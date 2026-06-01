@@ -1,6 +1,8 @@
 # NPS 文档
 
-> 轻量级、高性能、功能强大的内网穿透代理服务器 v1.0.0
+> 轻量级、高性能、功能强大的内网穿透代理服务器
+
+**2026 全面重启** — 33 项 Bug 修复 · 16 项内存泄漏修复 · Web UI 现代化改造 · 安全加固 · v1.0.0 全新出发
 
 ## 特性
 
@@ -17,5 +19,6 @@
 - [隧道模式说明](tunnel.md)
 - [服务端配置参考](server_config.md)
 - [Docker 部署](docker.md)
+- [更新日志](changelog.md)
 
 [GitHub](https://github.com/ZiDuNet/nps) | [Docker Hub](https://hub.docker.com/u/wushuo98) | [问题反馈](https://github.com/ZiDuNet/nps/issues)
