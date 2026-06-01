@@ -37,12 +37,7 @@ async function handlePing(request, env, corsHeaders) {
     const existing = await env.INSTALLS.get(key, 'json');
     if (existing) records = existing;
 
-    records.push({
-      t: typ,
-      c: country,
-      ip: ip,
-      ts: Date.now(),
-    });
+    records.push({ t: typ, c: country, ts: Date.now() });
 
     await env.INSTALLS.put(key, JSON.stringify(records), { expirationTtl: 365 * 86400 });
 
@@ -58,7 +53,7 @@ async function handlePing(request, env, corsHeaders) {
 
 async function handleStats(request, env, corsHeaders) {
   try {
-    const cached = await env.INSTALLS.get('stats', 'json');
+    const cached = await env.INSTALLS.get('cache:stats', 'json');
     if (cached) {
       return new Response(JSON.stringify(cached), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -86,14 +81,9 @@ async function handleStats(request, env, corsHeaders) {
       }
     }
 
-    const stats = {
-      updated_at: new Date().toISOString(),
-      total_nps: totalNps,
-      total_npc: totalNpc,
-      countries,
-    };
+    const stats = { total_nps: totalNps, total_npc: totalNpc, countries };
 
-    await env.INSTALLS.put('stats', JSON.stringify(stats), { expirationTtl: 300 });
+    await env.INSTALLS.put('cache:stats', JSON.stringify(stats), { expirationTtl: 300 });
 
     return new Response(JSON.stringify(stats), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
