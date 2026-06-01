@@ -3,10 +3,10 @@
   "outputtype": "desktop",
   "frontend": {
     "dir": "frontend",
-    "packageManager": "yarn",
-    "install": "yarn install",
-    "build": "yarn run build",
-    "dev": "yarn run dev",
+    "packageManager": "npm",
+    "install": "npm install",
+    "build": "npm run build",
+    "dev": "npm run dev",
     "dev:serverUrl": "http://localhost:34115"
   },
   "author": {

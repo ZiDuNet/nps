@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  nps:
+    image: wushuo98/nps:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.nps
+    container_name: nps
+    restart: unless-stopped
+    ports:
+      - "80:80"       # HTTP
+      - "443:443"     # HTTPS
+      - "8024:8024"   # Bridge (TCP)
+      - "8025:8025"   # Bridge (TLS)
+      - "8080:8080"   # Web 管理面板
+    volumes:
+      - ./conf:/conf

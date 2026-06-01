@@ -2,8 +2,13 @@
 /nps
 /npc
 *.exe
+*.exe~
 .claude/
 *.png
 conf/clients.json
 conf/tasks.json
 conf/hosts.json
+cmd/npc/npc-gui/build/
+cmd/npc/npc-gui/frontend/dist/
+cmd/npc/npc-gui/frontend/node_modules/
+cmd/npc/npc-gui/frontend/package-lock.json
