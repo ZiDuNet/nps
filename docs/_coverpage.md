@@ -12,4 +12,4 @@
 - 客户端 GUI 桌面应用
 
 [GitHub](https://github.com/ZiDuNet/nps)
-[开始使用](#/start)
+[开始使用](https://zidunet.github.io/nps/#/start)
