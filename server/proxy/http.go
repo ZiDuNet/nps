@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 type httpServer struct {
@@ -130,6 +131,7 @@ func (s *httpServer) handleTunneling(w http.ResponseWriter, r *http.Request) {
 		c, _, err := hijacker.Hijack()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
 		}
 
 		s.handleHttp(conn.NewConn(c), r)
@@ -147,7 +149,7 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request) {
 		lk         *conn.Link
 		targetAddr string
 		lenConn    *conn.LenConn
-		isReset    bool
+		isReset    int32
 		wg         sync.WaitGroup
 		remoteAddr string
 	)
@@ -160,7 +162,7 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request) {
 		c.Close()
 	}()
 reset:
-	if isReset {
+	if atomic.LoadInt32(&isReset) == 1 {
 		host.Client.AddConn()
 	}
 
@@ -186,7 +188,7 @@ reset:
 		c.Close()
 		return
 	}
-	if !isReset {
+	if atomic.LoadInt32(&isReset) == 0 {
 		defer host.Client.AddConn()
 	}
 	if err = s.auth(r, c, host.Client.Cnf.U, host.Client.Cnf.P); err != nil {
@@ -251,13 +253,13 @@ reset:
 	connClient = conn.GetConn(target, lk.Crypt, lk.Compress, host.Client.Rate, true)
 
 	//read from inc-client
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
-		isReset = false
+		atomic.StoreInt32(&isReset, 0)
 		defer connClient.Close()
 		defer func() {
 			wg.Done()
-			if !isReset {
+			if atomic.LoadInt32(&isReset) == 0 {
 				c.Close()
 			}
 		}()
@@ -329,7 +331,7 @@ reset:
 			break
 		} else if host != hostTmp {
 			host = hostTmp
-			isReset = true
+			atomic.StoreInt32(&isReset, 1)
 			connClient.Close()
 			goto reset
 		}

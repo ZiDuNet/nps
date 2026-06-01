@@ -1,2 +1,9 @@
 .idea
-nps
+/nps
+/npc
+*.exe
+.claude/
+*.png
+conf/clients.json
+conf/tasks.json
+conf/hosts.json

@@ -42,7 +42,10 @@ func (s *Rate) ReturnBucket(size int64) {
 
 //停止
 func (s *Rate) Stop() {
-	s.stopChan <- true
+	select {
+	case s.stopChan <- true:
+	default:
+	}
 }
 
 func (s *Rate) Get(size int64) {

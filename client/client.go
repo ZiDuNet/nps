@@ -194,6 +194,7 @@ func (s *TRPClient) newUdpConn(localAddr, rAddr string, md5Password string) {
 			conn.Accept(nps_mux.NewMux(udpTunnel, s.bridgeConnType, s.disconnectTime), func(c net.Conn) {
 				go s.handleChan(c)
 			})
+			l.Close()
 			break
 		}
 	}
@@ -206,7 +207,12 @@ func (s *TRPClient) newChan() {
 		s.logError("connect to %s error: %v", s.svrAddr, err)
 		return
 	}
-	s.tunnel = nps_mux.NewMux(tunnel.Conn, s.bridgeConnType, s.disconnectTime)
+	newMux := nps_mux.NewMux(tunnel.Conn, s.bridgeConnType, s.disconnectTime)
+	// 关闭旧的 tunnel
+	if s.tunnel != nil {
+		s.tunnel.Close()
+	}
+	s.tunnel = newMux
 	for {
 		src, err := s.tunnel.Accept()
 		if err != nil {

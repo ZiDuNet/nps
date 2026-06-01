@@ -33,6 +33,7 @@ type Client struct {
 	file      *nps_mux.Mux
 	Version   string
 	retryTime int // it will be add 1 when ping not ok until to 3 will close the client
+	sync.Mutex
 }
 
 func NewClient(t, f *nps_mux.Mux, s *conn.Conn, vs string) *Client {
@@ -62,10 +63,10 @@ func NewTunnel(tunnelPort int, tunnelType string, ipVerify bool, runList sync.Ma
 	return &Bridge{
 		TunnelPort:     tunnelPort,
 		tunnelType:     tunnelType,
-		OpenTask:       make(chan *file.Tunnel),
-		CloseTask:      make(chan *file.Tunnel),
-		CloseClient:    make(chan int),
-		SecretChan:     make(chan *conn.Secret),
+		OpenTask:       make(chan *file.Tunnel, 128),
+		CloseTask:      make(chan *file.Tunnel, 128),
+		CloseClient:    make(chan int, 128),
+		SecretChan:     make(chan *conn.Secret, 128),
 		ipVerify:       ipVerify,
 		runList:        runList,
 		disconnectTime: disconnectTime,
@@ -120,7 +121,7 @@ func (s *Bridge) GetHealthFromClient(id int, c *conn.Conn) {
 	for {
 		if info, status, err := c.GetHealthInfo(); err != nil {
 			break
-		} else if !status { //the status is true , return target to the targetArr
+		} else if !status { // health check failed, remove target from TargetArr
 			file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
 				v := value.(*file.Tunnel)
 				if v.Client.Id == id && v.Mode == "tcp" && strings.Contains(v.Target.TargetStr, info) {
@@ -153,7 +154,7 @@ func (s *Bridge) GetHealthFromClient(id int, c *conn.Conn) {
 				}
 				return true
 			})
-		} else { //the status is false,remove target from the targetArr
+		} else { // health check passed, restore target to TargetArr
 			file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
 				v := value.(*file.Tunnel)
 				if v.Client.Id == id && v.Mode == "tcp" && common.IsArrContains(v.HealthRemoveArr, info) && !common.IsArrContains(v.Target.TargetArr, info) {
@@ -237,15 +238,27 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 
 func (s *Bridge) DelClient(id int) {
 	if v, ok := s.Client.Load(id); ok {
-		if v.(*Client).signal != nil {
-			v.(*Client).signal.Close()
+		cl := v.(*Client)
+		cl.Lock()
+		if cl.signal != nil {
+			cl.signal.Close()
 		}
+		if cl.tunnel != nil {
+			cl.tunnel.Close()
+		}
+		if cl.file != nil {
+			cl.file.Close()
+		}
+		cl.Unlock()
 		s.Client.Delete(id)
 		if file.GetDb().IsPubClient(id) {
 			return
 		}
 		if c, err := file.GetDb().GetClient(id); err == nil {
-			s.CloseClient <- c.Id
+			select {
+			case s.CloseClient <- c.Id:
+			default:
+			}
 		}
 	}
 }
@@ -267,18 +280,27 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 		}
 		//the vKey connect by another ,close the client of before
 		if v, ok := s.Client.LoadOrStore(id, NewClient(nil, nil, c, vs)); ok {
-			if v.(*Client).signal != nil {
-				v.(*Client).signal.WriteClose()
+			cl := v.(*Client)
+			cl.Lock()
+			if cl.signal != nil {
+				cl.signal.WriteClose()
 			}
-			v.(*Client).signal = c
-			v.(*Client).Version = vs
+			cl.signal = c
+			cl.Version = vs
+			cl.Unlock()
 		}
 		go s.GetHealthFromClient(id, c)
 		logs.Info("clientId %d connection succeeded, address:%s ", id, c.Conn.RemoteAddr())
 	case common.WORK_CHAN:
 		muxConn := nps_mux.NewMux(c.Conn, s.tunnelType, s.disconnectTime)
 		if v, ok := s.Client.LoadOrStore(id, NewClient(muxConn, nil, nil, vs)); ok {
-			v.(*Client).tunnel = muxConn
+			cl := v.(*Client)
+			cl.Lock()
+			if cl.tunnel != nil {
+				cl.tunnel.Close()
+			}
+			cl.tunnel = muxConn
+			cl.Unlock()
 		}
 	case common.WORK_CONFIG:
 		client, err := file.GetDb().GetClient(id)
@@ -295,35 +317,49 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 			s.SecretChan <- conn.NewSecret(string(b), c)
 		} else {
 			logs.Error("secret error, failed to match the key successfully")
+			c.Close()
 		}
 	case common.WORK_FILE:
 		muxConn := nps_mux.NewMux(c.Conn, s.tunnelType, s.disconnectTime)
 		if v, ok := s.Client.LoadOrStore(id, NewClient(nil, muxConn, nil, vs)); ok {
-			v.(*Client).file = muxConn
+			cl := v.(*Client)
+			cl.Lock()
+			if cl.file != nil {
+				cl.file.Close()
+			}
+			cl.file = muxConn
+			cl.Unlock()
 		}
 	case common.WORK_P2P:
 		//read md5 secret
 		if b, err := c.GetShortContent(32); err != nil {
 			logs.Error("p2p error,", err.Error())
+			c.Close()
 		} else if t := file.GetDb().GetTaskByMd5Password(string(b)); t == nil {
 			logs.Error("p2p error, failed to match the key successfully")
+			c.Close()
 		} else {
 			if v, ok := s.Client.Load(t.Client.Id); !ok {
+				c.Close()
 				return
 			} else {
-				//向密钥对应的客户端发送与服务端udp建立连接信息，地址，密钥
-				v.(*Client).signal.Write([]byte(common.NEW_UDP_CONN))
-				svrAddr := beego.AppConfig.String("p2p_ip") + ":" + beego.AppConfig.String("p2p_port")
-				if err != nil {
-					logs.Warn("get local udp addr error")
+				cl := v.(*Client)
+				cl.Lock()
+				sig := cl.signal
+				cl.Unlock()
+				if sig == nil {
+					logs.Error("p2p error, client signal is nil")
+					c.Close()
 					return
 				}
-				v.(*Client).signal.WriteLenContent([]byte(svrAddr))
-				v.(*Client).signal.WriteLenContent(b)
-				//向该请求者发送建立连接请求,服务器地址
+				sig.Write([]byte(common.NEW_UDP_CONN))
+				svrAddr := beego.AppConfig.String("p2p_ip") + ":" + beego.AppConfig.String("p2p_port")
+				sig.WriteLenContent([]byte(svrAddr))
+				sig.WriteLenContent(b)
 				c.WriteLenContent([]byte(svrAddr))
 			}
 		}
+		return
 	}
 	c.SetAlive(s.tunnelType)
 	return
@@ -393,14 +429,19 @@ func (s *Bridge) ping() {
 			arr := make([]int, 0)
 			s.Client.Range(func(key, value interface{}) bool {
 				v := value.(*Client)
-				if v.tunnel == nil || v.signal == nil {
+				v.Lock()
+				tunnel := v.tunnel
+				signal := v.signal
+				isClose := v.tunnel != nil && v.tunnel.IsClose
+				v.Unlock()
+				if tunnel == nil || signal == nil {
 					v.retryTime += 1
 					if v.retryTime >= 3 {
 						arr = append(arr, key.(int))
 					}
 					return true
 				}
-				if v.tunnel.IsClose {
+				if isClose {
 					arr = append(arr, key.(int))
 				}
 				return true
@@ -409,6 +450,14 @@ func (s *Bridge) ping() {
 				logs.Info("the client %d closed", v)
 				s.DelClient(v)
 			}
+			// 清理过期的 Register 条目
+			now := time.Now()
+			s.Register.Range(func(key, value interface{}) bool {
+				if value.(time.Time).Before(now) {
+					s.Register.Delete(key)
+				}
+				return true
+			})
 		}
 	}
 }

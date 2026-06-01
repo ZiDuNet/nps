@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"sync"
 
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
@@ -95,7 +96,14 @@ func (s *Sock5ModeServer) sendReply(c net.Conn, rep uint8) {
 
 	localAddr := c.LocalAddr().String()
 	localHost, localPort, _ := net.SplitHostPort(localAddr)
-	ipBytes := net.ParseIP(localHost).To4()
+	ip := net.ParseIP(localHost)
+	if ip == nil {
+		ip = net.ParseIP("0.0.0.0")
+	}
+	ipBytes := ip.To4()
+	if ipBytes == nil {
+		ipBytes = net.ParseIP("0.0.0.0").To4()
+	}
 	nPort, _ := strconv.Atoi(localPort)
 	reply = append(reply, ipBytes...)
 	portBytes := make([]byte, 2)
@@ -108,22 +116,32 @@ func (s *Sock5ModeServer) sendReply(c net.Conn, rep uint8) {
 // do conn
 func (s *Sock5ModeServer) doConnect(c net.Conn, command uint8) {
 	addrType := make([]byte, 1)
-	c.Read(addrType)
+	if _, err := io.ReadFull(c, addrType); err != nil {
+		return
+	}
 	var host string
 	switch addrType[0] {
 	case ipV4:
 		ipv4 := make(net.IP, net.IPv4len)
-		c.Read(ipv4)
+		if _, err := io.ReadFull(c, ipv4); err != nil {
+			return
+		}
 		host = ipv4.String()
 	case ipV6:
 		ipv6 := make(net.IP, net.IPv6len)
-		c.Read(ipv6)
+		if _, err := io.ReadFull(c, ipv6); err != nil {
+			return
+		}
 		host = ipv6.String()
 	case domainName:
 		var domainLen uint8
-		binary.Read(c, binary.BigEndian, &domainLen)
+		if err := binary.Read(c, binary.BigEndian, &domainLen); err != nil {
+			return
+		}
 		domain := make([]byte, domainLen)
-		c.Read(domain)
+		if _, err := io.ReadFull(c, domain); err != nil {
+			return
+		}
 		host = string(domain)
 	default:
 		s.sendReply(c, addrTypeNotSupported)
@@ -131,7 +149,9 @@ func (s *Sock5ModeServer) doConnect(c net.Conn, command uint8) {
 	}
 
 	var port uint16
-	binary.Read(c, binary.BigEndian, &port)
+	if err := binary.Read(c, binary.BigEndian, &port); err != nil {
+		return
+	}
 	// connect to host
 	addr := net.JoinHostPort(host, strconv.Itoa(int(port)))
 	var ltype string
@@ -163,7 +183,14 @@ func (s *Sock5ModeServer) sendUdpReply(writeConn net.Conn, c net.Conn, rep uint8
 	}
 	localHost, localPort, _ := net.SplitHostPort(c.LocalAddr().String())
 	localHost = serverIp
-	ipBytes := net.ParseIP(localHost).To4()
+	ip := net.ParseIP(localHost)
+	if ip == nil {
+		ip = net.ParseIP("0.0.0.0")
+	}
+	ipBytes := ip.To4()
+	if ipBytes == nil {
+		ipBytes = net.ParseIP("0.0.0.0").To4()
+	}
 	nPort, _ := strconv.Atoi(localPort)
 	reply = append(reply, ipBytes...)
 	portBytes := make([]byte, 2)
@@ -176,22 +203,32 @@ func (s *Sock5ModeServer) sendUdpReply(writeConn net.Conn, c net.Conn, rep uint8
 func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 	defer c.Close()
 	addrType := make([]byte, 1)
-	c.Read(addrType)
+	if _, err := io.ReadFull(c, addrType); err != nil {
+		return
+	}
 	var host string
 	switch addrType[0] {
 	case ipV4:
 		ipv4 := make(net.IP, net.IPv4len)
-		c.Read(ipv4)
+		if _, err := io.ReadFull(c, ipv4); err != nil {
+			return
+		}
 		host = ipv4.String()
 	case ipV6:
 		ipv6 := make(net.IP, net.IPv6len)
-		c.Read(ipv6)
+		if _, err := io.ReadFull(c, ipv6); err != nil {
+			return
+		}
 		host = ipv6.String()
 	case domainName:
 		var domainLen uint8
-		binary.Read(c, binary.BigEndian, &domainLen)
+		if err := binary.Read(c, binary.BigEndian, &domainLen); err != nil {
+			return
+		}
 		domain := make([]byte, domainLen)
-		c.Read(domain)
+		if _, err := io.ReadFull(c, domain); err != nil {
+			return
+		}
 		host = string(domain)
 	default:
 		s.sendReply(c, addrTypeNotSupported)
@@ -199,8 +236,10 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 	}
 	//读取端口
 	var port uint16
-	binary.Read(c, binary.BigEndian, &port)
-	logs.Warn(host, string(port))
+	if err := binary.Read(c, binary.BigEndian, &port); err != nil {
+		return
+	}
+	logs.Warn(host, strconv.Itoa(int(port)))
 	replyAddr, err := net.ResolveUDPAddr("udp", s.task.ServerIp+":0")
 	if err != nil {
 		logs.Error("build local reply addr error", err)
@@ -224,6 +263,7 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 	}
 
 	var clientAddr net.Addr
+	var clientAddrMu sync.Mutex
 	// copy buffer
 	go func() {
 		b := common.BufPoolUdp.Get().([]byte)
@@ -236,9 +276,11 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 				logs.Error("read data from %s err %s", reply.LocalAddr().String(), err.Error())
 				return
 			}
+			clientAddrMu.Lock()
 			if clientAddr == nil {
 				clientAddr = laddr
 			}
+			clientAddrMu.Unlock()
 			if _, err := target.Write(b[:n]); err != nil {
 				logs.Error("write data to client error", err.Error())
 				return
@@ -256,12 +298,17 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 				logs.Warn("read len bytes error", err.Error())
 				return
 			}
-			binary.Read(target, binary.LittleEndian, b[:l])
-			if err != nil {
+			if err := binary.Read(target, binary.LittleEndian, b[:l]); err != nil {
 				logs.Warn("read data form client error", err.Error())
 				return
 			}
-			if _, err := reply.WriteTo(b[:l], clientAddr); err != nil {
+			clientAddrMu.Lock()
+			addr := clientAddr
+			clientAddrMu.Unlock()
+			if addr == nil {
+				continue
+			}
+			if _, err := reply.WriteTo(b[:l], addr); err != nil {
 				logs.Warn("write data to user ", err.Error())
 				return
 			}

@@ -1,51 +1,65 @@
 <div class="wrapper wrapper-content">
+
+    <!-- === Row 1: Stat Cards === -->
     <div class="row">
-        <div class="col-lg-3">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title">
-                    <h5 langtag="word-connectionport"></h5>
-                </div>
-                <div class="ibox-content">
-                    <h1 class="no-margins">{{.p1}}</h1>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-3">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title">
-                    <h5 langtag="word-totalclients"></h5>
-                </div>
-                <div class="ibox-content">
-                    <h1 class="no-margins">{{.data.clientCount}}</h1>
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card card-blue">
+                <div class="ibox float-e-margins">
+                    <i class="fa fa-plug stat-icon"></i>
+                    <div class="ibox-title">
+                        <h5 langtag="word-connectionport"></h5>
+                    </div>
+                    <div class="ibox-content">
+                        <h1 class="no-margins">{{.p1}}</h1>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-3">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title">
-                {{/*<span class="label label-primary pull-right">今日</span>*/}}
-                    <h5 langtag="word-onlineclients"></h5>
-                </div>
-                <div class="ibox-content">
-                    <h1 class="no-margins">{{.data.clientOnlineCount}}</h1>
-                {{/*<div class="stat-percent font-bold text-navy">44% <i class="fa fa-level-up"></i></div>*/}}
-                {{/*<small>新访客</small>*/}}
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card card-purple">
+                <div class="ibox float-e-margins">
+                    <i class="fa fa-users stat-icon"></i>
+                    <div class="ibox-title">
+                        <h5 langtag="word-totalclients"></h5>
+                    </div>
+                    <div class="ibox-content">
+                        <h1 class="no-margins">{{.data.clientCount}}</h1>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-3">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title">
-                    <h5 langtag="word-tcpconnections"></h5>
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card card-green">
+                <div class="ibox float-e-margins">
+                    <i class="fa fa-signal stat-icon"></i>
+                    <div class="ibox-title">
+                    {{/*<span class="label label-primary pull-right">今日</span>*/}}
+                        <h5 langtag="word-onlineclients"></h5>
+                    </div>
+                    <div class="ibox-content">
+                        <h1 class="no-margins">{{.data.clientOnlineCount}}</h1>
+                    {{/*<div class="stat-percent font-bold text-navy">44% <i class="fa fa-level-up"></i></div>*/}}
+                    {{/*<small>新访客</small>*/}}
+                    </div>
                 </div>
-                <div class="ibox-content">
-                    <h1 class="no-margins">{{.data.tcpCount}}</h1>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="stat-card card-amber">
+                <div class="ibox float-e-margins">
+                    <i class="fa fa-network-wired stat-icon"></i>
+                    <div class="ibox-title">
+                        <h5 langtag="word-tcpconnections"></h5>
+                    </div>
+                    <div class="ibox-content">
+                        <h1 class="no-margins">{{.data.tcpCount}}</h1>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-
+    <!-- === Row 2: Config & System Info === -->
     <div class="row">
         <div class="col-lg-6">
             <div class="ibox float-e-margins">
@@ -55,7 +69,6 @@
                         <a class="collapse-link">
                             <i class="fa fa-chevron-up"></i>
                         </a>
-
                         <a class="close-link">
                             <i class="fa fa-times"></i>
                         </a>
@@ -93,7 +106,7 @@
                                 </div>
                             </div>
                         </li>
-                        <li class="list-group-item ">
+                        <li class="list-group-item">
                             <div class="row">
                                 <div class="col-sm-6">
                                     <strong langtag="word-iprestriction"></strong>
@@ -103,7 +116,7 @@
                                 </div>
                             </div>
                         </li>
-                        <li class="list-group-item ">
+                        <li class="list-group-item">
                             <div class="row">
                                 <div class="col-sm-6">
                                     <strong langtag="word-trafficdatapersistence"></strong>
@@ -113,7 +126,7 @@
                                 </div>
                             </div>
                         </li>
-                        <li class="list-group-item ">
+                        <li class="list-group-item">
                             <div class="row">
                                 <div class="col-sm-6">
                                     <strong langtag="word-loglevel"></strong>
@@ -123,7 +136,7 @@
                                 </div>
                             </div>
                         </li>
-                        <li class="list-group-item ">
+                        <li class="list-group-item">
                             <div class="row">
                                 <div class="col-sm-6">
                                     <strong langtag="word-p2pport"></strong>
@@ -133,7 +146,7 @@
                                 </div>
                             </div>
                         </li>
-                        <li class="list-group-item ">
+                        <li class="list-group-item">
                             <div class="row">
                                 <div class="col-sm-6">
                                     <strong langtag="word-serveriP"></strong>
@@ -143,7 +156,7 @@
                                 </div>
                             </div>
                         </li>
-                        <li class="list-group-item ">
+                        <li class="list-group-item">
                             <div class="row">
                                 <div class="col-sm-6">
                                     <strong langtag="word-serverversion"></strong>
@@ -208,7 +221,7 @@
                                 </div>
                             </div>
                         </li>
-                        <li class="list-group-item ">
+                        <li class="list-group-item">
                             <div class="row">
                                 <div class="col-sm-6">
                                     <strong langtag="word-tcpconnections_established"></strong>
@@ -218,7 +231,7 @@
                                 </div>
                             </div>
                         </li>
-                        <li class="list-group-item ">
+                        <li class="list-group-item">
                             <div class="row">
                                 <div class="col-sm-6">
                                     <strong langtag="word-udpconnections_established"></strong>
@@ -228,7 +241,7 @@
                                 </div>
                             </div>
                         </li>
-                        <li class="list-group-item ">
+                        <li class="list-group-item">
                             <div class="row">
                                 <div class="col-sm-6">
                                     <strong langtag="word-outbandwidth"></strong>
@@ -238,7 +251,7 @@
                                 </div>
                             </div>
                         </li>
-                        <li class="list-group-item ">
+                        <li class="list-group-item">
                             <div class="row">
                                 <div class="col-sm-6">
                                     <strong langtag="word-inbandwidth"></strong>
@@ -255,6 +268,7 @@
     </div>
 
 {{if eq true .system_info_display}}
+    <!-- === Row 3: Load & CPU Charts === -->
     <div class="row">
         <div class="col-lg-6">
             <div class="ibox float-e-margins">
@@ -293,6 +307,8 @@
             </div>
         </div>
     </div>
+
+    <!-- === Row 4: Memory & Connections Charts === -->
     <div class="row">
         <div class="col-lg-6">
             <div class="ibox float-e-margins">
@@ -332,6 +348,7 @@
         </div>
     </div>
 
+    <!-- === Row 5: Bandwidth Chart === -->
     <div class="row">
         <div class="col-lg-12">
             <div class="ibox float-e-margins">
@@ -354,6 +371,7 @@
     </div>
 {{end}}
 
+    <!-- === Row 6: Traffic & Tunnel Type Pie Charts === -->
     <div class="row">
         <div class="col-lg-6">
             <div class="ibox float-e-margins">
@@ -391,9 +409,8 @@
                 </div>
             </div>
         </div>
-
-
     </div>
+
 </div>
 
 <script>
@@ -407,335 +424,335 @@
     $("#overview_send").text(changeunit({{.data.io_send}}) + "/s")
     $("#overview_recv").text(changeunit({{.data.io_recv}}) + "/s")
 
-	chartdatas['load'] = {
-		tooltip: {
-			trigger: 'axis',
-			formatter: function (params) {
-				var str = params[0].axisValue + '<br/>';
-				for (i in params){
-					str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'</br>';
+		chartdatas['load'] = {
+			tooltip: {
+				trigger: 'axis',
+				formatter: function (params) {
+					var str = params[0].axisValue + '<br/>';
+					for (i in params){
+						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'</br>';
 					}
-				return str;
-			}
-		},
-		grid: {
+					return str;
+				}
+			},
+			grid: {
+				left: '3%',
+				right: '3%',
+				top: '5%',
+				bottom: '3%',
+				containLabel: true
+			},
+			xAxis: {
+				type: 'category',
+				boundaryGap: false,
+				data: ['{{.data.sys1.time}}', '{{.data.sys2.time}}', '{{.data.sys3.time}}', '{{.data.sys4.time}}', '{{.data.sys5.time}}', '{{.data.sys6.time}}', '{{.data.sys7.time}}', '{{.data.sys8.time}}', '{{.data.sys9.time}}', '{{.data.sys10.time}}']
+			},
+			yAxis: {
+				type: 'value'
+			},
+			series: [
+				{
+					name: '',
+					type: 'line',
+					stack: 'load1',
+					smooth: true,
+					data: [{{.data.sys1.load1}}, {{.data.sys2.load1}}, {{.data.sys3.load1}}, {{.data.sys4.load1}}, {{.data.sys5.load1}}, {{.data.sys6.load1}}, {{.data.sys7.load1}}, {{.data.sys8.load1}}, {{.data.sys9.load1}}, {{.data.sys10.load1}}]
+				},
+				{
+					name: '',
+					type: 'line',
+					stack: 'load5',
+					smooth: true,
+					data: [{{.data.sys1.load5}}, {{.data.sys2.load5}}, {{.data.sys3.load5}}, {{.data.sys4.load5}}, {{.data.sys5.load5}}, {{.data.sys6.load5}}, {{.data.sys7.load5}}, {{.data.sys8.load5}}, {{.data.sys9.load5}}, {{.data.sys10.load5}}]
+				},
+				{
+					name: '',
+					type: 'line',
+					stack: 'load15',
+					smooth: true,
+					data: [{{.data.sys1.load15}}, {{.data.sys2.load15}}, {{.data.sys3.load15}}, {{.data.sys4.load15}}, {{.data.sys5.load15}}, {{.data.sys6.load15}}, {{.data.sys7.load15}}, {{.data.sys8.load15}}, {{.data.sys9.load15}}, {{.data.sys10.load15}}]
+				}
+			]
+		};
+
+		chartdatas['cpu'] = {
+			tooltip: {
+				trigger: 'axis',
+				formatter: function (params) {
+					var str = params[0].axisValue + '<br/>';
+					for (i in params){
+						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'%</br>';
+					}
+					return str;
+				}
+			},
+			grid: {
+				left: '3%',
+				right: '3%',
+				top: '5%',
+				bottom: '3%',
+				containLabel: true
+			},
+			xAxis: {
+				type: 'category',
+				boundaryGap: false,
+				data: ['{{.data.sys1.time}}', '{{.data.sys2.time}}', '{{.data.sys3.time}}', '{{.data.sys4.time}}', '{{.data.sys5.time}}', '{{.data.sys6.time}}', '{{.data.sys7.time}}', '{{.data.sys8.time}}', '{{.data.sys9.time}}', '{{.data.sys10.time}}']
+			},
+			yAxis: {
+				type: 'value',
+				axisLabel: {
+					show: true,
+					interval: 'auto',
+					formatter: '{value} %'
+				}
+			},
+			series: [
+				{
+					name: '',
+					type: 'line',
+					stack: 'cpu',
+					smooth: true,
+					data: [{{.data.sys1.cpu}}, {{.data.sys2.cpu}}, {{.data.sys3.cpu}}, {{.data.sys4.cpu}}, {{.data.sys5.cpu}}, {{.data.sys6.cpu}}, {{.data.sys7.cpu}}, {{.data.sys8.cpu}}, {{.data.sys9.cpu}}, {{.data.sys10.cpu}}]
+				}
+			]
+		};
+
+		chartdatas['memory'] = {
+			tooltip: {
+				trigger: 'axis',
+				formatter: function (params) {
+					var str = params[0].axisValue + '<br/>';
+					for (i in params){
+						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'MB</br>';
+					}
+					return str;
+				}
+			},
+			grid: {
+				left: '3%',
+				right: '3%',
+				top: '5%',
+				bottom: '3%',
+				containLabel: true
+			},
+			xAxis: {
+				type: 'category',
+				boundaryGap: false,
+				data: ['{{.data.sys1.time}}', '{{.data.sys2.time}}', '{{.data.sys3.time}}', '{{.data.sys4.time}}', '{{.data.sys5.time}}', '{{.data.sys6.time}}', '{{.data.sys7.time}}', '{{.data.sys8.time}}', '{{.data.sys9.time}}', '{{.data.sys10.time}}']
+				},
+			yAxis: {
+				type: 'value',
+				axisLabel: {
+					show: true,
+					interval: 'auto',
+					formatter: '{value} MB'
+				}
+			},
+			series: [
+				{
+					name: '',
+					type: 'line',
+					stack: 'virtual_mem',
+					smooth: true,
+					data: [{{.data.sys1.virtual_mem}}, {{.data.sys2.virtual_mem}}, {{.data.sys3.virtual_mem}}, {{.data.sys4.virtual_mem}}, {{.data.sys5.virtual_mem}}, {{.data.sys6.virtual_mem}}, {{.data.sys7.virtual_mem}}, {{.data.sys8.virtual_mem}}, {{.data.sys9.virtual_mem}}, {{.data.sys10.virtual_mem}}]
+				},
+				{
+					name: '',
+					type: 'line',
+					stack: 'swap_mem',
+					smooth: true,
+					data: [{{.data.sys1.swap_mem}}, {{.data.sys2.swap_mem}}, {{.data.sys3.swap_mem}}, {{.data.sys4.swap_mem}}, {{.data.sys5.swap_mem}}, {{.data.sys6.swap_mem}}, {{.data.sys7.swap_mem}}, {{.data.sys8.swap_mem}}, {{.data.sys9.swap_mem}}, {{.data.sys10.swap_mem}}]
+				}
+			]
+		};
+
+		chartdatas['connections'] = {
+			tooltip: {
+				trigger: 'axis'
+			},
+			grid: {
+				left: '3%',
+				right: '3%',
+				top: '5%',
+				bottom: '3%',
+				containLabel: true
+			},
+			xAxis: {
+				type: 'category',
+				boundaryGap: false,
+				data: ['{{.data.sys1.time}}', '{{.data.sys2.time}}', '{{.data.sys3.time}}', '{{.data.sys4.time}}', '{{.data.sys5.time}}', '{{.data.sys6.time}}', '{{.data.sys7.time}}', '{{.data.sys8.time}}', '{{.data.sys9.time}}', '{{.data.sys10.time}}']
+			},
+			yAxis: {
+				type: 'value'
+			},
+			series: [
+				{
+					name: '',
+					type: 'line',
+					stack: 'tcp',
+					smooth: true,
+					data: [{{.data.sys1.tcp}}, {{.data.sys2.tcp}}, {{.data.sys3.tcp}}, {{.data.sys4.tcp}}, {{.data.sys5.tcp}}, {{.data.sys6.tcp}}, {{.data.sys7.tcp}}, {{.data.sys8.tcp}}, {{.data.sys9.tcp}}, {{.data.sys10.tcp}}]
+				},
+				{
+					name: '',
+					type: 'line',
+					stack: 'udp',
+					smooth: true,
+					data: [{{.data.sys1.udp}}, {{.data.sys2.udp}}, {{.data.sys3.udp}}, {{.data.sys4.udp}}, {{.data.sys5.udp}}, {{.data.sys6.udp}}, {{.data.sys7.udp}}, {{.data.sys8.udp}}, {{.data.sys9.udp}}, {{.data.sys10.udp}}]
+				}
+			]
+		};
+
+		chartdatas['bandwidth'] = {
+			tooltip: {
+				trigger: 'axis',
+				formatter: function (params) {
+					var str = params[0].axisValue + '<br/>';
+					for (i in params){
+						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ changeunit(params[i].data) +'/s</br>';
+					}
+					return str;
+				}
+			},
+			grid: {
 			left: '3%',
 			right: '3%',
 			top: '5%',
 			bottom: '3%',
 			containLabel: true
-		},
-		xAxis: {
-			type: 'category',
-			boundaryGap: false,
-			data: ['{{.data.sys1.time}}', '{{.data.sys2.time}}', '{{.data.sys3.time}}', '{{.data.sys4.time}}', '{{.data.sys5.time}}', '{{.data.sys6.time}}', '{{.data.sys7.time}}', '{{.data.sys8.time}}', '{{.data.sys9.time}}', '{{.data.sys10.time}}']
-		},
-		yAxis: {
-			type: 'value'
-		},
-		series: [
-			{
-				name: '',
-				type: 'line',
-				stack: 'load1',
-				smooth: true,
-				data: [{{.data.sys1.load1}}, {{.data.sys2.load1}}, {{.data.sys3.load1}}, {{.data.sys4.load1}}, {{.data.sys5.load1}}, {{.data.sys6.load1}}, {{.data.sys7.load1}}, {{.data.sys8.load1}}, {{.data.sys9.load1}}, {{.data.sys10.load1}}]
 			},
-			{
-				name: '',
-				type: 'line',
-				stack: 'load5',
-				smooth: true,
-				data: [{{.data.sys1.load5}}, {{.data.sys2.load5}}, {{.data.sys3.load5}}, {{.data.sys4.load5}}, {{.data.sys5.load5}}, {{.data.sys6.load5}}, {{.data.sys7.load5}}, {{.data.sys8.load5}}, {{.data.sys9.load5}}, {{.data.sys10.load5}}]
+			xAxis: {
+				type: 'category',
+				boundaryGap: false,
+				data: ['{{.data.sys1.time}}', '{{.data.sys2.time}}', '{{.data.sys3.time}}', '{{.data.sys4.time}}', '{{.data.sys5.time}}', '{{.data.sys6.time}}', '{{.data.sys7.time}}', '{{.data.sys8.time}}', '{{.data.sys9.time}}', '{{.data.sys10.time}}']
 			},
-			{
-				name: '',
-				type: 'line',
-				stack: 'load15',
-				smooth: true,
-				data: [{{.data.sys1.load15}}, {{.data.sys2.load15}}, {{.data.sys3.load15}}, {{.data.sys4.load15}}, {{.data.sys5.load15}}, {{.data.sys6.load15}}, {{.data.sys7.load15}}, {{.data.sys8.load15}}, {{.data.sys9.load15}}, {{.data.sys10.load15}}]
-			}
-		]
-	};
-
-	chartdatas['cpu'] = {
-		tooltip: {
-			trigger: 'axis',
-			formatter: function (params) {
-				var str = params[0].axisValue + '<br/>';
-				for (i in params){
-					str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'%</br>';
-				}
-				return str;
-			}
-		},
-		grid: {
-			left: '3%',
-			right: '3%',
-			top: '5%',
-			bottom: '3%',
-			containLabel: true
-		},
-		xAxis: {
-			type: 'category',
-			boundaryGap: false,
-			data: ['{{.data.sys1.time}}', '{{.data.sys2.time}}', '{{.data.sys3.time}}', '{{.data.sys4.time}}', '{{.data.sys5.time}}', '{{.data.sys6.time}}', '{{.data.sys7.time}}', '{{.data.sys8.time}}', '{{.data.sys9.time}}', '{{.data.sys10.time}}']
-		},
-		yAxis: {
-			type: 'value',
-			axisLabel: {
-				show: true,
-				interval: 'auto',
-				formatter: '{value} %'
-			}
-		},
-		series: [
-			{
-				name: '',
-				type: 'line',
-				stack: 'cpu',
-				smooth: true,
-				data: [{{.data.sys1.cpu}}, {{.data.sys2.cpu}}, {{.data.sys3.cpu}}, {{.data.sys4.cpu}}, {{.data.sys5.cpu}}, {{.data.sys6.cpu}}, {{.data.sys7.cpu}}, {{.data.sys8.cpu}}, {{.data.sys9.cpu}}, {{.data.sys10.cpu}}]
-			}
-		]
-	};
-
-	chartdatas['memory'] = {
-		tooltip: {
-			trigger: 'axis',
-			formatter: function (params) {
-				var str = params[0].axisValue + '<br/>';
-				for (i in params){
-					str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'MB</br>';
-				}
-				return str;
-			}
-		},
-		grid: {
-			left: '3%',
-			right: '3%',
-			top: '5%',
-			bottom: '3%',
-			containLabel: true
-		},
-		xAxis: {
-			type: 'category',
-			boundaryGap: false,
-			data: ['{{.data.sys1.time}}', '{{.data.sys2.time}}', '{{.data.sys3.time}}', '{{.data.sys4.time}}', '{{.data.sys5.time}}', '{{.data.sys6.time}}', '{{.data.sys7.time}}', '{{.data.sys8.time}}', '{{.data.sys9.time}}', '{{.data.sys10.time}}']
-			},
-		yAxis: {
-			type: 'value',
-			axisLabel: {
-				show: true,
-				interval: 'auto',
-				formatter: '{value} MB'
-			}
-		},
-		series: [
-			{
-				name: '',
-				type: 'line',
-				stack: 'virtual_mem',
-				smooth: true,
-				data: [{{.data.sys1.virtual_mem}}, {{.data.sys2.virtual_mem}}, {{.data.sys3.virtual_mem}}, {{.data.sys4.virtual_mem}}, {{.data.sys5.virtual_mem}}, {{.data.sys6.virtual_mem}}, {{.data.sys7.virtual_mem}}, {{.data.sys8.virtual_mem}}, {{.data.sys9.virtual_mem}}, {{.data.sys10.virtual_mem}}]
-			},
-			{
-				name: '',
-				type: 'line',
-				stack: 'swap_mem',
-				smooth: true,
-				data: [{{.data.sys1.swap_mem}}, {{.data.sys2.swap_mem}}, {{.data.sys3.swap_mem}}, {{.data.sys4.swap_mem}}, {{.data.sys5.swap_mem}}, {{.data.sys6.swap_mem}}, {{.data.sys7.swap_mem}}, {{.data.sys8.swap_mem}}, {{.data.sys9.swap_mem}}, {{.data.sys10.swap_mem}}]
-			}
-		]
-	};
-
-	chartdatas['connections'] = {
-		tooltip: {
-			trigger: 'axis'
-		},
-		grid: {
-			left: '3%',
-			right: '3%',
-			top: '5%',
-			bottom: '3%',
-			containLabel: true
-		},
-		xAxis: {
-			type: 'category',
-			boundaryGap: false,
-			data: ['{{.data.sys1.time}}', '{{.data.sys2.time}}', '{{.data.sys3.time}}', '{{.data.sys4.time}}', '{{.data.sys5.time}}', '{{.data.sys6.time}}', '{{.data.sys7.time}}', '{{.data.sys8.time}}', '{{.data.sys9.time}}', '{{.data.sys10.time}}']
-		},
-		yAxis: {
-			type: 'value'
-		},
-		series: [
-			{
-				name: '',
-				type: 'line',
-				stack: 'tcp',
-				smooth: true,
-				data: [{{.data.sys1.tcp}}, {{.data.sys2.tcp}}, {{.data.sys3.tcp}}, {{.data.sys4.tcp}}, {{.data.sys5.tcp}}, {{.data.sys6.tcp}}, {{.data.sys7.tcp}}, {{.data.sys8.tcp}}, {{.data.sys9.tcp}}, {{.data.sys10.tcp}}]
-			},
-			{
-				name: '',
-				type: 'line',
-				stack: 'udp',
-				smooth: true,
-				data: [{{.data.sys1.udp}}, {{.data.sys2.udp}}, {{.data.sys3.udp}}, {{.data.sys4.udp}}, {{.data.sys5.udp}}, {{.data.sys6.udp}}, {{.data.sys7.udp}}, {{.data.sys8.udp}}, {{.data.sys9.udp}}, {{.data.sys10.udp}}]
-			}
-		]
-	};
-
-	chartdatas['bandwidth'] = {
-		tooltip: {
-			trigger: 'axis',
-			formatter: function (params) {
-				var str = params[0].axisValue + '<br/>';
-				for (i in params){
-					str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ changeunit(params[i].data) +'/s</br>';
-				}
-				return str;
-			}
-		},
-		grid: {
-		left: '3%',
-		right: '3%',
-		top: '5%',
-		bottom: '3%',
-		containLabel: true
-		},
-		xAxis: {
-			type: 'category',
-			boundaryGap: false,
-			data: ['{{.data.sys1.time}}', '{{.data.sys2.time}}', '{{.data.sys3.time}}', '{{.data.sys4.time}}', '{{.data.sys5.time}}', '{{.data.sys6.time}}', '{{.data.sys7.time}}', '{{.data.sys8.time}}', '{{.data.sys9.time}}', '{{.data.sys10.time}}']
-		},
-		yAxis: {
-			type: 'value',
-			axisLabel: {
-				show: true,
-				interval: 'auto',
-				formatter: function (params){
-					return changeunit (params);
-				}
-			}
-		},
-		series: [
-			{
-				name: '',
-				type: 'line',
-				stack: 'in',
-				smooth: true,
-				data: [{{.data.sys1.io_recv}}, {{.data.sys2.io_recv}}, {{.data.sys3.io_recv}}, {{.data.sys4.io_recv}}, {{.data.sys5.io_recv}}, {{.data.sys6.io_recv}}, {{.data.sys7.io_recv}}, {{.data.sys8.io_recv}}, {{.data.sys9.io_recv}}, {{.data.sys10.io_recv}}]
-			},
-			{
-				name: '',
-				type: 'line',
-				stack: 'out',
-				smooth: true,
-				data: [{{.data.sys1.io_send}}, {{.data.sys2.io_send}}, {{.data.sys3.io_send}}, {{.data.sys4.io_send}}, {{.data.sys5.io_send}}, {{.data.sys6.io_send}}, {{.data.sys7.io_send}}, {{.data.sys8.io_send}}, {{.data.sys9.io_send}}, {{.data.sys10.io_send}}]
-			}
-		]
-	};
-
-	chartdatas['flow'] = {
-		tooltip: {
-			trigger: 'item',
-			formatter: function (p) {
-				return p.seriesName + '<br>' + p.name + ':' + changeunit(p.data.value);
-			}
-		},
-		legend: {
-			orient: 'vertical',
-			left: 'left',
-			data: ['', '']
-		},
-		series: [
-			{
-				name: '',
-				type: 'pie',
-				radius: '55%',
-				center: ['50%', '60%'],
-				data: [
-					{
-						name: '',
-						value:{{.data.inletFlowCount}}
-					},
-					{
-						name: '',
-						value:{{.data.exportFlowCount}}
-					}
-				],
-				itemStyle: {
-					emphasis: {
-						shadowBlur: 10,
-						shadowOffsetX: 0,
-						shadowColor: 'rgba(0, 0, 0, 0.5)'
+			yAxis: {
+				type: 'value',
+				axisLabel: {
+					show: true,
+					interval: 'auto',
+					formatter: function (params){
+						return changeunit (params);
 					}
 				}
-			}
-		]
-	};
+			},
+			series: [
+				{
+					name: '',
+					type: 'line',
+					stack: 'in',
+					smooth: true,
+					data: [{{.data.sys1.io_recv}}, {{.data.sys2.io_recv}}, {{.data.sys3.io_recv}}, {{.data.sys4.io_recv}}, {{.data.sys5.io_recv}}, {{.data.sys6.io_recv}}, {{.data.sys7.io_recv}}, {{.data.sys8.io_recv}}, {{.data.sys9.io_recv}}, {{.data.sys10.io_recv}}]
+				},
+				{
+					name: '',
+					type: 'line',
+					stack: 'out',
+					smooth: true,
+					data: [{{.data.sys1.io_send}}, {{.data.sys2.io_send}}, {{.data.sys3.io_send}}, {{.data.sys4.io_send}}, {{.data.sys5.io_send}}, {{.data.sys6.io_send}}, {{.data.sys7.io_send}}, {{.data.sys8.io_send}}, {{.data.sys9.io_send}}, {{.data.sys10.io_send}}]
+				}
+			]
+		};
 
-	chartdatas['counts'] = {
-		tooltip: {
-			trigger: 'item',
-			formatter: '{a} <br/>{b} : {c} ({d}%)'
-		},
-		legend: {
-			orient: 'vertical',
-			left: 'left',
-			data: ['', '', '', '', '', '', '']
-		},
-		series: [
-			{
-				name: '',
-				type: 'pie',
-				radius: '55%',
-				center: ['50%', '60%'],
-				data: [
-					{
-						name: '',
-						value:{{.data.hostCount}}
-					},
-					{
-						name: '',
-						value:{{.data.tcpC}}
-					},
-					{
-						name: '',
-						value:{{.data.udpCount}}
-					},
-					{
-						name: '',
-						value:{{.data.httpProxyCount}}
-					},
-					{
-						name: '',
-						value:{{.data.socks5Count}}
-					},
-					{
-						name: '',
-						value:{{.data.secretCount}}
-					},
-					{
-						name: '',
-						value:{{.data.p2pCount}}
-					}
-				],
-				itemStyle: {
-					emphasis: {
-						shadowBlur: 10,
-						shadowOffsetX: 0,
-						shadowColor: 'rgba(0, 0, 0, 0.5)'
+		chartdatas['flow'] = {
+			tooltip: {
+				trigger: 'item',
+				formatter: function (p) {
+					return p.seriesName + '<br>' + p.name + ':' + changeunit(p.data.value);
+				}
+			},
+			legend: {
+				orient: 'vertical',
+				left: 'left',
+				data: ['', '']
+			},
+			series: [
+				{
+					name: '',
+					type: 'pie',
+					radius: '55%',
+					center: ['50%', '60%'],
+					data: [
+						{
+							name: '',
+							value:{{.data.inletFlowCount}}
+						},
+						{
+							name: '',
+							value:{{.data.exportFlowCount}}
+						}
+					],
+					itemStyle: {
+						emphasis: {
+							shadowBlur: 10,
+							shadowOffsetX: 0,
+							shadowColor: 'rgba(0, 0, 0, 0.5)'
+						}
 					}
 				}
-			}
-		]
-	};
+			]
+		};
 
-    window.addEventListener('resize', () => {
-        for(var key in charts){
-            charts[key].resize();
-        }
-    });
+		chartdatas['counts'] = {
+			tooltip: {
+				trigger: 'item',
+				formatter: '{a} <br/>{b} : {c} ({d}%)'
+			},
+			legend: {
+				orient: 'vertical',
+				left: 'left',
+				data: ['', '', '', '', '', '', '']
+			},
+			series: [
+				{
+					name: '',
+					type: 'pie',
+					radius: '55%',
+					center: ['50%', '60%'],
+					data: [
+						{
+							name: '',
+							value:{{.data.hostCount}}
+						},
+						{
+							name: '',
+							value:{{.data.tcpC}}
+						},
+						{
+							name: '',
+							value:{{.data.udpCount}}
+						},
+						{
+							name: '',
+							value:{{.data.httpProxyCount}}
+						},
+						{
+							name: '',
+							value:{{.data.socks5Count}}
+						},
+						{
+							name: '',
+							value:{{.data.secretCount}}
+						},
+						{
+							name: '',
+							value:{{.data.p2pCount}}
+						}
+					],
+					itemStyle: {
+						emphasis: {
+							shadowBlur: 10,
+							shadowOffsetX: 0,
+							shadowColor: 'rgba(0, 0, 0, 0.5)'
+						}
+					}
+				}
+			]
+		};
+
+	    window.addEventListener('resize', () => {
+	        for(var key in charts){
+	            charts[key].resize();
+	        }
+	    });
 </script>

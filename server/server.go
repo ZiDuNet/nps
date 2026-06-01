@@ -14,6 +14,7 @@ import (
 	"ehang.io/nps/bridge"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
 	"ehang.io/nps/server/proxy"
 	"ehang.io/nps/server/tool"
 	"github.com/astaxie/beego"
@@ -162,6 +163,7 @@ func StopServer(id int) error {
 		if svr, ok := v.(proxy.Service); ok {
 			if err := svr.Close(); err != nil {
 				logs.Error("stop server id %d error", id, err)
+				return err
 			}
 		} else {
 			logs.Warn("stop server id %d error", id)
@@ -244,7 +246,7 @@ func GetTunnel(start, length int, typeVal string, clientId int, search string, s
 	for _, key := range keys {
 		if value, ok := file.GetDb().JsonDb.Tasks.Load(key); ok {
 			v := value.(*file.Tunnel)
-			if (typeVal != "" && v.Mode != typeVal || (clientId != 0 && v.Client.Id != clientId)) || (typeVal == "" && clientId != v.Client.Id) {
+			if (typeVal != "" && v.Mode != typeVal) || (clientId != 0 && v.Client.Id != clientId) || (typeVal == "" && clientId != 0 && clientId != v.Client.Id) {
 				continue
 			}
 			all_list = append(all_list, v)
@@ -287,7 +289,7 @@ func GetTunnel(start, length int, typeVal string, clientId int, search string, s
 	for _, key := range all_list {
 		if value, ok := file.GetDb().JsonDb.Tasks.Load(key.Id); ok {
 			v := value.(*file.Tunnel)
-			if (typeVal != "" && v.Mode != typeVal || (clientId != 0 && v.Client.Id != clientId)) || (typeVal == "" && clientId != v.Client.Id) {
+			if (typeVal != "" && v.Mode != typeVal) || (clientId != 0 && v.Client.Id != clientId) || (typeVal == "" && clientId != 0 && clientId != v.Client.Id) {
 				continue
 			}
 			if search != "" && !(v.Id == common.GetIntNoErrByStr(search) || v.Port == common.GetIntNoErrByStr(search) || strings.Contains(v.Password, search) || strings.Contains(v.Remark, search) || strings.Contains(v.Target.TargetStr, search)) {
@@ -332,7 +334,10 @@ func dealClientData() {
 		} else {
 			v.IsConnect = false
 		}
-
+		// 确保 Rate 不为 nil，防止前端 JSON 序列化时 row.Rate.NowRate 报错
+		if v.Rate == nil {
+			v.Rate = rate.NewRate(0)
+		}
 		return true
 	})
 	return
@@ -451,24 +456,27 @@ func GetDashboardData() map[string]interface{} {
 	vir, _ := mem.VirtualMemory()
 	data["virtual_mem"] = math.Round(vir.UsedPercent)
 	conn, _ := net.ProtoCounters(nil)
+	// 采样间隔 100ms，乘以 10 换算为每秒速率
 	io1, _ := net.IOCounters(false)
-	time.Sleep(time.Millisecond * 500)
+	time.Sleep(time.Millisecond * 100)
 	io2, _ := net.IOCounters(false)
 	if len(io2) > 0 && len(io1) > 0 {
-		data["io_send"] = (io2[0].BytesSent - io1[0].BytesSent) * 2
-		data["io_recv"] = (io2[0].BytesRecv - io1[0].BytesRecv) * 2
+		data["io_send"] = (io2[0].BytesSent - io1[0].BytesSent) * 10
+		data["io_recv"] = (io2[0].BytesRecv - io1[0].BytesRecv) * 10
 	}
 	for _, v := range conn {
 		data[v.Protocol] = v.Stats["CurrEstab"]
 	}
 	//chart
 	var fg int
+	tool.ServerStatusLock.RLock()
 	if len(tool.ServerStatus) >= 10 {
 		fg = len(tool.ServerStatus) / 10
 		for i := 0; i <= 9; i++ {
 			data["sys"+strconv.Itoa(i+1)] = tool.ServerStatus[i*fg]
 		}
 	}
+	tool.ServerStatusLock.RUnlock()
 	return data
 }
 

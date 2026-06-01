@@ -52,6 +52,7 @@ func (self *LoginController) Verify() {
 		if !cpt.VerifyReq(self.Ctx.Request) {
 			self.Data["json"] = map[string]interface{}{"status": 0, "msg": "the verification code is wrong, please get it again and try again"}
 			self.ServeJSON()
+			return
 		}
 	}
 	if self.doLogin(username, password, true) {
@@ -132,8 +133,8 @@ func (self *LoginController) Register() {
 			self.ServeJSON()
 			return
 		}
-		if self.GetString("username") == "" || self.GetString("password") == "" || self.GetString("username") == beego.AppConfig.String("web_username") {
-			self.Data["json"] = map[string]interface{}{"status": 0, "msg": "please check your input"}
+		if self.GetString("username") == "" || self.GetString("password") == "" || len(self.GetString("password")) < 6 || self.GetString("username") == beego.AppConfig.String("web_username") {
+			self.Data["json"] = map[string]interface{}{"status": 0, "msg": "please check your input (password min 6 chars)"}
 			self.ServeJSON()
 			return
 		}

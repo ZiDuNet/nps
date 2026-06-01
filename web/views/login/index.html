@@ -8,98 +8,88 @@
 
     <title langtag="title-login"></title>
 
-    <!-- Mainly scripts -->
-    <!-- Latest compiled and minified CSS -->
     <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/style.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}" rel="stylesheet">
 
-    <!-- Latest compiled and minified JavaScript -->
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/bootstrap.min.js?v={{.version}}"></script>
-    <!-- Latest compiled and minified Locales -->
     <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}" type="text/javascript"></script>
 
 </head>
 
 <body class="gray-bg">
-<div class="row border-bottom">
-    <nav class="navbar navbar-static-top navbar-right" role="navigation" style="margin: 20px 40px">
-        <div></div>
-        <h1 style="margin:0px" class="navbar-header font-bold" langtag="application"></h1>
-        <span class="btn-group dropdown">
+<div class="login-page-bg">
+    <div class="login-nav">
+        <h1 class="font-bold" langtag="application"></h1>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <a href="#" onclick="toggleLoginTheme()" class="theme-toggle" id="theme-toggle" title="Toggle theme">
+                <i class="fa fa-moon" id="theme-icon"></i>
+            </a>
+            <span class="btn-group dropdown">
                 <button id="languagemenu" class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown"
-                        aria-haspopup="true" aria-expanded="false"><i
-                            class="fa fa-globe-asia fa-lg"></i><span></span></button>
+                        aria-haspopup="true" aria-expanded="false"><i class="fa fa-globe-asia fa-lg"></i><span></span></button>
                 <ul class="dropdown-menu"></ul>
             </span>
-    </nav>
-</div>
-<div class="loginColumns animated fadeInDown mt-3 px-5">
-    <div class="row">
-
-        <div class="col-md-6 mt-3">
-            <h3 langtag="info-tagline"></h3>
-            <ul class="px-1 text-justify">
-                <li langtag="info-feature1"></li>
-                <li langtag="info-feature2"></li>
-                <li langtag="info-feature3"></li>
-                <li langtag="info-feature4"></li>
-                <li langtag="info-feature5"></li>
-                <li langtag="info-feature6"></li>
-                <li langtag="info-feature7"></li>
-                <li langtag="info-feature8"></li>
-                <li langtag="info-feature9"></li>
-            </ul>
         </div>
+    </div>
 
-        <div class="col-md-6 mt-3">
-            <div class="ibox-content">
-                <form class="m-t" onsubmit="return false">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-features">
+                <h3 langtag="info-tagline"></h3>
+                <ul>
+                    <li langtag="info-feature1"></li>
+                    <li langtag="info-feature2"></li>
+                    <li langtag="info-feature3"></li>
+                    <li langtag="info-feature4"></li>
+                    <li langtag="info-feature5"></li>
+                    <li langtag="info-feature6"></li>
+                    <li langtag="info-feature7"></li>
+                    <li langtag="info-feature8"></li>
+                    <li langtag="info-feature9"></li>
+                </ul>
+            </div>
+            <div class="login-form-wrap">
+                <form onsubmit="return false">
                     <div class="form-group">
-                        <input name="username" class="form-control" placeholder="username" required=""
-                               langtag="word-username">
+                        <input name="username" class="form-control" placeholder="username" required="" langtag="word-username">
                     </div>
                     <div class="form-group">
-                        <input name="password" type="password" class="form-control" placeholder="password" required=""
-                               langtag="word-password">
+                        <input name="password" type="password" class="form-control" placeholder="password" required="" langtag="word-password">
                     </div>
                     {{if eq true .captcha_open}}
-                        <div class="form-group">
-                            {{create_captcha}}
-                            <input name="captcha" class="form-control" placeholder="captcha" required=""
-                                   langtag="word-captcha">
-                        </div>
+                    <div class="form-group">
+                        {{create_captcha}}
+                        <input name="captcha" class="form-control" placeholder="captcha" required="" langtag="word-captcha">
+                    </div>
                     {{end}}
-                    <button onclick="login()" class="btn btn-primary block full-width m-b"
-                            langtag="word-login"></button>
-                    {{if eq true .register_allow}}
-                        <p class="text-muted text-center"><small langtag="info-noaccount"></small></p>
-                        <a class="btn btn-sm btn-white btn-block" href="{{.web_base_url}}/login/register"
-                           langtag="word-register"></a>
-                    {{end}}
+                    <button onclick="login()" class="login-btn" langtag="word-login"></button>
                 </form>
+                {{if eq true .register_allow}}
+                <div class="register-link">
+                    <small langtag="info-noaccount"></small>
+                    <a href="{{.web_base_url}}/login/register" langtag="word-register"></a>
+                </div>
+                {{end}}
             </div>
         </div>
     </div>
-    <hr/>
-    <div class="footer" style="position: unset;">
-        <div class="pull-right">
-            <span langtag="word-readmore"></span> <strong><a href="https://ehang.io/nps" langtag="word-go"></a></strong>
-        </div>
-        <div><strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2020</div>
+
+    <div class="login-footer">
+        <strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2020
+        &emsp; <span langtag="word-readmore"></span> <a href="https://ehang.io/nps" langtag="word-go"></a>
     </div>
 </div>
 
 </body>
 </html>
 
-
 <script type="text/javascript">
     window.nps = {"web_base_url": {{.web_base_url}} }
 
-    // Login Page Flipbox control
     function login() {
         $.ajax({
             type: "POST",
@@ -115,6 +105,23 @@
         })
         return false
     }
+
+    function toggleLoginTheme() {
+        var html = document.documentElement;
+        var isDark = html.getAttribute('data-theme') === 'dark';
+        var next = isDark ? 'light' : 'dark';
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('nps-theme', next);
+        var icon = document.getElementById('theme-icon');
+        if (icon) icon.className = next === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
+    }
+
+    (function() {
+        var saved = localStorage.getItem('nps-theme');
+        if (saved) {
+            document.documentElement.setAttribute('data-theme', saved);
+            var icon = document.getElementById('theme-icon');
+            if (icon) icon.className = saved === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
+        }
+    })();
 </script>
-</body>
-</html>

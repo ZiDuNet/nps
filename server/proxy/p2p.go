@@ -3,6 +3,7 @@ package proxy
 import (
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"ehang.io/nps/lib/common"
@@ -13,6 +14,7 @@ type P2PServer struct {
 	BaseServer
 	p2pPort  int
 	p2p      map[string]*p2p
+	p2pMu    sync.Mutex
 	listener *net.UDPConn
 }
 
@@ -58,10 +60,12 @@ func (s *P2PServer) handleP2P(addr *net.UDPAddr, str string) {
 	if len(arr) < 2 {
 		return
 	}
+	s.p2pMu.Lock()
 	if v, ok = s.p2p[arr[0]]; !ok {
 		v = new(p2p)
 		s.p2p[arr[0]] = v
 	}
+	s.p2pMu.Unlock()
 	logs.Trace("new p2p connection ,role %s , password %s ,local address %s", arr[1], arr[0], addr.String())
 	if arr[1] == common.WORK_P2P_VISITOR {
 		v.visitorAddr = addr
@@ -73,7 +77,9 @@ func (s *P2PServer) handleP2P(addr *net.UDPAddr, str string) {
 			}
 			time.Sleep(time.Second)
 		}
+		s.p2pMu.Lock()
 		delete(s.p2p, arr[0])
+		s.p2pMu.Unlock()
 	} else {
 		v.providerAddr = addr
 	}

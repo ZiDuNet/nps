@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 	"strconv"
+	"sync"
 	"time"
 
 	"ehang.io/nps/lib/common"
@@ -15,8 +16,9 @@ import (
 )
 
 var (
-	ports        []int
-	ServerStatus []map[string]interface{}
+	ports             []int
+	ServerStatus      []map[string]interface{}
+	ServerStatusLock  sync.RWMutex
 )
 
 func StartSystemInfo() {
@@ -52,7 +54,7 @@ func TestServerPort(p int, m string) (b bool) {
 }
 
 func GenerateServerPort(m string) int {
-	for {
+	for i := 0; i < 1000; i++ {
 		//生成随机数 1024 - 65535
 		serverPort := rand.Intn(65535)
 		if serverPort < 1024 {
@@ -63,6 +65,7 @@ func GenerateServerPort(m string) int {
 			return serverPort
 		}
 	}
+	return 0
 }
 
 func getSeverStatus() {
@@ -104,6 +107,8 @@ func getSeverStatus() {
 		if len(ServerStatus) >= 1440 {
 			ServerStatus = ServerStatus[1:]
 		}
+		ServerStatusLock.Lock()
 		ServerStatus = append(ServerStatus, m)
+		ServerStatusLock.Unlock()
 	}
 }

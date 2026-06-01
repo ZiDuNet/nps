@@ -144,7 +144,8 @@
                 halign: 'center',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    return changeunit(row.Rate.NowRate) + "/S"
+                    var nowRate = (row.Rate && row.Rate.NowRate) ? row.Rate.NowRate : 0;
+                    return changeunit(nowRate) + "/S"
                 }
             },
             {

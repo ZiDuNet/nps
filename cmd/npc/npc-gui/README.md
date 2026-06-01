@@ -1,47 +1,26 @@
-# NPS 客户端 GUI (Wails 版本)
+# NPC GUI 客户端
 
-## 快捷命令格式
+基于 Wails 开发的 NPS 桌面客户端，需要 WebView2 运行时。
 
-快捷命令使用 Base64 编码，解码后的格式为：
-```
-nps:name|addr|key|tls
-```
+## 快捷命令
 
-示例：
+快捷命令为 Base64 编码，解码格式：
 ```
-nps:MyServer|127.0.0.1:8024|mykey123|false
+nps:名称|地址:端口|密钥|是否TLS
 ```
 
-编码后的 Base64：
-```
-bnBzOk15U2VydmVyfDEyNy4wLjAuMTo4MDI0fG15a2V5MTIzfGZhbHNl
-```
-
-## 安装与运行
-
-### 前置要求
-- Go 1.21+
-- Node.js 16+
-- Yarn
-
-### 开发模式
+## 开发
 
 ```bash
-cd npc-gui
-
-# 安装依赖
+cd cmd/npc/npc-gui
 yarn install
-
-# 运行开发服务器
 wails dev
 ```
 
+前置要求：Go 1.24+、Node.js 16+、Yarn
 
 ## 配置存储
 
-连接配置自动保存在以下位置：
 - Windows: `%APPDATA%\npc\npc_data.json`
 - Linux: `~/.config/npc/npc_data.json`
 - macOS: `~/Library/Application Support/npc/npc_data.json`
-
-

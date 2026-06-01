@@ -263,13 +263,16 @@ func (s *Mux) readSession() {
 			case muxNewConn: //New connection
 				connection := NewConn(pack.id, s)
 				s.newConnQueue.Push(connection)
+				muxPack.Put(pack)
 				continue
 			case muxPingFlag: //ping
 				s.sendInfo(muxPingReturn, muxPing, pack.content)
 				windowBuff.Put(pack.content)
+				muxPack.Put(pack)
 				continue
 			case muxPingReturn:
 				s.pingCh <- pack.content
+				muxPack.Put(pack)
 				continue
 			}
 			if connection, ok := s.connMap.Get(pack.id); ok && !connection.isClose {

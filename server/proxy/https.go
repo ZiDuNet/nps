@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"ehang.io/nps/lib/cache"
 	"ehang.io/nps/lib/common"
@@ -232,7 +233,12 @@ func (https *HttpsServer) cert(host *file.Host, c net.Conn, rb []byte, certFileU
 
 	acceptConn := conn.NewConn(c)
 	acceptConn.Rb = rb
-	l.acceptConn <- acceptConn
+	select {
+	case l.acceptConn <- acceptConn:
+	default:
+		logs.Warn("https acceptConn channel full, dropping connection")
+		c.Close()
+	}
 }
 
 // handle the https which is just proxy to other client
@@ -257,6 +263,8 @@ func (https *HttpsServer) handleHttps2(c net.Conn, hostName string, rb []byte, r
 	}
 	if targetAddr, err = host.Target.GetRandomTarget(); err != nil {
 		logs.Warn(err.Error())
+		c.Close()
+		return
 	}
 	logs.Info("new https connection,clientId %d,host %s,remote address %s", host.Client.Id, r.Host, c.RemoteAddr().String())
 	https.DealClient(conn.NewConn(c), host.Client, targetAddr, rb, common.CONN_TCP, nil, host.Client.Flow, host.Target.LocalProxy, nil)
@@ -300,6 +308,8 @@ func (https *HttpsServer) handleHttps(c net.Conn) {
 	}
 	if targetAddr, err = host.Target.GetRandomTarget(); err != nil {
 		logs.Warn(err.Error())
+		c.Close()
+		return
 	}
 	logs.Trace("new https connection,clientId %d,host %s,remote address %s", host.Client.Id, r.Host, c.RemoteAddr().String())
 	https.DealClient(conn.NewConn(c), host.Client, targetAddr, rb, common.CONN_TCP, nil, host.Client.Flow, host.Target.LocalProxy, nil)
@@ -308,15 +318,19 @@ func (https *HttpsServer) handleHttps(c net.Conn) {
 type HttpsListener struct {
 	acceptConn     chan *conn.Conn
 	parentListener net.Listener
+	closed         int32
 }
 
 // https listener
 func NewHttpsListener(l net.Listener) *HttpsListener {
-	return &HttpsListener{parentListener: l, acceptConn: make(chan *conn.Conn)}
+	return &HttpsListener{parentListener: l, acceptConn: make(chan *conn.Conn, 1024)}
 }
 
 // accept
 func (httpsListener *HttpsListener) Accept() (net.Conn, error) {
+	if atomic.LoadInt32(&httpsListener.closed) == 1 {
+		return nil, errors.New("listener closed")
+	}
 	httpsConn := <-httpsListener.acceptConn
 	if httpsConn == nil {
 		return nil, errors.New("get connection error")
@@ -326,6 +340,7 @@ func (httpsListener *HttpsListener) Accept() (net.Conn, error) {
 
 // close
 func (httpsListener *HttpsListener) Close() error {
+	atomic.StoreInt32(&httpsListener.closed, 1)
 	return nil
 }
 

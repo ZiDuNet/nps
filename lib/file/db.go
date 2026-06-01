@@ -271,6 +271,13 @@ func (s *DbUtils) VerifyUserName(username string, id int) (res bool) {
 }
 
 func (s *DbUtils) UpdateClient(t *Client) error {
+	// 先 Stop 旧的 Rate，防止内存泄漏
+	if old, ok := s.JsonDb.Clients.Load(t.Id); ok {
+		oldClient := old.(*Client)
+		if oldClient.Rate != nil {
+			oldClient.Rate.Stop()
+		}
+	}
 	s.JsonDb.Clients.Store(t.Id, t)
 	if t.RateLimit == 0 {
 		t.Rate = rate.NewRate(int64((2 << 23) * 1024))

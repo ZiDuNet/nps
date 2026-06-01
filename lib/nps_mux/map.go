@@ -44,6 +44,7 @@ func (s *connMap) Close() {
 	for _, v := range s.cMap {
 		_ = v.Close() // close all the connections in the mux
 	}
+	s.cMap = make(map[int32]*conn)
 }
 
 func (s *connMap) Delete(id int32) {
