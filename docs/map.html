@@ -26,8 +26,7 @@
         .stat-item .number { font-size: 28px; font-weight: 700; color: #3b82f6; }
         .stat-item .label { font-size: 13px; color: #64748b; margin-top: 4px; }
         #map-container { width: 100%; height: calc(100vh - 140px); }
-        .footer { text-align: center; padding: 12px; color: #475569; font-size: 12px; position: absolute; bottom: 0; width: 100%; }
-        .loading {
+        .msg {
             display: flex; align-items: center; justify-content: center;
             height: calc(100vh - 140px); color: #475569; font-size: 16px;
         }
@@ -43,24 +42,24 @@
     </div>
     <div class="stats-bar">
         <div class="stat-item">
-            <div class="number" id="total-nps">--</div>
+            <div class="number" id="total-nps">0</div>
             <div class="label">NPS Server</div>
         </div>
         <div class="stat-item">
-            <div class="number" id="total-npc">--</div>
+            <div class="number" id="total-npc">0</div>
             <div class="label">NPC Client</div>
         </div>
         <div class="stat-item">
-            <div class="number" id="total-countries">--</div>
+            <div class="number" id="total-countries">0</div>
             <div class="label">Countries</div>
         </div>
     </div>
-    <div id="map-container"><div class="loading">Loading map data...</div></div>
+    <div id="map-container"><div class="msg">Loading...</div></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@4/map/js/world.js"></script>
+    <script src="https://unpkg.com/echarts@5/dist/echarts.min.js"></script>
     <script>
-    var API = 'https://nps-telemetry.4dbim.workers.dev/stats';
+    var API = 'https://nps-telemetry.wushuo224.workers.dev/stats';
+    var MAP_URL = 'https://unpkg.com/echarts@4/map/json/world.json';
 
     var COUNTRY_NAMES = {
         AF:'Afghanistan',AL:'Albania',DZ:'Algeria',AD:'Andorra',AO:'Angola',AG:'Antigua and Barbuda',
@@ -70,7 +69,7 @@
         BN:'Brunei',BG:'Bulgaria',BF:'Burkina Faso',BI:'Burundi',KH:'Cambodia',CM:'Cameroon',
         CA:'Canada',CV:'Cape Verde',CF:'Central African Republic',TD:'Chad',CL:'Chile',
         CN:'China',CO:'Colombia',KM:'Comoros',CG:'Congo',CD:'Dem. Rep. Congo',CR:'Costa Rica',
-        CI:'Côte d\'Ivoire',HR:'Croatia',CU:'Cuba',CY:'Cyprus',CZ:'Czech Rep.',DK:'Denmark',
+        CI:'Ivory Coast',HR:'Croatia',CU:'Cuba',CY:'Cyprus',CZ:'Czech Rep.',DK:'Denmark',
         DJ:'Djibouti',DM:'Dominica',DO:'Dominican Rep.',EC:'Ecuador',EG:'Egypt',SV:'El Salvador',
         GQ:'Eq. Guinea',ER:'Eritrea',EE:'Estonia',ET:'Ethiopia',FJ:'Fiji',FI:'Finland',
         FR:'France',GA:'Gabon',GM:'Gambia',GE:'Georgia',DE:'Germany',GH:'Ghana',GR:'Greece',
@@ -98,19 +97,44 @@
         VE:'Venezuela',VN:'Vietnam',YE:'Yemen',ZM:'Zambia',ZW:'Zimbabwe'
     };
 
+    var chart = null;
+
+    function init() {
+        fetch(MAP_URL).then(function(r) { return r.json(); }).then(function(geo) {
+            echarts.registerMap('world', geo);
+            chart = echarts.init(document.getElementById('map-container'));
+            renderEmpty();
+            loadData();
+            window.addEventListener('resize', function() { chart.resize(); });
+        }).catch(function(e) {
+            document.getElementById('map-container').innerHTML =
+                '<div class="msg">Failed to load map data. Please refresh.</div>';
+        });
+    }
+
+    function renderEmpty() {
+        chart.setOption({
+            backgroundColor: '#0f172a',
+            series: [{
+                type: 'map', map: 'world', roam: true,
+                scaleLimit: { min: 1, max: 10 },
+                itemStyle: { areaColor: '#1e293b', borderColor: '#334155' },
+                emphasis: { label: { show: true, color: '#fff' }, itemStyle: { areaColor: '#2563eb' } },
+                data: []
+            }]
+        });
+    }
+
     function loadData() {
         fetch(API).then(function(r) { return r.json(); }).then(function(data) {
             document.getElementById('total-nps').textContent = (data.total_nps || 0).toLocaleString();
             document.getElementById('total-npc').textContent = (data.total_npc || 0).toLocaleString();
             document.getElementById('total-countries').textContent = Object.keys(data.countries || {}).length;
             renderMap(data);
-        }).catch(function(e) {
-            console.error(e);
-        });
+        }).catch(function() {});
     }
 
     function renderMap(data) {
-        var chart = echarts.init(document.getElementById('map-container'));
         var mapData = [];
         var countries = data.countries || {};
         var maxVal = 10;
@@ -120,15 +144,14 @@
             var name = COUNTRY_NAMES[code] || code;
             var val = (info.nps || 0) + (info.npc || 0);
             if (val > maxVal) maxVal = val;
-            mapData.push({ name: name, value: val, nps: info.nps || 0, npc: info.npc || 0, code: code });
+            mapData.push({ name: name, value: val, nps: info.nps || 0, npc: info.npc || 0 });
         }
 
         chart.setOption({
             backgroundColor: '#0f172a',
             tooltip: {
                 trigger: 'item',
-                backgroundColor: '#1e293b',
-                borderColor: '#1e3a5f',
+                backgroundColor: '#1e293b', borderColor: '#1e3a5f',
                 textStyle: { color: '#e2e8f0' },
                 formatter: function(p) {
                     if (!p.data || !p.data.nps) return p.name;
@@ -136,32 +159,22 @@
                 }
             },
             visualMap: {
-                min: 0, max: maxVal,
-                text: ['High', 'Low'],
+                min: 0, max: maxVal, text: ['High', 'Low'],
                 realtime: false, calculable: true,
                 inRange: { color: ['#1e3a5f', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd'] },
-                textStyle: { color: '#64748b' },
-                left: 20, bottom: 30
+                textStyle: { color: '#64748b' }, left: 20, bottom: 30
             },
             series: [{
-                name: 'NPS',
-                type: 'map',
-                map: 'world',
-                roam: true,
+                type: 'map', map: 'world', roam: true,
                 scaleLimit: { min: 1, max: 10 },
                 itemStyle: { areaColor: '#1e293b', borderColor: '#334155' },
-                emphasis: {
-                    label: { show: true, color: '#fff' },
-                    itemStyle: { areaColor: '#2563eb' }
-                },
+                emphasis: { label: { show: true, color: '#fff' }, itemStyle: { areaColor: '#2563eb' } },
                 data: mapData
             }]
         });
-
-        window.addEventListener('resize', function() { chart.resize(); });
     }
 
-    loadData();
+    init();
     setInterval(loadData, 300000);
     </script>
 </body>
