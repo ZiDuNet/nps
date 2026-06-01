@@ -36,7 +36,7 @@ NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务
 # Docker
 docker run -d --name nps \
   -p 80:80 -p 443:443 -p 8024:8024 -p 8080:8080 \
-  -v /path/to/conf:/conf yisier1/nps
+  -v /path/to/conf:/conf wushuo98/nps
 ```
 
 访问 `http://ip:8080` 进入管理面板。
@@ -62,8 +62,8 @@ go build cmd/npc/npc.go    # 客户端
 
 ## Docker Hub
 
-- [yisier1/nps](https://hub.docker.com/r/yisier1/nps) — 服务端
-- [yisier1/npc](https://hub.docker.com/r/yisier1/npc) — 客户端
+- [wushuo98/nps](https://hub.docker.com/r/wushuo98/nps) — 服务端
+- [wushuo98/npc](https://hub.docker.com/r/wushuo98/npc) — 客户端
 
 ## 文档
 

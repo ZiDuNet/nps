@@ -29,7 +29,7 @@ NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务
 ./nps -server        # 交互式引导安装/卸载
 
 # Docker 部署
-docker run -d --name nps -p 80:80 -p 443:443 -p 8024:8024 -p 8080:8080 -v /path/to/conf:/conf yisier1/nps
+docker run -d --name nps -p 80:80 -p 443:443 -p 8024:8024 -p 8080:8080 -v /path/to/conf:/conf wushuo98/nps
 ```
 
 启动后访问 `http://ip:8080` 进入 Web 管理面板，首次启动会在终端打印随机生成的用户名和密码。
@@ -47,7 +47,7 @@ docker run -d --name nps -p 80:80 -p 443:443 -p 8024:8024 -p 8080:8080 -v /path/
 ./npc -server=your-ip:8025 -vkey=your-key -tls_enable=true
 
 # Docker
-docker run -d --name npc yisier1/npc -server=your-ip:8024 -vkey=your-key
+docker run -d --name npc wushuo98/npc -server=your-ip:8024 -vkey=your-key
 ```
 
 > 推荐使用无配置文件模式启动客户端（删除 npc 目录下的 `conf` 文件夹），所有配置在服务端 Web 面板管理。
@@ -77,8 +77,8 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" ./cmd/nps/nps.go
 
 ## Docker Hub
 
-- **NPS 服务端**: [yisier1/nps](https://hub.docker.com/r/yisier1/nps)
-- **NPC 客户端**: [yisier1/npc](https://hub.docker.com/r/yisier1/npc)
+- **NPS 服务端**: [wushuo98/nps](https://hub.docker.com/r/wushuo98/nps)
+- **NPC 客户端**: [wushuo98/npc](https://hub.docker.com/r/wushuo98/npc)
 
 ## 宝塔面板
 
