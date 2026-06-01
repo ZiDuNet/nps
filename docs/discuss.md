@@ -1,3 +1,3 @@
-# 交流群
+# 交流
 
-![二维码.jpeg](https://i.loli.net/2019/02/15/5c66c32a42074.jpeg)
+[GitHub Issues](https://github.com/ZiDuNet/nps/issues)

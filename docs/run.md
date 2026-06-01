@@ -1,42 +1,81 @@
-# 启动
+# 快速启动
+
 ## 服务端
-下载完服务器压缩包后，解压，然后进入解压后的文件夹
 
-- 执行安装命令
+### 直接运行
 
-对于linux|darwin ```sudo ./nps install```
+```bash
+./nps
+```
 
-对于windows，管理员身份运行cmd，进入安装目录 ```nps.exe install```
+启动后在终端输出随机生成的管理员用户名和密码，访问 `http://ip:8080` 进入管理面板。
 
-- 启动
+### 交互式服务管理
 
-对于linux|darwin ```sudo nps start```
+```bash
+./nps -server
+```
 
-对于windows，管理员身份运行cmd，进入程序目录 ```nps.exe start```
+支持安装/卸载系统服务（Linux 需要 sudo，Windows 需要管理员权限）。
 
-```安装后windows配置文件位于 C:\Program Files\nps，linux和darwin位于/etc/nps```
+### 安装为系统服务
 
-停止和重启可用，stop和restart
+**Linux/macOS:**
+```bash
+sudo ./nps install
+sudo nps start
+```
 
-**如果发现没有启动成功，可以使用`nps(.exe) stop`，然后运行`nps.(exe)`运行调试，或查看日志**(Windows日志文件位于当前运行目录下，linux和darwin位于/var/log/nps.log)
-- 访问服务端ip:web服务端口（默认为8080）
-- 使用用户名和密码登陆（默认admin/123，正式使用一定要更改）
-- 创建客户端
+**Windows（管理员 CMD）:**
+```cmd
+nps.exe install
+nps.exe start
+```
+
+安装后配置文件位置：
+- Windows: `C:\Program Files\nps`
+- Linux/macOS: `/etc/nps`
+
+### 默认端口
+
+| 端口 | 用途 |
+|------|------|
+| 80 | HTTP 代理 |
+| 443 | HTTPS 代理 |
+| 8024 | Bridge TCP（客户端连接） |
+| 8025 | Bridge TLS（加密连接） |
+| 8080 | Web 管理面板 |
 
 ## 客户端
-- 下载客户端安装包并解压，进入到解压目录
-- 点击web管理中客户端前的+号，复制启动命令
-- 执行启动命令，linux直接执行即可，windows将./npc换成npc.exe用**cmd执行**
 
-如果使用`powershell`运行，**请将ip括起来！**
+### 无配置文件模式（推荐）
 
-如果需要注册到系统服务可查看[注册到系统服务](/use?id=注册到系统服务)
+所有配置在服务端 Web 面板管理，客户端只需一条命令：
+
+```bash
+./npc -server=your-ip:8024 -vkey=your-key
+```
+
+TLS 加密模式：
+```bash
+./npc -server=your-ip:8025 -vkey=your-key -tls_enable=true
+```
+
+### 交互式启动
+
+```bash
+./npc
+```
+
+直接双击运行（Windows），按提示输入快捷启动命令即可。
+
+### 快捷启动命令
+
+在 Web 面板的客户端列表中，展开客户端详情可看到快捷启动命令（Base64 编码），直接复制运行即可一键启动。
 
 ## 版本检查
-- 对客户端以及服务的均可以使用参数`-version`打印版本
-- `nps -version`或`./nps -version`
-- `npc -version`或`./npc -version`
 
-## 配置
-- 客户端连接后，在web中配置对应穿透服务即可
-- 可以查看[使用示例](/example)
+```bash
+./nps -version
+./npc -version
+```

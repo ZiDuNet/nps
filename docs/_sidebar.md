@@ -1,29 +1,17 @@
 * 入门
-  * [安装](install.md)
-  * [启动](run.md)
+  * [快速开始](start.md)
+  * [隧道模式](tunnel.md)
   * [使用示例](example.md)
-* 服务端
-  * [介绍](introduction.md)
-  * [使用](nps_use.md)
-  * [配置文件](server_config.md)
-  * [增强功能](nps_extend.md)
-
-* 客户端
-
-  * [基本使用](use.md)
-  * [增强功能](npc_extend.md)
-
-* 扩展
-
-  * [功能](feature.md)
-  * [说明](description.md)
-  * [web api](api.md)
-  * [sdk](npc_sdk.md)
-
+* 配置
+  * [服务端配置](server_config.md)
+  * [客户端配置](client_config.md)
+* 功能
+  * [功能一览](feature.md)
+  * [Web API](api.md)
+* 部署
+  * [Docker 部署](docker.md)
+  * [宝塔面板](bt.md)
+  * [GUI 客户端](gui.md)
 * 其他
-
   * [FAQ](faq.md)
-  * [贡献](contribute.md)
-  * [捐助](donate.md)
-  * [致谢](thanks.md)
-  * [交流](discuss.md)
+  * [更新日志](changelog.md)

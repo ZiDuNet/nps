@@ -1,6 +1,5 @@
 # 贡献
 
-- 如果遇到bug可以直接提交至dev分支
-- 使用遇到问题可以通过issues反馈
-- 项目处于开发阶段，还有很多待完善的地方，如果可以贡献代码，请提交 PR 至 dev 分支
-- 如果有新的功能特性反馈，可以通过issues或者qq群反馈
+- 遇到 Bug 请提交 [Issue](https://github.com/ZiDuNet/nps/issues)
+- 欢迎提交 Pull Request
+- Fork → 修改 → 提交 PR 到 master 分支

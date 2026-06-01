@@ -1,5 +1,4 @@
-Thanks [jetbrains](https://www.jetbrains.com/?from=nps) for providing development tools for nps
+# 致谢
 
-<html>
-<img src="https://ftp.bmp.ovh/imgs/2019/12/6435398b0c7402b1.png" width="300"  align=center />
-</html>
+- [原版 NPS](https://github.com/ehang-io/nps) by @ehang
+- 所有贡献者和用户

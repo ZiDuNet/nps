@@ -1,16 +1,13 @@
 ![logo](logo.svg)
 
-# NPS <small>0.26.10</small>
+# NPS <small>1.0.0</small>
 
-> 一款轻量级、高性能、功能强大的内网穿透代理服务器
+> 轻量级、高性能、功能强大的内网穿透代理服务器
 
-- 几乎支持所有协议
-- 支持内网http代理、内网socks5代理、p2p等
-- 简洁但功能强大的WEB管理界面
-- 支持服务端、客户端同时控制
-- 扩展功能强大
-- 全平台兼容，一键注册为服务
+- 支持 TCP/UDP/HTTP(S)/SOCKS5/P2P 等协议
+- 现代化 Web 管理面板，支持明暗主题切换
+- Docker 一键部署，全平台兼容
+- 客户端 GUI 桌面应用
 
-
-[GitHub](https://github.com/ehang-io/nps/)
-[开始使用](#nps)
+[GitHub](https://github.com/ZiDuNet/nps)
+[开始使用](#/start)
