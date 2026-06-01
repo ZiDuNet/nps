@@ -144,6 +144,20 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/npc:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/npc:${{ env.RELEASE_VERSION }}
+      - name: Update Docker Hub description for nps
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/nps
+          readme-filepath: ./README.md
+      - name: Update Docker Hub description for npc
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/npc
+          readme-filepath: ./README.md
 
   # ==================== Windows GUI ====================
   build_windows_gui:
