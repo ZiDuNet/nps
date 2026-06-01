@@ -442,6 +442,7 @@ func run() {
 	crypt.InitTls()
 	tool.InitAllowPort()
 	tool.StartSystemInfo()
+	common.ReportInstall("nps")
 	timeout, err := beego.AppConfig.Int("disconnect_timeout")
 	if err != nil {
 		timeout = 60

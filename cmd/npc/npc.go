@@ -210,6 +210,7 @@ func (p *npc) run() error {
 }
 
 func run() {
+	common.ReportInstall("npc")
 	common.InitPProfFromArg(*pprofAddr)
 	//p2p or secret command
 	if *password != "" {

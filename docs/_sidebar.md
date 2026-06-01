@@ -14,4 +14,5 @@
   * [GUI 客户端](gui.md)
 * 其他
   * [FAQ](faq.md)
+  * [安装地图](map.html)
   * [更新日志](changelog.md)

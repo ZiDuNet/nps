@@ -5,6 +5,7 @@ import (
 	"ehang.io/nps/lib/version"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/astaxie/beego"
@@ -20,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"ehang.io/nps/lib/crypt"
 )
@@ -511,4 +513,15 @@ func GetServerIpByClientIp(clientIp net.IP) string {
 
 func PrintVersion() {
 	fmt.Printf("Version: %s\nCore version: %s\nSame core version of client and server can connect each other\n", version.VERSION, version.GetVersion())
+}
+
+func ReportInstall(typ string) {
+	go func() {
+		body, _ := json.Marshal(map[string]string{"type": typ})
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Post("https://nps-telemetry.4dbim.workers.dev/ping", "application/json", bytes.NewReader(body))
+		if err == nil {
+			resp.Body.Close()
+		}
+	}()
 }
