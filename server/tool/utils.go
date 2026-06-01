@@ -82,7 +82,7 @@ func getSeverStatus() {
 		}
 		m := make(map[string]interface{})
 		loads, _ := load.Avg()
-		m["load1"] = loads.Load1
+		m["load1"] = math.Round(loads.Load1*100) / 100
 		m["load5"] = loads.Load5
 		m["load15"] = loads.Load15
 		m["cpu"] = math.Round(cpuAll / float64(len(cpuPercet)))

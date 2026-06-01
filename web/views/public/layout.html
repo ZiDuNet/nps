@@ -38,11 +38,11 @@
                 <li class="nav-header">
                     <div class="dropdown profile-element">
                     {{if eq true .isAdmin}}
-                        <span><i class="fa fa-user-cog fa-3x"></i></span>
+                        <span><i class="fa fa-shield-alt fa-3x"></i></span>
                         <span class="clear"> <span class="block m-t-xs"><strong class="font-bold" langtag="word-admin"></strong></span>
                         <span class="text-muted text-xs block" langtag="word-system">
                     {{else}}
-                        <span><i class="fa fa-user fa-3x"></i></span>
+                        <span><i class="fa fa-user-shield fa-3x"></i></span>
                         <span class="clear"> <span class="block m-t-xs"><strong class="font-bold">{{.username}}</strong></span>
                         <span class="text-muted text-xs block" langtag="word-user">
                     {{end}}

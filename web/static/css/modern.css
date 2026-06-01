@@ -389,3 +389,15 @@ body { background: var(--c-bg) !important; color: var(--c-text) !important; font
 hr { border-color: var(--c-border) !important; }
 a { color: var(--c-accent) !important; }
 code { background: var(--c-accent-light) !important; color: var(--c-accent) !important; border-radius: 4px; padding: 2px 6px; font-size: 12px; }
+
+/* ── Dashboard Compact ── */
+.dashboard-compact .row { margin-left: -8px !important; margin-right: -8px !important; }
+.dashboard-compact .row > [class*="col-"] { padding-left: 8px !important; padding-right: 8px !important; }
+.dashboard-compact .ibox { margin-bottom: 0 !important; }
+.dashboard-compact .ibox-title { padding: 10px 16px !important; }
+.dashboard-compact .ibox-title h5 { font-size: 13px !important; }
+.dashboard-compact .list-group-sm .list-group-item { padding: 7px 16px !important; font-size: 13px !important; }
+.dashboard-compact .stat-card .ibox-title { padding: 12px 16px 2px !important; }
+.dashboard-compact .stat-card .ibox-content { padding: 2px 16px 14px !important; }
+.dashboard-compact .stat-card .ibox-content h1 { font-size: 24px !important; }
+.dashboard-compact .stat-card .stat-icon { font-size: 40px !important; }
