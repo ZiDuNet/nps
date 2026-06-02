@@ -271,167 +271,154 @@ func run() {
 
 func printSlogan() {
 	green := color.New(color.FgGreen).SprintFunc()
-	// 第一次输入，如果输入 1,2,3，4 则需要输入秘钥，否则
+	yellow := color.New(color.FgYellow).SprintFunc()
 
-	fmt.Printf("%s", green(""))
+	_ = green
 
-	fmt.Printf("\033[32;0m###########################################################\n")
-	fmt.Printf("\033[32;0m#                   \033[31mNPS内网穿透客户端\033[0m                     #\n")
-	fmt.Printf("\033[32;0m#                            			          #\n")
-	fmt.Printf("\033[32;0m#\033[32m 地址：\033[31;0mhttps://github.com/ZiDuNet/nps\033[0m                     #\n")
-	fmt.Printf("\033[32;0m#\033[32m 提示：\033[32;0m1、涉及到系统服务的需要以管理员身份运行\033[0m\033[32;0m	          #\n")
-	fmt.Printf("\033[32;0m#\033[32m       \033[32;0m2、直接启动或[注册系统服务]需要使用[快捷启动命令]\033[0m\033[32;0m #\n")
-	fmt.Printf("\033[32;0m#\033[32m       \033[32;0m3、其他命令如卸载/启动/停止只需要输入[vkey]\033[0m\033[32;0m	  #\n")
-	fmt.Printf("\033[32;0m###########################################################\n")
-	fmt.Printf("\033[0m") // 重置颜色
-
-	fmt.Printf("\n")
-
-	fmt.Printf("\u001B[32m输入[1]\u001B[0m - 注册系统服务\n")
-	fmt.Printf("\u001B[32m输入[2]\u001B[0m - 卸载系统服务\n")
-	fmt.Printf("---------------------\n")
-	fmt.Printf("\u001B[32m输入[3]\u001B[0m - 启动系统服务\n")
-	fmt.Printf("\u001B[32m输入[4]\u001B[0m - 停止系统服务\n")
-	fmt.Printf("---------------------\n")
-	fmt.Printf("\u001B[32m输入[0]\u001B[0m - 退出\n")
-	fmt.Printf("---------------------\n")
-	fmt.Printf("直接输入[快捷启动命令]则是启动隧道,多个[快捷启动命令]用英文逗号拼接\n")
-	fmt.Printf("\n")
+	fmt.Println()
+	fmt.Printf("  %s\n", yellow("NPS 内网穿透客户端 v"+version.VERSION))
+	fmt.Printf("  %s\n", "https://github.com/ZiDuNet/nps")
+	fmt.Println()
+	fmt.Println("  [1] 注册系统服务")
+	fmt.Println("  [2] 卸载系统服务")
+	fmt.Println("  [3] 启动系统服务")
+	fmt.Println("  [4] 停止系统服务")
+	fmt.Println("  [0] 退出")
+	fmt.Println()
+	fmt.Println("  输入[快捷启动命令]直接启动隧道，多个用英文逗号拼接")
+	fmt.Println()
 }
 
 func inputCmd() {
+	for {
+		var input string
+		fmt.Printf("请输入：")
 
-	var flag string
-	fmt.Printf("请输入：")
+		stdin := bufio.NewReader(os.Stdin)
+		_, err := fmt.Fscanln(stdin, &input)
+		if err != nil {
+			fmt.Println("输入有误，请重新输入")
+			continue
+		}
 
-	stdin := bufio.NewReader(os.Stdin)
-	_, err := fmt.Fscanln(stdin, &flag)
-	if err != nil {
-		fmt.Println("输入有误")
-	} else {
-		if flag == "0" {
+		input = strings.Replace(input, " ", "", -1)
+
+		if input == "0" {
 			os.Exit(0)
 		}
 
-		flag := strings.Replace(flag, " ", "", -1)
-
-		// 如果输入不等于 1,2,3，4，则启动隧道
-		if flag != "1" && flag != "2" && flag != "3" && flag != "4" {
-
-			vkeys := strings.Split(flag, `,`)
-			var cmdArray []string
-
-			for _, key := range vkeys {
-				startCmd, err := crypt.Base64Decoding(key)
-				if err != nil {
-					fmt.Println("快捷启动命令解析失败")
-					inputCmd()
-					return
-				}
-
-				cmdArray = append(cmdArray, startCmd)
-			}
-
-			for _, item := range cmdArray {
-				startNpcServer(item)
-			}
-
-		} else {
-			systemService(flag)
+		if input == "1" || input == "2" || input == "3" || input == "4" {
+			systemService(input)
+			continue
 		}
+
+		// 快捷启动命令模式
+		vkeys := strings.Split(input, ",")
+		var cmdArray []string
+
+		parseOk := true
+		for _, key := range vkeys {
+			startCmd, err := crypt.Base64Decoding(key)
+			if err != nil {
+				fmt.Println("快捷启动命令解析失败")
+				parseOk = false
+				break
+			}
+			cmdArray = append(cmdArray, startCmd)
+		}
+
+		if !parseOk {
+			continue
+		}
+
+		for _, item := range cmdArray {
+			startNpcServer(item)
+		}
+		fmt.Println("隧道已启动，连接中...")
 	}
 }
 
 func startNpcServer(startCmd string) {
-	var serAddr string
-	var vkey string
-	var tls string
 	array := strings.Fields(startCmd)
-	serAddr = array[0]
-	vkey = array[1]
-	if len(array) > 2 {
-		tls = array[2]
+	if len(array) < 2 {
+		logs.Error("快捷启动命令格式错误")
+		return
 	}
+	serAddr := array[0]
+	vkey := array[1]
+	tlsEnable := len(array) > 2 && (array[2] == "-tls_enable=true" || array[2] == "true")
+
 	go func() {
 		for {
-			if tls == "-tls_enable=true" || tls == "true" {
-				client.SetTlsEnable(true)
-				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey + " " + tls)
-				logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), client.GetTlsEnable())
+			client.SetTlsEnable(tlsEnable)
+			if tlsEnable {
+				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey + " -tls_enable=true")
 			} else {
-				client.SetTlsEnable(false)
 				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey)
-				logs.Info("the version of client is %s, the core version of client is %s", version.VERSION, version.GetVersion())
 			}
-
+			logs.Info("版本: %s, 核心版本: %s, TLS: %t", version.VERSION, version.GetVersion(), client.GetTlsEnable())
 			client.NewRPClient(serAddr, vkey, *connType, *proxyUrl, nil, *disconnectTime).Start()
-			logs.Info("Client closed! It will be reconnected in five seconds")
+			logs.Info("连接断开，5秒后重连")
 			time.Sleep(time.Second * 5)
 		}
 	}()
 }
 
 func systemService(flag string) {
+	for {
+		if flag == "1" {
+			fmt.Printf("请输入[快捷启动命令]，多个用英文逗号拼接：")
+		} else {
+			fmt.Printf("请输入[VKEY]，多个用英文逗号拼接：")
+		}
 
-	if flag == "1" {
-		fmt.Printf("请输入[快捷启动命令],多个[快捷启动命令]用英文逗号拼接：")
-	} else {
-		fmt.Printf("请输入[VKEY],多个[VKEY]用英文逗号拼接：")
-	}
+		var input string
+		stdin := bufio.NewReader(os.Stdin)
+		_, err := fmt.Fscanln(stdin, &input)
 
-	var vkey string
-	stdin := bufio.NewReader(os.Stdin)
-	_, err := fmt.Fscanln(stdin, &vkey)
+		if err != nil {
+			fmt.Println("输入错误，请重新输入")
+			continue
+		}
 
-	if err != nil {
-		fmt.Println("输入错误，请重试")
-		systemService(flag)
-		return
-	} else {
-		if vkey == "0" {
+		input = strings.Replace(input, " ", "", -1)
+
+		if input == "0" {
 			os.Exit(0)
 		}
+
+		vkeys := strings.Split(input, ",")
+
+		if flag == "1" {
+			var cmdArray []string
+			parseOk := true
+			for _, key := range vkeys {
+				startCmd, err := crypt.Base64Decoding(key)
+				if err != nil {
+					fmt.Println("快捷启动命令解析失败")
+					parseOk = false
+					break
+				}
+				cmdArray = append(cmdArray, startCmd)
+			}
+
+			if !parseOk {
+				continue
+			}
+
+			for _, item := range cmdArray {
+				array := strings.Fields(item)
+				tlsEnable := len(array) > 2 && (array[2] == "-tls_enable=true" || array[2] == "true")
+				systemPro(flag, array[0], array[1], tlsEnable)
+			}
+		} else {
+			for _, key := range vkeys {
+				systemPro(flag, "", key, false)
+			}
+		}
+
+		return
 	}
-
-	vkey = strings.Replace(vkey, " ", "", -1)
-
-	vkeys := strings.Split(vkey, `,`)
-
-	if flag == "1" {
-		var cmdArray []string
-		for _, key := range vkeys {
-			startCmd, err := crypt.Base64Decoding(key)
-			if err != nil {
-				fmt.Println("快捷启动命令解析失败")
-				systemService(flag)
-				return
-			}
-			cmdArray = append(cmdArray, startCmd)
-		}
-
-		for _, item := range cmdArray {
-			array := strings.Fields(item)
-
-			tls := "false"
-			if len(array) > 2 {
-				tls = array[2]
-			}
-			// tls
-			if tls == "-tls_enable=true" || tls == "true" {
-				systemPro(flag, array[0], array[1], true)
-			} else {
-				systemPro(flag, array[0], array[1], false)
-			}
-		}
-	} else {
-		for _, key := range vkeys {
-			systemPro(flag, "", key, false)
-		}
-
-	}
-
-	inputCmd()
-	return
 }
 
 func systemPro(flag string, serAddr string, vkey string, tls bool) {
