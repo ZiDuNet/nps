@@ -10,7 +10,7 @@ fi
 apt-get update
 apt-get install -y libegl1-mesa-dev libgles2-mesa-dev libx11-dev xorg-dev ca-certificates curl
 
-GO_VERSION="${GO_VERSION:-1.22.7}"
+GO_VERSION="${GO_VERSION:-1.24.4}"
 curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
 rm -rf /usr/local/go
 tar -C /usr/local -xzf /tmp/go.tgz
