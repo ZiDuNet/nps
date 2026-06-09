@@ -72,7 +72,7 @@ func DealBridgeTask() {
 			logs.Trace("New secret connection, addr", s.Conn.Conn.RemoteAddr())
 			if t := file.GetDb().GetTaskByMd5Password(s.Password); t != nil {
 				if t.Status {
-					go proxy.NewBaseServer(Bridge, t).DealClient(s.Conn, t.Client, t.Target.TargetStr, nil, common.CONN_TCP, nil, t.Flow, t.Target.LocalProxy, nil)
+					go proxy.NewBaseServer(Bridge, t).DealClient(s.Conn, t.Client, t.Target.TargetStr, nil, common.CONN_TCP, nil, t.Flow, t.Target.LocalProxy, nil, nil)
 				} else {
 					s.Conn.Close()
 					logs.Trace("This key %s cannot be processed,status is close", s.Password)
@@ -101,6 +101,11 @@ func StartNewServer(bridgePort int, cnf *file.Tunnel, bridgeType string, bridgeD
 	}
 	go DealBridgeTask()
 	go dealClientFlow()
+	go dealClientExpire()
+	tool.StartIORateCollector()
+	if minute, err := beego.AppConfig.Int("flow_store_interval"); err == nil && minute > 0 {
+		go flowSession(time.Minute * time.Duration(minute))
+	}
 	if svr := NewMode(Bridge, cnf); svr != nil {
 		if err := svr.Start(); err != nil {
 			logs.Error(err)
@@ -190,9 +195,6 @@ func AddTask(t *file.Tunnel) error {
 	if b := tool.TestServerPort(t.Port, t.Mode); !b && t.Mode != "httpHostServer" {
 		logs.Error("taskId %d start error port %d open failed", t.Id, t.Port)
 		return errors.New("the port open error")
-	}
-	if minute, err := beego.AppConfig.Int("flow_store_interval"); err == nil && minute > 0 {
-		go flowSession(time.Minute * time.Duration(minute))
 	}
 	if svr := NewMode(Bridge, t); svr != nil {
 		logs.Info("tunnel task %s start mode：%s port %d", t.Remark, t.Mode, t.Port)
@@ -456,13 +458,10 @@ func GetDashboardData() map[string]interface{} {
 	vir, _ := mem.VirtualMemory()
 	data["virtual_mem"] = math.Round(vir.UsedPercent)
 	conn, _ := net.ProtoCounters(nil)
-	// 采样间隔 100ms，乘以 10 换算为每秒速率
-	io1, _ := net.IOCounters(false)
-	time.Sleep(time.Millisecond * 100)
-	io2, _ := net.IOCounters(false)
-	if len(io2) > 0 && len(io1) > 0 {
-		data["io_send"] = (io2[0].BytesSent - io1[0].BytesSent) * 10
-		data["io_recv"] = (io2[0].BytesRecv - io1[0].BytesRecv) * 10
+	// 从后台 IO 采集缓存获取，不再 Sleep 阻塞请求
+	if ioData, ok := tool.IORateCache.Load().(map[string]interface{}); ok {
+		data["io_send"] = ioData["io_send"]
+		data["io_recv"] = ioData["io_recv"]
 	}
 	for _, v := range conn {
 		data[v.Protocol] = v.Stats["CurrEstab"]
@@ -494,5 +493,34 @@ func flowSession(m time.Duration) {
 				file.GetDb().JsonDb.StoreGlobalToJsonFile()
 			}
 		}
+	})
+}
+
+func dealClientExpire() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			checkClientExpire()
+		}
+	}
+}
+
+func checkClientExpire() {
+	file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {
+		v := value.(*file.Client)
+		if v.ExpireTime != "" && v.ExpireTime != "0001-01-01 00:00:00" {
+			if t, err := time.Parse("2006-01-02 15:04:05", v.ExpireTime); err == nil {
+				if time.Now().After(t) {
+					v.Status = false
+					file.GetDb().UpdateClient(v)
+					DelTunnelAndHostByClientId(v.Id, false)
+					Bridge.DelClient(v.Id)
+					logs.Warn("客户端ID %d 已过期，自动断开并清理隧道", v.Id)
+				}
+			}
+		}
+		return true
 	})
 }

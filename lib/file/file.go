@@ -187,8 +187,17 @@ func storeSyncMapToFile(m sync.Map, filePath string) {
 	file, err := os.Create(filePath + ".tmp")
 	// first create a temporary file to store
 	if err != nil {
-		panic(err)
+		logs.Error(err, "create temp file err")
+		return
 	}
+	var writeErr bool
+	defer func() {
+		if writeErr {
+			_ = file.Close()
+			_ = os.Remove(filePath + ".tmp")
+			return
+		}
+	}()
 	m.Range(func(key, value interface{}) bool {
 		var b []byte
 		var err error
@@ -218,18 +227,26 @@ func storeSyncMapToFile(m sync.Map, filePath string) {
 			return true
 		}
 		if err != nil {
+			logs.Error(err, "marshal json err")
 			return true
 		}
 		_, err = file.Write(b)
 		if err != nil {
-			panic(err)
+			logs.Error(err, "write file err")
+			writeErr = true
+			return false
 		}
 		_, err = file.Write([]byte("\n" + common.CONN_DATA_SEQ))
 		if err != nil {
-			panic(err)
+			logs.Error(err, "write file err")
+			writeErr = true
+			return false
 		}
 		return true
 	})
+	if writeErr {
+		return
+	}
 	_ = file.Sync()
 	_ = file.Close()
 	// must close file first, then rename it
@@ -244,18 +261,27 @@ func storeGlobalToFile(m *Glob, filePath string) {
 	file, err := os.Create(filePath + ".tmp")
 	// first create a temporary file to store
 	if err != nil {
-		panic(err)
+		logs.Error(err, "create temp file err")
+		return
 	}
+	defer func() {
+		_ = file.Close()
+	}()
 
 	var b []byte
 	b, err = json.Marshal(m)
+	if err != nil {
+		logs.Error(err, "marshal json err")
+		return
+	}
 	_, err = file.Write(b)
 	if err != nil {
-		panic(err)
+		logs.Error(err, "write file err")
+		return
 	}
 	_ = file.Sync()
-	_ = file.Close()
 	// must close file first, then rename it
+	_ = file.Close()
 	err = os.Rename(filePath+".tmp", filePath)
 	if err != nil {
 		logs.Error(err, "store to file err, data will lost")

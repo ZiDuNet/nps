@@ -162,7 +162,7 @@ func (s *Sock5ModeServer) doConnect(c net.Conn, command uint8) {
 	}
 	s.DealClient(conn.NewConn(c), s.task.Client, addr, nil, ltype, func() {
 		s.sendReply(c, succeeded)
-	}, s.task.Flow, s.task.Target.LocalProxy, nil)
+	}, s.task.Flow, s.task.Target.LocalProxy, nil, nil)
 	return
 }
 
@@ -319,7 +319,7 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 	defer common.BufPoolUdp.Put(b)
 	defer target.Close()
 	for {
-		_, err := c.Read(b)
+		_, err := io.ReadFull(c, b)
 		if err != nil {
 			c.Close()
 			return
@@ -344,7 +344,7 @@ func (s *Sock5ModeServer) handleConn(c net.Conn) {
 	nMethods := buf[1]
 
 	methods := make([]byte, nMethods)
-	if len, err := c.Read(methods); len != int(nMethods) || err != nil {
+	if _, err := io.ReadFull(c, methods); err != nil {
 		logs.Warn("wrong method")
 		c.Close()
 		return
@@ -378,7 +378,7 @@ func (s *Sock5ModeServer) Auth(c net.Conn) error {
 	if _, err := io.ReadAtLeast(c, user, userLen); err != nil {
 		return err
 	}
-	if _, err := c.Read(header[:1]); err != nil {
+	if _, err := io.ReadFull(c, header[:1]); err != nil {
 		return errors.New("密码长度获取错误")
 	}
 	passLen := int(header[0])

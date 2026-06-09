@@ -278,11 +278,13 @@ func printSlogan() {
 	fmt.Println()
 	fmt.Printf("  %s\n", yellow("NPS 内网穿透客户端 v"+version.VERSION))
 	fmt.Printf("  %s\n", "https://github.com/ZiDuNet/nps")
+	fmt.Printf("  当前版本：%s\n", version.VERSION)
 	fmt.Println()
 	fmt.Println("  [1] 注册系统服务")
 	fmt.Println("  [2] 卸载系统服务")
 	fmt.Println("  [3] 启动系统服务")
 	fmt.Println("  [4] 停止系统服务")
+	fmt.Println("  [5] 更新客户端")
 	fmt.Println("  [0] 退出")
 	fmt.Println()
 	fmt.Println("  输入[快捷启动命令]直接启动隧道，多个用英文逗号拼接")
@@ -309,6 +311,11 @@ func inputCmd() {
 
 		if input == "1" || input == "2" || input == "3" || input == "4" {
 			systemService(input)
+			continue
+		}
+
+		if input == "5" {
+			install.UpdateNpcNew()
 			continue
 		}
 

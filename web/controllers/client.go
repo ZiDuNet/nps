@@ -73,6 +73,7 @@ func (s *ClientController) Add() {
 			IpWhite:     s.GetBoolNoErr("ipwhite"),
 			IpWhitePass: s.getEscapeString("ipwhitepass"),
 			IpWhiteList: RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n")),
+			ExpireTime:  normalizeExpireTime(s.getEscapeString("expire_time")),
 			CreateTime:  time.Now().Format("2006-01-02 15:04:05"),
 		}
 		if err := file.GetDb().NewClient(t); err != nil {
@@ -159,6 +160,7 @@ func (s *ClientController) Edit() {
 			}
 
 			c.BlackIpList = RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n"))
+			c.ExpireTime = normalizeExpireTime(s.getEscapeString("expire_time"))
 			file.GetDb().JsonDb.StoreClientsToJsonFile()
 		}
 		s.AjaxOk("save success")
@@ -184,6 +186,39 @@ func RemoveRepeatedElement(arr []string) (newArr []string) {
 		}
 	}
 	return
+}
+
+// 支持的过期时间日期格式
+var expireTimeFormats = []string{
+	"2006-01-02 15:04:05",
+	"2006-01-02 15:04",
+	"2006-01-02",
+	"2006/01/02 15:04:05",
+	"2006/01/02 15:04",
+	"2006/01/02",
+	time.RFC3339,
+}
+
+// ParseExpireTime 尝试用多种格式解析过期时间字符串
+func ParseExpireTime(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range expireTimeFormats {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// normalizeExpireTime 将用户输入的过期时间统一为 "2006-01-02 15:04:05" 格式
+func normalizeExpireTime(s string) string {
+	if t, ok := ParseExpireTime(s); ok {
+		return t.Format("2006-01-02 15:04:05")
+	}
+	return ""
 }
 
 // 更改状态

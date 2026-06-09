@@ -35,7 +35,7 @@ type Mux struct {
 	newConnCh          chan *conn
 	id                 int32
 	closeChan          chan struct{}
-	IsClose            bool
+	isClose            atomic.Bool
 	counter            *latencyCounter
 	bw                 *bandwidth
 	pingCh             chan []byte
@@ -44,6 +44,10 @@ type Mux struct {
 	connType           string
 	writeQueue         priorityQueue
 	newConnQueue       connQueue
+}
+
+func (s *Mux) IsClose() bool {
+	return s.isClose.Load()
 }
 
 func NewMux(c net.Conn, connType string, pingCheckThreshold int) *Mux {
@@ -70,7 +74,6 @@ func NewMux(c net.Conn, connType string, pingCheckThreshold int) *Mux {
 		closeChan:          make(chan struct{}, 1),
 		newConnCh:          make(chan *conn),
 		bw:                 NewBandwidth(fd),
-		IsClose:            false,
 		connType:           connType,
 		pingCh:             make(chan []byte),
 		pingCheckThreshold: checkThreshold,
@@ -87,7 +90,7 @@ func NewMux(c net.Conn, connType string, pingCheckThreshold int) *Mux {
 }
 
 func (s *Mux) NewConn() (*conn, error) {
-	if s.IsClose {
+	if s.isClose.Load() {
 		return nil, errors.New("the mux has closed")
 	}
 	conn := NewConn(s.getId(), s)
@@ -106,7 +109,7 @@ func (s *Mux) NewConn() (*conn, error) {
 }
 
 func (s *Mux) Accept() (net.Conn, error) {
-	if s.IsClose {
+	if s.isClose.Load() {
 		return nil, errors.New("accpet error,the mux has closed")
 	}
 	conn := <-s.newConnCh
@@ -121,7 +124,7 @@ func (s *Mux) Addr() net.Addr {
 }
 
 func (s *Mux) sendInfo(flag uint8, id int32, data interface{}) {
-	if s.IsClose {
+	if s.isClose.Load() {
 		return
 	}
 	var err error
@@ -140,11 +143,11 @@ func (s *Mux) sendInfo(flag uint8, id int32, data interface{}) {
 func (s *Mux) writeSession() {
 	go func() {
 		for {
-			if s.IsClose {
+			if s.isClose.Load() {
 				break
 			}
 			pack := s.writeQueue.Pop()
-			if s.IsClose {
+			if s.isClose.Load() {
 				break
 			}
 			//if pack.flag == muxNewMsg || pack.flag == muxNewMsgPart {
@@ -173,7 +176,7 @@ func (s *Mux) ping() {
 		ticker := time.NewTicker(time.Second * 5)
 		defer ticker.Stop()
 		for {
-			if s.IsClose {
+			if s.isClose.Load() {
 				break
 			}
 			select {
@@ -197,7 +200,7 @@ func (s *Mux) ping() {
 		var now time.Time
 		var data []byte
 		for {
-			if s.IsClose {
+			if s.isClose.Load() {
 				break
 			}
 			select {
@@ -213,7 +216,7 @@ func (s *Mux) ping() {
 				// convert float64 to bits, store it atomic
 				//log.Println("ping", math.Float64frombits(atomic.LoadUint64(&s.latency)))
 			}
-			if cap(data) > 0 && !s.IsClose {
+			if cap(data) > 0 && !s.isClose.Load() {
 				windowBuff.Put(data)
 			}
 		}
@@ -224,11 +227,11 @@ func (s *Mux) readSession() {
 	go func() {
 		var connection *conn
 		for {
-			if s.IsClose {
+			if s.isClose.Load() {
 				break
 			}
 			connection = s.newConnQueue.Pop()
-			if s.IsClose {
+			if s.isClose.Load() {
 				break // make sure that is closed
 			}
 			s.connMap.Set(connection.connId, connection) //it has been Set before send ok
@@ -241,7 +244,7 @@ func (s *Mux) readSession() {
 		var l uint16
 		var err error
 		for {
-			if s.IsClose {
+			if s.isClose.Load() {
 				return
 			}
 			pack = muxPack.Get()
@@ -325,10 +328,10 @@ func (s *Mux) newMsg(connection *conn, pack *muxPackager) (err error) {
 }
 
 func (s *Mux) Close() (err error) {
-	if s.IsClose {
+	if s.isClose.Load() {
 		return errors.New("the mux has closed")
 	}
-	s.IsClose = true
+	s.isClose.Store(true)
 	log.Println("close mux")
 	s.connMap.Close()
 	//s.connMap = nil

@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ehang.io/nps/lib/common"
@@ -19,6 +20,8 @@ var (
 	ports             []int
 	ServerStatus      []map[string]interface{}
 	ServerStatusLock  sync.RWMutex
+	ServerStatusMu    sync.RWMutex
+	IORateCache       atomic.Value
 )
 
 func StartSystemInfo() {
@@ -91,12 +94,10 @@ func getSeverStatus() {
 		vir, _ := mem.VirtualMemory()
 		m["virtual_mem"] = math.Round(vir.UsedPercent)
 		conn, _ := net.ProtoCounters(nil)
-		io1, _ := net.IOCounters(false)
-		time.Sleep(time.Millisecond * 500)
-		io2, _ := net.IOCounters(false)
-		if len(io2) > 0 && len(io1) > 0 {
-			m["io_send"] = (io2[0].BytesSent - io1[0].BytesSent) * 2
-			m["io_recv"] = (io2[0].BytesRecv - io1[0].BytesRecv) * 2
+		// 从后台 IO 采集缓存获取
+		if ioData, ok := IORateCache.Load().(map[string]interface{}); ok {
+			m["io_send"] = ioData["io_send"]
+			m["io_recv"] = ioData["io_recv"]
 		}
 		t := time.Now()
 		m["time"] = strconv.Itoa(t.Hour()) + ":" + strconv.Itoa(t.Minute()) + ":" + strconv.Itoa(t.Second())
@@ -104,11 +105,37 @@ func getSeverStatus() {
 		for _, v := range conn {
 			m[v.Protocol] = v.Stats["CurrEstab"]
 		}
+		ServerStatusMu.Lock()
 		if len(ServerStatus) >= 1440 {
 			ServerStatus = ServerStatus[1:]
 		}
 		ServerStatusLock.Lock()
 		ServerStatus = append(ServerStatus, m)
 		ServerStatusLock.Unlock()
+		ServerStatusMu.Unlock()
+	}
+}
+
+// StartIORateCollector 启动后台 IO 速率采集协程
+func StartIORateCollector() {
+	go collectIORate()
+}
+
+func collectIORate() {
+	// 初始化缓存，避免空值 panic
+	IORateCache.Store(map[string]interface{}{
+		"io_send": uint64(0),
+		"io_recv": uint64(0),
+	})
+	for {
+		io1, _ := net.IOCounters(false)
+		time.Sleep(time.Second)
+		io2, _ := net.IOCounters(false)
+		if len(io2) > 0 && len(io1) > 0 {
+			IORateCache.Store(map[string]interface{}{
+				"io_send": io2[0].BytesSent - io1[0].BytesSent,
+				"io_recv": io2[0].BytesRecv - io1[0].BytesRecv,
+			})
+		}
 	}
 }

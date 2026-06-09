@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"ehang.io/nps/lib/common"
@@ -39,6 +40,8 @@ type PortMux struct {
 	httpConn    chan *PortConn
 	httpsConn   chan *PortConn
 	managerConn chan *PortConn
+	done        chan struct{}
+	wg          sync.WaitGroup
 }
 
 func NewPortMux(port int, managerHost string) *PortMux {
@@ -49,6 +52,7 @@ func NewPortMux(port int, managerHost string) *PortMux {
 		httpConn:    make(chan *PortConn),
 		httpsConn:   make(chan *PortConn),
 		managerConn: make(chan *PortConn),
+		done:        make(chan struct{}),
 	}
 	pMux.Start()
 	return pMux
@@ -65,15 +69,22 @@ func (pMux *PortMux) Start() error {
 		logs.Error(err)
 		os.Exit(0)
 	}
+	pMux.wg.Add(1)
 	go func() {
+		defer pMux.wg.Done()
 		for {
 			conn, err := pMux.Listener.Accept()
 			if err != nil {
 				logs.Warn(err)
 				//close
 				pMux.Close()
+				return
 			}
-			go pMux.process(conn)
+			pMux.wg.Add(1)
+			go func(c net.Conn) {
+				defer pMux.wg.Done()
+				pMux.process(c)
+			}(conn)
 		}
 	}()
 	return nil
@@ -82,16 +93,23 @@ func (pMux *PortMux) Start() error {
 func (pMux *PortMux) process(conn net.Conn) {
 	// Recognition according to different signs
 	// read 3 byte
+	// 设置读超时，防止恶意连接阻塞
+	conn.SetReadDeadline(time.Now().Add(ACCEPT_TIME_OUT * time.Second))
 	buf := make([]byte, 3)
 	if n, err := io.ReadFull(conn, buf); err != nil || n != 3 {
+		conn.Close()
 		return
 	}
+	// 读完 3 字节后清除超时
+	conn.SetReadDeadline(time.Time{})
 	var ch chan *PortConn
 	var rs []byte
 	var buffer bytes.Buffer
 	var readMore = false
 	switch common.BytesToNum(buf) {
 	case HTTP_CONNECT, HTTP_DELETE, HTTP_GET, HTTP_HEAD, HTTP_OPTIONS, HTTP_POST, HTTP_PUT, HTTP_TRACE: //http and manager
+		// HTTP 分支刷新超时
+		conn.SetReadDeadline(time.Now().Add(ACCEPT_TIME_OUT * time.Second))
 		buffer.Reset()
 		r := bufio.NewReader(conn)
 		buffer.Write(buf)
@@ -121,6 +139,8 @@ func (pMux *PortMux) process(conn net.Conn) {
 				break
 			}
 		}
+		// HTTP 分支读完Header后清除超时
+		conn.SetReadDeadline(time.Time{})
 	case CLIENT: // client connection
 		ch = pMux.clientConn
 	default: // https
@@ -130,9 +150,17 @@ func (pMux *PortMux) process(conn net.Conn) {
 	if len(rs) == 0 {
 		rs = buf
 	}
-	timer := time.NewTimer(ACCEPT_TIME_OUT)
+	if ch == nil {
+		conn.Close()
+		return
+	}
+	timer := time.NewTimer(ACCEPT_TIME_OUT * time.Second)
+	defer timer.Stop()
 	select {
 	case <-timer.C:
+		conn.Close()
+	case <-pMux.done:
+		conn.Close()
 	case ch <- newPortConn(conn, rs, readMore):
 	}
 }
@@ -142,11 +170,14 @@ func (pMux *PortMux) Close() error {
 		return errors.New("the port pmux has closed")
 	}
 	pMux.isClose = true
+	pMux.Listener.Close()
+	close(pMux.done)
+	pMux.wg.Wait()
 	close(pMux.clientConn)
 	close(pMux.httpsConn)
 	close(pMux.httpConn)
 	close(pMux.managerConn)
-	return pMux.Listener.Close()
+	return nil
 }
 
 func (pMux *PortMux) GetClientListener() net.Listener {

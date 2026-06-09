@@ -1,4 +1,4 @@
-# NPS <sub>v1.0.0</sub>
+# NPS <sub>v1.1.0</sub>
 
 ![](https://img.shields.io/github/v/tag/ehang-io/nps.svg) ![](https://img.shields.io/github/stars/ehang-io/nps.svg) ![](https://img.shields.io/github/forks/ehang-io/nps.svg)
 
@@ -90,6 +90,13 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" ./cmd/nps/nps.go
 - [新特性文档](https://dqg9t9eulqq.feishu.cn/wiki/FmVVwDcEGiTZxekYJl5ccuFanlg)
 
 ## 更新日志
+
+- **2026-06-10 v1.1.0**
+  - **合并上游更新**：Bridge Client 并发安全、Mux atomic.Bool、pmux 优雅关闭
+  - **Bug 修复**：隧道/域名/UDP 流量统计为零、JSON 持久化 panic、buf pool 泄漏、SOCKS5 读取错误处理
+  - **新功能**：客户端到期时间（自动暂停）、NPC 一键更新、菜单显示版本号
+  - **性能优化**：GetTunnel 单次遍历、Dashboard IO 后台缓存采集
+  - **CI/CD**：修复 Go 版本、更新 actions、Docker Hub 简介说明优化内容
 
 - **2026-06-02 v1.0.0**
   - **版本号升级至 1.0.0**，标志项目进入稳定阶段

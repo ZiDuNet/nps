@@ -1,4 +1,4 @@
-# NPS <sub>v1.0.0</sub>
+# NPS <sub>v1.1.0</sub>
 
 ![](https://img.shields.io/github/v/tag/ehang-io/nps.svg) ![](https://img.shields.io/github/stars/ehang-io/nps.svg)
 

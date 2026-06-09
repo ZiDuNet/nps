@@ -1,5 +1,34 @@
 # 更新日志
 
+## v1.1.0 (2026-06-10)
+
+### 合并上游更新
+- Bridge Client 并发安全（sync.Mutex 保护 signal/tunnel/file 字段）
+- Mux IsClose 改为 atomic.Bool，避免竞态条件
+- pmux 优雅关闭，防止 send on closed channel
+
+### Bug 修复
+- 隧道/域名解析/UDP 流量始终为 0：CopyBuffer 传入 host 参数
+- JSON 持久化 panic → logs.Error，不再崩溃
+- netpackager UnPack 错误时归还 buf pool，修复内存泄漏
+- P2P UDP 连接添加 30 秒超时，避免无限等待
+- SOCKS5 doConnect/handleUDP 用 io.ReadFull 替代 c.Read
+- HTTPS ClientHello recordLen 添加 16384 上限检查
+
+### 新功能
+- 客户端到期时间：支持设置 ExpireTime，定时检查自动暂停
+- NPC 菜单新增"更新客户端"选项
+- NPS/NPC 菜单显示当前版本号
+- 更新前自动检查版本，已是最新则跳过
+
+### 其他
+- rand.Seed → rand.New(rand.NewSource)
+- ioutil.WriteFile → os.WriteFile
+- GetTunnel 性能优化（单次 Range 遍历）
+- Dashboard IO 速率改为后台缓存采集，不再 Sleep 500ms
+- GenerateServerPort 添加重试上限
+- CI/CD：修复 Go 版本、更新 actions 版本、Docker Hub 简介说明优化内容
+
 ## v1.0.0 (2026-06-02)
 
 ### Web UI 现代化改造

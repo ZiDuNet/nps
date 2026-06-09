@@ -2,6 +2,7 @@ package install
 
 import (
 	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/version"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -142,6 +144,16 @@ func UpdateNps() {
 }
 
 func UpdateNpsNew() {
+	latestVersion, err := fetchLatestVersion()
+	if err != nil {
+		fmt.Println("获取最新版本失败：", err)
+		return
+	}
+	if compareVersion(latestVersion, version.VERSION) <= 0 {
+		fmt.Println("当前已是最新版本：", version.VERSION)
+		return
+	}
+	fmt.Println("发现新版本：", latestVersion, "，当前版本：", version.VERSION)
 	destPath := downloadLatest2("server", filepath.Join(common.GetAppPath(), "temp"))
 	//复制文件到对应目录
 	copyStaticFileReplaceNps(destPath, common.GetAppPath())
@@ -436,4 +448,79 @@ func chMod(name string, mode os.FileMode) {
 	if !common.IsWindows() {
 		os.Chmod(name, mode)
 	}
+}
+
+// fetchLatestVersion 从 GitHub API 获取最新版本号
+func fetchLatestVersion() (string, error) {
+	resp, err := http.Get("https://api.github.com/repos/ZiDuNet/nps/releases/latest")
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	rl := new(release)
+	if err := json.Unmarshal(b, rl); err != nil {
+		return "", err
+	}
+	return rl.TagName, nil
+}
+
+// compareVersion 比较两个版本号，返回 1 表示 v1 > v2，-1 表示 v1 < v2，0 表示相等
+func compareVersion(v1, v2 string) int {
+	v1 = strings.TrimPrefix(v1, "v")
+	v2 = strings.TrimPrefix(v2, "v")
+	parts1 := strings.Split(v1, ".")
+	parts2 := strings.Split(v2, ".")
+	maxLen := len(parts1)
+	if len(parts2) > maxLen {
+		maxLen = len(parts2)
+	}
+	for i := 0; i < maxLen; i++ {
+		var n1, n2 int
+		if i < len(parts1) {
+			n1, _ = strconv.Atoi(parts1[i])
+		}
+		if i < len(parts2) {
+			n2, _ = strconv.Atoi(parts2[i])
+		}
+		if n1 > n2 {
+			return 1
+		} else if n1 < n2 {
+			return -1
+		}
+	}
+	return 0
+}
+
+// UpdateNpcNew 更新客户端（带版本检查）
+func UpdateNpcNew() {
+	latestVersion, err := fetchLatestVersion()
+	if err != nil {
+		fmt.Println("获取最新版本失败：", err)
+		return
+	}
+	if compareVersion(latestVersion, version.VERSION) <= 0 {
+		fmt.Println("当前已是最新版本：", version.VERSION)
+		return
+	}
+	fmt.Println("发现新版本：", latestVersion, "，当前版本：", version.VERSION)
+	destPath := downloadLatest2("client", filepath.Join(common.GetAppPath(), "temp"))
+	copyStaticFileReplaceNpc(destPath, common.GetAppPath())
+	fmt.Println("更新成功，请重启客户端")
+}
+
+// copyStaticFileReplaceNpc 替换客户端可执行文件
+func copyStaticFileReplaceNpc(srcPath, descPath string) string {
+	binPath, _ := filepath.Abs(os.Args[0])
+	if !common.IsWindows() {
+		os.Rename(filepath.Join(srcPath, "npc"), filepath.Join(descPath, "npc"))
+	} else {
+		os.Rename(filepath.Join(srcPath, "npc.exe"), filepath.Join(descPath, "npc.exe"))
+	}
+	chMod(binPath, 0755)
+	os.RemoveAll(srcPath)
+	return binPath
 }

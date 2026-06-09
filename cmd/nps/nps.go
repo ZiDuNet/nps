@@ -323,7 +323,7 @@ func inputCmd() {
 
 		case "3":
 			install.UpdateNpsNew()
-			return
+			break
 		case "4":
 			var statusMsg = ""
 			status, err := s.Status()

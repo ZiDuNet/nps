@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ehang.io/nps/lib/common"
@@ -28,12 +29,12 @@ import (
 var ServerTlsEnable bool = false
 
 type Client struct {
+	mu        sync.Mutex
 	tunnel    *nps_mux.Mux
 	signal    *conn.Conn
 	file      *nps_mux.Mux
 	Version   string
-	retryTime int // it will be add 1 when ping not ok until to 3 will close the client
-	sync.Mutex
+	retryTime atomic.Int32 // it will be add 1 when ping not ok until to 3 will close the client
 }
 
 func NewClient(t, f *nps_mux.Mux, s *conn.Conn, vs string) *Client {
@@ -239,7 +240,7 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 func (s *Bridge) DelClient(id int) {
 	if v, ok := s.Client.Load(id); ok {
 		cl := v.(*Client)
-		cl.Lock()
+		cl.mu.Lock()
 		if cl.signal != nil {
 			cl.signal.Close()
 		}
@@ -249,7 +250,7 @@ func (s *Bridge) DelClient(id int) {
 		if cl.file != nil {
 			cl.file.Close()
 		}
-		cl.Unlock()
+		cl.mu.Unlock()
 		s.Client.Delete(id)
 		if file.GetDb().IsPubClient(id) {
 			return
@@ -281,13 +282,13 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 		//the vKey connect by another ,close the client of before
 		if v, ok := s.Client.LoadOrStore(id, NewClient(nil, nil, c, vs)); ok {
 			cl := v.(*Client)
-			cl.Lock()
+			cl.mu.Lock()
 			if cl.signal != nil {
 				cl.signal.WriteClose()
 			}
 			cl.signal = c
 			cl.Version = vs
-			cl.Unlock()
+			cl.mu.Unlock()
 		}
 		go s.GetHealthFromClient(id, c)
 		logs.Info("clientId %d connection succeeded, address:%s ", id, c.Conn.RemoteAddr())
@@ -295,12 +296,12 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 		muxConn := nps_mux.NewMux(c.Conn, s.tunnelType, s.disconnectTime)
 		if v, ok := s.Client.LoadOrStore(id, NewClient(muxConn, nil, nil, vs)); ok {
 			cl := v.(*Client)
-			cl.Lock()
+			cl.mu.Lock()
 			if cl.tunnel != nil {
 				cl.tunnel.Close()
 			}
 			cl.tunnel = muxConn
-			cl.Unlock()
+			cl.mu.Unlock()
 		}
 	case common.WORK_CONFIG:
 		client, err := file.GetDb().GetClient(id)
@@ -323,12 +324,12 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 		muxConn := nps_mux.NewMux(c.Conn, s.tunnelType, s.disconnectTime)
 		if v, ok := s.Client.LoadOrStore(id, NewClient(nil, muxConn, nil, vs)); ok {
 			cl := v.(*Client)
-			cl.Lock()
+			cl.mu.Lock()
 			if cl.file != nil {
 				cl.file.Close()
 			}
 			cl.file = muxConn
-			cl.Unlock()
+			cl.mu.Unlock()
 		}
 	case common.WORK_P2P:
 		//read md5 secret
@@ -344,9 +345,9 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 				return
 			} else {
 				cl := v.(*Client)
-				cl.Lock()
+				cl.mu.Lock()
 				sig := cl.signal
-				cl.Unlock()
+				cl.mu.Unlock()
 				if sig == nil {
 					logs.Error("p2p error, client signal is nil")
 					c.Close()
@@ -391,12 +392,15 @@ func (s *Bridge) SendLinkInfo(clientId int, link *conn.Link, t *file.Tunnel) (ta
 				}
 			}
 		}
+		cl := v.(*Client)
+		cl.mu.Lock()
 		var tunnel *nps_mux.Mux
 		if t != nil && t.Mode == "file" {
-			tunnel = v.(*Client).file
+			tunnel = cl.file
 		} else {
-			tunnel = v.(*Client).tunnel
+			tunnel = cl.tunnel
 		}
+		cl.mu.Unlock()
 		if tunnel == nil {
 			err = errors.New("the client connect error")
 			return
@@ -429,14 +433,14 @@ func (s *Bridge) ping() {
 			arr := make([]int, 0)
 			s.Client.Range(func(key, value interface{}) bool {
 				v := value.(*Client)
-				v.Lock()
+				v.mu.Lock()
 				tunnel := v.tunnel
 				signal := v.signal
-				isClose := v.tunnel != nil && v.tunnel.IsClose
-				v.Unlock()
+				isClose := v.tunnel != nil && v.tunnel.IsClose()
+				v.mu.Unlock()
 				if tunnel == nil || signal == nil {
-					v.retryTime += 1
-					if v.retryTime >= 3 {
+					v.retryTime.Add(1)
+					if v.retryTime.Load() >= 3 {
 						arr = append(arr, key.(int))
 					}
 					return true
