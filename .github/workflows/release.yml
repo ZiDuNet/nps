@@ -80,26 +80,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ==================== Android APK ====================
-  build_android:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Build
-        run: |
-          chmod +x build.android.sh
-          docker run --rm -i -w /app -v $(pwd):/app -e ANDROID_HOME=/usr/local/android_sdk -e GOPROXY=direct fyneio/fyne-cross:android-latest /app/build.android.sh
-          ls -la android_client.apk
-      - name: Upload
-        uses: softprops/action-gh-release@v2
-        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
-        with:
-          files: |
-            android_client.apk
-          tag_name: ${{ github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # ==================== Android APK（已禁用：GUI 已从 Fyne 迁移到 Wails，不支持 Android） ====================
+  # build_android:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Check out code
+  #       uses: actions/checkout@v4
+  #     - name: Build
+  #       run: |
+  #         chmod +x build.android.sh
+  #         docker run --rm -i -w /app -v $(pwd):/app -e ANDROID_HOME=/usr/local/android_sdk -e GOPROXY=direct fyneio/fyne-cross:android-latest /app/build.android.sh
+  #         ls -la android_client.apk
+  #     - name: Upload
+  #       uses: softprops/action-gh-release@v2
+  #       if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+  #       with:
+  #         files: |
+  #           android_client.apk
+  #         tag_name: ${{ github.ref_name }}
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ==================== Docker 镜像 ====================
   build_docker:
