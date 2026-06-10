@@ -58,26 +58,57 @@
         onExpandRow: function () {$('body').setLang ('.detail-view');},
         onPostBody: function (data) { if ($(this)[0].locale != undefined ) $('body').setLang ('#table'); },
         detailFormatter: function (index, row, element) {
-            return '<b langtag="word-maxconnections"></b>: ' + row.MaxConn + '&emsp;'
-                + '<b langtag="word-curconnections"></b>: ' + row.NowConn + '&emsp;'
-                + '<b langtag="word-flowlimit"></b>: ' + row.Flow.FlowLimit + 'm&emsp;'
-                + '<b langtag="word-ratelimit"></b>: ' + row.RateLimit + 'KB/s&emsp;'
-                + '<b langtag="word-maxtunnels"></b>: ' + row.MaxTunnelNum + '&emsp;<br/><br/>'
-                + '<b langtag="word-webusername"></b>: ' + row.WebUserName + '&emsp;'
-                + '<b langtag="word-webpassword"></b>: ' + row.WebPassword + '&emsp;'
-                + '<b langtag="word-basicusername"></b>: ' + row.Cnf.U + '&emsp;'
-                + '<b langtag="word-basicpassword"></b>: ' + row.Cnf.P + '&emsp;<br/><br/>'
-                + '<b langtag="word-connectbyconfig"></b>: <span langtag="word-' + row.ConfigConnAllow + '"></span>&emsp;<br/><br/>'
-                + '<b langtag="word-ipwhite"></b>: ' + row.IpWhite + '&emsp;'
-                + '<b langtag="word-ipwhitepass"></b>: ' + row.IpWhitePass + '&emsp;<br/>'
-                + '<b langtag="word-ipwhitelist"></b>: ' + row.IpWhiteList + '&emsp;<br/>'
-                + '<b langtag="word-blackip"></b>: ' + row.BlackIpList + '&emsp;<br/><br/>'
-                + '<b langtag="word-createtime"></b>: ' + row.CreateTime + '&emsp;<br/>'
-                + '<b langtag="word-lastonlinetime"></b>: ' + row.LastOnlineTime + '&emsp;<br/><br/>'
-                + '<b langtag="word-quicklycommand"></b>: <span>' + encodeToBase64(row.Remark +'|'+'{{.ip}}:{{.p}}|' + row.VerifyKey + '|false')   + '</span>&emsp;<button class="copy btn btn-info btn-xs" onclick="copyCommand(this)" data-clipboard-text="">复制</button><br/>'
-                + '<b langtag="word-tlsquicklycommand"></b>: <span>' + encodeToBase64(row.Remark +'|'+'{{.ip}}:{{.tls_p}}|' + row.VerifyKey + '|true')   + '</span>&emsp;<button class="copy btn btn-info btn-xs" onclick="copyCommand(this)" data-clipboard-text="">复制</button><br/>'
-                + '<b langtag="word-commandclient"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + row.VerifyKey + " -type=" +{{.bridgeType}} +"</code><button class=\"copy btn btn-info btn-xs\" onclick=\"copyCommand(this)\" data-clipboard-text=\"\">复制</button><br/>"
-                + '<b langtag="word-commandclient-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + row.VerifyKey + " -tls_enable=true</code><button class=\"copy btn btn-info btn-xs\" onclick=\"copyCommand(this)\" data-clipboard-text=\"\">复制</button>"
+            var expireDisplay = row.ExpireTime || '<span langtag="info-unrestricted"></span>';
+            var kv = function(label, value) {
+                return '<div style="display:inline-block;width:33%;padding:3px 0;font-size:13px;line-height:1.8">'
+                    + '<span style="color:var(--c-text-secondary)">' + label + '</span>'
+                    + '<span style="color:var(--c-text);margin-left:6px;font-weight:500">' + value + '</span></div>';
+            };
+            var section = function(icon, title, content) {
+                return '<div style="margin-bottom:12px">'
+                    + '<div style="font-size:11px;font-weight:600;color:var(--c-accent);padding-bottom:6px;border-bottom:1px solid var(--c-border);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">'
+                    + '<i class="fa fa-' + icon + '" style="margin-right:6px"></i>' + title + '</div>'
+                    + '<div style="display:flex;flex-wrap:wrap">' + content + '</div></div>';
+            };
+            var cmdRow = function(label, code) {
+                return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
+                    + '<span style="color:var(--c-text-secondary);font-size:13px;white-space:nowrap;min-width:80px">' + label + '</span>'
+                    + '<code style="flex:1;font-size:12px;padding:3px 8px;background:var(--c-accent-light);color:var(--c-accent);border-radius:4px;word-break:break-all;min-width:0">' + code + '</code>'
+                    + '<button class="copy btn btn-outline btn-primary btn-xs" onclick="copyCommand(this)" data-clipboard-text="" style="flex-shrink:0">复制</button></div>';
+            };
+            return '<div style="padding:6px 8px">'
+                + section('sliders-h', '基础配置',
+                    kv('<span langtag="word-maxconnections"></span>', row.MaxConn)
+                    + kv('<span langtag="word-curconnections"></span>', row.NowConn)
+                    + kv('<span langtag="word-flowlimit"></span>', row.Flow.FlowLimit + ' M')
+                    + kv('<span langtag="word-ratelimit"></span>', row.RateLimit + ' KB/s')
+                    + kv('<span langtag="word-maxtunnels"></span>', row.MaxTunnelNum)
+                    + kv('<span langtag="word-connectbyconfig"></span>', '<span langtag="word-' + row.ConfigConnAllow + '"></span>'))
+                + '<div style="display:flex;gap:20px;flex-wrap:wrap">'
+                + '<div style="flex:1;min-width:280px">'
+                + section('key', '认证信息',
+                    kv('<span langtag="word-webusername"></span>', row.WebUserName || '-')
+                    + kv('<span langtag="word-webpassword"></span>', row.WebPassword || '-')
+                    + kv('<span langtag="word-basicusername"></span>', row.Cnf.U || '-')
+                    + kv('<span langtag="word-basicpassword"></span>', row.Cnf.P || '-'))
+                + '</div>'
+                + '<div style="flex:1;min-width:280px">'
+                + section('shield-alt', '访问控制',
+                    kv('<span langtag="word-ipwhite"></span>', row.IpWhite)
+                    + kv('<span langtag="word-ipwhitepass"></span>', row.IpWhitePass || '-'))
+                + '<div style="font-size:13px;padding:2px 0;color:var(--c-text-secondary)"><span langtag="word-ipwhitelist"></span>: <span style="color:var(--c-text)">' + (row.IpWhiteList || '-') + '</span></div>'
+                + '<div style="font-size:13px;padding:2px 0;color:var(--c-text-secondary)"><span langtag="word-blackip"></span>: <span style="color:var(--c-text)">' + (row.BlackIpList || '-') + '</span></div>'
+                + '</div></div>'
+                + section('clock', '时间信息',
+                    kv('<span langtag="word-createtime"></span>', row.CreateTime)
+                    + kv('<span langtag="word-lastonlinetime"></span>', row.LastOnlineTime || '-')
+                    + kv('<span langtag="word-expiretime"></span>', expireDisplay))
+                + section('terminal', '连接命令',
+                    cmdRow('<span langtag="word-quicklycommand"></span>', encodeToBase64(row.Remark + '|{{.ip}}:{{.p}}|' + row.VerifyKey + '|false'))
+                    + cmdRow('<span langtag="word-tlsquicklycommand"></span>', encodeToBase64(row.Remark + '|{{.ip}}:{{.tls_p}}|' + row.VerifyKey + '|true'))
+                    + cmdRow('<span langtag="word-commandclient"></span>', '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + row.VerifyKey + ' -type=' + {{.bridgeType}})
+                    + cmdRow('<span langtag="word-commandclient-tls"></span>', '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + row.VerifyKey + ' -tls_enable=true'))
+                + '</div>';
         },
         //表格的列
         columns: [

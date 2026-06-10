@@ -22,8 +22,14 @@
 
 <body class="gray-bg">
 <div class="login-page-bg">
+    <!-- Particle canvas -->
+    <canvas id="particle-canvas"></canvas>
+
     <div class="login-nav">
-        <h1 class="font-bold" langtag="application"></h1>
+        <div class="login-logo">
+            <span class="logo-text" langtag="application"></span>
+            <span class="pro-badge">PRO</span>
+        </div>
         <div style="display:flex;align-items:center;gap:10px;">
             <a href="#" onclick="toggleLoginTheme()" class="theme-toggle" id="theme-toggle" title="Toggle theme">
                 <i class="fa fa-moon" id="theme-icon"></i>
@@ -40,30 +46,66 @@
         <div class="login-card">
             <div class="login-features">
                 <h3 langtag="info-tagline"></h3>
-                <ul>
-                    <li langtag="info-feature1"></li>
-                    <li langtag="info-feature2"></li>
-                    <li langtag="info-feature3"></li>
-                    <li langtag="info-feature4"></li>
-                    <li langtag="info-feature5"></li>
-                    <li langtag="info-feature6"></li>
-                    <li langtag="info-feature7"></li>
-                    <li langtag="info-feature8"></li>
-                    <li langtag="info-feature9"></li>
-                </ul>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <i class="fa fa-network-wired feature-icon"></i>
+                        <div class="feature-text">多协议支持</div>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fa fa-desktop feature-icon"></i>
+                        <div class="feature-text">全平台兼容</div>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fa fa-lock feature-icon"></i>
+                        <div class="feature-text">HTTPS 集成</div>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fa fa-tachometer-alt feature-icon"></i>
+                        <div class="feature-text">实时监控</div>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fa fa-compress feature-icon"></i>
+                        <div class="feature-text">压缩加密</div>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fa fa-users feature-icon"></i>
+                        <div class="feature-text">多用户管理</div>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fa fa-globe feature-icon"></i>
+                        <div class="feature-text">域名解析</div>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fa fa-sliders-h feature-icon"></i>
+                        <div class="feature-text">流量管控</div>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fa fa-cogs feature-icon"></i>
+                        <div class="feature-text">一键部署</div>
+                    </div>
+                </div>
             </div>
             <div class="login-form-wrap">
                 <form onsubmit="return false">
                     <div class="form-group">
-                        <input name="username" class="form-control" placeholder="username" required="" langtag="word-username">
+                        <div class="input-icon-wrap">
+                            <i class="fa fa-user input-icon"></i>
+                            <input name="username" class="form-control has-icon" placeholder="username" required="" langtag="word-username">
+                        </div>
                     </div>
                     <div class="form-group">
-                        <input name="password" type="password" class="form-control" placeholder="password" required="" langtag="word-password">
+                        <div class="input-icon-wrap">
+                            <i class="fa fa-lock input-icon"></i>
+                            <input name="password" type="password" class="form-control has-icon" placeholder="password" required="" langtag="word-password">
+                        </div>
                     </div>
                     {{if eq true .captcha_open}}
                     <div class="form-group">
                         {{create_captcha}}
-                        <input name="captcha" class="form-control" placeholder="captcha" required="" langtag="word-captcha">
+                        <div class="input-icon-wrap">
+                            <i class="fa fa-shield-alt input-icon"></i>
+                            <input name="captcha" class="form-control has-icon" placeholder="captcha" required="" langtag="word-captcha">
+                        </div>
                     </div>
                     {{end}}
                     <button onclick="login()" class="login-btn" langtag="word-login"></button>
@@ -123,5 +165,71 @@
             var icon = document.getElementById('theme-icon');
             if (icon) icon.className = saved === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
         }
+    })();
+
+    // Particle animation
+    (function() {
+        var canvas = document.getElementById('particle-canvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        var particles = [];
+        var particleCount = 60;
+        var maxDist = 120;
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        function Particle() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.vx = (Math.random() - 0.5) * 0.6;
+            this.vy = (Math.random() - 0.5) * 0.6;
+            this.radius = Math.random() * 2 + 1;
+        }
+
+        for (var i = 0; i < particleCount; i++) {
+            particles.push(new Particle());
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            var dotColor = isDark ? 'rgba(93,173,255,' : 'rgba(59,130,246,';
+            var lineColor = isDark ? 'rgba(93,173,255,' : 'rgba(59,130,246,';
+
+            for (var i = 0; i < particles.length; i++) {
+                var p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+                if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = dotColor + '0.4)';
+                ctx.fill();
+
+                for (var j = i + 1; j < particles.length; j++) {
+                    var p2 = particles[j];
+                    var dx = p.x - p2.x;
+                    var dy = p.y - p2.y;
+                    var dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < maxDist) {
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.strokeStyle = lineColor + (0.15 * (1 - dist / maxDist)) + ')';
+                        ctx.lineWidth = 0.6;
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+        animate();
     })();
 </script>

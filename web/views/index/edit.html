@@ -5,6 +5,8 @@
             <div class="ibox-content">
                 <form class="form-horizontal">
                     <input type="hidden" name="id" value="{{.t.Id}}">
+
+                    <div class="form-section-title"><i class="fa fa-cog"></i> 隧道类型</div>
                     <div class="form-group">
                         <label class="col-sm-2 control-label font-bold" langtag="word-scheme"></label>
                         <div class="col-sm-10">
@@ -25,13 +27,11 @@
                                 <option value="socks5" langtag="scheme-socks5"></option>
                                 <option value="secret" langtag="scheme-secret"></option>
                                 <option value="p2p" langtag="scheme-p2p"></option>
-                                {{/*
-                                <option value="file" langtag="scheme-file"></option>
-                                */}}
                             </select>
                         </div>
                     </div>
 
+                    <div class="form-section-title"><i class="fa fa-link"></i> 基础配置</div>
                     <div class="form-group" id="client_id">
                         <label class="col-sm-2 control-label font-bold" langtag="word-clientid"></label>
                         <div class="col-sm-10">
@@ -39,12 +39,11 @@
                                    name="client_id" placeholder="" langtag="word-clientid">
                         </div>
                     </div>
-
-                    <div class="form-group">
+                    <div class="form-group" id="remark_group">
                         <label class="col-sm-2 control-label font-bold" langtag="word-remark"></label>
                         <div class="col-sm-10">
                             <input value="{{.t.Remark}}" class="form-control" type="text" name="remark" placeholder=""
-                                   langtag="info-unrestricted">
+                                   langtag="info-unrestricted" required>
                         </div>
                     </div>
                     {{if eq true .allow_multi_ip}}
@@ -67,15 +66,16 @@
                     <div class="form-group" id="local_proxy">
                         <label class="control-label col-sm-2 font-bold" langtag="word-proxytolocal"></label>
                         <div class="col-sm-10">
-                            <select class="form-control" name="local_proxy">
-                                <option {{if eq false .t.Target.LocalProxy}}selected{{end}} value="0"
-                                        langtag="word-no"></option>
-                                <option {{if eq true .t.Target.LocalProxy}}selected{{end}} value="1"
-                                        langtag="word-yes"></option>
-                            </select>
+                            <div class="toggle-field">
+                                <input type="hidden" name="local_proxy" value="{{if eq true .t.Target.LocalProxy}}1{{else}}0{{end}}">
+                                <label class="toggle-switch"><input type="checkbox" {{if eq true .t.Target.LocalProxy}}checked{{end}}><span class="toggle-slider"></span></label>
+                                <span class="toggle-label">{{if eq true .t.Target.LocalProxy}}是{{else}}否{{end}}</span>
+                            </div>
                         </div>
                     </div>
                     {{end}}
+
+                    <div class="form-section-title"><i class="fa fa-bullseye"></i> 目标配置</div>
                     <div class="form-group" id="target">
                         <label class="col-sm-2 control-label font-bold" langtag="word-target"></label>
                         <div class="col-sm-10">
@@ -84,7 +84,6 @@
                             <span class="help-block m-b-none" langtag="info-targettunnel"></span>
                         </div>
                     </div>
-
                     <div class="form-group" id="local_path">
                         <label class="col-sm-2 control-label font-bold" langtag="word-localpath"></label>
                         <div class="col-sm-10">
@@ -92,7 +91,6 @@
                                    placeholder="" langtag="info-suchaslocalpath">
                         </div>
                     </div>
-
                     <div class="form-group" id="strip_pre">
                         <label class="col-sm-2 control-label font-bold" langtag="word-stripprefix"></label>
                         <div class="col-sm-10">
@@ -101,6 +99,7 @@
                         </div>
                     </div>
 
+                    <div class="form-section-title"><i class="fa fa-lock"></i> 安全配置</div>
                     <div class="form-group" id="password">
                         <label class="col-sm-2 control-label font-bold" langtag="word-identificationkey"></label>
                         <div class="col-sm-10">
@@ -109,12 +108,11 @@
                             <span class="help-block m-b-none" langtag="info-identificationkey"></span>
                         </div>
                     </div>
-
                     <div class="form-group" id="proto_version">
-                        <label class="control-label font-bold">Proxy Protocol Version：</label>
+                        <label class="control-label col-sm-2 font-bold">Proxy Protocol</label>
                         <div class="col-sm-10">
-                            <select class="form-control" name="proto_version"  id="ProtoVersion">
-                                <option value=""></option>
+                            <select class="form-control" name="proto_version" id="ProtoVersion">
+                                <option value="">关闭</option>
                                 <option value="V1">V1</option>
                                 <option value="V2">V2</option>
                             </select>
@@ -122,18 +120,15 @@
                         </div>
                     </div>
 
-
                     <div class="hr-line-dashed"></div>
                     <div class="form-group">
                         <div class="col-sm-4 col-sm-offset-2">
                             <button class="btn btn-success" type="button"
                                     onclick="submitform('edit', '{{.web_base_url}}/index/edit', $('form').serializeArray())">
                                 <i class="fa fa-fw fa-lg fa-check-circle"></i> <span langtag="word-save"></span>
-
                             </button>
                         </div>
                     </div>
-
                 </form>
             </div>
         </div>
@@ -158,6 +153,7 @@
         for (var i = 0; i < arr[o].length; i++) {
             $("#" + arr[o][i]).css("display", "block")
         }
+        $("#remark_group").css("display", "block");
     }
 
     $(function () {
@@ -167,8 +163,9 @@
         $("#type").on("change", function () {
             resetForm()
         })
-        $("#use_client").on("change", function () {
-            resetForm()
-        })
+
+        $('.toggle-switch input[type="checkbox"]').on('change', function() {
+            $(this).closest('.toggle-field').find('.toggle-label').text(this.checked ? '是' : '否');
+        });
     })
 </script>

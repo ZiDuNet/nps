@@ -1,0 +1,190 @@
+- generic [ref=e2]:
+  - navigation [ref=e3]:
+    - list [ref=e5]:
+      - listitem [ref=e6]:
+        - generic [ref=e7]:
+          - generic [ref=e9]: 
+          - generic [ref=e10]:
+            - strong [ref=e12]: 管理员
+            - generic [ref=e13]: 系统
+      - listitem [ref=e14]:
+        - link " 仪表盘" [ref=e15] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e16]: 
+          - text: 仪表盘
+      - listitem [ref=e17]:
+        - link " 客户端" [ref=e18] [cursor=pointer]:
+          - /url: /client/list
+          - generic [ref=e19]: 
+          - text: 客户端
+      - listitem:
+        - generic: 隧道管理
+      - listitem [ref=e20]:
+        - link " 域名解析" [ref=e21] [cursor=pointer]:
+          - /url: /index/hostlist
+          - generic [ref=e22]: 
+          - text: 域名解析
+      - listitem [ref=e23]:
+        - link " TCP 隧道" [ref=e24] [cursor=pointer]:
+          - /url: /index/tcp
+          - generic [ref=e25]: 
+          - text: TCP 隧道
+      - listitem [ref=e26]:
+        - link " UDP 隧道" [ref=e27] [cursor=pointer]:
+          - /url: /index/udp
+          - generic [ref=e28]: 
+          - text: UDP 隧道
+      - listitem [ref=e29]:
+        - link " HTTP 代理" [ref=e30] [cursor=pointer]:
+          - /url: /index/http
+          - generic [ref=e31]: 
+          - text: HTTP 代理
+      - listitem [ref=e32]:
+        - link " SOCKS 代理" [ref=e33] [cursor=pointer]:
+          - /url: /index/socks5
+          - generic [ref=e34]: 
+          - text: SOCKS 代理
+      - listitem [ref=e35]:
+        - link " 私密代理" [ref=e36] [cursor=pointer]:
+          - /url: /index/secret
+          - generic [ref=e37]: 
+          - text: 私密代理
+      - listitem [ref=e38]:
+        - link " P2P 连接" [ref=e39] [cursor=pointer]:
+          - /url: /index/p2p
+          - generic [ref=e40]: 
+          - text: P2P 连接
+      - listitem [ref=e41]:
+        - link " 文件访问" [ref=e42] [cursor=pointer]:
+          - /url: /index/file
+          - generic [ref=e43]: 
+          - text: 文件访问
+      - listitem:
+        - generic: 系统
+      - listitem [ref=e44]:
+        - link " 全局参数" [ref=e45] [cursor=pointer]:
+          - /url: /global/index
+          - generic [ref=e46]: 
+          - text: 全局参数
+      - listitem [ref=e47]:
+        - link " 使用说明" [ref=e48] [cursor=pointer]:
+          - /url: https://ehang.io/nps/documents
+          - generic [ref=e49]: 
+          - text: 使用说明
+  - generic [ref=e50]:
+    - navigation [ref=e52]:
+      - link "" [ref=e54] [cursor=pointer]:
+        - /url: "#"
+        - generic [ref=e55]: 
+      - list [ref=e56]:
+        - listitem [ref=e57]:
+          - generic [ref=e58]:
+            - text: 欢迎使用
+            - link "NPS" [ref=e59] [cursor=pointer]:
+              - /url: https://github.com/ZiDuNet/nps
+        - listitem [ref=e60]:
+          - link "" [ref=e61] [cursor=pointer]:
+            - /url: "#"
+            - generic [ref=e62]: 
+        - listitem [ref=e63]:
+          - button " 简体中文" [ref=e65] [cursor=pointer]:
+            - generic [ref=e66]: 
+            - text: 简体中文
+        - listitem [ref=e67]:
+          - link " 退出" [ref=e68] [cursor=pointer]:
+            - /url: /login/out
+            - generic [ref=e69]: 
+            - text: 退出
+    - generic [ref=e72]:
+      - heading "新增客户端" [level=3] [ref=e73]
+      - generic [ref=e75]:
+        - generic [ref=e76]:
+          - generic [ref=e77]: 
+          - text: 基本信息
+        - generic [ref=e78]:
+          - generic [ref=e79]: 备注
+          - textbox "备注" [ref=e81]
+        - generic [ref=e82]:
+          - generic [ref=e83]: 唯一验证密钥
+          - generic [ref=e84]:
+            - textbox "留空表示不受限制" [ref=e85]
+            - text: 唯一值，不填将自动生成
+        - generic [ref=e86]:
+          - generic [ref=e87]: 
+          - text: 资源限制
+        - generic [ref=e88]:
+          - generic [ref=e89]: 流量限制
+          - generic [ref=e90]:
+            - textbox "留空表示不受限制" [ref=e91]
+            - text: "单位: M"
+        - generic [ref=e92]:
+          - generic [ref=e93]: 带宽限制
+          - generic [ref=e94]:
+            - textbox "留空表示不受限制" [ref=e95]
+            - text: "单位: KB/S"
+        - generic [ref=e96]:
+          - generic [ref=e97]: 最大连接数
+          - textbox "留空表示不受限制" [ref=e99]
+        - generic [ref=e100]:
+          - generic [ref=e101]: 最大隧道数
+          - textbox "留空表示不受限制" [ref=e103]
+        - generic [ref=e104]:
+          - generic [ref=e105]: 
+          - text: 认证配置
+        - generic [ref=e106]:
+          - generic [ref=e107]: Basic 认证用户名
+          - generic [ref=e108]:
+            - textbox "留空表示不受限制" [ref=e109]
+            - text: 仅限Socks5、Web、HTTP转发代理
+        - generic [ref=e110]:
+          - generic [ref=e111]: Basic 认证密码
+          - generic [ref=e112]:
+            - textbox "留空表示不受限制" [ref=e113]
+            - text: 仅限Socks5、Web、HTTP转发代理
+        - generic [ref=e114]:
+          - generic [ref=e115]: Web登陆用户名
+          - textbox "留空表示不受限制" [ref=e117]
+        - generic [ref=e118]:
+          - generic [ref=e119]: Web登陆密码
+          - textbox "留空表示不受限制" [ref=e121]
+        - generic [ref=e122]:
+          - generic [ref=e123]: 
+          - text: 访问控制
+        - generic [ref=e124]:
+          - generic [ref=e125]: 允许客户端通过配置文件连接
+          - generic [ref=e127]:
+            - generic [ref=e128]:
+              - checkbox [checked]
+            - generic [ref=e130]: 是
+        - generic [ref=e131]:
+          - generic [ref=e132]: 启用IP白名单
+          - generic [ref=e134]:
+            - generic [ref=e135]:
+              - checkbox
+            - generic [ref=e137]: 否
+        - generic [ref=e138]:
+          - generic [ref=e139]: IP黑名单（防暴力破解）
+          - generic [ref=e140]:
+            - textbox "例如 10.1.50.203 10.1.50.202" [ref=e141]:
+              - /placeholder: "例如\n10.1.50.203\n10.1.50.202"
+            - text: 一行一个，IPV4,不支持范围匹配
+        - generic [ref=e142]:
+          - generic [ref=e143]: 
+          - text: 有效期
+        - generic [ref=e144]:
+          - generic [ref=e145]: 到期时间
+          - generic [ref=e146]:
+            - textbox "2026-12-31 23:59:59" [ref=e147]
+            - text: 留空表示永不过期，到期后将自动暂停客户端
+        - button " 新增" [ref=e151] [cursor=pointer]:
+          - generic [ref=e152]: 
+          - text: 新增
+    - generic [ref=e153]:
+      - generic [ref=e154]:
+        - text: 更多说明
+        - strong [ref=e155]:
+          - link "进入" [ref=e156] [cursor=pointer]:
+            - /url: https://ehang.io/nps
+      - generic [ref=e157]:
+        - strong [ref=e158]: 版权所有
+        - text: NPS © 2018-2020

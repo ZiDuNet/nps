@@ -206,7 +206,7 @@ func ParseExpireTime(s string) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	for _, layout := range expireTimeFormats {
-		if t, err := time.Parse(layout, s); err == nil {
+		if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
 			return t, true
 		}
 	}

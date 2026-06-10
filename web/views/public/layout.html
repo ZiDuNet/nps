@@ -16,6 +16,7 @@
     <link href="{{.web_base_url}}/static/css/bootstrap-table.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/style.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/flatpickr.min.css?v={{.version}}" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/clipboard.min.js?v={{.version}}"></script>
@@ -26,6 +27,8 @@
     <script src="{{.web_base_url}}/static/js/bootstrap-table-locale-all.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/echarts.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/inspinia.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/flatpickr.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/flatpickr-l10n-zh.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}" type="text/javascript"></script>
 
 </head>
@@ -38,11 +41,11 @@
                 <li class="nav-header">
                     <div class="dropdown profile-element">
                     {{if eq true .isAdmin}}
-                        <span><i class="fa fa-shield-alt fa-3x"></i></span>
+                        <span><i class="fa fa-network-wired fa-3x"></i></span>
                         <span class="clear"> <span class="block m-t-xs"><strong class="font-bold" langtag="word-admin"></strong></span>
                         <span class="text-muted text-xs block" langtag="word-system">
                     {{else}}
-                        <span><i class="fa fa-user-shield fa-3x"></i></span>
+                        <span><i class="fa fa-globe fa-3x"></i></span>
                         <span class="clear"> <span class="block m-t-xs"><strong class="font-bold">{{.username}}</strong></span>
                         <span class="text-muted text-xs block" langtag="word-user">
                     {{end}}
@@ -150,6 +153,13 @@
 
 <script>
     window.nps = { "web_base_url": {{.web_base_url}} }
+
+    // Toggle switch: sync hidden input with checkbox state
+    $(document).on('change', '.toggle-switch input[type="checkbox"]', function() {
+        var field = $(this).closest('.toggle-field');
+        var hidden = field.find('input[type="hidden"]');
+        if (hidden.length) hidden.val(this.checked ? '1' : '0');
+    });
 
     function toggleTheme() {
         var html = document.documentElement;

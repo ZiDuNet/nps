@@ -8,58 +8,78 @@
 
     <title langtag="title-register"></title>
 
-    <!-- Mainly scripts -->
-    <!-- Latest compiled and minified CSS -->
     <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/style.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}" rel="stylesheet">
 
-    <!-- Latest compiled and minified JavaScript -->
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/bootstrap.min.js?v={{.version}}"></script>
-    <!-- Latest compiled and minified Locales -->
     <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}" type="text/javascript"></script>
 
 </head>
 
 <body class="gray-bg">
-    <div class="row border-bottom">
-        <nav class="navbar navbar-static-top navbar-right" role="navigation" style="margin: 20px 40px">
-            <div></div>
+<div class="login-page-bg">
+    <canvas id="particle-canvas"></canvas>
+
+    <div class="login-nav">
+        <div class="login-logo">
+            <span class="logo-text" langtag="application"></span>
+            <span class="pro-badge">PRO</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <a href="#" onclick="toggleTheme()" class="theme-toggle" id="theme-toggle" title="Toggle theme">
+                <i class="fa fa-moon" id="theme-icon"></i>
+            </a>
             <span class="btn-group dropdown">
-                <button id="languagemenu" class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><i class="fa fa-globe-asia fa-lg"></i><span></span></button>
+                <button id="languagemenu" class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown"
+                        aria-haspopup="true" aria-expanded="false"><i class="fa fa-globe-asia fa-lg"></i><span></span></button>
                 <ul class="dropdown-menu"></ul>
             </span>
-        </nav>
-    </div>
-    <div class="middle-box text-center loginscreen   animated fadeInDown">
-        <div>
-            <h1 class="logo-name" langtag="application"></h1>
         </div>
-        <h3 langtag="info-register"></h3>
-        <p langtag="info-createaccount"></p>
-        <form class="m-t" role="form" onsubmit="return false">
-            <div class="form-group">
-                <input type="text" class="form-control" placeholder="username" name="username" required="" langtag="word-username">
-            </div>
-            <div class="form-group">
-                <input type="password" class="form-control" placeholder="password" name="password" required="" langtag="word-password">
-            </div>
-            <button onclick="register()" type="submit" class="btn btn-primary block full-width m-b" langtag="word-register"></button>
-            <p class="text-muted text-center"><small langtag="info-haveaccount"></small></p>
-            <a class="btn btn-sm btn-white btn-block" href="{{.web_base_url}}/login/index" langtag="word-login"></a>
-        </form>
     </div>
-    <hr/>
-    <div class="footer">
-        <div class="pull-right">
-            <span langtag="word-readmore"></span> <strong><a href="https://ehang.io/nps" langtag="word-go"></a></strong>
+
+    <div class="login-container">
+        <div class="login-card" style="max-width:440px;">
+            <div class="login-form-wrap">
+                <h3 style="text-align:center;margin-bottom:24px;font-weight:700;font-size:20px;color:var(--c-text);" langtag="info-register"></h3>
+                <p style="text-align:center;margin-bottom:20px;color:var(--c-text-secondary);font-size:14px;" langtag="info-createaccount"></p>
+                <form onsubmit="return false">
+                    <div class="form-group">
+                        <div class="input-icon-wrap">
+                            <i class="fa fa-user input-icon"></i>
+                            <input name="username" class="form-control has-icon" placeholder="username" required="" langtag="word-username">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="input-icon-wrap">
+                            <i class="fa fa-lock input-icon"></i>
+                            <input name="password" type="password" class="form-control has-icon" placeholder="password" required="" langtag="word-password">
+                        </div>
+                    </div>
+                    <button onclick="register()" class="login-btn" langtag="word-register"></button>
+                </form>
+                <div class="register-link" style="margin-top:18px;">
+                    <small langtag="info-haveaccount"></small>
+                    <a href="{{.web_base_url}}/login/index" langtag="word-login"></a>
+                </div>
+            </div>
         </div>
-        <div><strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2019</div>
     </div>
-<script>
-    window.nps = { "web_base_url": {{.web_base_url}} }
+
+    <div class="login-footer">
+        <strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2020
+    </div>
+</div>
+
+</body>
+</html>
+
+<script type="text/javascript">
+    window.nps = {"web_base_url": {{.web_base_url}} }
+
     function register() {
         $.ajax({
             type: "POST",
@@ -74,7 +94,89 @@
         })
         return false
     }
-</script>
-</body>
 
-</html>
+    function toggleTheme() {
+        var html = document.documentElement;
+        var isDark = html.getAttribute('data-theme') === 'dark';
+        var next = isDark ? 'light' : 'dark';
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('nps-theme', next);
+        var icon = document.getElementById('theme-icon');
+        if (icon) icon.className = next === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
+    }
+
+    (function() {
+        var saved = localStorage.getItem('nps-theme');
+        if (saved) {
+            document.documentElement.setAttribute('data-theme', saved);
+            var icon = document.getElementById('theme-icon');
+            if (icon) icon.className = saved === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
+        }
+    })();
+
+    // Particle animation
+    (function() {
+        var canvas = document.getElementById('particle-canvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        var particles = [];
+        var particleCount = 50;
+        var maxDist = 120;
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        function Particle() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.vx = (Math.random() - 0.5) * 0.6;
+            this.vy = (Math.random() - 0.5) * 0.6;
+            this.radius = Math.random() * 2 + 1;
+        }
+
+        for (var i = 0; i < particleCount; i++) {
+            particles.push(new Particle());
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            var dotColor = isDark ? 'rgba(93,173,255,' : 'rgba(59,130,246,';
+            var lineColor = isDark ? 'rgba(93,173,255,' : 'rgba(59,130,246,';
+
+            for (var i = 0; i < particles.length; i++) {
+                var p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+                if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = dotColor + '0.4)';
+                ctx.fill();
+
+                for (var j = i + 1; j < particles.length; j++) {
+                    var p2 = particles[j];
+                    var dx = p.x - p2.x;
+                    var dy = p.y - p2.y;
+                    var dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < maxDist) {
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.strokeStyle = lineColor + (0.15 * (1 - dist / maxDist)) + ')';
+                        ctx.lineWidth = 0.6;
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+        animate();
+    })();
+</script>

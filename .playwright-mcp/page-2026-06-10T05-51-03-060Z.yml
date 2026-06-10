@@ -1,0 +1,13 @@
+- generic [ref=e3]:
+  - heading "Not Found" [level=1] [ref=e5]
+  - generic [ref=e6]:
+    - text: The page you have requested has flown the coop.
+    - text: "Perhaps you are here because:"
+    - list [ref=e7]:
+      - text: The page has moved
+      - text: The page no longer exists
+      - text: You were looking for your puppy and got lost
+      - text: You like 404 pages
+    - link "Go Home" [ref=e8] [cursor=pointer]:
+      - /url: /
+    - text: Powered by beego 1.12.0

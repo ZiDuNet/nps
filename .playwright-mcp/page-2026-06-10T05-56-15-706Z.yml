@@ -1,0 +1,56 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: NPS
+      - generic [ref=e6]: PRO
+    - generic [ref=e7]:
+      - link "" [ref=e8] [cursor=pointer]:
+        - /url: "#"
+        - generic [ref=e9]: 
+      - button " 简体中文" [ref=e11] [cursor=pointer]:
+        - generic [ref=e12]: 
+        - text: 简体中文
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - heading "一款轻量级、高性能、功能强大的内网穿透代理服务器" [level=3] [ref=e16]
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - generic [ref=e19]: 
+          - generic [ref=e20]: 多协议支持
+        - generic [ref=e21]:
+          - generic [ref=e22]: 
+          - generic [ref=e23]: 全平台兼容
+        - generic [ref=e24]:
+          - generic [ref=e25]: 
+          - generic [ref=e26]: HTTPS 集成
+        - generic [ref=e27]:
+          - generic [ref=e28]: 
+          - generic [ref=e29]: 实时监控
+        - generic [ref=e30]:
+          - generic [ref=e31]: 
+          - generic [ref=e32]: 压缩加密
+        - generic [ref=e33]:
+          - generic [ref=e34]: 
+          - generic [ref=e35]: 多用户管理
+        - generic [ref=e36]:
+          - generic [ref=e37]: 
+          - generic [ref=e38]: 域名解析
+        - generic [ref=e39]:
+          - generic [ref=e40]: 
+          - generic [ref=e41]: 流量管控
+        - generic [ref=e42]:
+          - generic [ref=e43]: 
+          - generic [ref=e44]: 一键部署
+    - generic [ref=e46]:
+      - generic [ref=e48]:
+        - generic: 
+        - textbox "用户名" [ref=e49]
+      - generic [ref=e51]:
+        - generic: 
+        - textbox "密码" [ref=e52]
+      - button "登录" [ref=e53] [cursor=pointer]
+  - generic [ref=e54]:
+    - strong [ref=e55]: 版权所有
+    - text: NPS © 2018-2020 更多说明
+    - link "进入" [ref=e56] [cursor=pointer]:
+      - /url: https://ehang.io/nps

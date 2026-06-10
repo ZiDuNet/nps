@@ -497,6 +497,8 @@ func flowSession(m time.Duration) {
 }
 
 func dealClientExpire() {
+	// 启动时立即检查一次，避免重启后到期客户端最多1分钟内才被暂停
+	checkClientExpire()
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -508,19 +510,31 @@ func dealClientExpire() {
 }
 
 func checkClientExpire() {
+	now := time.Now()
+	changed := false
 	file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {
-		v := value.(*file.Client)
-		if v.ExpireTime != "" && v.ExpireTime != "0001-01-01 00:00:00" {
-			if t, err := time.Parse("2006-01-02 15:04:05", v.ExpireTime); err == nil {
-				if time.Now().After(t) {
-					v.Status = false
-					file.GetDb().UpdateClient(v)
-					DelTunnelAndHostByClientId(v.Id, false)
-					Bridge.DelClient(v.Id)
-					logs.Warn("客户端ID %d 已过期，自动断开并清理隧道", v.Id)
-				}
-			}
+		v, ok := value.(*file.Client)
+		if !ok || v == nil {
+			return true
 		}
+		if v.ExpireTime == "" || !v.Status {
+			return true
+		}
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", v.ExpireTime, time.Local)
+		if err != nil {
+			return true
+		}
+		if now.Before(t) {
+			return true
+		}
+		v.Status = false
+		changed = true
+		DelClientConnect(v.Id)
+		DelTunnelAndHostByClientId(v.Id, false)
+		logs.Info("client id %d (remark: %s) expired at %s, auto paused", v.Id, v.Remark, v.ExpireTime)
 		return true
 	})
+	if changed {
+		file.GetDb().JsonDb.StoreClientsToJsonFile()
+	}
 }

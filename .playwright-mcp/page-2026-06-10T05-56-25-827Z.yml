@@ -1,0 +1,246 @@
+- generic [ref=e2]:
+  - navigation [ref=e3]:
+    - list [ref=e5]:
+      - listitem [ref=e6]:
+        - generic [ref=e7]:
+          - generic [ref=e9]: 
+          - generic [ref=e10]:
+            - strong [ref=e12]: 管理员
+            - generic [ref=e13]: 系统
+      - listitem [ref=e14]:
+        - link " 仪表盘" [ref=e15] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e16]: 
+          - text: 仪表盘
+      - listitem [ref=e17]:
+        - link " 客户端" [ref=e18] [cursor=pointer]:
+          - /url: /client/list
+          - generic [ref=e19]: 
+          - text: 客户端
+      - listitem:
+        - generic: 隧道管理
+      - listitem [ref=e20]:
+        - link " 域名解析" [ref=e21] [cursor=pointer]:
+          - /url: /index/hostlist
+          - generic [ref=e22]: 
+          - text: 域名解析
+      - listitem [ref=e23]:
+        - link " TCP 隧道" [ref=e24] [cursor=pointer]:
+          - /url: /index/tcp
+          - generic [ref=e25]: 
+          - text: TCP 隧道
+      - listitem [ref=e26]:
+        - link " UDP 隧道" [ref=e27] [cursor=pointer]:
+          - /url: /index/udp
+          - generic [ref=e28]: 
+          - text: UDP 隧道
+      - listitem [ref=e29]:
+        - link " HTTP 代理" [ref=e30] [cursor=pointer]:
+          - /url: /index/http
+          - generic [ref=e31]: 
+          - text: HTTP 代理
+      - listitem [ref=e32]:
+        - link " SOCKS 代理" [ref=e33] [cursor=pointer]:
+          - /url: /index/socks5
+          - generic [ref=e34]: 
+          - text: SOCKS 代理
+      - listitem [ref=e35]:
+        - link " 私密代理" [ref=e36] [cursor=pointer]:
+          - /url: /index/secret
+          - generic [ref=e37]: 
+          - text: 私密代理
+      - listitem [ref=e38]:
+        - link " P2P 连接" [ref=e39] [cursor=pointer]:
+          - /url: /index/p2p
+          - generic [ref=e40]: 
+          - text: P2P 连接
+      - listitem [ref=e41]:
+        - link " 文件访问" [ref=e42] [cursor=pointer]:
+          - /url: /index/file
+          - generic [ref=e43]: 
+          - text: 文件访问
+      - listitem:
+        - generic: 系统
+      - listitem [ref=e44]:
+        - link " 全局参数" [ref=e45] [cursor=pointer]:
+          - /url: /global/index
+          - generic [ref=e46]: 
+          - text: 全局参数
+      - listitem [ref=e47]:
+        - link " 使用说明" [ref=e48] [cursor=pointer]:
+          - /url: https://ehang.io/nps/documents
+          - generic [ref=e49]: 
+          - text: 使用说明
+  - generic [ref=e50]:
+    - navigation [ref=e52]:
+      - link "" [ref=e54] [cursor=pointer]:
+        - /url: "#"
+        - generic [ref=e55]: 
+      - list [ref=e56]:
+        - listitem [ref=e57]:
+          - generic [ref=e58]:
+            - text: 欢迎使用
+            - link "NPS" [ref=e59] [cursor=pointer]:
+              - /url: https://github.com/ZiDuNet/nps
+        - listitem [ref=e60]:
+          - link "" [ref=e61] [cursor=pointer]:
+            - /url: "#"
+            - generic [ref=e62]: 
+        - listitem [ref=e63]:
+          - button " 简体中文" [ref=e65] [cursor=pointer]:
+            - generic [ref=e66]: 
+            - text: 简体中文
+        - listitem [ref=e67]:
+          - link " 退出" [ref=e68] [cursor=pointer]:
+            - /url: /login/out
+            - generic [ref=e69]: 
+            - text: 退出
+    - generic [ref=e70]:
+      - generic [ref=e71]:
+        - generic [ref=e74]:
+          - generic [ref=e75]: 
+          - heading "客户端连接端口" [level=5] [ref=e77]
+          - heading "8024 / 8025" [level=1] [ref=e79]
+        - generic [ref=e82]:
+          - generic [ref=e83]: 
+          - heading "客户端总数" [level=5] [ref=e85]
+          - heading "5" [level=1] [ref=e87]
+        - generic [ref=e90]:
+          - generic [ref=e91]: 
+          - heading "在线客户端" [level=5] [ref=e93]
+          - heading "0" [level=1] [ref=e95]
+        - generic [ref=e98]:
+          - generic [ref=e99]: 
+          - heading "当前TCP连接数" [level=5] [ref=e101]
+          - heading "0" [level=1] [ref=e103]
+      - generic [ref=e104]:
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - heading "配置信息" [level=5] [ref=e108]
+            - generic [ref=e109]:
+              - generic [ref=e111] [cursor=pointer]: 
+              - generic [ref=e113] [cursor=pointer]: 
+          - list [ref=e115]:
+            - listitem [ref=e116]:
+              - generic [ref=e117]:
+                - strong [ref=e119]: 桥接模式
+                - strong [ref=e121]: tcp
+            - listitem [ref=e122]:
+              - generic [ref=e123]:
+                - strong [ref=e125]: HTTP 端口
+                - strong [ref=e127]: "80"
+            - listitem [ref=e128]:
+              - generic [ref=e129]:
+                - strong [ref=e131]: HTTPS 端口
+                - strong [ref=e133]: "443"
+            - listitem [ref=e134]:
+              - generic [ref=e135]:
+                - strong [ref=e137]: IP 限制
+                - generic [ref=e138]:
+                  - strong
+            - listitem [ref=e139]:
+              - generic [ref=e140]:
+                - strong [ref=e142]: 流量数据持久化
+                - strong [ref=e144]: "1"
+            - listitem [ref=e145]:
+              - generic [ref=e146]:
+                - strong [ref=e148]: 日志级别
+                - strong [ref=e150]: "6"
+            - listitem [ref=e151]:
+              - generic [ref=e152]:
+                - strong [ref=e154]: P2P 端口
+                - generic [ref=e155]:
+                  - strong
+            - listitem [ref=e156]:
+              - generic [ref=e157]:
+                - strong [ref=e159]: 服务端 IP
+                - generic [ref=e160]:
+                  - strong
+            - listitem [ref=e161]:
+              - generic [ref=e162]:
+                - strong [ref=e164]: 服务端版本
+                - strong [ref=e166]: 1.1.0
+        - generic [ref=e168]:
+          - generic [ref=e169]:
+            - heading "系统信息" [level=5] [ref=e170]
+            - generic [ref=e171]:
+              - generic [ref=e173] [cursor=pointer]: 
+              - generic [ref=e175] [cursor=pointer]: 
+          - list [ref=e177]:
+            - listitem [ref=e178]:
+              - generic [ref=e179]:
+                - strong [ref=e181]: 处理器
+                - strong [ref=e183]: 32%
+            - listitem [ref=e186]:
+              - generic [ref=e187]:
+                - strong [ref=e189]: 内存
+                - strong [ref=e191]: 80%
+            - listitem [ref=e194]:
+              - generic [ref=e195]:
+                - strong [ref=e197]: 负载
+                - strong [ref=e199]: 0.09286114725583637 0.05948748464501437 0.024764173268916133
+            - listitem [ref=e200]:
+              - generic [ref=e201]:
+                - strong [ref=e203]: TCP 连接 (已建立)
+                - generic [ref=e204]:
+                  - strong
+            - listitem [ref=e205]:
+              - generic [ref=e206]:
+                - strong [ref=e208]: UDP 连接 (已建立)
+                - generic [ref=e209]:
+                  - strong
+            - listitem [ref=e210]:
+              - generic [ref=e211]:
+                - strong [ref=e213]: 流出带宽
+                - strong [ref=e215]: 0.19MB/s
+            - listitem [ref=e216]:
+              - generic [ref=e217]:
+                - strong [ref=e219]: 流入带宽
+                - strong [ref=e221]: 10.78KB/s
+      - generic [ref=e222]:
+        - generic [ref=e225]:
+          - heading "处理器" [level=5] [ref=e226]
+          - generic [ref=e227]:
+            - generic [ref=e229] [cursor=pointer]: 
+            - generic [ref=e231] [cursor=pointer]: 
+        - generic [ref=e238]:
+          - heading "内存" [level=5] [ref=e239]
+          - generic [ref=e240]:
+            - generic [ref=e242] [cursor=pointer]: 
+            - generic [ref=e244] [cursor=pointer]: 
+      - generic [ref=e249]:
+        - generic [ref=e252]:
+          - heading "负载" [level=5] [ref=e253]
+          - generic [ref=e254]:
+            - generic [ref=e256] [cursor=pointer]: 
+            - generic [ref=e258] [cursor=pointer]: 
+        - generic [ref=e265]:
+          - heading "连接数 (已建立)" [level=5] [ref=e266]
+          - generic [ref=e267]:
+            - generic [ref=e269] [cursor=pointer]: 
+            - generic [ref=e271] [cursor=pointer]: 
+      - generic [ref=e279]:
+        - heading "带宽" [level=5] [ref=e280]
+        - generic [ref=e281]:
+          - generic [ref=e283] [cursor=pointer]: 
+          - generic [ref=e285] [cursor=pointer]: 
+      - generic [ref=e290]:
+        - generic [ref=e293]:
+          - heading "流量统计" [level=5] [ref=e294]
+          - generic [ref=e295]:
+            - generic [ref=e297] [cursor=pointer]: 
+            - generic [ref=e299] [cursor=pointer]: 
+        - generic [ref=e306]:
+          - heading "连接类型" [level=5] [ref=e307]
+          - generic [ref=e308]:
+            - generic [ref=e310] [cursor=pointer]: 
+            - generic [ref=e312] [cursor=pointer]: 
+    - generic [ref=e317]:
+      - generic [ref=e318]:
+        - text: 更多说明
+        - strong [ref=e319]:
+          - link "进入" [ref=e320] [cursor=pointer]:
+            - /url: https://ehang.io/nps
+      - generic [ref=e321]:
+        - strong [ref=e322]: 版权所有
+        - text: NPS © 2018-2020

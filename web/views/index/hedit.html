@@ -5,27 +5,29 @@
             <div class="ibox-content">
                 <form class="form-horizontal">
                     <input type="hidden" name="id" value="{{.h.Id}}">
+
+                    <div class="form-section-title"><i class="fa fa-link"></i> 基础配置</div>
                     <div class="form-group">
-                        <label class="control-label font-bold" langtag="word-clientid"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-clientid"></label>
                         <div class="col-sm-10">
                             <input value="{{.h.Client.Id}}" class="form-control" type="text" name="client_id" placeholder="" langtag="word-clientid">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="control-label font-bold" langtag="word-remark"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-remark"></label>
                         <div class="col-sm-10">
                             <input value="{{.h.Remark}}" class="form-control" type="text" name="remark"
-                                   placeholder="remark">
+                                   placeholder="remark" required>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="control-label font-bold" langtag="word-host"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-host"></label>
                         <div class="col-sm-10">
                             <input value="{{.h.Host}}" class="form-control" type="text" name="host" placeholder="" langtag="info-suchashost">
                         </div>
                     </div>
                     <div class="form-group" id="scheme">
-                        <label class="control-label font-bold" langtag="word-scheme"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-scheme"></label>
                         <div class="col-sm-10">
                             <select id="scheme_select" class="form-control" name="scheme">
                                 <option {{if eq "all" .h.Scheme}}selected{{end}} value="all" langtag="word-all"></option>
@@ -35,18 +37,19 @@
                         </div>
                     </div>
 
+                    <div class="form-section-title"><i class="fa fa-certificate"></i> SSL / HTTPS</div>
                     <div class="form-group" id="AutoHttps">
-                        <label class="control-label font-bold">自动HTTPS（301）</label>
+                        <label class="col-sm-2 control-label font-bold">自动 HTTPS（301）</label>
                         <div class="col-sm-10">
-                            <select class="form-control" name="AutoHttps">
-                                <option {{if eq false .h.AutoHttps}}selected{{end}} value="0" langtag="word-no"></option>
-                                <option {{if eq true .h.AutoHttps}}selected{{end}}  value="1" langtag="word-yes"></option>
-                            </select>
+                            <div class="toggle-field">
+                                <input type="hidden" name="AutoHttps" value="{{if eq true .h.AutoHttps}}1{{else}}0{{end}}">
+                                <label class="toggle-switch"><input type="checkbox" {{if eq true .h.AutoHttps}}checked{{end}}><span class="toggle-slider"></span></label>
+                                <span class="toggle-label">{{if eq true .h.AutoHttps}}是{{else}}否{{end}}</span>
+                            </div>
                         </div>
                     </div>
-
                     <div class="form-group" id="cert_file">
-                        <label class="control-label font-bold" langtag="word-httpscert"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-httpscert"></label>
                         <div class="col-sm-10">
                             <textarea rows="6" class="form-control" type="text" name="cert_file_path" id="pemText"
                                       placeholder="请将证书文件拖拽或将内容复制粘贴到此处，证书文件格式为：xxxx_example.com.pem。
@@ -54,52 +57,56 @@
                         </div>
                     </div>
                     <div class="form-group" id="key_file">
-                        <label class="control-label font-bold" langtag="word-httpskey"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-httpskey"></label>
                         <div class="col-sm-10">
                             <textarea rows="6" class="form-control" type="text" name="key_file_path" id="pemKey"
                                       placeholder="请将私钥文件拖拽或复制粘贴到此处，证书秘钥格式为：xxxx_example.com.key。
 或者配置秘钥文件路径。">{{.h.KeyFilePath}}</textarea>
                         </div>
                     </div>
+
+                    <div class="form-section-title"><i class="fa fa-route"></i> 路由配置</div>
                     <div class="form-group">
-                        <label class="control-label font-bold" langtag="word-urlroute"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-urlroute"></label>
                         <div class="col-sm-10">
-                            <input value="{{.h.Location}}" class="form-control" type="text" name="location"  placeholder="" langtag="info-unrestricted">
+                            <input value="{{.h.Location}}" class="form-control" type="text" name="location" placeholder="" langtag="info-unrestricted">
                         </div>
                     </div>
                 {{if eq true .allow_local_proxy}}
                     <div class="form-group" id="local_proxy">
-                        <label class="control-label font-bold" langtag="word-proxytolocal"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-proxytolocal"></label>
                         <div class="col-sm-10">
-                            <select class="form-control" name="local_proxy">
-                                <option {{if eq false .h.Target.LocalProxy}}selected{{end}} value="0" langtag="word-no"></option>
-                                <option {{if eq true .h.Target.LocalProxy}}selected{{end}} value="1" langtag="word-yes"></option>
-                            </select>
+                            <div class="toggle-field">
+                                <input type="hidden" name="local_proxy" value="{{if eq true .h.Target.LocalProxy}}1{{else}}0{{end}}">
+                                <label class="toggle-switch"><input type="checkbox" {{if eq true .h.Target.LocalProxy}}checked{{end}}><span class="toggle-slider"></span></label>
+                                <span class="toggle-label">{{if eq true .h.Target.LocalProxy}}是{{else}}否{{end}}</span>
+                            </div>
                         </div>
                     </div>
                 {{end}}
                     <div class="form-group">
-                        <label class="control-label font-bold" langtag="word-target"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-target"></label>
                         <div class="col-sm-10">
-                        <textarea class="form-control" rows="4" type="text" name="target" placeholder="" langtag="info-suchasiplist">{{.h.Target.TargetStr}}</textarea>
+                            <textarea class="form-control" rows="4" type="text" name="target" placeholder="" langtag="info-suchasiplist">{{.h.Target.TargetStr}}</textarea>
                             <span class="help-block m-b-none" langtag="info-targethost"></span>
-
                         </div>
                     </div>
+
+                    <div class="form-section-title"><i class="fa fa-exchange-alt"></i> 请求改写</div>
                     <div class="form-group" id="header">
-                        <label class="control-label font-bold" langtag="word-requestheader"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-requestheader"></label>
                         <div class="col-sm-10">
-                        <textarea class="form-control" rows="4" type="text" name="header" placeholder="Cache-Control: no-cache">{{.h.HeaderChange}}</textarea>
+                            <textarea class="form-control" rows="4" type="text" name="header" placeholder="Cache-Control: no-cache">{{.h.HeaderChange}}</textarea>
                             <span class="help-block m-b-none" langtag="info-header"></span>
                         </div>
-
                     </div>
                     <div class="form-group" id="hostchange">
-                        <label class="control-label font-bold" langtag="word-requesthost"></label>
+                        <label class="col-sm-2 control-label font-bold" langtag="word-requesthost"></label>
                         <div class="col-sm-10">
-                            <input value="{{.h.HostChange}}" class="form-control" value="" type="text" name="hostchange" placeholder="" langtag="word-requesthost">
+                            <input value="{{.h.HostChange}}" class="form-control" type="text" name="hostchange" placeholder="" langtag="word-requesthost">
                         </div>
                     </div>
+
                     <div class="hr-line-dashed"></div>
                     <div class="form-group">
                         <div class="col-sm-4 col-sm-offset-2">
@@ -116,68 +123,43 @@
 
 <script>
     $(function () {
-        if ($("#scheme_select").val() == "all" || $("#scheme_select").val() == "https") {
-            $("#cert_file").css("display", "block")
-            $("#key_file").css("display", "block")
-            $("#AutoHttps").css("display", "block")
-        } else {
-            $("#cert_file").css("display", "none")
-            $("#key_file").css("display", "none")
-            $("#AutoHttps").css("display", "none")
+        function updateSchemeUI() {
+            var val = $("#scheme_select").val();
+            if (val == "all" || val == "https") {
+                $("#cert_file").show();
+                $("#key_file").show();
+                $("#AutoHttps").show();
+            } else {
+                $("#cert_file").hide();
+                $("#key_file").hide();
+                $("#AutoHttps").hide();
+            }
         }
+        updateSchemeUI();
+        $("#scheme_select").on("change", updateSchemeUI);
 
+        var pemText = document.getElementById("pemText");
+        var pemKey = document.getElementById("pemKey");
 
-        const pemText = document.getElementById("pemText");
-        const pemKey = document.getElementById("pemKey");
-
-        // 阻止浏览器默认打开文件的行为
-        document.addEventListener("dragover", function(event) {
-            event.preventDefault();
-        });
-
+        document.addEventListener("dragover", function(event) { event.preventDefault(); });
         pemText.addEventListener("drop", function(event) {
             event.preventDefault();
-            const file = event.dataTransfer.files[0];
-            const reader = new FileReader();
-
-            reader.onload = function(e) {
-                pemText.value = e.target.result;
-                console.log("上传pem")
-                $('#edit_form').data('bootstrapValidator').updateStatus('pemText', 'NOT_VALIDATED');
-                $('#edit_form').data('bootstrapValidator').validateField('pemText');
-            }
-
+            var file = event.dataTransfer.files[0];
+            var reader = new FileReader();
+            reader.onload = function(e) { pemText.value = e.target.result; }
             reader.readAsText(file);
         });
-
         pemKey.addEventListener("drop", function(event) {
             event.preventDefault();
-            const file = event.dataTransfer.files[0];
-            const reader = new FileReader();
-
-            reader.onload = function(e) {
-                pemKey.value = e.target.result;
-                $('#edit_form').data('bootstrapValidator').updateStatus('pemKey', 'NOT_VALIDATED');
-                $('#edit_form').data('bootstrapValidator').validateField('pemKey');
-            }
-
+            var file = event.dataTransfer.files[0];
+            var reader = new FileReader();
+            reader.onload = function(e) { pemKey.value = e.target.result; }
             reader.readAsText(file);
         });
 
-
-
-
-        $("#scheme_select").on("change", function () {
-            if ($("#scheme_select").val() == "all" || $("#scheme_select").val() == "https") {
-                $("#cert_file").css("display", "block")
-                $("#key_file").css("display", "block")
-                $("#AutoHttps").css("display", "block")
-            } else {
-                $("#cert_file").css("display", "none")
-                $("#key_file").css("display", "none")
-                $("#AutoHttps").css("display", "none")
-            }
-        })
+        // Toggle labels
+        $('.toggle-switch input[type="checkbox"]').on('change', function() {
+            $(this).closest('.toggle-field').find('.toggle-label').text(this.checked ? '是' : '否');
+        });
     })
-
 </script>
