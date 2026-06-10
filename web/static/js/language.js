@@ -138,6 +138,18 @@ function langreply(langstr) {
     return langobj
 }
 
+function npsNotify(type, msg) {
+    if (typeof toastr !== 'undefined') {
+        var opts = { positionClass: 'toast-top-center', timeOut: 3000, closeButton: true };
+        if (type === 'error') toastr.error(msg, '', opts);
+        else if (type === 'success') toastr.success(msg, '', opts);
+        else if (type === 'warning') toastr.warning(msg, '', opts);
+        else toastr.info(msg, '', opts);
+    } else {
+        alert(msg);
+    }
+}
+
 function submitform(action, url, postdata) {
     postsubmit = false;
     switch (action) {
@@ -151,12 +163,48 @@ function submitform(action, url, postdata) {
             postsubmit = true;
         case 'add':
         case 'edit':
+            // Check required fields before submitting
+            var form = document.querySelector('form.form-horizontal');
+            if (form) {
+                var missing = [];
+                var reqs = form.querySelectorAll('input[required], textarea[required], select[required]');
+                for (var i = 0; i < reqs.length; i++) {
+                    var el = reqs[i];
+                    if (el.type === 'checkbox' || el.type === 'radio') {
+                        // skip (not used as a required field here)
+                        continue;
+                    }
+                    if (!el.value || el.value.trim() === '') {
+                        var name = el.getAttribute('name') || '';
+                        // Try to find a human label
+                        var lbl = form.querySelector('label[for="' + el.id + '"]');
+                        if (!lbl) {
+                            var prev = el.closest('.form-group, .form-field');
+                            if (prev) lbl = prev.querySelector('label');
+                        }
+                        var labelText = lbl ? lbl.textContent.replace(/[*\s:：]+$/, '').trim() : (name || '该字段');
+                        missing.push(labelText);
+                    }
+                }
+                if (missing.length) {
+                    npsNotify('warning', '请填写必填字段：' + missing.join('、'));
+                    // Focus the first missing field
+                    for (var k = 0; k < reqs.length; k++) {
+                        if (reqs[k].type !== 'checkbox' && reqs[k].type !== 'radio'
+                            && (!reqs[k].value || reqs[k].value.trim() === '')) {
+                            reqs[k].focus();
+                            break;
+                        }
+                    }
+                    return;
+                }
+            }
             $.ajax({
                 type: "POST",
                 url: url,
                 data: postdata,
                 success: function (res) {
-                    alert(langreply(res.msg));
+                    npsNotify(res.status ? 'success' : 'error', langreply(res.msg));
                     if (res.status) {
                         if (postsubmit) {
 							document.location.reload();
@@ -168,12 +216,36 @@ function submitform(action, url, postdata) {
             });
 			return;
 		case 'global':
+			// Check required fields before submitting
+			var formG = document.querySelector('form.form-horizontal');
+			if (formG) {
+				var missingG = [];
+				var reqsG = formG.querySelectorAll('input[required], textarea[required], select[required]');
+				for (var j = 0; j < reqsG.length; j++) {
+					var eg = reqsG[j];
+					if (eg.type === 'checkbox' || eg.type === 'radio') continue;
+					if (!eg.value || eg.value.trim() === '') {
+						missingG.push(eg.getAttribute('name') || '该字段');
+					}
+				}
+				if (missingG.length) {
+					npsNotify('warning', '请填写必填字段：' + missingG.join('、'));
+					for (var m = 0; m < reqsG.length; m++) {
+						if (reqsG[m].type !== 'checkbox' && reqsG[m].type !== 'radio'
+							&& (!reqsG[m].value || reqsG[m].value.trim() === '')) {
+							reqsG[m].focus();
+							break;
+						}
+					}
+					return;
+				}
+			}
 			$.ajax({
 				type: "POST",
 				url: url,
 				data: postdata,
 				success: function (res) {
-					alert(langreply(res.msg));
+					npsNotify(res.status ? 'success' : 'error', langreply(res.msg));
 					if (res.status) {
 						document.location.reload();
 					}
