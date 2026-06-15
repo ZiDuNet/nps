@@ -1,12 +1,12 @@
-﻿{
+{
   "name": "NPS 客户端",
   "outputtype": "desktop",
   "frontend": {
     "dir": "frontend",
-    "packageManager": "npm",
-    "install": "npm install",
-    "build": "npm run build",
-    "dev": "npm run dev",
+    "packageManager": "yarn",
+    "install": "yarn install --frozen-lockfile",
+    "build": "yarn build",
+    "dev": "yarn dev",
     "dev:serverUrl": "http://localhost:34115"
   },
   "author": {

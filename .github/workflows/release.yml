@@ -194,7 +194,9 @@ jobs:
           cache: yarn
           cache-dependency-path: ${{ env.FRONTEND_DIR }}/yarn.lock
       - name: Enable Yarn (corepack)
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
         working-directory: ${{ env.FRONTEND_DIR }}
@@ -257,7 +259,9 @@ jobs:
           cache: yarn
           cache-dependency-path: ${{ env.FRONTEND_DIR }}/yarn.lock
       - name: Enable Yarn (corepack)
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
         working-directory: ${{ env.FRONTEND_DIR }}
@@ -321,7 +325,9 @@ jobs:
           cache: yarn
           cache-dependency-path: ${{ env.FRONTEND_DIR }}/yarn.lock
       - name: Enable Yarn (corepack)
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare yarn@1.22.22 --activate
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
         working-directory: ${{ env.FRONTEND_DIR }}

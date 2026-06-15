@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "npc-client",
   "packageManager": "yarn@1.22.22",
   "type": "module",
@@ -17,4 +17,3 @@
     "vite": "^4.3.9"
   }
 }
-
