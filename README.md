@@ -5,15 +5,16 @@
 [![](https://img.shields.io/github/forks/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/network/members)
 [![](https://img.shields.io/docker/pulls/wushuo98/nps.svg)](https://hub.docker.com/r/wushuo98/nps)
 
-NPS is a lightweight, high-performance **intranet penetration** proxy server supporting **TCP/UDP traffic forwarding, HTTP(S) reverse proxy, SOCKS5 proxy, P2P穿透**, with a modern web management panel.
+NPS is a lightweight, high-performance **intranet penetration** proxy server supporting **TCP/UDP forwarding, HTTP(S) reverse proxy, SOCKS5 proxy and P2P tunneling**, with a modern web management panel.
 
-Based on the original nps 0.26.10, with extensive bug fixes, performance and security improvements, and a redesigned Web UI.
+Based on the original nps 0.26.10, with extensive bug fixes, performance and security improvements, and a redesigned Web UI. Since v1.1.1, administrators can create users and assign multiple clients to one user.
 
 ## Features
 
 - 🚀 **Comprehensive Protocols** — TCP, UDP, HTTP(S), SOCKS5, P2P, Secret, File access
 - 🖥️ **Cross-platform** — Linux / Windows / macOS / ARM / Synology, with one-click system service installation
 - 🎨 **Web UI** — Modern interface with light/dark theme, real-time traffic and speed monitoring
+- 👥 **User Management** — One user can manage multiple clients, with user-level tunnel quotas and expiration
 - 🔒 **Security** — Random password on first start, IP whitelist/blacklist, CAPTCHA, rate limiting
 - 🌐 **Domain Proxy** — Custom headers, 404 pages, host rewrite, URL routing, wildcard, auto HTTPS
 - 🔐 **TLS Encryption** — TLS encrypted communication between client and server
@@ -149,13 +150,15 @@ docker-compose up -d
 
 ## Documentation
 
-- 📖 [Full Documentation](https://ehang.io/nps/documents)
+- 📖 [Full Documentation](docs/README.md)
 - 🚀 [Getting Started](docs/start.md)
+- 👥 [User Management](docs/user.md)
 - ⚙️ [Server Config](docs/server_config.md)
 - 📱 [Client Config](docs/client_config.md)
 - 🔧 [Tunnel Details](docs/tunnel.md)
 - 🐳 [Docker Deployment](docs/docker.md)
 - 🖥️ [GUI Client](docs/gui.md)
+- ⬆️ [Migration Guide](docs/migrate.md)
 
 ## Changelog
 

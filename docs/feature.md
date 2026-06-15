@@ -1,157 +1,56 @@
-# 功能一览
-
-## 安全功能
-
-### TLS 加密传输
-
-客户端与服务端之间支持 TLS 加密。在 `nps.conf` 中设置 `tls_enable=true`，开启后自动在 `tls_bridge_port`（默认 8025）监听。
-
-客户端连接：
-```bash
-./npc -server=ip:8025 -vkey=key -tls_enable=true
-```
-
-### IP 白名单与黑名单
-
-- **IP 白名单**：在客户端配置中添加允许访问的 IP，或通过 IP 授权页面让用户自行添加
-- **IP 黑名单**：全局黑名单，在 `nps.conf` 中配置，防止恶意扫描
-- **IP 限制访问**：设置 `ip_limit=true` 后，仅注册 IP 可访问代理端口
-
-### 站点保护
-
-域名代理模式支持 HTTP Basic Auth 认证，在 Web 面板设置用户名和密码。
-
-### Web 管理保护
-
-同一 IP 连续登录失败超过 10 次，将在 1 分钟内禁止该 IP 再次尝试。
-
-### 登录验证码
-
-在 `nps.conf` 中设置 `open_captcha=true` 开启登录验证码。
-
-## 流量与带宽控制
-
-### 流量限制
-
-按客户端设置流量总量限制（单位 MB），达到后拒绝服务。需在 `nps.conf` 设置 `allow_flow_limit=true`。
-
-### 带宽限制
-
-按客户端设置带宽限制（单位 KB/s）。需在 `nps.conf` 设置 `allow_rate_limit=true`。
-
-### 连接数限制
-
-按客户端设置最大连接数。需在 `nps.conf` 设置 `allow_connection_num_limit=true`。
-
-### 隧道数限制
-
-按客户端限制隧道数量。需在 `nps.conf` 设置 `allow_tunnel_num_limit=true`。
-
-## 代理功能
-
-### 负载均衡
-
-TCP 隧道和域名代理支持负载均衡，内网目标填写多个地址（逗号分隔），自动轮询。
-
-### 端口复用
-
-`bridge_port`、`http_proxy_port`、`https_proxy_port`、`web_port` 可设置为同一端口，自动识别协议。
-
-### Proxy Protocol
-
-TCP 隧道支持 Proxy Protocol 协议传递真实客户端 IP。
-
-### 端口白名单
-
-限制可开启的端口范围：
-```ini
-allow_ports=9001-9009,10001,11000-12000
-```
-
-### 代理到服务端本地
-
-设置 `allow_local_proxy=true`，可将请求转发到 NPS 服务器本地的服务。
-
-## 域名代理功能
-
-### 自定义 Header
-
-支持新增或修改请求 Header。
-
-### Host 修改
-
-修改请求中的 Host 字段，适配内网站点。
-
-### URL 路由
-
-同一域名根据 URL 路径转发到不同内网服务。
-
-### 泛解析
-
-支持 `*.proxy.com` 格式的泛域名解析。
-
-### 自动 HTTPS
-
-自动将 HTTP 请求 301 跳转到 HTTPS。
-
-### HTTPS 证书管理
-
-在 Web 面板为每个域名单独上传证书，或指定证书文件路径。系统自动识别。
-
-## 系统功能
-
-### 流量数据持久化
-
-设置 `flow_store_interval` 定时保存流量数据到磁盘。
-
-### 系统信息监控
-
-设置 `system_info_display=true`，Web 面板展示 CPU、内存、网络、连接数等实时图表。
-
-### 多用户支持
-
-- `allow_user_login=true`：允许多用户登录
-- `allow_user_register=true`：允许用户注册
-
-### 获取用户真实 IP
-
-设置 `http_add_origin_header=true`，通过 `X-Forwarded-For` 和 `X-Real-IP` 获取。
-
-### 热更新
-
-Web 面板修改的配置实时生效，无需重启。
-
-### 环境变量渲染
-
-客户端支持环境变量替换配置文件中的参数：
-
-```bash
-export NPC_SERVER_ADDR=1.1.1.1:8024
-export NPC_SERVER_VKEY=xxxxx
-./npc  # 自动使用环境变量
-```
-
-### 健康检查
-
-配置文件模式支持多节点健康检查，失败自动移除目标，恢复后自动加回。
-
-### KCP 协议
-
-设置 `bridge_type=kcp` 可启用 UDP 协议传输，降低延迟（适合专线/内网）。
-
-### 断线重连
-
-配置文件模式：
-```ini
-[common]
-auto_reconnection=true
-```
-
-无配置文件模式默认自动重连。
-
-### 通过代理连接
-
-客户端可通过 SOCKS5/HTTP 代理连接服务端：
-```bash
-./npc -server=ip:8024 -vkey=key -proxy=socks5://user:pass@proxy:port
-```
+# 功能概览
+
+## 代理能力
+
+- TCP 端口转发
+- UDP 端口转发
+- HTTP/HTTPS 域名反向代理
+- HTTP 正向代理
+- SOCKS5 代理
+- Secret 私密代理
+- P2P 点对点穿透
+- 文件访问
+
+## Web 管理
+
+- 仪表盘展示版本、客户端数量、在线数量、流量、隧道统计。
+- 客户端管理：创建、编辑、停用、删除、分配用户、复制启动命令。
+- 隧道管理：新增、编辑、启动、停止、删除。
+- 域名管理：Host 规则、路径路由、Header 修改、Host 重写、HTTPS 证书配置。
+- 用户管理：创建普通用户、设置到期时间、设置用户级隧道配额。
+- 全局设置：黑名单、服务端访问地址等。
+
+## 用户和权限
+
+- 管理员账号配置在 `nps.conf` 中。
+- 普通用户保存到 `users.json`。
+- 一个用户可以管理多个客户端。
+- 普通用户只能看到分配给自己的客户端、隧道和 Host 规则。
+- 普通用户不能访问用户管理和全局设置。
+
+## 配额与到期
+
+- 支持客户端级最大隧道数。
+- 支持用户级最大隧道数。
+- 普通隧道和 Host 域名规则都会计入配额。
+- 支持客户端到期自动停用。
+- 支持用户到期自动停用，并清理其名下客户端运行资源。
+
+## 安全能力
+
+- 首次启动随机生成管理员密码。
+- 支持登录验证码。
+- 登录失败次数限制。
+- Bridge TLS 加密连接。
+- IP 白名单和黑名单。
+- 代理认证账号密码。
+- Web API 时间戳签名鉴权。
+
+## 运维能力
+
+- Docker 多架构镜像。
+- 二进制跨平台构建。
+- Wails GUI 客户端。
+- JSON 数据文件，便于备份和迁移。
+- 流量定时持久化。
+- 系统服务安装、启动、停止、卸载。

@@ -1,29 +1,31 @@
-# NPC 客户端（ZiDuNet 优化版）
+# NPC 客户端
 
-> 对原版 NPS 进行了大量 bug 修复、性能优化和安全加固，长期维护中。
-
-## 优化内容
-
-- **交互式菜单优化** — 递归改循环防止栈溢出
-- **内存泄漏修复** — UDP 数据转发 buf 泄漏、P2P 连接资源释放
-- **并发安全** — 连接状态原子化、关闭时资源正确回收
-- **弃用 API 更新** — rand.Seed、ioutil.WriteFile 等已替换
-- **版本显示** — 菜单中显示当前版本号
-- **内置更新** — 菜单选项一键更新客户端
+NPC 是 NPS 的客户端程序，用于连接 NPS 服务端并把内网服务转发到公网。
 
 ## 快速启动
 
 ```bash
-docker run -d --name npc \
-  ZiDuNet/npc -server=your-ip:8024 -vkey=your-key
+docker run -d --name npc wushuo98/npc:latest \
+  -server=<服务器IP>:8024 -vkey=<VerifyKey>
 ```
 
 TLS 模式：
+
 ```bash
-docker run -d --name npc \
-  ZiDuNet/npc -server=your-ip:8025 -vkey=your-key -tls_enable=true
+docker run -d --name npc wushuo98/npc:latest \
+  -server=<服务器IP>:8025 -vkey=<VerifyKey> -tls_enable=true
 ```
 
-## 相关链接
+## 常用参数
 
-- GitHub: https://github.com/ZiDuNet/nps
+| 参数 | 说明 |
+|------|------|
+| `-server` | 服务端 Bridge 地址 |
+| `-vkey` | 客户端连接密钥，多个用英文逗号分隔 |
+| `-tls_enable` | 启用 TLS |
+| `-type` | 连接类型，`tcp` 或 `kcp` |
+| `-proxy` | 通过 HTTP/SOCKS5 代理连接服务端 |
+
+推荐在服务端 Web 面板管理客户端和隧道，客户端使用无配置文件模式连接。
+
+项目地址：https://github.com/ZiDuNet/nps

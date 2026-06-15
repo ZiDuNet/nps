@@ -1,35 +1,52 @@
-# NPS 服务端（ZiDuNet 优化版）
+# NPS 服务端
 
-> 对原版 NPS 进行了大量 bug 修复、性能优化和安全加固，长期维护中。
+NPS 是一款轻量级、高性能的内网穿透代理服务器，支持 TCP、UDP、HTTP(S) 反向代理、HTTP 正向代理、SOCKS5、P2P、Secret 和文件访问。
 
-## 优化内容
+## 主要特性
 
-- **Web UI 现代化改造** — 全新 CSS 主题，支持明暗主题一键切换
-- **安全加固** — 登录验证码绕过修复、密码强度校验、首次启动随机密码
-- **性能优化** — 16 项内存泄漏修复（HTTP/HTTPS/SOCKS5 代理、mux 连接池、限速器）
-- **流量统计修复** — 隧道/域名解析/UDP 流量正确统计
-- **并发安全** — Bridge Client 并发读写保护、Mux 连接状态原子化
-- **客户端到期时间** — 支持设置客户端到期自动暂停
+- Web 管理面板
+- 独立用户体系，一个用户可管理多个客户端
+- 用户级和客户端级隧道配额
+- HTTP/HTTPS 域名代理
+- TLS Bridge 加密连接
+- IP 白名单/黑名单、验证码、限速、限流
+- JSON 文件持久化，轻量易备份
 
 ## 快速启动
 
 ```bash
 docker run -d --name nps \
-  -p 80:80 -p 443:443 -p 8024:8024 -p 8025:8025 -p 8080:8080 \
-  -v /path/to/conf:/conf \
-  ZiDuNet/nps
+  -p 80:80 -p 443:443 \
+  -p 8024:8024 -p 8025:8025 \
+  -p 8080:8080 \
+  -v /opt/nps/conf:/conf \
+  wushuo98/nps:latest
 ```
+
+查看首次启动账号密码：
+
+```bash
+docker logs nps | head -20
+```
+
+Web 面板：
+
+```text
+http://<服务器IP>:8080
+```
+
+## 端口
 
 | 端口 | 用途 |
 |------|------|
-| 8024 | Bridge TCP（客户端连接） |
-| 8025 | Bridge TLS（加密连接） |
+| 80 | HTTP 反向代理 |
+| 443 | HTTPS 反向代理 |
+| 8024 | Bridge TCP |
+| 8025 | Bridge TLS |
 | 8080 | Web 管理面板 |
-| 80 | HTTP 代理 |
-| 443 | HTTPS 代理 |
 
-启动后访问 `http://<IP>:8080` 进入管理面板，首次启动日志中会打印随机生成的用户名和密码。
+## 数据目录
 
-## 相关链接
+请挂载 `/conf`，其中包含 `nps.conf`、`clients.json`、`users.json`、`tasks.json`、`hosts.json` 等配置和数据文件。
 
-- GitHub: https://github.com/ZiDuNet/nps
+项目地址：https://github.com/ZiDuNet/nps
