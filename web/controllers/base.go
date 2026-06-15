@@ -48,10 +48,12 @@ func (s *BaseController) Prepare() {
 		s.Data["isAdmin"] = true
 	}
 	if s.GetSession("isAdmin") != nil && !s.GetSession("isAdmin").(bool) {
-		s.Ctx.Input.SetData("client_id", s.GetSession("clientId").(int))
-		s.Ctx.Input.SetParam("client_id", strconv.Itoa(s.GetSession("clientId").(int)))
 		s.Data["isAdmin"] = false
 		s.Data["username"] = s.GetSession("username")
+		if s.controllerName == "user" || s.controllerName == "global" {
+			s.StopRun()
+			return
+		}
 		s.CheckUserAuth()
 	} else {
 		s.Data["isAdmin"] = true
@@ -220,30 +222,35 @@ func (s *BaseController) SetType(name string) {
 }
 
 func (s *BaseController) CheckUserAuth() {
+	allowedClientIds := s.GetAllowedClientIds()
 	if s.controllerName == "client" {
 		if s.actionName == "add" {
 			s.StopRun()
 			return
 		}
 		if id := s.GetIntNoErr("id"); id != 0 {
-			if id != s.GetSession("clientId").(int) {
+			if !isAllowedClient(id, allowedClientIds) {
 				s.StopRun()
 				return
 			}
 		}
 	}
 	if s.controllerName == "index" {
+		if clientId := s.GetIntNoErr("client_id"); clientId != 0 && !isAllowedClient(clientId, allowedClientIds) {
+			s.StopRun()
+			return
+		}
 		if id := s.GetIntNoErr("id"); id != 0 {
 			belong := false
 			if strings.Contains(s.actionName, "h") {
 				if v, ok := file.GetDb().JsonDb.Hosts.Load(id); ok {
-					if v.(*file.Host).Client.Id == s.GetSession("clientId").(int) {
+					if isAllowedClient(v.(*file.Host).Client.Id, allowedClientIds) {
 						belong = true
 					}
 				}
 			} else {
 				if v, ok := file.GetDb().JsonDb.Tasks.Load(id); ok {
-					if v.(*file.Tunnel).Client.Id == s.GetSession("clientId").(int) {
+					if isAllowedClient(v.(*file.Tunnel).Client.Id, allowedClientIds) {
 						belong = true
 					}
 				}
@@ -253,4 +260,24 @@ func (s *BaseController) CheckUserAuth() {
 			}
 		}
 	}
+}
+
+func (s *BaseController) GetAllowedClientIds() map[int]struct{} {
+	if ids, ok := s.GetSession("clientIds").(map[int]struct{}); ok {
+		return ids
+	}
+	if id, ok := s.GetSession("clientId").(int); ok {
+		return map[int]struct{}{id: {}}
+	}
+	if userId, ok := s.GetSession("userId").(int); ok {
+		ids := file.GetDb().UserClientIds(userId)
+		s.SetSession("clientIds", ids)
+		return ids
+	}
+	return map[int]struct{}{}
+}
+
+func isAllowedClient(id int, allowedClientIds map[int]struct{}) bool {
+	_, ok := allowedClientIds[id]
+	return ok
 }

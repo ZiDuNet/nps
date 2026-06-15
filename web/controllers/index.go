@@ -81,7 +81,11 @@ func (s *IndexController) GetTunnel() {
 	start, length := s.GetAjaxParams()
 	taskType := s.getEscapeString("type")
 	clientId := s.GetIntNoErr("client_id")
-	list, cnt := server.GetTunnel(start, length, taskType, clientId, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"))
+	var allowed map[int]struct{}
+	if !s.GetSession("isAdmin").(bool) {
+		allowed = s.GetAllowedClientIds()
+	}
+	list, cnt := server.GetTunnelByAllowedClients(start, length, taskType, clientId, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"), allowed)
 	s.AjaxTable(list, cnt, cnt, nil)
 }
 
@@ -119,8 +123,14 @@ func (s *IndexController) Add() {
 		if t.Client, err = file.GetDb().GetClient(s.GetIntNoErr("client_id")); err != nil {
 			s.AjaxErr(err.Error())
 		}
+		if !s.GetSession("isAdmin").(bool) && !isAllowedClient(t.Client.Id, s.GetAllowedClientIds()) {
+			s.AjaxErr("permission denied")
+		}
 		if t.Client.MaxTunnelNum != 0 && t.Client.GetTunnelNum() >= t.Client.MaxTunnelNum {
 			s.AjaxErr("The number of tunnels exceeds the limit")
+		}
+		if t.Client.UserId != 0 && file.GetDb().IsUserTunnelLimitReached(t.Client.UserId) {
+			s.AjaxErr("The number of user tunnels exceeds the limit")
 		}
 		if err := file.GetDb().NewTask(t); err != nil {
 			s.AjaxErr(err.Error())
@@ -168,6 +178,9 @@ func (s *IndexController) Copy() {
 		if newTask.Client.MaxTunnelNum != 0 && newTask.Client.GetTunnelNum() >= newTask.Client.MaxTunnelNum {
 			s.AjaxErr("The number of tunnels exceeds the limit")
 		}
+		if newTask.Client.UserId != 0 && file.GetDb().IsUserTunnelLimitReached(newTask.Client.UserId) {
+			s.AjaxErr("The number of user tunnels exceeds the limit")
+		}
 		if err := file.GetDb().NewTask(newTask); err != nil {
 			s.AjaxErr(err.Error())
 		}
@@ -209,6 +222,10 @@ func (s *IndexController) Edit() {
 				s.AjaxErr("modified error,the client is not exist")
 				return
 			} else {
+				if !s.GetSession("isAdmin").(bool) && !isAllowedClient(client.Id, s.GetAllowedClientIds()) {
+					s.AjaxErr("permission denied")
+					return
+				}
 				t.Client = client
 			}
 			if s.GetIntNoErr("port") != t.Port {
@@ -274,7 +291,11 @@ func (s *IndexController) HostList() {
 	} else {
 		start, length := s.GetAjaxParams()
 		clientId := s.GetIntNoErr("client_id")
-		list, cnt := file.GetDb().GetHost(start, length, clientId, s.getEscapeString("search"))
+		var allowed map[int]struct{}
+		if !s.GetSession("isAdmin").(bool) {
+			allowed = s.GetAllowedClientIds()
+		}
+		list, cnt := file.GetDb().GetHostByAllowedClients(start, length, clientId, s.getEscapeString("search"), allowed)
 		s.AjaxTable(list, cnt, cnt, nil)
 	}
 }
@@ -352,8 +373,14 @@ func (s *IndexController) AddHost() {
 		if h.Client, err = file.GetDb().GetClient(s.GetIntNoErr("client_id")); err != nil {
 			s.AjaxErr("add error the client can not be found")
 		}
+		if !s.GetSession("isAdmin").(bool) && !isAllowedClient(h.Client.Id, s.GetAllowedClientIds()) {
+			s.AjaxErr("permission denied")
+		}
 		if h.Client.MaxTunnelNum != 0 && h.Client.GetTunnelNum() >= h.Client.MaxTunnelNum {
 			s.AjaxErr("The number of tunnels exceeds the limit")
+		}
+		if h.Client.UserId != 0 && file.GetDb().IsUserTunnelLimitReached(h.Client.UserId) {
+			s.AjaxErr("The number of user tunnels exceeds the limit")
 		}
 
 		if err := file.GetDb().NewHost(h); err != nil {
@@ -391,6 +418,10 @@ func (s *IndexController) EditHost() {
 			if client, err := file.GetDb().GetClient(s.GetIntNoErr("client_id")); err != nil {
 				s.AjaxErr("modified error,the client is not exist")
 			} else {
+				if !s.GetSession("isAdmin").(bool) && !isAllowedClient(client.Id, s.GetAllowedClientIds()) {
+					s.AjaxErr("permission denied")
+					return
+				}
 				h.Client = client
 			}
 			h.Host = s.getEscapeString("host")

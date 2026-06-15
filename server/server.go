@@ -239,6 +239,10 @@ func DelTask(id int) error {
 
 // get task list by page num
 func GetTunnel(start, length int, typeVal string, clientId int, search string, sortField string, order string) ([]*file.Tunnel, int) {
+	return GetTunnelByAllowedClients(start, length, typeVal, clientId, search, sortField, order, nil)
+}
+
+func GetTunnelByAllowedClients(start, length int, typeVal string, clientId int, search string, sortField string, order string, allowedClientIds map[int]struct{}) ([]*file.Tunnel, int) {
 	all_list := make([]*file.Tunnel, 0) //store all Tunnel
 	list := make([]*file.Tunnel, 0)
 	var cnt int
@@ -248,6 +252,9 @@ func GetTunnel(start, length int, typeVal string, clientId int, search string, s
 	for _, key := range keys {
 		if value, ok := file.GetDb().JsonDb.Tasks.Load(key); ok {
 			v := value.(*file.Tunnel)
+			if !isClientAllowed(v.Client.Id, allowedClientIds) {
+				continue
+			}
 			if (typeVal != "" && v.Mode != typeVal) || (clientId != 0 && v.Client.Id != clientId) || (typeVal == "" && clientId != 0 && clientId != v.Client.Id) {
 				continue
 			}
@@ -291,6 +298,9 @@ func GetTunnel(start, length int, typeVal string, clientId int, search string, s
 	for _, key := range all_list {
 		if value, ok := file.GetDb().JsonDb.Tasks.Load(key.Id); ok {
 			v := value.(*file.Tunnel)
+			if !isClientAllowed(v.Client.Id, allowedClientIds) {
+				continue
+			}
 			if (typeVal != "" && v.Mode != typeVal) || (clientId != 0 && v.Client.Id != clientId) || (typeVal == "" && clientId != 0 && clientId != v.Client.Id) {
 				continue
 			}
@@ -325,6 +335,44 @@ func GetClientList(start, length int, search, sort, order string, clientId int) 
 	return
 }
 
+func FilterClientsByUserId(clients []*file.Client, userId int) []*file.Client {
+	list := make([]*file.Client, 0, len(clients))
+	for _, client := range clients {
+		if client.UserId == userId {
+			list = append(list, client)
+		}
+	}
+	return list
+}
+
+func FilterClientsByAllowedIds(clients []*file.Client, allowedClientIds map[int]struct{}) []*file.Client {
+	list := make([]*file.Client, 0, len(clients))
+	for _, client := range clients {
+		if isClientAllowed(client.Id, allowedClientIds) {
+			list = append(list, client)
+		}
+	}
+	return list
+}
+
+func FilterTunnelsByAllowedClients(tunnels []*file.Tunnel, allowedClientIds map[int]struct{}) []*file.Tunnel {
+	list := make([]*file.Tunnel, 0, len(tunnels))
+	for _, tunnel := range tunnels {
+		if tunnel.Client != nil && isClientAllowed(tunnel.Client.Id, allowedClientIds) {
+			list = append(list, tunnel)
+		}
+	}
+	return list
+}
+
+func isClientAllowed(clientId int, allowedClientIds map[int]struct{}) bool {
+	if allowedClientIds == nil {
+		return true
+	}
+	_, ok := allowedClientIds[clientId]
+	return ok
+}
+
 func dealClientData() {
 
 	file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {
@@ -335,6 +383,13 @@ func dealClientData() {
 			v.Version = vv.(*bridge.Client).Version
 		} else {
 			v.IsConnect = false
+		}
+		if v.UserId != 0 {
+			if user, err := file.GetDb().GetUser(v.UserId); err == nil {
+				v.UserName = user.UserName
+			}
+		} else {
+			v.UserName = ""
 		}
 		// 确保 Rate 不为 nil，防止前端 JSON 序列化时 row.Rate.NowRate 报错
 		if v.Rate == nil {
@@ -499,12 +554,14 @@ func flowSession(m time.Duration) {
 func dealClientExpire() {
 	// 启动时立即检查一次，避免重启后到期客户端最多1分钟内才被暂停
 	checkClientExpire()
+	checkUserExpire()
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			checkClientExpire()
+			checkUserExpire()
 		}
 	}
 }
@@ -536,5 +593,38 @@ func checkClientExpire() {
 	})
 	if changed {
 		file.GetDb().JsonDb.StoreClientsToJsonFile()
+	}
+}
+
+func checkUserExpire() {
+	now := time.Now()
+	changed := false
+	file.GetDb().JsonDb.Users.Range(func(key, value interface{}) bool {
+		v, ok := value.(*file.User)
+		if !ok || v == nil {
+			return true
+		}
+		if v.ExpireTime == "" || !v.Status {
+			return true
+		}
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", v.ExpireTime, time.Local)
+		if err != nil || now.Before(t) {
+			return true
+		}
+		v.Status = false
+		changed = true
+		file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {
+			c := value.(*file.Client)
+			if c.UserId == v.Id {
+				DelClientConnect(c.Id)
+				DelTunnelAndHostByClientId(c.Id, false)
+			}
+			return true
+		})
+		logs.Info("user id %d (username: %s) expired at %s, auto paused", v.Id, v.UserName, v.ExpireTime)
+		return true
+	})
+	if changed {
+		file.GetDb().JsonDb.StoreUsersToJsonFile()
 	}
 }

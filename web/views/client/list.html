@@ -125,6 +125,15 @@
                 visible: true//false表示不显示
             },
             {
+                field: 'UserName',
+                title: '所属用户',
+                halign: 'center',
+                visible: true,
+                formatter: function(value) {
+                    return value || '-'
+                }
+            },
+            {
                 field: 'Version',//域值
                 title: '<span langtag="word-version"></span>',//标题
                 halign: 'center',

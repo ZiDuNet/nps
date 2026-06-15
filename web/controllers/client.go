@@ -23,14 +23,12 @@ func (s *ClientController) List() {
 		return
 	}
 	start, length := s.GetAjaxParams()
-	clientIdSession := s.GetSession("clientId")
-	var clientId int
-	if clientIdSession == nil {
-		clientId = 0
-	} else {
-		clientId = clientIdSession.(int)
-	}
+	clientId := 0
 	list, cnt := server.GetClientList(start, length, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"), clientId)
+	if !s.GetSession("isAdmin").(bool) {
+		list = server.FilterClientsByAllowedIds(list, s.GetAllowedClientIds())
+		cnt = len(list)
+	}
 	cmd := make(map[string]interface{})
 	ip := s.Ctx.Request.Host
 	cmd["ip"] = common.GetIpByAddr(ip)
@@ -44,12 +42,14 @@ func (s *ClientController) Add() {
 	if s.Ctx.Request.Method == "GET" {
 		s.Data["menu"] = "client"
 		s.SetInfo("add client")
+		s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
 		s.display()
 	} else {
 		id := int(file.GetDb().JsonDb.GetClientId())
 		t := &file.Client{
 			VerifyKey: s.getEscapeString("vkey"),
 			Id:        id,
+			UserId:    s.GetIntNoErr("user_id"),
 			Status:    true,
 			Remark:    s.getEscapeString("remark"),
 			Cnf: &file.Config{
@@ -106,6 +106,7 @@ func (s *ClientController) Edit() {
 			s.error()
 		} else {
 			s.Data["c"] = c
+			s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
 			s.Data["BlackIpList"] = strings.Join(c.BlackIpList, "\r\n")
 			s.Data["IpWhiteList"] = strings.Join(c.IpWhiteList, "\r\n")
 		}
@@ -117,18 +118,13 @@ func (s *ClientController) Edit() {
 			s.AjaxErr("client ID not found")
 			return
 		} else {
-			if s.getEscapeString("web_username") != "" {
-				if s.getEscapeString("web_username") == beego.AppConfig.String("web_username") || !file.GetDb().VerifyUserName(s.getEscapeString("web_username"), c.Id) {
-					s.AjaxErr("web login username duplicate, please reset")
-					return
-				}
-			}
 			if s.GetSession("isAdmin").(bool) {
 				if !file.GetDb().VerifyVkey(s.getEscapeString("vkey"), c.Id) {
 					s.AjaxErr("Vkey duplicate, please reset")
 					return
 				}
 				c.VerifyKey = s.getEscapeString("vkey")
+				c.UserId = s.GetIntNoErr("user_id")
 				c.Flow.FlowLimit = int64(s.GetIntNoErr("flow_limit"))
 				c.RateLimit = s.GetIntNoErr("rate_limit")
 				c.MaxConn = s.GetIntNoErr("max_conn")

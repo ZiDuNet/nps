@@ -1,0 +1,71 @@
+<div class="row">
+    <div class="col-md-12 col-md-auto">
+        <div class="ibox float-e-margins">
+            <h3 class="ibox-title">新增用户</h3>
+            <div class="ibox-content">
+                <form class="form-horizontal">
+                    <div class="form-section-title"><i class="fa fa-user"></i> 基本信息</div>
+                    <div class="form-group">
+                        <label class="col-sm-2 control-label font-bold">用户名</label>
+                        <div class="col-sm-10">
+                            <input class="form-control" type="text" name="username" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-2 control-label font-bold">密码</label>
+                        <div class="col-sm-10">
+                            <input class="form-control" type="text" name="password" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="col-sm-2 control-label font-bold">备注</label>
+                        <div class="col-sm-10">
+                            <input class="form-control" type="text" name="remark">
+                        </div>
+                    </div>
+
+                    <div class="form-section-title"><i class="fa fa-sliders-h"></i> 资源限制</div>
+                    <div class="form-group">
+                        <label class="col-sm-2 control-label font-bold">总隧道上限</label>
+                        <div class="col-sm-10">
+                            <input class="form-control" type="text" name="max_tunnel" placeholder="不填或 0 表示不限">
+                        </div>
+                    </div>
+
+                    <div class="form-section-title"><i class="fa fa-clock"></i> 有效期</div>
+                    <div class="form-group">
+                        <label class="col-sm-2 control-label font-bold">有效期</label>
+                        <div class="col-sm-10">
+                            <input class="form-control flatpickr-expire" type="text" name="expire_time" placeholder="2026-12-31 23:59:59" autocomplete="off">
+                        </div>
+                    </div>
+
+                    <div class="hr-line-dashed"></div>
+                    <div class="form-group">
+                        <div class="col-sm-4 col-sm-offset-2">
+                            <button class="btn btn-success" type="button" onclick="submitform('add', '{{.web_base_url}}/user/add', $('form').serializeArray())">
+                                <i class="fa fa-fw fa-lg fa-check-circle"></i> 新增
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    if (typeof flatpickr !== 'undefined') {
+        flatpickr('.flatpickr-expire', {
+            enableTime: true,
+            enableSeconds: true,
+            time_24hr: true,
+            dateFormat: 'Y-m-d H:i:S',
+            minDate: 'today',
+            allowInput: true,
+            locale: (flatpickr.l10ns && flatpickr.l10ns.zh) ? 'zh' : 'default'
+        });
+    }
+});
+</script>

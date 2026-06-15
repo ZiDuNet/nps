@@ -79,11 +79,22 @@ func (self *LoginController) doLogin(username, password string, explicit bool) b
 	if password == beego.AppConfig.String("web_password") && username == beego.AppConfig.String("web_username") {
 		self.SetSession("isAdmin", true)
 		self.DelSession("clientId")
+		self.DelSession("clientIds")
+		self.DelSession("userId")
 		self.DelSession("username")
 		auth = true
 		server.Bridge.Register.Store(common.GetIpByAddr(self.Ctx.Input.IP()), time.Now().Add(time.Hour*time.Duration(2)))
 	}
 	b, err := beego.AppConfig.Bool("allow_user_login")
+	if err == nil && b && !auth {
+		if user, err := file.GetDb().GetUserByName(username); err == nil && file.GetDb().IsUserActive(user.Id) && user.Password == password {
+			auth = true
+			self.SetSession("isAdmin", false)
+			self.SetSession("userId", user.Id)
+			self.SetSession("username", user.UserName)
+			self.SetSession("clientIds", file.GetDb().UserClientIds(user.Id))
+		}
+	}
 	if err == nil && b && !auth {
 		file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {
 			v := value.(*file.Client)
@@ -103,6 +114,7 @@ func (self *LoginController) doLogin(username, password string, explicit bool) b
 			if auth {
 				self.SetSession("isAdmin", false)
 				self.SetSession("clientId", v.Id)
+				self.SetSession("clientIds", map[int]struct{}{v.Id: {}})
 				self.SetSession("username", v.WebUserName)
 				return false
 			}

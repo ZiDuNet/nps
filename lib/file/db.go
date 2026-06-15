@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/crypt"
@@ -28,10 +29,14 @@ func GetDb() *DbUtils {
 	once.Do(func() {
 		jsonDb := NewJsonDb(common.GetRunPath())
 		jsonDb.LoadClientFromJsonFile()
+		jsonDb.LoadUserFromJsonFile()
 		jsonDb.LoadTaskFromJsonFile()
 		jsonDb.LoadHostFromJsonFile()
 		jsonDb.LoadGlobalFromJsonFile()
 		Db = &DbUtils{JsonDb: jsonDb}
+		if err := Db.MigrateUsersFromClients(); err != nil {
+			// 迁移失败不影响主流程，保留旧客户端登录兼容。
+		}
 	})
 	return Db
 }
@@ -73,6 +78,231 @@ func (s *DbUtils) GetClientList(start, length int, search, sort, order string, c
 		}
 	}
 	return list, cnt
+}
+
+func (s *DbUtils) GetUserList(start, length int, search string) ([]*User, int) {
+	list := make([]*User, 0)
+	all := make([]*User, 0)
+	s.JsonDb.Users.Range(func(key, value interface{}) bool {
+		v := value.(*User)
+		if search != "" && !(v.Id == common.GetIntNoErrByStr(search) || strings.Contains(v.UserName, search) || strings.Contains(v.Remark, search)) {
+			return true
+		}
+		all = append(all, v)
+		return true
+	})
+	sort.SliceStable(all, func(i, j int) bool {
+		return all[i].Id < all[j].Id
+	})
+	cnt := len(all)
+	for _, user := range all {
+		if start--; start < 0 {
+			if length--; length >= 0 {
+				list = append(list, user)
+			}
+		}
+	}
+	return list, cnt
+}
+
+func (s *DbUtils) NewUser(u *User) error {
+	if u.UserName == "" {
+		return errors.New("username can not be empty")
+	}
+	if u.Password == "" {
+		return errors.New("password can not be empty")
+	}
+	if !s.VerifyUserLoginName(u.UserName, u.Id) {
+		return errors.New("username duplicate, please reset")
+	}
+	if u.Id == 0 {
+		u.Id = int(s.JsonDb.GetUserId())
+	}
+	if u.CreateTime == "" {
+		u.CreateTime = time.Now().Format("2006-01-02 15:04:05")
+	}
+	u.Status = true
+	s.JsonDb.Users.Store(u.Id, u)
+	s.JsonDb.StoreUsersToJsonFile()
+	return nil
+}
+
+func (s *DbUtils) UpdateUser(u *User) error {
+	if u.UserName == "" {
+		return errors.New("username can not be empty")
+	}
+	if u.Password == "" {
+		return errors.New("password can not be empty")
+	}
+	if !s.VerifyUserLoginName(u.UserName, u.Id) {
+		return errors.New("username duplicate, please reset")
+	}
+	s.JsonDb.Users.Store(u.Id, u)
+	s.JsonDb.StoreUsersToJsonFile()
+	return nil
+}
+
+func (s *DbUtils) DelUser(id int) error {
+	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
+		c := value.(*Client)
+		if c.UserId == id {
+			c.UserId = 0
+		}
+		return true
+	})
+	s.JsonDb.Users.Delete(id)
+	s.JsonDb.StoreUsersToJsonFile()
+	s.JsonDb.StoreClientsToJsonFile()
+	return nil
+}
+
+func (s *DbUtils) GetUser(id int) (*User, error) {
+	if v, ok := s.JsonDb.Users.Load(id); ok {
+		return v.(*User), nil
+	}
+	return nil, errors.New("未找到用户")
+}
+
+func (s *DbUtils) GetUserByName(username string) (*User, error) {
+	var user *User
+	s.JsonDb.Users.Range(func(key, value interface{}) bool {
+		v := value.(*User)
+		if v.UserName == username {
+			user = v
+			return false
+		}
+		return true
+	})
+	if user == nil {
+		return nil, errors.New("未找到用户")
+	}
+	return user, nil
+}
+
+func (s *DbUtils) VerifyUserLoginName(username string, id int) bool {
+	res := true
+	s.JsonDb.Users.Range(func(key, value interface{}) bool {
+		v := value.(*User)
+		if v.UserName == username && v.Id != id {
+			res = false
+			return false
+		}
+		return true
+	})
+	return res
+}
+
+func (s *DbUtils) MigrateUsersFromClients() error {
+	type credential struct {
+		userId   int
+		password string
+	}
+	byName := make(map[string]credential)
+	s.JsonDb.Users.Range(func(key, value interface{}) bool {
+		u := value.(*User)
+		byName[u.UserName] = credential{userId: u.Id, password: u.Password}
+		return true
+	})
+
+	changedUsers := false
+	changedClients := false
+	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
+		c := value.(*Client)
+		if c.UserId != 0 || c.WebUserName == "" || c.WebPassword == "" {
+			return true
+		}
+		name := c.WebUserName
+		cred, ok := byName[name]
+		if ok && cred.password != c.WebPassword {
+			name = fmt.Sprintf("%s_%d", c.WebUserName, c.Id)
+			ok = false
+		}
+		if !ok {
+			u := &User{
+				Id:         int(s.JsonDb.GetUserId()),
+				UserName:   name,
+				Password:   c.WebPassword,
+				Status:     true,
+				Remark:     c.Remark,
+				CreateTime: time.Now().Format("2006-01-02 15:04:05"),
+			}
+			s.JsonDb.Users.Store(u.Id, u)
+			cred = credential{userId: u.Id, password: u.Password}
+			byName[name] = cred
+			changedUsers = true
+		}
+		c.UserId = cred.userId
+		changedClients = true
+		return true
+	})
+	if changedUsers {
+		s.JsonDb.StoreUsersToJsonFile()
+	}
+	if changedClients {
+		s.JsonDb.StoreClientsToJsonFile()
+	}
+	return nil
+}
+
+func (s *DbUtils) UserClientIds(userId int) map[int]struct{} {
+	ids := make(map[int]struct{})
+	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
+		c := value.(*Client)
+		if c.UserId == userId {
+			ids[c.Id] = struct{}{}
+		}
+		return true
+	})
+	return ids
+}
+
+func (s *DbUtils) IsClientBelongToUser(clientId, userId int) bool {
+	c, err := s.GetClient(clientId)
+	return err == nil && c.UserId == userId
+}
+
+func (s *DbUtils) IsUserActive(userId int) bool {
+	user, err := s.GetUser(userId)
+	if err != nil || !user.Status {
+		return false
+	}
+	if user.ExpireTime == "" {
+		return true
+	}
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", user.ExpireTime, time.Local)
+	return err != nil || time.Now().Before(t)
+}
+
+func (s *DbUtils) GetUserTunnelNum(userId int) int {
+	clientIds := s.UserClientIds(userId)
+	num := 0
+	s.JsonDb.Tasks.Range(func(key, value interface{}) bool {
+		t := value.(*Tunnel)
+		if t.Client != nil {
+			if _, ok := clientIds[t.Client.Id]; ok {
+				num++
+			}
+		}
+		return true
+	})
+	s.JsonDb.Hosts.Range(func(key, value interface{}) bool {
+		h := value.(*Host)
+		if h.Client != nil {
+			if _, ok := clientIds[h.Client.Id]; ok {
+				num++
+			}
+		}
+		return true
+	})
+	return num
+}
+
+func (s *DbUtils) IsUserTunnelLimitReached(userId int) bool {
+	user, err := s.GetUser(userId)
+	if err != nil || user.MaxTunnelNum == 0 {
+		return false
+	}
+	return s.GetUserTunnelNum(userId) >= user.MaxTunnelNum
 }
 
 func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error) {
@@ -183,12 +413,21 @@ func (s *DbUtils) NewHost(t *Host) error {
 }
 
 func (s *DbUtils) GetHost(start, length int, id int, search string) ([]*Host, int) {
+	return s.GetHostByAllowedClients(start, length, id, search, nil)
+}
+
+func (s *DbUtils) GetHostByAllowedClients(start, length int, id int, search string, allowedClientIds map[int]struct{}) ([]*Host, int) {
 	list := make([]*Host, 0)
 	var cnt int
 	keys := GetMapKeys(s.JsonDb.Hosts, false, "", "")
 	for _, key := range keys {
 		if value, ok := s.JsonDb.Hosts.Load(key); ok {
 			v := value.(*Host)
+			if allowedClientIds != nil {
+				if _, ok := allowedClientIds[v.Client.Id]; !ok {
+					continue
+				}
+			}
 			if search != "" && !(v.Id == common.GetIntNoErrByStr(search) || strings.Contains(v.Host, search) || strings.Contains(v.Remark, search) || strings.Contains(v.Client.VerifyKey, search)) {
 				continue
 			}
@@ -213,9 +452,6 @@ func (s *DbUtils) DelClient(id int) error {
 
 func (s *DbUtils) NewClient(c *Client) error {
 	var isNotSet bool
-	if c.WebUserName != "" && !s.VerifyUserName(c.WebUserName, c.Id) {
-		return errors.New("web login username duplicate, please reset")
-	}
 reset:
 	if c.VerifyKey == "" || isNotSet {
 		isNotSet = true

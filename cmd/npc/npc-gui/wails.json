@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "NPS 客户端",
   "outputtype": "desktop",
   "frontend": {
@@ -14,7 +14,7 @@
   },
   "info": {
     "productName": "NPS Client",
-    "productVersion": "1.1.0",
+    "productVersion": "1.1.1",
     "companyName": "NPS",
     "copyright": "Copyright © 2026 NPS"
   },

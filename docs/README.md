@@ -1,8 +1,8 @@
-# NPS 文档
+﻿# NPS 文档
 
 > 轻量级、高性能、功能强大的内网穿透代理服务器
 
-**v1.1.0** — 并发安全加固 · 流量统计修复 · 客户端到期时间 · 内存泄漏修复 · 上游更新合并
+**v1.1.1** — 用户管理 · 多客户端归属 · 用户级隧道配额 · 兼容迁移
 
 ## 特性
 
@@ -22,3 +22,4 @@
 - [更新日志](changelog.md)
 
 [GitHub](https://github.com/ZiDuNet/nps) | [Docker Hub](https://hub.docker.com/u/wushuo98) | [问题反馈](https://github.com/ZiDuNet/nps/issues)
+

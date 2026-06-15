@@ -34,6 +34,8 @@ type Config struct {
 type Client struct {
 	Cnf             *Config
 	Id              int        //id
+	UserId          int        //关联的普通用户 id
+	UserName        string     `json:"-"` //关联用户名称，仅用于展示
 	VerifyKey       string     //verify key
 	Addr            string     //the ip of client
 	Remark          string     //remark
@@ -58,6 +60,18 @@ type Client struct {
 	IpWhitePass     string   // ip授权密码
 	IpWhiteList     []string // ip白名单
 	ExpireTime      string   // 到期时间,留空表示永不过期,格式 2006-01-02 15:04:05
+	sync.RWMutex
+}
+
+type User struct {
+	Id           int
+	UserName     string
+	Password     string
+	Status       bool
+	Remark       string
+	MaxTunnelNum int
+	ExpireTime   string
+	CreateTime   string
 	sync.RWMutex
 }
 

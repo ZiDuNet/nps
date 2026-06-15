@@ -20,6 +20,7 @@ func NewJsonDb(runPath string) *JsonDb {
 		TaskFilePath:   filepath.Join(runPath, "conf", "tasks.json"),
 		HostFilePath:   filepath.Join(runPath, "conf", "hosts.json"),
 		ClientFilePath: filepath.Join(runPath, "conf", "clients.json"),
+		UserFilePath:   filepath.Join(runPath, "conf", "users.json"),
 		GlobalFilePath: filepath.Join(runPath, "conf", "global.json"),
 	}
 }
@@ -29,14 +30,17 @@ type JsonDb struct {
 	Hosts            sync.Map
 	HostsTmp         sync.Map
 	Clients          sync.Map
+	Users            sync.Map
 	Global           *Glob
 	RunPath          string
 	ClientIncreaseId int32  //client increased id
+	UserIncreaseId   int32  //user increased id
 	TaskIncreaseId   int32  //task increased id
 	HostIncreaseId   int32  //host increased id
 	TaskFilePath     string //task file path
 	HostFilePath     string //host file path
 	ClientFilePath   string //client file path
+	UserFilePath     string //user file path
 	GlobalFilePath   string //global file path
 }
 
@@ -73,6 +77,19 @@ func (s *JsonDb) LoadClientFromJsonFile() {
 		s.Clients.Store(post.Id, post)
 		if post.Id > int(s.ClientIncreaseId) {
 			s.ClientIncreaseId = int32(post.Id)
+		}
+	})
+}
+
+func (s *JsonDb) LoadUserFromJsonFile() {
+	loadSyncMapFromFile(s.UserFilePath, func(v string) {
+		post := new(User)
+		if json.Unmarshal([]byte(v), &post) != nil {
+			return
+		}
+		s.Users.Store(post.Id, post)
+		if post.Id > int(s.UserIncreaseId) {
+			s.UserIncreaseId = int32(post.Id)
 		}
 	})
 }
@@ -137,6 +154,14 @@ func (s *JsonDb) StoreClientsToJsonFile() {
 	clientLock.Unlock()
 }
 
+var userLock sync.Mutex
+
+func (s *JsonDb) StoreUsersToJsonFile() {
+	userLock.Lock()
+	storeSyncMapToFile(s.Users, s.UserFilePath)
+	userLock.Unlock()
+}
+
 var globalLock sync.Mutex
 
 func (s *JsonDb) StoreGlobalToJsonFile() {
@@ -147,6 +172,10 @@ func (s *JsonDb) StoreGlobalToJsonFile() {
 
 func (s *JsonDb) GetClientId() int32 {
 	return atomic.AddInt32(&s.ClientIncreaseId, 1)
+}
+
+func (s *JsonDb) GetUserId() int32 {
+	return atomic.AddInt32(&s.UserIncreaseId, 1)
 }
 
 func (s *JsonDb) GetTaskId() int32 {
@@ -220,6 +249,8 @@ func storeSyncMapToFile(m sync.Map, filePath string) {
 				return true
 			}
 			b, err = json.Marshal(obj)
+		case *User:
+			b, err = json.Marshal(value.(*User))
 		//case *Glob:
 		//	obj := value.(*Glob)
 		//	b, err = json.Marshal(obj)

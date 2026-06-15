@@ -1,0 +1,76 @@
+<div class="wrapper wrapper-content animated fadeInRight">
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="ibox float-e-margins">
+                <div class="ibox-title">
+                    <h5>用户管理</h5>
+                    <div class="ibox-tools">
+                        <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
+                        <a class="close-link"><i class="fa fa-times"></i></a>
+                    </div>
+                </div>
+                <div class="ibox-content">
+                    <div id="toolbar">
+                        <a href="{{.web_base_url}}/user/add" class="btn btn-primary dim">
+                            <i class="fa fa-fw fa-lg fa-plus"></i> 新增用户
+                        </a>
+                    </div>
+                    <table id="table"></table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    $('#table').bootstrapTable({
+        toolbar: "#toolbar",
+        method: 'post',
+        url: "{{.web_base_url}}/user/list",
+        contentType: "application/x-www-form-urlencoded",
+        striped: true,
+        search: true,
+        showHeader: true,
+        showColumns: true,
+        showRefresh: true,
+        pagination: true,
+        sidePagination: 'server',
+        pageNumber: 1,
+        pageList: [5, 10, 20, 50],
+        smartDisplay: true,
+        columns: [
+            { field: 'Id', title: 'ID', halign: 'center' },
+            { field: 'UserName', title: '用户名', halign: 'center' },
+            { field: 'Remark', title: '备注', halign: 'center' },
+            { field: 'MaxTunnelNum', title: '总隧道上限', halign: 'center', formatter: function(value) { return value || '不限'; } },
+            { field: 'ExpireTime', title: '有效期', halign: 'center', formatter: function(value) { return value || '不限'; } },
+            {
+                field: 'Status',
+                title: '状态',
+                align: 'center',
+                halign: 'center',
+                formatter: function(value) {
+                    return value ? '<span class="badge badge-primary">启用</span>' : '<span class="badge badge-badge">停用</span>';
+                }
+            },
+            {
+                field: 'option',
+                title: '操作',
+                align: 'center',
+                halign: 'center',
+                formatter: function(value, row) {
+                    var btn = '<div class="btn-group">';
+                    if (row.Status) {
+                        btn += '<a onclick="submitform(\'stop\', \'{{.web_base_url}}/user/changestatus\', {\'id\':' + row.Id + ', \'status\': 0})" class="btn btn-outline btn-warning"><i class="fa fa-pause"></i></a>';
+                    } else {
+                        btn += '<a onclick="submitform(\'start\', \'{{.web_base_url}}/user/changestatus\', {\'id\':' + row.Id + ', \'status\': 1})" class="btn btn-outline btn-primary"><i class="fa fa-play"></i></a>';
+                    }
+                    btn += '<a href="{{.web_base_url}}/user/edit?id=' + row.Id + '" class="btn btn-outline btn-success"><i class="fa fa-edit"></i></a>';
+                    btn += '<a onclick="submitform(\'delete\', \'{{.web_base_url}}/user/del\', {\'id\':' + row.Id + '})" class="btn btn-outline btn-danger"><i class="fa fa-trash"></i></a>';
+                    btn += '</div>';
+                    return btn;
+                }
+            }
+        ]
+    });
+</script>
