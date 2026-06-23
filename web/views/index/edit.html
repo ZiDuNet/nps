@@ -8,32 +8,25 @@
     .tunnel-type-tcp #target,
     .tunnel-type-tcp #local_proxy,
     .tunnel-type-tcp #client_id,
-    .tunnel-type-tcp #server_ip,
     .tunnel-type-tcp #proto_version,
     .tunnel-type-udp #port,
     .tunnel-type-udp #target,
     .tunnel-type-udp #local_proxy,
     .tunnel-type-udp #client_id,
-    .tunnel-type-udp #server_ip,
     .tunnel-type-httpProxy #port,
     .tunnel-type-httpProxy #client_id,
-    .tunnel-type-httpProxy #server_ip,
     .tunnel-type-socks5 #port,
     .tunnel-type-socks5 #client_id,
-    .tunnel-type-socks5 #server_ip,
     .tunnel-type-secret #target,
     .tunnel-type-secret #password,
     .tunnel-type-secret #client_id,
-    .tunnel-type-secret #server_ip,
     .tunnel-type-p2p #target,
     .tunnel-type-p2p #password,
     .tunnel-type-p2p #client_id,
-    .tunnel-type-p2p #server_ip,
     .tunnel-type-file #port,
     .tunnel-type-file #local_path,
     .tunnel-type-file #strip_pre,
-    .tunnel-type-file #client_id,
-    .tunnel-type-file #server_ip {
+    .tunnel-type-file #client_id {
         display: block;
     }
 
@@ -190,13 +183,13 @@
 </div>
 <script>
     var fieldMap = {
-        tcp: ["port", "target", "local_proxy", "client_id", "server_ip", "proto_version"],
-        udp: ["port", "target", "local_proxy", "client_id", "server_ip"],
-        socks5: ["port", "client_id", "server_ip"],
-        httpProxy: ["port", "client_id", "server_ip"],
-        secret: ["target", "password", "client_id", "server_ip"],
-        p2p: ["target", "password", "client_id", "server_ip"],
-        file: ["port", "local_path", "strip_pre", "client_id", "server_ip"]
+        tcp: ["client_id", "port", "target", "local_proxy", "proto_version"],
+        udp: ["client_id", "port", "target", "local_proxy"],
+        socks5: ["client_id", "port"],
+        httpProxy: ["client_id", "port"],
+        secret: ["client_id", "target", "password"],
+        p2p: ["client_id", "target", "password"],
+        file: ["client_id", "port", "local_path", "strip_pre"]
     };
     var tunnelTypeClasses = "tunnel-type-tcp tunnel-type-udp tunnel-type-httpProxy tunnel-type-socks5 tunnel-type-secret tunnel-type-p2p tunnel-type-file";
 
