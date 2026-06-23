@@ -84,8 +84,8 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 			path:      "../views/index/add.html",
 			typeClass: `class="row tile tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}"`,
 			expectedRules: []string{
-				`.tunnel-type-tcp #server_ip`,
-				`.tunnel-type-file #server_ip`,
+				`.tunnel-form.tunnel-type-tcp #server_ip`,
+				`.tunnel-form.tunnel-type-file #server_ip`,
 			},
 		},
 		{
@@ -93,28 +93,30 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 			path:      "../views/index/edit.html",
 			typeClass: `class="row tile tunnel-form tunnel-type-{{.t.Mode}}"`,
 			forbiddenRules: []string{
-				`.tunnel-type-tcp #server_ip`,
-				`.tunnel-type-udp #server_ip`,
-				`.tunnel-type-httpProxy #server_ip`,
-				`.tunnel-type-socks5 #server_ip`,
-				`.tunnel-type-secret #server_ip`,
-				`.tunnel-type-p2p #server_ip`,
-				`.tunnel-type-file #server_ip`,
+				`.tunnel-form.tunnel-type-tcp #server_ip`,
+				`.tunnel-form.tunnel-type-udp #server_ip`,
+				`.tunnel-form.tunnel-type-httpProxy #server_ip`,
+				`.tunnel-form.tunnel-type-socks5 #server_ip`,
+				`.tunnel-form.tunnel-type-secret #server_ip`,
+				`.tunnel-form.tunnel-type-p2p #server_ip`,
+				`.tunnel-form.tunnel-type-file #server_ip`,
 			},
 		},
 	}
 
 	requiredCSS := []string{
 		`.tunnel-form .form-group[id] {`,
+		`display: none !important;`,
 		`.tunnel-form #remark_group`,
-		`.tunnel-type-tcp #port`,
-		`.tunnel-type-udp #port`,
-		`.tunnel-type-httpProxy #port`,
-		`.tunnel-type-socks5 #client_id`,
-		`.tunnel-type-secret #password`,
-		`.tunnel-type-p2p #password`,
-		`.tunnel-type-file #local_path`,
-		`.tunnel-type-file #strip_pre`,
+		`.tunnel-form.tunnel-type-tcp #port`,
+		`.tunnel-form.tunnel-type-udp #port`,
+		`.tunnel-form.tunnel-type-httpProxy #port`,
+		`.tunnel-form.tunnel-type-socks5 #client_id`,
+		`.tunnel-form.tunnel-type-secret #password`,
+		`.tunnel-form.tunnel-type-p2p #password`,
+		`.tunnel-form.tunnel-type-file #local_path`,
+		`.tunnel-form.tunnel-type-file #strip_pre`,
+		`display: flex !important;`,
 		`tunnelTypeClasses`,
 		`applyTypeClass(type);`,
 	}
@@ -139,6 +141,9 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 				if strings.Contains(content, rule) {
 					t.Fatalf("%s template contains non-upstream visibility rule: %s", tt.name, rule)
 				}
+			}
+			if strings.Contains(content, `.css("display"`) {
+				t.Fatalf("%s template directly mutates display instead of type class", tt.name)
 			}
 		})
 	}

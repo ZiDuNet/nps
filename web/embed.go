@@ -25,10 +25,8 @@ func ExtractWebFiles(runPath string) {
 		extractFS(StaticFS, "static", webDir)
 		logs.Info("Extracted embedded web/static to", staticDir)
 	}
-	if !common.FileExists(viewsDir) {
-		extractFS(ViewsFS, "views", webDir)
-		logs.Info("Extracted embedded web/views to", viewsDir)
-	}
+	extractFS(ViewsFS, "views", webDir)
+	logs.Info("Synced embedded web/views to", viewsDir)
 }
 
 func extractFS(efs embed.FS, root string, destDir string) {
