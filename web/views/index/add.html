@@ -1,4 +1,57 @@
-<div class="row tile">
+<style>
+    .tunnel-form .form-group[id] {
+        display: none;
+    }
+
+    .tunnel-form #remark_group,
+    .tunnel-type-tcp #port,
+    .tunnel-type-tcp #target,
+    .tunnel-type-tcp #local_proxy,
+    .tunnel-type-tcp #client_id,
+    .tunnel-type-tcp #server_ip,
+    .tunnel-type-tcp #proto_version,
+    .tunnel-type-udp #port,
+    .tunnel-type-udp #target,
+    .tunnel-type-udp #local_proxy,
+    .tunnel-type-udp #client_id,
+    .tunnel-type-udp #server_ip,
+    .tunnel-type-httpProxy #port,
+    .tunnel-type-httpProxy #client_id,
+    .tunnel-type-httpProxy #server_ip,
+    .tunnel-type-socks5 #port,
+    .tunnel-type-socks5 #client_id,
+    .tunnel-type-socks5 #server_ip,
+    .tunnel-type-secret #target,
+    .tunnel-type-secret #password,
+    .tunnel-type-secret #client_id,
+    .tunnel-type-secret #server_ip,
+    .tunnel-type-p2p #target,
+    .tunnel-type-p2p #password,
+    .tunnel-type-p2p #client_id,
+    .tunnel-type-p2p #server_ip,
+    .tunnel-type-file #port,
+    .tunnel-type-file #local_path,
+    .tunnel-type-file #strip_pre,
+    .tunnel-type-file #client_id,
+    .tunnel-type-file #server_ip {
+        display: block;
+    }
+
+    .tunnel-form #usecase span {
+        display: none;
+    }
+
+    .tunnel-form.tunnel-type-tcp #casetcp,
+    .tunnel-form.tunnel-type-udp #caseudp,
+    .tunnel-form.tunnel-type-httpProxy #casehttpProxy,
+    .tunnel-form.tunnel-type-socks5 #casesocks5,
+    .tunnel-form.tunnel-type-secret #casesecret,
+    .tunnel-form.tunnel-type-p2p #casep2p,
+    .tunnel-form.tunnel-type-file #casefile {
+        display: inline;
+    }
+</style>
+<div class="row tile tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}">
     <div class="col-md-12 col-md-auto">
         <div class="ibox float-e-margins">
             <h3 class="ibox-title" langtag="page-add"></h3>
@@ -143,12 +196,18 @@
         p2p: ["target", "password", "client_id", "server_ip"],
         file: ["port", "local_path", "strip_pre", "client_id", "server_ip"]
     };
+    var tunnelTypeClasses = "tunnel-type-tcp tunnel-type-udp tunnel-type-httpProxy tunnel-type-socks5 tunnel-type-secret tunnel-type-p2p tunnel-type-file";
+
+    function applyTypeClass(type) {
+        $(".tunnel-form").removeClass(tunnelTypeClasses).addClass("tunnel-type-" + type);
+    }
 
     function resetForm() {
         $(".form-group[id]").css("display", "none");
         $("#usecase span").css("display", "none");
         var type = $("#type").val() || "tcp";
         var fields = fieldMap[type] || fieldMap.tcp;
+        applyTypeClass(type);
         $('#case' + type).css("display", "inline");
         for (var i = 0; i < fields.length; i++) {
             $("#" + fields[i]).css("display", "block");

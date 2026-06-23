@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"bytes"
+	"html/template"
 	"os"
 	"strings"
 	"testing"
@@ -35,6 +37,123 @@ func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 				if !strings.Contains(content, fields) {
 					t.Fatalf("%s template misses %s field map: %s", tt.name, tunnelType, fields)
 				}
+			}
+		})
+	}
+}
+
+func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
+	tests := []struct {
+		name          string
+		path          string
+		typeClass     string
+		expectedRules []string
+	}{
+		{
+			name:      "add",
+			path:      "../views/index/add.html",
+			typeClass: `class="row tile tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}"`,
+		},
+		{
+			name:      "edit",
+			path:      "../views/index/edit.html",
+			typeClass: `class="row tile tunnel-form tunnel-type-{{.t.Mode}}"`,
+		},
+	}
+
+	requiredCSS := []string{
+		`.tunnel-form .form-group[id] {`,
+		`.tunnel-form #remark_group`,
+		`.tunnel-type-tcp #port`,
+		`.tunnel-type-udp #port`,
+		`.tunnel-type-httpProxy #port`,
+		`.tunnel-type-socks5 #client_id`,
+		`.tunnel-type-secret #password`,
+		`.tunnel-type-p2p #password`,
+		`.tunnel-type-file #local_path`,
+		`.tunnel-type-file #strip_pre`,
+		`tunnelTypeClasses`,
+		`applyTypeClass(type);`,
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := readTemplateForTest(t, tt.path)
+			if !strings.Contains(content, tt.typeClass) {
+				t.Fatalf("%s template does not set initial tunnel type class", tt.name)
+			}
+			for _, rule := range requiredCSS {
+				if !strings.Contains(content, rule) {
+					t.Fatalf("%s template misses initial visibility rule: %s", tt.name, rule)
+				}
+			}
+		})
+	}
+}
+
+func TestTunnelFormTemplatesExecuteWithInitialTypeClass(t *testing.T) {
+	tests := []struct {
+		name      string
+		path      string
+		data      map[string]interface{}
+		wantClass string
+	}{
+		{
+			name: "add udp",
+			path: "../views/index/add.html",
+			data: map[string]interface{}{
+				"type":              "udp",
+				"allow_multi_ip":    true,
+				"allow_local_proxy": true,
+				"web_base_url":      "",
+			},
+			wantClass: `tunnel-type-udp`,
+		},
+		{
+			name: "add default",
+			path: "../views/index/add.html",
+			data: map[string]interface{}{
+				"type":              "",
+				"allow_multi_ip":    true,
+				"allow_local_proxy": true,
+				"web_base_url":      "",
+			},
+			wantClass: `tunnel-type-tcp`,
+		},
+		{
+			name: "edit file",
+			path: "../views/index/edit.html",
+			data: map[string]interface{}{
+				"t": map[string]interface{}{
+					"Id":           1,
+					"Mode":         "file",
+					"Client":       map[string]interface{}{"Id": 1},
+					"ServerIp":     "0.0.0.0",
+					"Port":         8080,
+					"Target":       map[string]interface{}{"LocalProxy": false, "TargetStr": ""},
+					"LocalPath":    "/tmp",
+					"StripPre":     "",
+					"Password":     "",
+					"ProtoVersion": "",
+					"Remark":       "",
+				},
+				"allow_multi_ip":    true,
+				"allow_local_proxy": true,
+				"web_base_url":      "",
+			},
+			wantClass: `tunnel-type-file`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tpl := template.Must(template.ParseFiles(tt.path))
+			var buf bytes.Buffer
+			if err := tpl.Execute(&buf, tt.data); err != nil {
+				t.Fatalf("execute template: %v", err)
+			}
+			if !strings.Contains(buf.String(), tt.wantClass) {
+				t.Fatalf("rendered template misses %s", tt.wantClass)
 			}
 		})
 	}
