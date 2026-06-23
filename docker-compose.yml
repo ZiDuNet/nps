@@ -13,6 +13,6 @@ services:
       - "443:443"     # HTTPS
       - "8024:8024"   # Bridge (TCP)
       - "8025:8025"   # Bridge (TLS)
-      - "8080:8080"   # Web 管理面板
+      - "8081:8081"   # Web 管理面板
     volumes:
       - ./conf:/conf

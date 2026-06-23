@@ -15,7 +15,7 @@ md5(nps.conf 中的 auth_key + timestamp)
 示例：
 
 ```bash
-curl -X POST 'http://127.0.0.1:8080/client/list' \
+curl -X POST 'http://127.0.0.1:8081/client/list' \
   -d 'auth_key=<md5值>' \
   -d 'timestamp=<当前时间戳>' \
   -d 'offset=0' \

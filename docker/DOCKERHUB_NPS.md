@@ -18,12 +18,12 @@ NPS 是一款轻量级、高性能的内网穿透代理服务器，支持 TCP、
 docker run -d --name nps \
   -p 80:80 -p 443:443 \
   -p 8024:8024 -p 8025:8025 \
-  -p 8080:8080 \
+  -p 8081:8081 \
   -v /opt/nps/conf:/conf \
   wushuo98/nps:latest
 ```
 
-查看首次启动账号密码：
+查看首次启动账号和密码：
 
 ```bash
 docker logs nps | head -20
@@ -32,8 +32,10 @@ docker logs nps | head -20
 Web 面板：
 
 ```text
-http://<服务器IP>:8080
+http://<服务器IP>:8081
 ```
+
+默认管理员账号为 `admin`，密码首次启动随机生成。
 
 ## 端口
 
@@ -43,7 +45,7 @@ http://<服务器IP>:8080
 | 443 | HTTPS 反向代理 |
 | 8024 | Bridge TCP |
 | 8025 | Bridge TLS |
-| 8080 | Web 管理面板 |
+| 8081 | Web 管理面板 |
 
 ## 数据目录
 

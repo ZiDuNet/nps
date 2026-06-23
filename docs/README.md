@@ -23,12 +23,16 @@
 
 ## 推荐阅读顺序
 
-1. [快速开始](start.md)
-2. [用户体系](user.md)
-3. [隧道模式](tunnel.md)
-4. [服务端配置](server_config.md)
-5. [Docker 部署](docker.md)
-6. [升级迁移](migrate.md)
+1. [安装部署](install.md)
+2. [快速开始](start.md)
+3. [运行命令速查](run.md)
+4. [用户体系](user.md)
+5. [隧道模式](tunnel.md)
+6. [服务端配置](server_config.md)
+7. [客户端配置](client_config.md)
+8. [Docker 部署](docker.md)
+9. [GUI 客户端](gui.md)
+10. [升级迁移](migrate.md)
 
 ## 项目链接
 

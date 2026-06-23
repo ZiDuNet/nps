@@ -30,7 +30,7 @@ NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务
 - 🌐 **域名代理** — 自定义 Header、404 页面、Host 修改、URL 路由、泛解析、自动 HTTPS
 - 🔐 **TLS 加密** — 客户端与服务端之间 TLS 加密通信
 - 📦 **Docker 部署** — 多平台镜像（amd64/arm/arm64），一键启动
-- 💻 **GUI 客户端** — 基于 Wails 的桌面客户端（Windows）
+- 💻 **GUI 客户端** — 基于 Wails 的桌面客户端，支持 Windows/macOS/Linux 桌面环境
 
 ## 快速开始
 
@@ -40,18 +40,20 @@ NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务
 # 直接运行
 ./nps
 
-# 安装为系统服务（交互式）
-./nps -server
+# 安装为系统服务
+./nps install
+nps start
 
 # Docker 部署
 docker run -d --name nps \
   -p 80:80 -p 443:443 \
-  -p 8024:8024 -p 8080:8080 \
+  -p 8024:8024 -p 8025:8025 \
+  -p 8081:8081 \
   -v /opt/nps/conf:/conf \
   wushuo98/nps
 ```
 
-启动后访问 `http://<服务器IP>:8080` 进入 Web 管理面板。首次启动会在终端打印随机生成的用户名和密码。
+启动后访问 `http://<服务器IP>:8081` 进入 Web 管理面板。首次启动会在终端打印管理员账号 `admin` 和随机生成的密码。
 
 <details>
 <summary>📋 端口说明</summary>
@@ -62,7 +64,7 @@ docker run -d --name nps \
 | 443 | HTTPS 反向代理入口 |
 | 8024 | Bridge TCP（客户端连接） |
 | 8025 | Bridge TLS（加密连接） |
-| 8080 | Web 管理面板 |
+| 8081 | Web 管理面板 |
 
 </details>
 
@@ -166,7 +168,9 @@ docker-compose up -d
 ## 文档
 
 - 📖 [完整文档](docs/README.md)
+- 📦 [安装部署](docs/install.md)
 - 🚀 [快速开始](docs/start.md)
+- ▶️ [运行命令速查](docs/run.md)
 - 👥 [用户体系](docs/user.md)
 - ⚙️ [服务端配置](docs/server_config.md)
 - 📱 [客户端配置](docs/client_config.md)
@@ -202,4 +206,4 @@ docker-compose up -d
 
 ## 致谢
 
-基于 [ehang-io/nps](https://github.com/ehang-io/nps) 二次开发，感谢原作者的贡献。
+基于原版 NPS 二次开发。当前项目仓库：[ZiDuNet/nps](https://github.com/ZiDuNet/nps)。

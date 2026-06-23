@@ -1,4 +1,7 @@
 # 增强功能
+
+> 本页保留部分早期扩展说明。当前版本的端口、用户体系和配置默认值以 [安装部署](install.md)、[服务端配置](server_config.md) 和 [用户体系](user.md) 为准。
+
 ## 使用https
 
 **方式一：** 类似于nginx实现https的处理
@@ -14,7 +17,7 @@
 
 ## 与nginx配合
 
-有时候我们还需要在云服务器上运行nginx来保证静态文件缓存等，本代理可和nginx配合使用，在配置文件中将httpProxyPort设置为非80端口，并在nginx中配置代理，例如httpProxyPort为8010时
+有时候还需要在云服务器上运行 Nginx 来处理静态文件缓存等场景。NPS 可与 Nginx 配合使用：在配置文件中将 `http_proxy_port` 设置为非 80 端口，并在 Nginx 中反向代理到该端口。例如 `http_proxy_port=8010`：
 ```
 server {
     listen 80;
@@ -25,7 +28,7 @@ server {
     }
 }
 ```
-如需使用https也可在nginx监听443端口并配置ssl，并将本代理的httpsProxyPort设置为空关闭https即可，例如httpProxyPort为8020时
+如需使用 HTTPS，也可以让 Nginx 监听 443 并配置 SSL，再将 NPS 的 `https_proxy_port` 置空以关闭 NPS 自身 HTTPS 入口。例如 `http_proxy_port=8020`：
 
 ```
 server {
@@ -87,8 +90,11 @@ web上可以自定义客户端连接的密钥，但是必须具有唯一性
 ## 关闭web管理
 可以将`nps.conf`中的`web_port`设置为空或者删除
 
-## 服务端多用户登陆
-如果将`nps.conf`中的`allow_user_login`设置为true,服务端web将支持多用户登陆，登陆用户名为user，默认密码为每个客户端的验证密钥，登陆后可以进入客户端编辑修改web登陆的用户名和密码，默认该功能是关闭的。
+## 服务端多用户登录
+
+当前版本已经使用独立用户体系，普通用户由管理员在 Web 面板「用户管理」中创建，并通过客户端归属关系管理权限。默认 `allow_user_login=true`。
+
+旧版本曾支持把客户端上的 `WebUserName` / `WebPassword` 当作登录账号。当前版本会兼容旧字段，但新部署不建议继续使用这种方式。详情见 [用户体系](user.md)。
 
 ## 用户注册功能
 nps服务端支持用户注册功能，可将`nps.conf`中的`allow_user_register`设置为true，开启后登陆页将会有有注册功能，

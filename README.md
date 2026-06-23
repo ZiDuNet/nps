@@ -19,7 +19,7 @@ Based on the original nps 0.26.10, with extensive bug fixes, performance and sec
 - 🌐 **Domain Proxy** — Custom headers, 404 pages, host rewrite, URL routing, wildcard, auto HTTPS
 - 🔐 **TLS Encryption** — TLS encrypted communication between client and server
 - 📦 **Docker** — Multi-arch images (amd64/arm/arm64), one-command deployment
-- 💻 **GUI Client** — Wails-based desktop client (Windows)
+- 💻 **GUI Client** — Wails-based desktop client for Windows/macOS/Linux desktop environments
 
 ## Quick Start
 
@@ -29,18 +29,20 @@ Based on the original nps 0.26.10, with extensive bug fixes, performance and sec
 # Run directly
 ./nps
 
-# Install as system service (interactive)
-./nps -server
+# Install as system service
+./nps install
+nps start
 
 # Docker
 docker run -d --name nps \
   -p 80:80 -p 443:443 \
-  -p 8024:8024 -p 8080:8080 \
+  -p 8024:8024 -p 8025:8025 \
+  -p 8081:8081 \
   -v /opt/nps/conf:/conf \
   wushuo98/nps
 ```
 
-After starting, visit `http://<server-ip>:8080` to access the web panel. A random username and password will be printed in the terminal on first launch.
+After starting, visit `http://<server-ip>:8081` to access the web panel. The username is `admin`, and a random password is printed in the terminal on first launch.
 
 <details>
 <summary>📋 Port Reference</summary>
@@ -51,7 +53,7 @@ After starting, visit `http://<server-ip>:8080` to access the web panel. A rando
 | 443 | HTTPS reverse proxy |
 | 8024 | Bridge TCP (client connections) |
 | 8025 | Bridge TLS (encrypted connections) |
-| 8080 | Web management panel |
+| 8081 | Web management panel |
 
 </details>
 
@@ -151,7 +153,9 @@ docker-compose up -d
 ## Documentation
 
 - 📖 [Full Documentation](docs/README.md)
+- 📦 [Installation](docs/install.md)
 - 🚀 [Getting Started](docs/start.md)
+- ▶️ [Command Reference](docs/run.md)
 - 👥 [User Management](docs/user.md)
 - ⚙️ [Server Config](docs/server_config.md)
 - 📱 [Client Config](docs/client_config.md)
@@ -187,4 +191,4 @@ Issues and Pull Requests are welcome!
 
 ## Acknowledgments
 
-Based on [ehang-io/nps](https://github.com/ehang-io/nps). Thanks to the original author.
+Based on the original NPS project. Current project repository: [ZiDuNet/nps](https://github.com/ZiDuNet/nps).

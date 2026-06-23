@@ -219,7 +219,7 @@ func printSlogan() {
 	fmt.Printf("  %s\n", yellow("NPS 内网穿透服务端 v"+version.VERSION))
 	fmt.Println()
 	fmt.Println("  [1] 安装 NPS")
-	fmt.Println("  [2] 卸载 NPS")
+	fmt.Println("  [2] 删除/卸载 NPS")
 	fmt.Println("  [3] 更新 NPS")
 	fmt.Println("  [4] 查看状态")
 	fmt.Println("  [5] 启动 NPS")
@@ -364,7 +364,6 @@ func inputCmd() {
 		}
 	}
 }
-
 
 func installNps() {
 

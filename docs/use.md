@@ -3,6 +3,8 @@
 新版本文档已经按主题拆分：
 
 - [快速开始](start.md)
+- [安装部署](install.md)
+- [运行命令速查](run.md)
 - [用户体系](user.md)
 - [隧道模式](tunnel.md)
 - [服务端配置](server_config.md)

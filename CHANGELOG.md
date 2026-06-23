@@ -69,4 +69,4 @@
 
 ## [0.26.10] - 2024
 
-- 上游 [ehang-io/nps](https://github.com/ehang-io/nps) 原始基线。
+- 基于原版 NPS 原始基线，当前项目仓库：[ZiDuNet/nps](https://github.com/ZiDuNet/nps)。

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -281,10 +283,12 @@ func printSlogan() {
 	fmt.Printf("  当前版本：%s\n", version.VERSION)
 	fmt.Println()
 	fmt.Println("  [1] 注册系统服务")
-	fmt.Println("  [2] 卸载系统服务")
+	fmt.Println("  [2] 删除/卸载系统服务")
 	fmt.Println("  [3] 启动系统服务")
 	fmt.Println("  [4] 停止系统服务")
 	fmt.Println("  [5] 更新客户端")
+	fmt.Println("  [6] 查看已注册服务列表")
+	fmt.Println("  [7] 查看服务状态")
 	fmt.Println("  [0] 退出")
 	fmt.Println()
 	fmt.Println("  输入[快捷启动命令]直接启动隧道，多个用英文逗号拼接")
@@ -316,6 +320,16 @@ func inputCmd() {
 
 		if input == "5" {
 			install.UpdateNpcNew()
+			continue
+		}
+
+		if input == "6" {
+			printNpcServiceList()
+			continue
+		}
+
+		if input == "7" {
+			systemService(input)
 			continue
 		}
 
@@ -550,5 +564,120 @@ func systemPro(flag string, serAddr string, vkey string, tls bool) {
 		}
 
 		return
+	case "7":
+		status, err := s.Status()
+		fmt.Println("隧道[" + vkey + "]服务状态：" + serviceStatusText(status, err))
+		return
+	}
+}
+
+func printNpcServiceList() {
+	names, err := listNpcServiceNames()
+	if err != nil {
+		fmt.Println("获取服务列表失败：", err)
+		return
+	}
+	if len(names) == 0 {
+		fmt.Println("未发现已注册的 nps-client-* 服务")
+		return
+	}
+
+	fmt.Println("已注册服务列表：")
+	for _, name := range names {
+		status, err := npcServiceStatus(name)
+		fmt.Println("  " + name + "：" + serviceStatusText(status, err))
+	}
+}
+
+func listNpcServiceNames() ([]string, error) {
+	if common.IsWindows() {
+		return listNpcServiceNamesByCommand("powershell", "-NoProfile", "-Command", "Get-Service -Name 'nps-client-*' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name; exit 0")
+	}
+
+	if runtime.GOOS == "darwin" {
+		homeDir, _ := os.UserHomeDir()
+		patterns := []string{
+			"/Library/LaunchDaemons/nps-client-*.plist",
+		}
+		if homeDir != "" {
+			patterns = append(patterns, filepath.Join(homeDir, "Library", "LaunchAgents", "nps-client-*.plist"))
+		}
+		return listNpcServiceNamesByGlob(patterns, ".plist")
+	}
+
+	return listNpcServiceNamesByGlob([]string{
+		"/etc/systemd/system/nps-client-*.service",
+		"/etc/init.d/nps-client-*",
+	}, ".service")
+}
+
+func listNpcServiceNamesByGlob(patterns []string, suffix string) ([]string, error) {
+	names := make(map[string]struct{})
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return nil, err
+		}
+		for _, match := range matches {
+			name := strings.TrimSuffix(filepath.Base(match), suffix)
+			if strings.HasPrefix(name, "nps-client-") {
+				names[name] = struct{}{}
+			}
+		}
+	}
+	return sortedServiceNames(names), nil
+}
+
+func listNpcServiceNamesByCommand(name string, args ...string) ([]string, error) {
+	out, err := exec.Command(name, args...).Output()
+	if err != nil {
+		return nil, err
+	}
+
+	names := make(map[string]struct{})
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "nps-client-") {
+			names[line] = struct{}{}
+		}
+	}
+	return sortedServiceNames(names), nil
+}
+
+func sortedServiceNames(names map[string]struct{}) []string {
+	list := make([]string, 0, len(names))
+	for name := range names {
+		list = append(list, name)
+	}
+	sort.Strings(list)
+	return list
+}
+
+func npcServiceStatus(name string) (service.Status, error) {
+	prg := &npc{
+		exit: make(chan struct{}),
+	}
+	svcConfig := &service.Config{
+		Name:        name,
+		DisplayName: name,
+	}
+	s, err := service.New(prg, svcConfig)
+	if err != nil {
+		return service.StatusUnknown, err
+	}
+	return s.Status()
+}
+
+func serviceStatusText(status service.Status, err error) string {
+	if err != nil {
+		return "未安装或状态未知"
+	}
+	switch status {
+	case service.StatusRunning:
+		return "运行中"
+	case service.StatusStopped:
+		return "已停止"
+	default:
+		return "未知"
 	}
 }

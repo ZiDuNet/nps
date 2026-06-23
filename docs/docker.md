@@ -1,8 +1,8 @@
 # Docker 部署
 
-推荐使用 Docker Compose 部署服务端，并将 `/conf` 挂载到宿主机，方便升级和备份。
+推荐用 Docker Compose 部署 NPS 服务端，并把容器内 `/conf` 挂载到宿主机。这个目录保存配置和 JSON 数据，升级、重建容器都要保留。
 
-## 服务端
+## NPS 服务端
 
 ```bash
 mkdir -p /opt/nps/conf
@@ -23,7 +23,7 @@ services:
       - "443:443"
       - "8024:8024"
       - "8025:8025"
-      - "8080:8080"
+      - "8081:8081"
     volumes:
       - ./conf:/conf
 ```
@@ -32,24 +32,36 @@ services:
 
 ```bash
 docker compose up -d
-docker logs nps | head -20
+docker logs nps --tail=50
 ```
 
-首次启动会在日志中输出随机管理员账号和密码。
+首次启动会在日志中输出管理员账号 `admin` 和随机管理员密码。Web 面板默认地址：
 
-## 客户端
+```text
+http://<服务器IP>:8081
+```
+
+注意：源码默认 `web_port = 8081`。如果你把 `conf/nps.conf` 改成 `8080`，Compose 也要改成 `"8080:8080"`。
+
+## NPC 客户端
+
+NPC 也可以用 Docker 运行。镜像入口就是 `npc`，启动参数和物理机二进制一致。本项目保留了上游 `Dockerfile.npc` 的用法，并用于发布 `wushuo98/npc` 镜像。
+
+普通 Bridge：
 
 ```bash
 docker run -d --name npc wushuo98/npc \
   -server=<服务器IP>:8024 -vkey=<VerifyKey>
 ```
 
-TLS 模式：
+TLS Bridge：
 
 ```bash
 docker run -d --name npc wushuo98/npc \
   -server=<服务器IP>:8025 -vkey=<VerifyKey> -tls_enable=true
 ```
+
+如果内网服务在宿主机上，容器里的 `127.0.0.1` 不是宿主机。Linux 可按需使用 `--network host`；Windows/macOS Docker Desktop 需要使用 Docker 提供的宿主机访问地址。
 
 ## 只开放必要端口
 
@@ -57,12 +69,14 @@ docker run -d --name npc wushuo98/npc \
 
 ```yaml
 ports:
-  - "8080:8080"
+  - "8081:8081"
   - "8024:8024"
   - "9001:9001"
 ```
 
 如果使用域名代理，需要映射 `http_proxy_port` 和 `https_proxy_port`，默认是 80 和 443。
+
+如果使用 TLS Bridge，需要映射 `tls_bridge_port`，默认是 8025。
 
 ## 配置和数据
 
@@ -90,9 +104,17 @@ docker compose pull
 docker compose up -d
 ```
 
-## Docker Hub
+## 镜像平台
+
+Docker Hub：
 
 - 服务端：[wushuo98/nps](https://hub.docker.com/r/wushuo98/nps)
 - 客户端：[wushuo98/npc](https://hub.docker.com/r/wushuo98/npc)
 
-支持平台：`linux/amd64`、`linux/arm`、`linux/arm64`。
+当前 Docker CI 构建的平台：
+
+- `linux/amd64`
+- `linux/arm/v7`
+- `linux/arm64`
+
+这里只构建 Linux 容器镜像。Windows、macOS、FreeBSD 等平台使用 Release 中的二进制包。

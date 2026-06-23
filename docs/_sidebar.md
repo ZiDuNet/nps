@@ -1,5 +1,7 @@
 * 入门
+  * [安装部署](install.md)
   * [快速开始](start.md)
+  * [运行命令速查](run.md)
   * [隧道模式](tunnel.md)
   * [使用示例](example.md)
 * 管理

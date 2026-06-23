@@ -622,8 +622,8 @@
 		<en-US>There is no need to add a new port to access port 22 of intranet server 10.1.50.2, which can prevent other people from connecting. A client is also required to provide a port for access to the access side.</en-US>
 	</lang>
 	<lang id="info-casesocks5">
-		<zh-CN>将公网服务器1.1.1.1的8003端口作为SOCKS5代理，访问内网任意设备或者资源。</zh-CN>
-		<en-US>Use port 8003 of public server 1.1.1.1 as Socks5 proxy to access any device or resource in the Intranet.</en-US>
+		<zh-CN>将公网服务器1.1.1.1的8003端口作为SOCKS5代理，访问内网任意设备或者资源。账号密码在所属客户端的认证配置里设置。</zh-CN>
+		<en-US>Use port 8003 of public server 1.1.1.1 as Socks5 proxy to access any device or resource in the Intranet. Username and password are configured in the owning client's auth settings.</en-US>
 	</lang>
 	<lang id="info-casetcp">
 		<zh-CN>通过公网服务器1.1.1.1的8001端口，连接内网机器10.1.50.101的22端口，实现SSH连接。</zh-CN>
@@ -690,8 +690,8 @@
 		<en-US>Do not have an account?</en-US>
 	</lang>
 	<lang id="info-onlyproxy">
-		<zh-CN>仅限Socks5、Web、HTTP转发代理</zh-CN>
-		<en-US>Only socks5 , web, HTTP forward proxy</en-US>
+		<zh-CN>用于 HTTP 正向代理、SOCKS5 代理和域名代理；留空时 SOCKS5 不要求账号密码。</zh-CN>
+		<en-US>Used by HTTP forward proxy, SOCKS5 and Host proxy. Leave empty to allow SOCKS5 without authentication.</en-US>
 	</lang>
 	<lang id="info-register">
 		<zh-CN>注册到 NPS</zh-CN>
