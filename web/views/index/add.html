@@ -25,6 +25,7 @@
                                 <option value="socks5" langtag="scheme-socks5"></option>
                                 <option value="secret" langtag="scheme-secret"></option>
                                 <option value="p2p" langtag="scheme-p2p"></option>
+                                <option value="file" langtag="scheme-file"></option>
                             </select>
                         </div>
                     </div>
@@ -133,25 +134,25 @@
     </div>
 </div>
 <script>
-    var arr = []
-    arr["all"] = ["port", "target", "password", "local_path", "strip_pre", "local_proxy", "client_id", "server_ip"]
-    arr["tcp"] = ["port", "target", "local_proxy", "client_id", "server_ip", "proto_version"]
-    arr["udp"] = ["port", "target", "local_proxy", "client_id", "server_ip"]
-    arr["socks5"] = ["port", "client_id", "server_ip"]
-    arr["httpProxy"] = ["port", "client_id", "server_ip"]
-    arr["secret"] = ["target", "password", "client_id", "server_ip"]
-    arr["p2p"] = ["target", "password", "client_id", "server_ip"]
-    arr["file"] = ["port", "local_path", "strip_pre", "client_id", "server_ip"]
+    var fieldMap = {
+        tcp: ["port", "target", "local_proxy", "client_id", "server_ip", "proto_version"],
+        udp: ["port", "target", "local_proxy", "client_id", "server_ip"],
+        socks5: ["port", "client_id", "server_ip"],
+        httpProxy: ["port", "client_id", "server_ip"],
+        secret: ["target", "password", "client_id", "server_ip"],
+        p2p: ["target", "password", "client_id", "server_ip"],
+        file: ["port", "local_path", "strip_pre", "client_id", "server_ip"]
+    };
 
     function resetForm() {
         $(".form-group[id]").css("display", "none");
         $("#usecase span").css("display", "none");
-        o = $("#type").val();
-        $('#case' + o).css("display", "inline")
-        for (var i = 0; i < arr[o].length; i++) {
-            $("#" + arr[o][i]).css("display", "block")
+        var type = $("#type").val() || "tcp";
+        var fields = fieldMap[type] || fieldMap.tcp;
+        $('#case' + type).css("display", "inline");
+        for (var i = 0; i < fields.length; i++) {
+            $("#" + fields[i]).css("display", "block");
         }
-        // 始终显示备注
         $("#remark_group").css("display", "block");
     }
 
