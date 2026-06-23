@@ -1,0 +1,35 @@
+.git
+.github
+.idea
+.claude
+.playwright-mcp
+
+# Local build outputs and release artifacts
+nps
+npc
+*.exe
+*.exe~
+*.tar.gz
+*.zip
+*.apk
+coverage.txt
+*.out
+
+# GUI outputs are not needed for CLI images
+cmd/npc/npc-gui/frontend/node_modules
+cmd/npc/npc-gui/frontend/dist
+cmd/npc/npc-gui/frontend/package-lock.json
+cmd/npc/npc-gui/build/bin
+
+# CLI images only need Go source and embedded web assets
+docs
+docker
+image
+gui
+conf
+README.md
+README_zh.md
+CHANGELOG.md
+CHANGELOG.txt
+CLAUDE.md
+AGENTS.md

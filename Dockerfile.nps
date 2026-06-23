@@ -1,11 +1,29 @@
-FROM golang:1.24 as builder
-ARG GOPROXY=direct
-WORKDIR /go/src/ehang.io/nps
+# syntax=docker/dockerfile:1.7
+
+FROM --platform=$BUILDPLATFORM golang:1.24 AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ARG TARGETVARIANT
+ARG GOPROXY=https://proxy.golang.org,direct
+
+ENV GOPROXY=$GOPROXY
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
 COPY . .
-RUN go get -d -v ./...
-RUN CGO_ENABLED=0 go build -ldflags="-w -s -extldflags -static" ./cmd/nps/nps.go
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -eux; \
+    goarm="${TARGETVARIANT:-}"; \
+    goarm="${goarm#v}"; \
+    if [ "$TARGETARCH" != "arm" ]; then goarm=""; fi; \
+    CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" GOARM="$goarm" \
+        go build -trimpath -ldflags="-w -s -extldflags -static" -o /out/nps ./cmd/nps/nps.go
 
 FROM scratch
-COPY --from=builder /go/src/ehang.io/nps/nps /
-VOLUME /conf
+COPY --from=builder /out/nps /nps
+VOLUME ["/conf"]
 CMD ["/nps"]

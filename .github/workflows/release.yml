@@ -125,8 +125,6 @@ jobs:
           echo "$CHANGES" > CHANGELOG.txt
           echo "Changes:"
           cat CHANGELOG.txt
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to DockerHub
@@ -139,8 +137,12 @@ jobs:
         with:
           context: .
           file: ./Dockerfile.nps
-          platforms: linux/amd64,linux/arm,linux/arm64
+          platforms: linux/amd64,linux/arm/v7,linux/arm64
           push: true
+          build-args: |
+            GOPROXY=https://proxy.golang.org,direct
+          cache-from: type=gha,scope=nps
+          cache-to: type=gha,mode=max,scope=nps
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/nps:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/nps:${{ env.RELEASE_VERSION }}
@@ -149,8 +151,12 @@ jobs:
         with:
           context: .
           file: ./Dockerfile.npc
-          platforms: linux/amd64,linux/arm,linux/arm64
+          platforms: linux/amd64,linux/arm/v7,linux/arm64
           push: true
+          build-args: |
+            GOPROXY=https://proxy.golang.org,direct
+          cache-from: type=gha,scope=npc
+          cache-to: type=gha,mode=max,scope=npc
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/npc:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/npc:${{ env.RELEASE_VERSION }}

@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.1</sub>
+﻿# NPS <sub>v1.1.2</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -181,6 +181,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.2** (2026-06-23) - 稳定隧道表单切换、优化 Docker 构建缓存
 - **v1.1.1** (2026-06-15) — 用户管理、多客户端归属、用户级隧道配额
 - **v1.1.0** (2026-06-10) — Web UI 现代化改造、Bug 修复、安全加固
 - **v1.0.0** (2026-05) — 二次开发基线、流量统计修复、Web UI 重设计
