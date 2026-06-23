@@ -15,6 +15,25 @@ type ClientController struct {
 	BaseController
 }
 
+type clientListRow struct {
+	*file.Client
+	UserName string
+}
+
+func newClientListRows(clients []*file.Client) []*clientListRow {
+	rows := make([]*clientListRow, 0, len(clients))
+	for _, client := range clients {
+		if client == nil {
+			continue
+		}
+		rows = append(rows, &clientListRow{
+			Client:   client,
+			UserName: client.UserName,
+		})
+	}
+	return rows
+}
+
 func (s *ClientController) List() {
 	if s.Ctx.Request.Method == "GET" {
 		s.Data["menu"] = "client"
@@ -34,7 +53,7 @@ func (s *ClientController) List() {
 	cmd["ip"] = common.GetIpByAddr(ip)
 	cmd["bridgeType"] = beego.AppConfig.String("bridge_type")
 	cmd["bridgePort"] = server.Bridge.TunnelPort
-	s.AjaxTable(list, cnt, cnt, cmd)
+	s.AjaxTable(newClientListRows(list), cnt, cnt, cmd)
 }
 
 // 添加客户端
