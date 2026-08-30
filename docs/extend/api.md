@@ -55,7 +55,7 @@ GET /auth/getauthkey/
 
 ```bash
 # 1. 获取服务端时间戳
-ts=$(curl -s http://127.0.0.1:8080/auth/gettime/ | sed 's/.*"time":\([0-9]*\).*/\1/')
+ts=$(curl -s http://127.0.0.1:8081/auth/gettime/ | sed 's/.*"time":\([0-9]*\).*/\1/')
 
 # 2. 计算签名（Linux）
 sign=$(echo -n "your_auth_key${ts}" | md5sum | awk '{print $1}')
@@ -63,7 +63,7 @@ sign=$(echo -n "your_auth_key${ts}" | md5sum | awk '{print $1}')
 # sign=$(echo -n "your_auth_key${ts}" | md5)
 
 # 3. 调用接口
-curl -s -X POST "http://127.0.0.1:8080/client/list/" \
+curl -s -X POST "http://127.0.0.1:8081/client/list/" \
   -d "auth_key=${sign}&timestamp=${ts}&search=&order=asc&offset=0&limit=10"
 ```
 
@@ -72,7 +72,7 @@ curl -s -X POST "http://127.0.0.1:8080/client/list/" \
 ```python
 import hashlib, requests
 
-host = "http://127.0.0.1:8080"
+host = "http://127.0.0.1:8081"
 auth_key = "your_auth_key"
 
 ts = requests.get(f"{host}/auth/gettime/").json()["time"]
@@ -90,7 +90,7 @@ print(r.json())
 ```javascript
 const crypto = require("crypto");
 
-const host = "http://127.0.0.1:8080";
+const host = "http://127.0.0.1:8081";
 const authKey = "your_auth_key";
 
 (async () => {

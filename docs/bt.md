@@ -36,7 +36,7 @@ services:
 
 配置文件在 `/www/docker/nps/conf/nps.conf`，首次启动会自动生成。
 
-Web 管理端口默认 `8081`，启动后查看日志获取管理员账号 `admin` 和随机管理员密码：
+Web 管理端口默认 `8081`。首次生成配置时查看日志获取管理员账号 `admin` 和随机管理员密码；已有配置请以 `conf/nps.conf` 为准：
 
 ```bash
 docker logs nps | head -20

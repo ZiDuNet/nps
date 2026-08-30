@@ -2,7 +2,7 @@
 
 > 轻量级、高性能、功能完整的内网穿透代理服务器。
 
-当前版本：**v1.1.2**。本版本支持独立用户体系、一个用户管理多个客户端、用户级隧道配额，以及从旧客户端登录体系自动迁移。
+当前版本：**v1.1.2**。本版本基于 `yisier/nps` 上游同步，并保留本项目的独立用户体系、现代化 Web 管理面板和兼容迁移能力。
 
 ## 适用场景
 
@@ -20,6 +20,8 @@
 - 支持客户端级和用户级隧道数量限制，Host 域名规则也计入隧道配额。
 - 支持客户端到期、用户到期、IP 白名单/黑名单、验证码、带宽/流量/连接数限制。
 - 数据继续使用 JSON 文件持久化，便于轻量部署和备份。
+- Bridge 支持 TCP/TLS 双端口、握手超时保护、客户端局域网地址上报和断线重连。
+- 客户端支持压缩/加密传输选项、SOCKS5 出站代理、P2P/Secret 本地访问端和 GUI 快捷启动命令。
 
 ## 推荐阅读顺序
 
@@ -28,14 +30,16 @@
 3. [运行命令速查](run.md)
 4. [用户体系](user.md)
 5. [隧道模式](tunnel.md)
-6. [服务端配置](server_config.md)
-7. [客户端配置](client_config.md)
-8. [Docker 部署](docker.md)
-9. [GUI 客户端](gui.md)
-10. [升级迁移](migrate.md)
+6. [系统架构](architecture.md)
+7. [服务端配置](server_config.md)
+8. [客户端配置](client_config.md)
+9. [Docker 部署](docker.md)
+10. [GUI 客户端](gui.md)
+11. [升级迁移](migrate.md)
 
 ## 项目链接
 
 - [GitHub](https://github.com/ZiDuNet/nps)
+- [上游项目 yisier/nps](https://github.com/yisier/nps)
 - [Docker Hub - nps](https://hub.docker.com/r/wushuo98/nps)
 - [Docker Hub - npc](https://hub.docker.com/r/wushuo98/npc)
