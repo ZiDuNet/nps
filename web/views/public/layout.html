@@ -158,7 +158,7 @@
 </html>
 
 <script>
-    window.nps = { "web_base_url": {{.web_base_url}} }
+    window.nps = { "web_base_url": {{.web_base_url}}, "version": "{{.version}}" }
 
     // Toggle switch: sync hidden input with checkbox state
     $(document).on('change', '.toggle-switch input[type="checkbox"]', function() {

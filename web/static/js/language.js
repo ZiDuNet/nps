@@ -59,16 +59,16 @@
 	$.fn.cloudLang = function () {
 		$.ajax({
 			type: 'GET',
-			url: window.nps.web_base_url + '/static/page/languages.xml?v=202512051',
+			url: window.nps.web_base_url + '/static/page/languages.xml?v=' + (window.nps.version || Date.now()),
 			dataType: 'xml',
 			success: function (xml) {
 				languages['content'] = xml2json($(xml).children())['content'];
 				languages['menu'] = languages['content']['languages'];
 				languages['default'] = languages['content']['default'];
-				languages['navigator'] = (getCookie ('lang') || navigator.language || navigator.browserLanguage);
+				languages['navigator'] = (getCookie ('lang') || navigator.language || navigator.browserLanguage || languages['default']);
 				for(var key in languages['menu']){
-					$('#languagemenu').next().append('<li lang="' + key + '"><a><img src="' + window.nps.web_base_url + '/static/img/flag/' + key + '.png"> ' + languages['menu'][key] +'</a></li>');
-					if ( key == languages['navigator'] ) languages['current'] = key;
+					$('#languagemenu').next().append('<li lang="' + key + '"><a href="#">' + languages['menu'][key] +'</a></li>');
+					if ( key.toLowerCase() == languages['navigator'].toLowerCase() ) languages['current'] = key;
 				}
 				$('#languagemenu').attr('lang',(languages['current'] || languages['default']));
 				$('body').setLang ('');
@@ -120,8 +120,9 @@
 
 $(document).ready(function () {
 	$('body').cloudLang();
-	$('body').on('click','li[lang]',function(){
-		$('#languagemenu').attr('lang',$(this).attr('lang'));
+	$('body').on('click','li[lang] a',function(e){
+		e.preventDefault();
+		$('#languagemenu').attr('lang',$(this).closest('li').attr('lang'));
 		$('body').setLang ('');
 	});
 });
