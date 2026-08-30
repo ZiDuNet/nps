@@ -1,4 +1,25 @@
 /* ===== NPS Modern UI Theme ===== */
+
+/* Flowing glass surface: a quiet animated backdrop gives translucent panels
+   enough contrast without reducing the dense operational layout to decoration. */
+body {
+    background: #dfe8f2 !important;
+    background-image: linear-gradient(120deg, #dce8f4 0%, #eef3f0 42%, #e8e1d7 100%) !important;
+    background-attachment: fixed;
+}
+body::before {
+    content: "";
+    position: fixed;
+    inset: -35%;
+    z-index: -1;
+    pointer-events: none;
+    background: conic-gradient(from 210deg at 50% 50%, rgba(70, 149, 180, .14), rgba(255, 202, 122, .11), rgba(86, 184, 157, .12), rgba(70, 149, 180, .14));
+    filter: blur(70px);
+    animation: nps-flow 24s ease-in-out infinite alternate;
+}
+@keyframes nps-flow { from { transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1); } to { transform: translate3d(3%, 2%, 0) rotate(18deg) scale(1.08); } }
+[data-theme="dark"] body { background: #0b1420 !important; background-image: linear-gradient(125deg, #0b1724, #14221f 52%, #241d17) !important; }
+[data-theme="dark"] body::before { background: conic-gradient(from 180deg, rgba(68, 157, 190, .16), rgba(220, 157, 79, .10), rgba(73, 175, 145, .13), rgba(68, 157, 190, .16)); }
 /* Light/Dark theme via CSS custom properties on <html> */
 /* Toggle: data-theme="dark" on <html> element */
 
@@ -462,6 +483,18 @@ h3.ibox-title { font-size: 16px !important; font-weight: 700 !important; padding
     box-shadow: 0 8px 40px rgba(0,0,0,0.4);
     background: rgba(26,35,50,0.92);
 }
+
+/* Translucent surfaces used across dashboard, settings and list pages. */
+.navbar-default.navbar-static-side { background: rgba(16, 31, 45, .86) !important; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+.navbar-fixed-top, .navbar-static-top, .white-bg { background: rgba(255,255,255,.68) !important; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+.ibox { background: rgba(255,255,255,.62) !important; border-color: rgba(255,255,255,.72) !important; box-shadow: 0 12px 32px rgba(44, 62, 80, .09), inset 0 1px rgba(255,255,255,.75); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.ibox-title { background: rgba(255,255,255,.24) !important; }
+.form-control, input[type="text"], input[type="password"], input[type="number"], input[type="email"], textarea, select { background: rgba(255,255,255,.56) !important; }
+.fixed-table-container { background: rgba(255,255,255,.3) !important; }
+[data-theme="dark"] .navbar-fixed-top, [data-theme="dark"] .navbar-static-top, [data-theme="dark"] .white-bg { background: rgba(20,28,43,.68) !important; }
+[data-theme="dark"] .ibox { background: rgba(26,35,50,.68) !important; border-color: rgba(255,255,255,.1) !important; box-shadow: 0 14px 36px rgba(0,0,0,.22), inset 0 1px rgba(255,255,255,.06); }
+[data-theme="dark"] .ibox-title { background: rgba(255,255,255,.04) !important; }
+[data-theme="dark"] .form-control, [data-theme="dark"] input[type="text"], [data-theme="dark"] input[type="password"], [data-theme="dark"] input[type="number"], [data-theme="dark"] input[type="email"], [data-theme="dark"] textarea, [data-theme="dark"] select { background: rgba(10,15,26,.54) !important; }
 .login-features {
     flex: 1; padding: 48px 44px; border-right: 1px solid var(--c-border);
     display: flex; flex-direction: column; justify-content: center;
