@@ -1,4 +1,11 @@
 (function ($) {
+	window.switchLanguage = function (lang) {
+		var menu = $('#languagemenu');
+		if (!menu.length) return false;
+		menu.attr('lang', lang);
+		if (languages && languages.content) $('body').setLang('');
+		return false;
+	};
 
 	function xml2json(Xml) {
 		var tempvalue, tempJson = {};
@@ -67,6 +74,7 @@
 				languages['default'] = languages['content']['default'];
 				languages['navigator'] = (getCookie ('lang') || navigator.language || navigator.browserLanguage || languages['default']);
 				for(var key in languages['menu']){
+					if ($('#languagemenu').next().find('li[lang="' + key + '"]').length) continue;
 					$('#languagemenu').next().append('<li lang="' + key + '"><a href="#">' + languages['menu'][key] +'</a></li>');
 					if ( key.toLowerCase() == languages['navigator'].toLowerCase() ) languages['current'] = key;
 				}
@@ -122,8 +130,7 @@ $(document).ready(function () {
 	$('body').cloudLang();
 	$('body').on('click','li[lang] a',function(e){
 		e.preventDefault();
-		$('#languagemenu').attr('lang',$(this).closest('li').attr('lang'));
-		$('body').setLang ('');
+		window.switchLanguage($(this).closest('li').attr('lang'));
 	});
 });
 
