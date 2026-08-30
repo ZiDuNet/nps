@@ -4,7 +4,10 @@ TEST_OPTIONS?=
 
 export PATH := ./bin:$(PATH)
 export GO111MODULE := on
-export GOPROXY := https://gocenter.io
+export GOPROXY := https://proxy.golang.org,direct
+
+GOLANGCI_LINT_VERSION ?= v1.64.8
+MISSPELL_VERSION ?= v0.3.4
 
 # Build a beta version of goreleaser
 build:
@@ -14,8 +17,9 @@ build:
 
 # Install all the build and lint dependencies
 setup:
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh
-	curl -L https://git.io/misspell | sh
+	@mkdir -p ./bin
+	GOBIN=$(CURDIR)/bin go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	GOBIN=$(CURDIR)/bin go install github.com/client9/misspell/cmd/misspell@$(MISSPELL_VERSION)
 	go mod download
 .PHONY: setup
 
@@ -38,7 +42,7 @@ fmt:
 lint:
 	# TODO: fix tests and lll issues
 	./bin/golangci-lint run --tests=false --enable-all --disable=lll ./...
-	./bin/misspell -error **/*
+	find . -type f -not -path './.git/*' -not -path './vendor/*' -print0 | xargs -0 ./bin/misspell -error
 .PHONY: lint
 
 # Clean go.mod

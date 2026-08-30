@@ -52,7 +52,7 @@ npc-client-<vkey>.log
 - Go 1.24+
 - Node.js 20+
 - Yarn 1.22.22
-- Wails v2.11.0
+- Wails v3.0.0-beta.12
 
 构建前端：
 
@@ -68,19 +68,19 @@ yarn build
 
 ```bash
 cd cmd/npc/npc-gui
-wails dev
+wails3 dev
 ```
 
 构建桌面程序：
 
 ```bash
-wails build
+wails3 build --tags npcgui
 ```
 
 Linux 构建示例：
 
 ```bash
-wails build -m -s -trimpath -skipbindings -tags webkit2_41 -platform linux/amd64
+GOOS=linux GOARCH=amd64 WAILS_TAGS=webkit2_41 wails3 build --tags npcgui
 ```
 
 `wails.json` 已指定前端包管理器为 Yarn，不要混用 npm 生成 `package-lock.json`。
