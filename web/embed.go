@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"ehang.io/nps/lib/common"
 	"github.com/astaxie/beego/logs"
 )
 
