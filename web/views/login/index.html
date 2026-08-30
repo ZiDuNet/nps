@@ -182,7 +182,7 @@
     }
 
     (function() {
-        var saved = localStorage.getItem('nps-theme');
+        var saved = localStorage.getItem('nps-theme') || 'dark';
         if (saved) {
             document.documentElement.setAttribute('data-theme', saved);
             var icon = document.getElementById('theme-icon');

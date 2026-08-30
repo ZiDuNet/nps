@@ -197,8 +197,8 @@
             splitLine: { lineStyle: { color: isDark ? 'rgba(255,255,255,0.06)' : '#edf2f7' } }
         };
         var colors = isDark
-            ? ['#5dadff', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#36d7b7', '#818cf8']
-            : ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#6366f1'];
+            ? ['#60d7bd', '#65adff', '#b193ff', '#e9b763', '#e87575', '#58c9dc', '#91c7a9']
+            : ['#087c70', '#247ed3', '#8064d8', '#bf8421', '#c34848', '#158fa3', '#4c8b70'];
         for (var key in chartdatas) {
             if (typeof chartdatas[key] !== 'object') continue;
             if (chartdatas[key].xAxis) { try { $.extend(true, chartdatas[key].xAxis, axisStyle); } catch(e){} }
@@ -206,8 +206,12 @@
             if (chartdatas[key].legend) { chartdatas[key].legend.textStyle = { color: isDark ? 'rgba(255,255,255,0.5)' : '#6b7a8d' }; }
             if (chartdatas[key].series) {
                 for (var i = 0; i < chartdatas[key].series.length; i++) {
-                    chartdatas[key].series[i].itemStyle = chartdatas[key].series[i].itemStyle || {};
-                    chartdatas[key].series[i].itemStyle.color = colors[i % colors.length];
+                    if (chartdatas[key].series[i].type === 'pie') {
+                        chartdatas[key].series[i].color = colors;
+                    } else {
+                        chartdatas[key].series[i].itemStyle = chartdatas[key].series[i].itemStyle || {};
+                        chartdatas[key].series[i].itemStyle.color = colors[i % colors.length];
+                    }
                 }
             }
             if (charts[key]) { charts[key].setOption(chartdatas[key], true); }
@@ -215,10 +219,11 @@
     }
 
     (function() {
-        var saved = localStorage.getItem('nps-theme');
+        var saved = localStorage.getItem('nps-theme') || 'dark';
         if (saved) {
             document.documentElement.setAttribute('data-theme', saved);
             updateThemeIcon(saved);
+            applyChartTheme(saved);
         }
     })();
 </script>
