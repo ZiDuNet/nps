@@ -341,7 +341,12 @@ func (s *Sock5ModeServer) handleConn(c net.Conn) {
 		c.Close()
 		return
 	}
-	nMethods := buf[1]
+	nMethods := int(buf[1])
+	if nMethods == 0 {
+		logs.Warn("socks5 client offered no auth methods, remote %s", c.RemoteAddr())
+		c.Close()
+		return
+	}
 
 	methods := make([]byte, nMethods)
 	if _, err := io.ReadFull(c, methods); err != nil {
@@ -349,17 +354,35 @@ func (s *Sock5ModeServer) handleConn(c net.Conn) {
 		c.Close()
 		return
 	}
-	if (s.task.Client.Cnf.U != "" && s.task.Client.Cnf.P != "") || (s.task.MultiAccount != nil && len(s.task.MultiAccount.AccountMap) > 0) {
-		buf[1] = UserPassAuth
-		c.Write(buf)
+	needAuth := (s.task.Client.Cnf.U != "" && s.task.Client.Cnf.P != "") ||
+		(s.task.MultiAccount != nil && len(s.task.MultiAccount.AccountMap) > 0)
+	if needAuth {
+		offered := false
+		for _, method := range methods {
+			if method == UserPassAuth {
+				offered = true
+				break
+			}
+		}
+		if !offered {
+			_, _ = c.Write([]byte{5, 0xff})
+			c.Close()
+			return
+		}
+		if _, err := c.Write([]byte{5, UserPassAuth}); err != nil {
+			c.Close()
+			return
+		}
 		if err := s.Auth(c); err != nil {
 			c.Close()
 			logs.Warn("Validation failed:", err)
 			return
 		}
 	} else {
-		buf[1] = 0
-		c.Write(buf)
+		if _, err := c.Write([]byte{5, 0}); err != nil {
+			c.Close()
+			return
+		}
 	}
 	s.handleRequest(c)
 }
