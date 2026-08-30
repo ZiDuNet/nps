@@ -185,6 +185,7 @@ func (s *Bridge) GetHealthFromClient(id int, c *conn.Conn) {
 // 验证失败，返回错误验证flag，并且关闭连接
 func (s *Bridge) verifyError(c *conn.Conn) {
 	c.Write([]byte(common.VERIFY_EER))
+	c.Close()
 }
 
 func (s *Bridge) verifySuccess(c *conn.Conn) {
@@ -192,9 +193,12 @@ func (s *Bridge) verifySuccess(c *conn.Conn) {
 }
 
 func (s *Bridge) cliProcess(c *conn.Conn) {
+	// Bound the handshake so half-open/scanning connections do not retain a goroutine.
+	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	//read test flag
 	if _, err := c.GetShortContent(3); err != nil {
 		logs.Info("The client %s connect error", c.Conn.RemoteAddr(), err.Error())
+		c.Close()
 		return
 	}
 	//version check
@@ -213,7 +217,7 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 	}
 	//write server version to client
 	c.Write([]byte(crypt.Md5(version.GetVersion())))
-	c.SetReadDeadlineBySecond(5)
+	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	var buf []byte
 	//get vKey from client
 	if buf, err = c.GetShortContent(32); err != nil {
@@ -230,9 +234,11 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 		s.verifySuccess(c)
 	}
 	if flag, err := c.ReadFlag(); err == nil {
+		_ = c.SetReadDeadline(time.Time{})
 		s.typeDeal(flag, c, id, string(vs))
 	} else {
 		logs.Warn(err, flag)
+		c.Close()
 	}
 	return
 }
