@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"path/filepath"
 	"strconv"
 
 	"ehang.io/nps/bridge"
@@ -15,6 +14,7 @@ import (
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/server/connection"
+	"ehang.io/nps/web"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 )
@@ -66,8 +66,7 @@ func (s *WebServer) Start() error {
 		<-stop
 	}
 	beego.BConfig.WebConfig.Session.SessionOn = true
-	beego.SetStaticPath(beego.AppConfig.String("web_base_url")+"/static", filepath.Join(common.GetRunPath(), "web", "static"))
-	beego.SetViewsPath(filepath.Join(common.GetRunPath(), "web", "views"))
+	web.InitBeegoAssets()
 	err := errors.New("Web management startup failure ")
 	var l net.Listener
 	if l, err = connection.GetWebManagerListener(); err == nil {
@@ -118,12 +117,14 @@ func ProcessHttp(c *conn.Conn, s *TunnelModeServer) error {
 		logs.Info(err)
 		return err
 	}
-	if r.Method == "CONNECT" {
-		c.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
-		rb = nil
-	}
-	if err := s.auth(r, c, s.task.Client.Cnf.U, s.task.Client.Cnf.P); err != nil {
+	if err := s.proxyAuth(r, c, s.task.Client.Cnf.U, s.task.Client.Cnf.P); err != nil {
 		return err
+	}
+	if r.Method == "CONNECT" {
+		if _, err := c.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n")); err != nil {
+			return err
+		}
+		rb = nil
 	}
 	return s.DealClient(c, s.task.Client, addr, rb, common.CONN_TCP, nil, s.task.Client.Flow, s.task.Target.LocalProxy, nil, nil)
 

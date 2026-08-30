@@ -3,11 +3,13 @@ package web
 import (
 	"embed"
 	"io/fs"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
+	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 )
 
@@ -35,6 +37,31 @@ func ReadStaticFile(name string) ([]byte, error) {
 	name = strings.ReplaceAll(name, "\\", "/")
 	name = path.Clean("/" + strings.TrimPrefix(name, "/"))
 	return StaticFS.ReadFile(path.Join("static", strings.TrimPrefix(name, "/")))
+}
+
+type slashFileSystem struct{ fs http.FileSystem }
+
+func (s slashFileSystem) Open(name string) (http.File, error) {
+	name = path.Clean("/" + strings.ReplaceAll(name, "\\", "/"))
+	return s.fs.Open(strings.TrimPrefix(name, "/"))
+}
+func ViewsHTTPFS() http.FileSystem { return slashFileSystem{fs: http.FS(ViewsFS)} }
+func StaticHTTPFS() http.FileSystem {
+	sub, err := fs.Sub(StaticFS, "static")
+	if err != nil {
+		panic(err)
+	}
+	return slashFileSystem{fs: http.FS(sub)}
+}
+func InitBeegoAssets() {
+	beego.SetTemplateFSFunc(func() http.FileSystem { return ViewsHTTPFS() })
+	beego.SetViewsPath("views")
+	beego.DelStaticPath("/static")
+	prefix := strings.TrimSuffix(beego.AppConfig.String("web_base_url"), "/") + "/static"
+	if !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
+	beego.Handler(prefix, http.StripPrefix(prefix, http.FileServer(StaticHTTPFS())), true)
 }
 
 func extractFS(efs embed.FS, root string, destDir string) {
