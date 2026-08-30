@@ -4,7 +4,9 @@ import (
 	"embed"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/astaxie/beego/logs"
 )
@@ -26,6 +28,13 @@ func ExtractWebFiles(runPath string) {
 	logs.Info("Synced embedded web/static to", staticDir)
 	extractFS(ViewsFS, "views", webDir)
 	logs.Info("Synced embedded web/views to", viewsDir)
+}
+
+// ReadStaticFile reads a file from the embedded static filesystem.
+func ReadStaticFile(name string) ([]byte, error) {
+	name = strings.ReplaceAll(name, "\\", "/")
+	name = path.Clean("/" + strings.TrimPrefix(name, "/"))
+	return StaticFS.ReadFile(path.Join("static", strings.TrimPrefix(name, "/")))
 }
 
 func extractFS(efs embed.FS, root string, destDir string) {
