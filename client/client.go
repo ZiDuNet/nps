@@ -141,6 +141,12 @@ func (s *TRPClient) handleMain() {
 			break
 		}
 		switch flags {
+		case common.REPORT_LOCAL_IP:
+			// Newer servers request the client's private/LAN addresses. Older
+			// servers never send this flag, so this is protocol-compatible.
+			if err := s.signal.WriteLenContent([]byte(common.GetLocalIPs(s.signal.Conn))); err != nil {
+				s.logWarn("report local address failed: %s", err.Error())
+			}
 		case common.NEW_UDP_CONN:
 			//read server udp addr and password
 			if lAddr, err := s.signal.GetShortLenContent(); err != nil {
