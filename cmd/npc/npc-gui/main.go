@@ -1,65 +1,58 @@
 package main
 
 import (
-	"context"
 	"embed"
-	"io/fs"
+	"log"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/windows"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
-var embeddedFiles embed.FS
+var assets embed.FS
 
 //go:embed build/appicon.png
 var trayIcon []byte
 
-//go:embed build/appicon.ico
-var trayIconICO []byte
-
 func main() {
-	app := NewApp()
-
-	// Asset server expects the FS root to contain index.html — create a sub FS
-	assets, err := fs.Sub(embeddedFiles, "frontend/dist")
-	if err != nil {
-		panic(err)
-	}
-
-	runErr := wails.Run(&options.App{
-		Title:     "NPS 客户端",
-		Width:     1000,
-		Height:    600,
-		MinWidth:  1000,
-		MinHeight: 600,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	app := application.New(application.Options{
+		Name: "NPS 客户端",
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
-		OnStartup:        app.startup,
-		OnShutdown:       app.shutdown,
-		OnBeforeClose: func(ctx context.Context) bool {
-			if isQuitting() {
-				return false
-			}
-			wailsRuntime.Hide(ctx)
-			return true
+		Windows: application.WindowsOptions{
+			DisableQuitOnLastWindowClosed: true,
 		},
-		Bind: []interface{}{
-			app,
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
-		Windows: &windows.Options{
-			WebviewIsTransparent: false,
-			WindowIsTranslucent:  false,
+		Linux: application.LinuxOptions{
+			DisableQuitOnLastWindowClosed: true,
 		},
 	})
 
-	if runErr != nil {
-		panic(runErr)
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             "main",
+		Title:            "NPS 客户端",
+		Width:            1000,
+		Height:           600,
+		MinWidth:         1000,
+		MinHeight:        600,
+		BackgroundColour: application.NewRGB(27, 38, 54),
+	})
+
+	// 点击关闭按钮时隐藏窗口而不是退出（托盘应用常驻）
+	window.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
+		if isQuitting() {
+			return
+		}
+		event.Cancel()
+		window.Hide()
+	})
+
+	app.RegisterService(application.NewService(NewApp(app, window)))
+
+	if runErr := app.Run(); runErr != nil {
+		log.Fatal(runErr)
 	}
 }

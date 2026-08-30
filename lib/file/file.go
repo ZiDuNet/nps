@@ -216,6 +216,7 @@ func storeSyncMapToFile(m sync.Map, filePath string) {
 	file, err := os.Create(filePath + ".tmp")
 	// first create a temporary file to store
 	if err != nil {
+<<<<<<< HEAD
 		logs.Error(err, "create temp file err")
 		return
 	}
@@ -227,6 +228,16 @@ func storeSyncMapToFile(m sync.Map, filePath string) {
 			return
 		}
 	}()
+=======
+		logs.Error("store to file: create tmp file error: %v", err)
+		return
+	}
+	defer func() {
+		file.Close()
+		os.Remove(filePath + ".tmp")
+	}()
+	var writeErr bool
+>>>>>>> upstream/master
 	m.Range(func(key, value interface{}) bool {
 		var b []byte
 		var err error
@@ -249,11 +260,14 @@ func storeSyncMapToFile(m sync.Map, filePath string) {
 				return true
 			}
 			b, err = json.Marshal(obj)
+<<<<<<< HEAD
 		case *User:
 			b, err = json.Marshal(value.(*User))
 		//case *Glob:
 		//	obj := value.(*Glob)
 		//	b, err = json.Marshal(obj)
+=======
+>>>>>>> upstream/master
 		default:
 			return true
 		}
@@ -263,13 +277,21 @@ func storeSyncMapToFile(m sync.Map, filePath string) {
 		}
 		_, err = file.Write(b)
 		if err != nil {
+<<<<<<< HEAD
 			logs.Error(err, "write file err")
+=======
+			logs.Error("store to file: write error: %v", err)
+>>>>>>> upstream/master
 			writeErr = true
 			return false
 		}
 		_, err = file.Write([]byte("\n" + common.CONN_DATA_SEQ))
 		if err != nil {
+<<<<<<< HEAD
 			logs.Error(err, "write file err")
+=======
+			logs.Error("store to file: write separator error: %v", err)
+>>>>>>> upstream/master
 			writeErr = true
 			return false
 		}
@@ -280,38 +302,56 @@ func storeSyncMapToFile(m sync.Map, filePath string) {
 	}
 	_ = file.Sync()
 	_ = file.Close()
-	// must close file first, then rename it
 	err = os.Rename(filePath+".tmp", filePath)
 	if err != nil {
 		logs.Error(err, "store to file err, data will lost")
 	}
-	// replace the file, maybe provides atomic operation
 }
 
 func storeGlobalToFile(m *Glob, filePath string) {
 	file, err := os.Create(filePath + ".tmp")
 	// first create a temporary file to store
 	if err != nil {
+<<<<<<< HEAD
 		logs.Error(err, "create temp file err")
 		return
 	}
 	defer func() {
 		_ = file.Close()
+=======
+		logs.Error("store global to file: create tmp file error: %v", err)
+		return
+	}
+	defer func() {
+		file.Close()
+		os.Remove(filePath + ".tmp")
+>>>>>>> upstream/master
 	}()
 
 	var b []byte
 	b, err = json.Marshal(m)
 	if err != nil {
+<<<<<<< HEAD
 		logs.Error(err, "marshal json err")
+=======
+		logs.Error("store global to file: marshal error: %v", err)
+>>>>>>> upstream/master
 		return
 	}
 	_, err = file.Write(b)
 	if err != nil {
+<<<<<<< HEAD
 		logs.Error(err, "write file err")
 		return
 	}
 	_ = file.Sync()
 	// must close file first, then rename it
+=======
+		logs.Error("store global to file: write error: %v", err)
+		return
+	}
+	_ = file.Sync()
+>>>>>>> upstream/master
 	_ = file.Close()
 	err = os.Rename(filePath+".tmp", filePath)
 	if err != nil {

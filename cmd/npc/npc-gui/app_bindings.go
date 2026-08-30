@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,13 +15,13 @@ import (
 
 	"ehang.io/nps/client"
 	"ehang.io/nps/lib/version"
-	_ "github.com/astaxie/beego"
-	"github.com/astaxie/beego/logs"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 type App struct {
-	ctx context.Context
+	app    *application.App
+	window *application.WebviewWindow
+	tray   *application.SystemTray
 }
 
 // ShortClient 与前端结构对应
@@ -49,33 +50,22 @@ var (
 	// 改为用 context 管理内置客户端，而不是外部进程
 	running           = make(map[string]context.CancelFunc)
 	clients           = make(map[string]*client.TRPClient)
-	clientErrors      = make(map[string]string)          // 存储客户端连接错误信息
-	clientConnected   = make(map[string]bool)            // 存储客户端连接状态 (true=connected)
-	clientAttempted   = make(map[string]bool)            // 存储客户端是否尝试过连接
-	clientLoggers     = make(map[string]*logs.BeeLogger) // 为每个客户端单独管理 logger
-	statusMu          sync.Mutex                         // 状态锁
+	clientErrors      = make(map[string]string) // 存储客户端连接错误信息
+	clientConnected   = make(map[string]bool)   // 存储客户端连接状态 (true=connected)
+	clientAttempted   = make(map[string]bool)   // 存储客户端是否尝试过连接
+	statusMu          sync.Mutex                // 状态锁
 	runningMu         sync.Mutex
-	loggerMu          sync.Mutex // 保护 clientLoggers 的并发访问
 	disconnectTimeout = 60
 	connType          = "tcp"
-
-	// 日志缓存机制，避免频繁读取文件
-	logsCacheMu   sync.RWMutex
-	logsCache     = make(map[string][]ConnectionLog) // 缓存：clientId -> logs
-	logsCacheTime = make(map[string]time.Time)       // 缓存时间：clientId -> time
-	logsCacheTTL  = 2 * time.Second                  // 缓存有效期 2 秒
 )
 
-func NewApp() *App { return &App{} }
+func NewApp(app *application.App, window *application.WebviewWindow) *App {
+	return &App{app: app, window: window}
+}
 
-func (a *App) startup(ctx context.Context) {
-	// 保存 context，用于后续调用 runtime API
-	a.ctx = ctx
-
-	// 初始化日志系统，只使用 store logger（内存缓存）
-	// 每个客户端有自己独立的日志文件，不需要全局日志文件
-	logs.SetLogger("store")
-	logs.SetLevel(logs.LevelDebug)
+func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
+	// 初始化日志系统：应用日志走 slog，客户端日志走内存缓冲 + JSON 文件
+	initAppLogger()
 
 	// 同步开机启动状态：检查配置与实际注册表是否一致
 	go func() {
@@ -84,21 +74,32 @@ func (a *App) startup(ctx context.Context) {
 			actualEnabled := isStartupEnabled()
 			if store.Settings.StartupEnabled && !actualEnabled {
 				// 配置说启用，但实际未启用，则启用之
-				logs.Info("同步开机启动状态：启用")
+				slog.Info("同步开机启动状态：启用")
 				if err := enableStartup(); err != nil {
-					logs.Error("同步开机启动失败: %v", err)
+					slog.Error("同步开机启动失败", "err", err)
 				}
 			} else if !store.Settings.StartupEnabled && actualEnabled {
 				// 配置说禁用，但实际已启用，则禁用之
-				logs.Info("同步开机启动状态：禁用")
+				slog.Info("同步开机启动状态：禁用")
 				if err := disableStartup(); err != nil {
-					logs.Error("同步开机启动失败: %v", err)
+					slog.Error("同步开机启动失败", "err", err)
 				}
 			}
 		}
 	}()
 
-	go a.startTray()
+	a.startTray()
+	return nil
+}
+
+func (a *App) ServiceShutdown() error {
+	setQuitting()
+	closeAllLogStores()
+	if a.tray != nil {
+		a.tray.Destroy()
+		a.tray = nil
+	}
+	return nil
 }
 
 func getLogsPath() string {
@@ -135,53 +136,6 @@ func getClientLogFilePath(vkey string) string {
 	vkey = strings.ReplaceAll(vkey, "\\", "-")
 	vkey = strings.ReplaceAll(vkey, "/", "-")
 	return filepath.Join(logsDir, fmt.Sprintf("npc-client-%s.log", vkey))
-}
-
-// initClientLogger 为客户端初始化独立的 logger
-func initClientLogger(vkey string) {
-	loggerMu.Lock()
-	defer loggerMu.Unlock()
-
-	if _, exists := clientLoggers[vkey]; !exists {
-		// 为每个客户端创建独立的 BeeLogger
-		logger := logs.NewLogger()
-		// 设置为 Debug 级别，可以看到 Trace 日志
-		logger.SetLevel(logs.LevelDebug)
-
-		// 设置独立的日志文件
-		logFilePath := getClientLogFilePath(vkey)
-		// Windows 路径中的反斜杠需要转义
-		escapedPath := strings.ReplaceAll(logFilePath, "\\", "\\\\")
-		logger.SetLogger(logs.AdapterFile, `{"filename":"`+escapedPath+`","daily":true,"maxdays":7}`)
-
-		clientLoggers[vkey] = logger
-	}
-}
-
-// getClientLogger 获取客户端的 logger
-func getClientLogger(id string) *logs.BeeLogger {
-	loggerMu.Lock()
-	defer loggerMu.Unlock()
-	return clientLoggers[id]
-}
-
-// closeClientLogger 关闭客户端的 logger
-func closeClientLogger(id string) {
-	loggerMu.Lock()
-	defer loggerMu.Unlock()
-
-	if logger, exists := clientLoggers[id]; exists {
-		if logger != nil {
-			logger.Close()
-		}
-		delete(clientLoggers, id)
-	}
-}
-
-func (a *App) shutdown(ctx context.Context) {
-	setQuitting()
-	QuitTray()
-	wailsRuntime.Quit(a.ctx)
 }
 
 // 持久化文件结构（向后兼容旧的仅数组格式）
@@ -338,16 +292,16 @@ func (a *App) SaveGuiSettings(s GuiSettings) error {
 	if oldStartupEnabled != s.StartupEnabled {
 		if s.StartupEnabled {
 			if err := enableStartup(); err != nil {
-				logs.Error("启用开机启动失败: %v", err)
+				slog.Error("启用开机启动失败", "err", err)
 				return fmt.Errorf("启用开机启动失败: %v", err)
 			}
-			logs.Info("已启用开机启动")
+			slog.Info("已启用开机启动")
 		} else {
 			if err := disableStartup(); err != nil {
-				logs.Error("禁用开机启动失败: %v", err)
+				slog.Error("禁用开机启动失败", "err", err)
 				return fmt.Errorf("禁用开机启动失败: %v", err)
 			}
-			logs.Info("已禁用开机启动")
+			slog.Info("已禁用开机启动")
 		}
 	}
 
@@ -387,7 +341,7 @@ func (a *App) GetDefaultLogDir() string {
 
 // SelectDirectory 打开目录选择对话框
 func (a *App) SelectDirectory() (string, error) {
-	logs.Info("SelectDirectory 被调用")
+	slog.Info("SelectDirectory 被调用")
 
 	// 获取当前设置的日志目录作为默认目录
 	defaultDir := ""
@@ -396,20 +350,23 @@ func (a *App) SelectDirectory() (string, error) {
 		defaultDir = store.Settings.LogDir
 	}
 
-	logs.Info("默认目录: %s", defaultDir)
+	slog.Info("默认目录", "dir", defaultDir)
 
 	// 打开目录选择对话框
-	selectedDir, err := wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
-		Title:            "选择日志目录",
-		DefaultDirectory: defaultDir,
+	dialog := a.app.Dialog.OpenFileWithOptions(&application.OpenFileDialogOptions{
+		CanChooseDirectories: true,
+		CanChooseFiles:       false,
+		Title:                "选择日志目录",
+		Directory:            defaultDir,
 	})
+	selectedDir, err := dialog.PromptForSingleSelection()
 
 	if err != nil {
-		logs.Error("打开目录选择对话框失败: %v", err)
+		slog.Error("打开目录选择对话框失败", "err", err)
 		return "", err
 	}
 
-	logs.Info("用户选择的目录: %s", selectedDir)
+	slog.Info("用户选择的目录", "dir", selectedDir)
 	return selectedDir, nil
 }
 
@@ -563,13 +520,13 @@ func (a *App) RemoveShortcut(name, addr, key string) error {
 
 func (a *App) ToggleClient(name, addr, key string, tls bool, runningState bool) error {
 	id := addr + "|" + key
-	logs.Info("ToggleClient called: name=%s, addr=%s, tls=%v, runningState=%v", name, addr, tls, runningState)
+	slog.Info("ToggleClient called", "name", name, "addr", addr, "tls", tls, "runningState", runningState)
 	runningMu.Lock()
 	defer runningMu.Unlock()
 	if runningState {
 		// start npc client in goroutine
 		if _, ok := running[id]; !ok {
-			logs.Info("Starting NPC client: %s", id)
+			slog.Info("Starting NPC client", "id", id)
 			ctx, cancel := context.WithCancel(context.Background())
 			running[id] = cancel
 			// 清除之前的状态
@@ -580,12 +537,12 @@ func (a *App) ToggleClient(name, addr, key string, tls bool, runningState bool) 
 			statusMu.Unlock()
 			go startNpcClientWithContext(ctx, id, addr, key, tls)
 		} else {
-			logs.Info("Client already running: %s", id)
+			slog.Info("Client already running", "id", id)
 		}
 	} else {
 		// stop the client
 		if cancel, ok := running[id]; ok {
-			logs.Info("Stopping NPC client: %s", id)
+			slog.Info("Stopping NPC client", "id", id)
 			cancel()
 			delete(running, id)
 			// 清除状态
@@ -600,7 +557,7 @@ func (a *App) ToggleClient(name, addr, key string, tls bool, runningState bool) 
 				delete(clients, id)
 			}
 		} else {
-			logs.Info("Client not running, nothing to stop: %s", id)
+			slog.Info("Client not running, nothing to stop", "id", id)
 		}
 	}
 	return nil
@@ -618,21 +575,17 @@ func startNpcClient(id, server, vkey string, tlsEnable bool) {
 
 // startNpcClientWithContext 在给定的 context 中运行 npc 客户端
 func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tlsEnable bool) {
-	// 为该客户端初始化独立的日志文件
-	initClientLogger(id)
-	clientLogger := getClientLogger(id)
+	// 为该客户端准备日志存储（内存缓冲 + 独立日志文件）
+	store := getClientLogStore(id)
+	clientLogger := &trpcLogger{store: store}
 
 	client.SetTlsEnable(tlsEnable)
-	if clientLogger != nil {
-		clientLogger.Info("启动 NPC 客户端: server=%s, vkey=%s, tls=%v", server, vkey, tlsEnable)
-	}
+	clientLogger.Info("启动 NPC 客户端: server=%s, vkey=%s, tls=%v", server, vkey, tlsEnable)
 
 	for {
 		select {
 		case <-ctx.Done():
-			if clientLogger != nil {
-				clientLogger.Info("停止 NPC 客户端")
-			}
+			clientLogger.Info("停止 NPC 客户端")
 			statusMu.Lock()
 			delete(clientConnected, id)
 			delete(clientAttempted, id)
@@ -644,15 +597,11 @@ func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tls
 				delete(clients, id)
 			}
 			runningMu.Unlock()
-			// 关闭客户端日志
-			closeClientLogger(id)
 			return
 		default:
 		}
 
-		if clientLogger != nil {
-			clientLogger.Info("连接服务器")
-		}
+		clientLogger.Info("连接服务器")
 
 		// 重置连接状态，准备新的连接尝试
 		statusMu.Lock()
@@ -662,9 +611,7 @@ func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tls
 		rpcClient := client.NewRPClient(server, vkey, connType, "", nil, disconnectTimeout)
 
 		// 设置客户端的独立 logger
-		if clientLogger != nil {
-			rpcClient.SetLogger(clientLogger)
-		}
+		rpcClient.SetLogger(clientLogger)
 
 		// 将客户端保存到全局 map
 		runningMu.Lock()
@@ -678,9 +625,7 @@ func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tls
 		go func() {
 			select {
 			case <-ctx.Done():
-				if clientLogger != nil {
-					clientLogger.Info("Context 已取消，关闭客户端")
-				}
+				clientLogger.Info("Context 已取消，关闭客户端")
 				rpcClient.Close()
 			}
 		}()
@@ -690,9 +635,7 @@ func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tls
 		// 检查 context 是否已取消
 		select {
 		case <-ctx.Done():
-			if clientLogger != nil {
-				clientLogger.Info("停止 NPC 客户端")
-			}
+			clientLogger.Info("停止 NPC 客户端")
 			statusMu.Lock()
 			delete(clientConnected, id)
 			delete(clientAttempted, id)
@@ -704,8 +647,6 @@ func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tls
 				delete(clients, id)
 			}
 			runningMu.Unlock()
-			// 关闭客户端日志
-			closeClientLogger(id)
 			return
 		case <-time.After(5 * time.Second):
 			// 继续重新连接
@@ -721,7 +662,7 @@ func monitorFirstConnection(ctx context.Context, id string, rpcClient *client.TR
 	initialTimeout := time.After(5 * time.Second)
 	connected := false
 
-	clientLogger := getClientLogger(id)
+	clientLogger := &trpcLogger{store: getClientLogStore(id)}
 
 	for {
 		select {
@@ -734,9 +675,7 @@ func monitorFirstConnection(ctx context.Context, id string, rpcClient *client.TR
 				clientConnected[id] = false
 				clientErrors[id] = "连接服务器失败，正在重新连接..."
 				statusMu.Unlock()
-				if clientLogger != nil {
-					clientLogger.Error("连接服务器失败 (timeout)，将自动重连")
-				}
+				clientLogger.Error("连接服务器失败 (timeout)，将自动重连")
 			}
 			// 即使超时，也继续监听连接状态变化
 		case <-ticker.C:
@@ -749,9 +688,7 @@ func monitorFirstConnection(ctx context.Context, id string, rpcClient *client.TR
 					clientConnected[id] = true
 					delete(clientErrors, id)
 					statusMu.Unlock()
-					if clientLogger != nil {
-						clientLogger.Info("客户端连接成功")
-					}
+					clientLogger.Info("客户端连接成功")
 					connected = true
 				}
 			} else {
@@ -761,9 +698,7 @@ func monitorFirstConnection(ctx context.Context, id string, rpcClient *client.TR
 					clientConnected[id] = false
 					clientErrors[id] = "连接已断开，正在重新连接..."
 					statusMu.Unlock()
-					if clientLogger != nil {
-						clientLogger.Warn("客户端连接已断开")
-					}
+					clientLogger.Warn("客户端连接已断开")
 					connected = false
 				}
 			}
@@ -771,101 +706,14 @@ func monitorFirstConnection(ctx context.Context, id string, rpcClient *client.TR
 	}
 }
 
-// GetConnectionLogs 获取指定客户端的连接日志（从独立日志文件读取）
+// GetConnectionLogs 获取指定客户端的连接日志（直接读内存缓冲，无需解析文件）
 func (a *App) GetConnectionLogs(clientId string) ([]ConnectionLog, error) {
-	// 检查缓存是否有效
-	logsCacheMu.RLock()
-	if cachedLogs, exists := logsCache[clientId]; exists {
-		if cacheTime, ok := logsCacheTime[clientId]; ok {
-			if time.Since(cacheTime) < logsCacheTTL {
-				// 缓存仍然有效
-				logsCacheMu.RUnlock()
-				return cachedLogs, nil
-			}
-		}
-	}
-	logsCacheMu.RUnlock()
-
-	// 缓存过期或不存在，重新读取日志
-	// 读取该客户端的独立日志文件
-	clientLogFile := getClientLogFilePath(clientId)
-
-	data, err := os.ReadFile(clientLogFile)
-	if err != nil {
-		// 如果文件不存在或读取失败，返回空日志
-		return []ConnectionLog{}, nil
-	}
-
-	logContent := string(data)
-	if logContent == "" {
-		return []ConnectionLog{}, nil
-	}
-
-	var result []ConnectionLog
-	lines := strings.Split(logContent, "\n")
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		// 判断日志类型
-		logType := "info"
-		if strings.Contains(line, "[E]") {
-			logType = "error"
-		} else if strings.Contains(line, "[W]") {
-			logType = "warning"
-		} else if strings.Contains(line, "成功") || strings.Contains(line, "connected") || strings.Contains(line, "Success") {
-			logType = "success"
-		}
-
-		// 提取时间戳（日志格式通常是：2026-01-09 11:04:56 或 11:04:56）
-		var timestamp string
-		timeFields := strings.Fields(line)
-		if len(timeFields) >= 2 {
-			// 尝试获取前两个字段作为日期和时间
-			timestamp = timeFields[0] + " " + timeFields[1]
-		} else if len(timeFields) >= 1 {
-			timestamp = timeFields[0]
-		}
-
-		log := ConnectionLog{
-			Timestamp: timestamp,
-			Message:   line,
-			Type:      logType,
-			ClientId:  clientId,
-		}
-
-		result = append(result, log)
-	}
-
-	// 更新缓存
-	logsCacheMu.Lock()
-	logsCache[clientId] = result
-	logsCacheTime[clientId] = time.Now()
-	logsCacheMu.Unlock()
-
-	return result, nil
+	return getClientLogStore(clientId).snapshot(), nil
 }
 
-// ClearConnectionLogs 清空指定客户端的连接日志文件
+// ClearConnectionLogs 清空指定客户端的连接日志（内存缓冲与日志文件）
 func (a *App) ClearConnectionLogs(clientId string) error {
-	// 获取日志文件路径
-	clientLogFile := getClientLogFilePath(clientId)
-
-	// 清空日志文件内容（写入空字符串）
-	if err := os.WriteFile(clientLogFile, []byte(""), 0o644); err != nil {
-		return err
-	}
-
-	// 清空缓存
-	logsCacheMu.Lock()
-	delete(logsCache, clientId)
-	delete(logsCacheTime, clientId)
-	logsCacheMu.Unlock()
-
-	return nil
+	return getClientLogStore(clientId).clear()
 }
 
 // getExecutablePath 获取当前可执行文件的完整路径

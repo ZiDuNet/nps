@@ -1,89 +1,167 @@
 <template>
-  <div class="container">
-    <div class="sidebar">
-      <div class="sidebar-content">
-        <button
-          class="sidebar-btn"
-          :class="{ active: activeView === 'clients' }"
-          @click="activeView = 'clients'"
-        >
-          🔗 客户端
-        </button>
-        <button
-          class="sidebar-btn"
-          :class="{ active: activeView === 'logs' }"
-          @click="activeView = 'logs'"
-        >
-          📋 连接日志
-        </button>
-        <button
-          class="sidebar-btn"
-          :class="{ active: activeView === 'settings' }"
-          @click="activeView = 'settings'"
-        >
-          ⚙️ 设置
-        </button>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path>
+            <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path>
+            <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path>
+            <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">NPS Client</span>
+          <span class="brand-sub">内网穿透客户端</span>
+        </div>
       </div>
-    </div>
 
-    <div class="main-content">
+      <nav class="sidebar-nav">
+        <button class="nav-item" :class="{ active: activeView === 'clients' }" @click="activeView = 'clients'">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="4 17 10 11 4 5"></polyline>
+            <line x1="12" y1="19" x2="20" y2="19"></line>
+          </svg>
+          <span>终端</span>
+        </button>
+        <button class="nav-item" :class="{ active: activeView === 'logs' }" @click="activeView = 'logs'">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="8" y1="13" x2="16" y2="13"></line>
+            <line x1="8" y1="17" x2="16" y2="17"></line>
+          </svg>
+          <span>日志</span>
+        </button>
+        <button class="nav-item" :class="{ active: activeView === 'settings' }" @click="activeView = 'settings'">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="21" x2="4" y2="14"></line>
+            <line x1="4" y1="10" x2="4" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12" y2="3"></line>
+            <line x1="20" y1="21" x2="20" y2="16"></line>
+            <line x1="20" y1="12" x2="20" y2="3"></line>
+            <line x1="1" y1="14" x2="7" y2="14"></line>
+            <line x1="9" y1="8" x2="15" y2="8"></line>
+            <line x1="17" y1="16" x2="23" y2="16"></line>
+          </svg>
+          <span>设置</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="version-tag">v{{ appVersion || 'dev' }}</span>
+      </div>
+    </aside>
+
+    <main class="main">
       <div v-if="activeView === 'clients'" class="view clients-view">
-        <div class="header">
-          <div class="input-group">
-            <input
-              v-model="commandInput"
-              type="text"
-              class="command-input"
-              placeholder="输入快捷启动命令"
-              @keyup.enter="addConnection"
-            />
-            <button class="btn btn-primary" @click="addConnection">连接</button>
-            <button class="btn btn-secondary" @click="showManualAddDialog">手工添加</button>
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">终端</h1>
+            <p class="page-desc">管理你的内网穿透客户端连接</p>
           </div>
+        </div>
+
+        <div v-if="updateInfo && updateInfo.updateAvailable && !updateBannerDismissed" class="update-banner">
+          <div class="update-banner-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </div>
+          <div class="update-banner-body">
+            <div class="update-banner-title">发现新版本 v{{ updateInfo.latestVersion }}</div>
+            <div class="update-banner-desc">当前版本 v{{ updateInfo.currentVersion }}，点击立即更新即可热升级</div>
+          </div>
+          <div class="update-banner-actions">
+            <button class="btn btn-default btn-sm" :disabled="updating" @click="downloadUpdate">
+              {{ updating ? '更新中...' : '立即更新' }}
+            </button>
+            <button class="btn btn-ghost btn-icon" title="忽略" @click="updateBannerDismissed = true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <input
+            v-model="commandInput"
+            type="text"
+            class="input toolbar-input"
+            placeholder="粘贴 Base64 快捷启动命令"
+            @keyup.enter="addConnection"
+          />
+          <button class="btn btn-default" @click="addConnection">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            连接
+          </button>
+          <button class="btn btn-outline" @click="showManualAddDialog">手工添加</button>
         </div>
 
         <div class="clients-grid">
           <div v-if="clients.length === 0" class="empty-state">
-            <p>暂无客户端，粘贴 Base64 格式的快捷命令并点击连接即可添加</p>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path>
+              <polyline points="3.29 7 12 12 20.71 7"></polyline>
+              <line x1="12" y1="22" x2="12" y2="12"></line>
+            </svg>
+            <p class="empty-title">暂无客户端</p>
+            <p class="empty-desc">粘贴 Base64 格式的快捷命令并点击连接即可添加</p>
           </div>
 
-          <div v-for="(client, index) in clients" :key="index" class="client-card">
+          <div v-for="(client, index) in clients" :key="index" class="card client-card">
             <div class="card-header">
-              <h3 class="card-title">{{ client.name }}</h3>
-              <button class="btn-close" @click="removeClient(client)">✕</button>
+              <div class="card-title-group">
+                <h3 class="card-title">{{ client.name }}</h3>
+                <span class="badge" :class="statusBadgeClass(client.status)">
+                  <span class="badge-dot"></span>
+                  {{ getStatusLabel(client.status) }}
+                </span>
+              </div>
+              <button class="btn btn-ghost btn-icon" title="删除" @click="removeClient(client)">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
             </div>
 
-            <div class="card-content">
+            <div class="card-body">
               <div class="info-row">
-                <span class="label">地址:</span>
-                <span class="value">{{ client.addr }}</span>
+                <span class="label">地址</span>
+                <span class="value mono">{{ client.addr }}</span>
               </div>
               <div class="info-row">
-                <span class="label">密钥:</span>
-                <span class="value code">{{ client.key }}</span>
+                <span class="label">密钥</span>
+                <span class="value mono">{{ client.key }}</span>
               </div>
               <div class="info-row">
-                <span class="label">TLS:</span>
-                <span class="value">{{ client.tls ? '是' : '否' }}</span>
+                <span class="label">TLS</span>
+                <span class="value">{{ client.tls ? '已启用' : '未启用' }}</span>
               </div>
-              <div v-if="client.error && client.running" class="info-row error-message">
-                <span class="label">错误:</span>
-                <span class="value">{{ client.error }}</span>
+              <div v-if="client.error && client.running" class="info-row error-row">
+                <span class="label">错误</span>
+                <span class="value error-text">{{ client.error }}</span>
               </div>
             </div>
 
             <div class="card-footer">
-              <label class="toggle-switch">
+              <span class="switch">
                 <input
                   type="checkbox"
                   :checked="client.status !== 'stopped'"
                   @change="toggleClient(client)"
                 />
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">
-                  {{ getStatusLabel(client.status) }}
-                </span>
-              </label>
+                <span class="switch-thumb"></span>
+              </span>
               <div v-if="client.error && client.status !== 'stopped'" class="status-error">
                 {{ client.error }}
               </div>
@@ -93,83 +171,138 @@
       </div>
 
       <div v-else-if="activeView === 'logs'" class="view logs-view">
-        <div class="logs-header">
-          <div class="logs-controls">
-            <label>选择客户端：</label>
-            <select v-model="selectedClientId" class="client-select">
-              <option value="">-- 全部客户端 --</option>
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">日志</h1>
+            <p class="page-desc">查看各客户端连接日志</p>
+          </div>
+        </div>
+
+        <div class="card logs-panel">
+          <div class="logs-toolbar">
+            <select v-model="selectedClientId" class="select logs-select">
+              <option value="">全部客户端</option>
               <option v-for="client in clients" :key="`${client.addr}|${client.key}`" :value="`${client.addr}|${client.key}`">
                 {{ client.name }} ({{ client.addr }})
               </option>
             </select>
-            <button class="btn btn-secondary" @click="clearLogs">清空日志</button>
-            <button v-if="!autoScroll" class="btn btn-secondary btn-scroll-to-bottom" @click="scrollToBottom">
-              ↓ 回到底部
-            </button>
-          </div>
-        </div>
-        
-        <div class="logs-container">
-          <div class="log-content" ref="logContentRef" @scroll="onLogScroll">
-            <div v-if="filteredLogs.length === 0" class="empty-logs">
-              <p>暂无日志记录</p>
+            <div class="logs-actions">
+              <button v-if="!autoScroll" class="btn btn-outline" @click="scrollToBottom">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <polyline points="19 12 12 19 5 12"></polyline>
+                </svg>
+                回到底部
+              </button>
+              <button class="btn btn-outline" @click="clearLogs">清空日志</button>
             </div>
-            <div v-for="(log, index) in filteredLogs" :key="index" :class="['log-item', `log-${log.type}`]">
-              <span class="log-timestamp">{{ log.timestamp }}</span>
-              <span class="log-message">{{ log.message }}</span>
+          </div>
+
+          <div class="logs-container">
+            <div class="log-content" ref="logContentRef" @scroll="onLogScroll">
+              <div v-if="filteredLogs.length === 0" class="empty-logs">
+                <p>暂无日志记录</p>
+              </div>
+              <div v-for="(log, index) in filteredLogs" :key="index" :class="['log-item', `log-${log.type}`]">
+                <span class="log-dot"></span>
+                <span class="log-timestamp">{{ log.timestamp }}</span>
+                <span class="log-message">{{ log.message }}</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <div v-else-if="activeView === 'settings'" class="view settings-view">
-        <div class="settings-container">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <h3 style="margin:0">设置</h3>
-            <div style="color:var(--text-secondary)">版本: {{ appVersion || '未知' }}</div>
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">设置</h1>
+            <p class="page-desc">配置客户端行为</p>
           </div>
+        </div>
 
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-            <label style="flex:1;color:var(--text-secondary)">主题</label>
-            <select v-model="themeMode" class="theme-select">
-              <option value="auto">跟随系统</option>
-              <option value="light">亮色</option>
-              <option value="dark">暗色</option>
-            </select>
-          </div>
+        <div class="card settings-card">
+          <div class="settings-group">
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">主题</div>
+                <div class="setting-desc">选择界面外观风格</div>
+              </div>
+              <select v-model="themeMode" class="select">
+                <option value="auto">跟随系统</option>
+                <option value="light">亮色</option>
+                <option value="dark">暗色</option>
+              </select>
+            </div>
 
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-            <label style="flex:1;color:var(--text-secondary)">开机启动</label>
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="startupEnabled" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">开机启动</div>
+                <div class="setting-desc">系统启动时自动运行客户端</div>
+              </div>
+              <span class="switch">
+                <input type="checkbox" v-model="startupEnabled" />
+                <span class="switch-thumb"></span>
+              </span>
+            </div>
 
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-            <label style="flex:1;color:var(--text-secondary)">记住客户端状态</label>
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="rememberClientState" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">记住客户端状态</div>
+                <div class="setting-desc">下次启动时自动恢复已连接客户端</div>
+              </div>
+              <span class="switch">
+                <input type="checkbox" v-model="rememberClientState" />
+                <span class="switch-thumb"></span>
+              </span>
+            </div>
 
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
-            <label style="flex:1;color:var(--text-secondary)">日志目录</label>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input v-model="logDir" type="text" style="padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-primary);color:var(--text-primary);min-width:320px" readonly />
-              <button class="btn btn-secondary" @click="selectLogDirectory" style="white-space:nowrap">浏览...</button>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">日志目录</div>
+                <div class="setting-desc">日志文件的保存位置</div>
+              </div>
+              <div class="logdir-field">
+                <input v-model="logDir" type="text" class="input logdir-input" readonly />
+                <button class="btn btn-outline" @click="selectLogDirectory">浏览...</button>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">版本</div>
+                <div class="setting-desc">
+                  <template v-if="updating">正在下载更新...</template>
+                  <template v-else-if="checkingUpdate">正在检查更新...</template>
+                  <template v-else-if="updateInfo && updateInfo.updateAvailable">
+                    发现新版本 v{{ updateInfo.latestVersion }}（当前 v{{ updateInfo.currentVersion }}）
+                  </template>
+                  <template v-else-if="updateInfo">已是最新版本 v{{ updateInfo.currentVersion }}</template>
+                  <template v-else>v{{ appVersion || 'dev' }} · 启动时自动检查更新</template>
+                </div>
+              </div>
+              <div class="update-buttons">
+                <button v-if="updateInfo && updateInfo.updateAvailable" class="btn btn-default btn-sm" :disabled="updating" @click="downloadUpdate">
+                  {{ updating ? '更新中...' : '立即更新' }}
+                </button>
+                <button class="btn btn-outline btn-sm" :disabled="checkingUpdate || updating" @click="checkForUpdate(false)">
+                  {{ checkingUpdate ? '检查中...' : '检查更新' }}
+                </button>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div style="display:flex;gap:12px;justify-content:flex-end">
-            <button class="btn btn-secondary" @click="resetSettings">重置</button>
-            <button class="btn btn-primary" @click="saveSettings">保存</button>
+        <div class="settings-actions">
+          <div class="settings-buttons">
+            <button class="btn btn-outline" @click="resetSettings">重置</button>
+            <button class="btn btn-default" @click="saveSettings">保存设置</button>
           </div>
         </div>
       </div>
 
-      <div v-if="message" :class="['message', message.type]">
+      <div v-if="message" :class="['toast', `toast-${message.type}`]">
+        <span class="toast-dot"></span>
         {{ message.text }}
       </div>
 
@@ -177,21 +310,26 @@
       <div v-if="showManualDialog" class="modal-overlay" @click.self="closeManualAddDialog">
         <div class="modal-dialog">
           <div class="modal-header">
-            <h3>手工添加客户端</h3>
-            <button class="btn-close" @click="closeManualAddDialog">✕</button>
+            <h3 class="modal-title">手工添加客户端</h3>
+            <button class="btn btn-ghost btn-icon" @click="closeManualAddDialog">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
           <div class="modal-body">
             <div class="form-group">
-              <label>名称 </label>
-              <input v-model="manualForm.name" type="text" class="form-input" placeholder="例如: test" />
+              <label class="form-label">名称</label>
+              <input v-model="manualForm.name" type="text" class="input" placeholder="例如: test" />
             </div>
             <div class="form-group">
-              <label>连接地址 <span class="required">*</span></label>
-              <input v-model="manualForm.addr" type="text" class="form-input" placeholder="例如: 127.0.0.1:8024" />
+              <label class="form-label">连接地址 <span class="required">*</span></label>
+              <input v-model="manualForm.addr" type="text" class="input" placeholder="例如: 127.0.0.1:8024" />
             </div>
             <div class="form-group">
-              <label>密钥 <span class="required">*</span></label>
-              <input v-model="manualForm.key" type="text" class="form-input" placeholder="例如: 6237ed8d52" />
+              <label class="form-label">密钥 <span class="required">*</span></label>
+              <input v-model="manualForm.key" type="text" class="input" placeholder="例如: 6237ed8d52" />
             </div>
             <div class="form-group">
               <label class="checkbox-label">
@@ -204,36 +342,41 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="closeManualAddDialog">取消</button>
-            <button class="btn btn-primary" @click="submitManualAdd">确定</button>
+            <button class="btn btn-outline" @click="closeManualAddDialog">取消</button>
+            <button class="btn btn-default" @click="submitManualAdd">确定</button>
           </div>
         </div>
       </div>
 
       <!-- 确认对话框 -->
       <div v-if="confirmState.show" class="modal-overlay" @click.self="confirmCancel">
-        <div class="modal-dialog" style="max-width:360px">
+        <div class="modal-dialog modal-dialog-sm">
           <div class="modal-header">
-            <h3>确认</h3>
-            <button class="btn-close" @click="confirmCancel">✕</button>
+            <h3 class="modal-title">确认</h3>
+            <button class="btn btn-ghost btn-icon" @click="confirmCancel">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
           <div class="modal-body">
-            <div style="white-space:pre-wrap">{{ confirmState.text }}</div>
+            <div class="confirm-text">{{ confirmState.text }}</div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="confirmCancel">取消</button>
-            <button class="btn btn-primary" @click="confirmOk">确定</button>
+            <button class="btn btn-outline" @click="confirmCancel">取消</button>
+            <button class="btn btn-default" @click="confirmOk">确定</button>
           </div>
         </div>
       </div>
-    </div>
+    </main>
   </div>
 </template>
 
 <script>
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 // 直接导入 Wails 生成的 API 绑定
-import * as AppAPI from '../wailsjs/go/main/App.js'
+import { App as AppAPI } from '../bindings/npc-gui/index.js'
 
 export default {
   name: 'App',
@@ -257,6 +400,12 @@ export default {
     const logDir = ref('')
     const themeMode = ref('auto') // 'auto', 'light', 'dark'
     const appVersion = ref('')
+
+    // Update / upgrade check
+    const updateInfo = ref(null)
+    const checkingUpdate = ref(false)
+    const updating = ref(false)
+    const updateBannerDismissed = ref(false)
 
     // Manual add dialog
     const showManualDialog = ref(false)
@@ -484,6 +633,9 @@ export default {
     let SelectDirectory = AppAPI.SelectDirectory
     let GetDefaultLogDir = AppAPI.GetDefaultLogDir
     let GetAppVersion = AppAPI.GetAppVersion
+    let CheckForUpdate = AppAPI.CheckForUpdate
+    let DownloadAndInstallUpdate = AppAPI.DownloadAndInstallUpdate
+    let RestartApp = AppAPI.RestartApp
 
     if (!AppAPI || typeof AppAPI.GetShortcuts !== 'function') {
       console.warn('Wails App API not available — using mock implementations for browser debugging')
@@ -527,6 +679,9 @@ export default {
       SelectDirectory = async () => { console.log('mock SelectDirectory'); return '/mock/selected/path' }
       GetDefaultLogDir = async () => { console.log('mock GetDefaultLogDir'); return 'C:\\Users\\User\\AppData\\Roaming\\npc\\logs' }
       GetAppVersion = async () => { console.log('mock GetAppVersion'); return 'dev' }
+      CheckForUpdate = async () => { console.log('mock CheckForUpdate'); return { currentVersion: 'dev', latestVersion: 'dev', updateAvailable: false, releaseNotes: '', publishedAt: '', downloadUrl: '', assetName: '' } }
+      DownloadAndInstallUpdate = async () => { console.log('mock DownloadAndInstallUpdate') }
+      RestartApp = async () => { console.log('mock RestartApp') }
     }
 
     const initWails = async () => {
@@ -823,15 +978,81 @@ export default {
       }, 3000)
     }
 
+    const checkForUpdate = async (silent = true) => {
+      if (checkingUpdate.value) return null
+      checkingUpdate.value = true
+      try {
+        const info = await CheckForUpdate()
+        updateInfo.value = info || null
+        // 手动检查（非静默）时给出明确反馈
+        if (!silent) {
+          if (info && info.updateAvailable) {
+            showMessage(`发现新版本 v${info.latestVersion}`, 'success')
+          } else {
+            showMessage('当前已是最新版本', 'success')
+          }
+        }
+        return info || null
+      } catch (error) {
+        console.error('检查更新失败:', error)
+        if (!silent) {
+          showMessage('检查更新失败: ' + extractErrorMessage(error), 'error')
+        }
+        return null
+      } finally {
+        checkingUpdate.value = false
+      }
+    }
+
+    const downloadUpdate = async () => {
+      if (!updateInfo.value || !updateInfo.value.updateAvailable) {
+        showMessage('当前没有可用的更新', 'info')
+        return
+      }
+      const confirmed = await confirmDialog(
+        `确定要下载并安装新版本 v${updateInfo.value.latestVersion} 吗？\n更新完成后将自动重启程序生效。`
+      )
+      if (!confirmed) return
+
+      updating.value = true
+      try {
+        await DownloadAndInstallUpdate()
+        showMessage('更新成功，正在重启程序...', 'success')
+        setTimeout(async () => {
+          try {
+            await RestartApp()
+          } catch (e) {
+            console.error('重启失败:', e)
+          }
+        }, 800)
+      } catch (error) {
+        console.error('更新失败:', error)
+        showMessage('更新失败: ' + extractErrorMessage(error), 'error')
+      } finally {
+        updating.value = false
+      }
+    }
+
     const getStatusLabel = (status) => {
       switch (status) {
         case 'connected':
-          return '✓ 已连接'
+          return '已连接'
         case 'connecting':
-          return '⟳ 连接中'
+          return '连接中'
         case 'stopped':
         default:
-          return '⊘ 已停止'
+          return '已停止'
+      }
+    }
+
+    const statusBadgeClass = (status) => {
+      switch (status) {
+        case 'connected':
+          return 'badge-success'
+        case 'connecting':
+          return 'badge-warning'
+        default:
+          return 'badge-muted'
       }
     }
 
@@ -1060,6 +1281,9 @@ export default {
       // 加载版本号（如果后端已绑定）
       await loadAppVersion()
 
+      // 启动时自动检测升级（后台静默检查）
+      checkForUpdate(true)
+
       // 每 2 秒自动刷新客户端状态，保持与服务器同步
       const refreshInterval = setInterval(() => {
         loadClients()
@@ -1107,6 +1331,13 @@ export default {
       resetSettings,
       saveSettings,
       selectLogDirectory,
+      // update
+      updateInfo,
+      checkingUpdate,
+      updating,
+      updateBannerDismissed,
+      checkForUpdate,
+      downloadUpdate,
       // manual add
       showManualDialog,
       manualForm,
@@ -1121,6 +1352,7 @@ export default {
       removeClient,
       toggleClient,
       getStatusLabel,
+      statusBadgeClass,
       clearLogs,
       loadLogs,
       onLogScroll,
@@ -1132,54 +1364,101 @@ export default {
 </script>
 
 <style>
-/* CSS Variables for Theme */
+/* ============ shadcn-ui 风格设计令牌 ============ */
 :root {
-  /* Dark Theme (Default) */
-  --bg-primary: #1a2332;
-  --bg-secondary: #0f1419;
-  --bg-tertiary: #2d3e54;
-  --text-primary: #e8eef7;
-  --text-secondary: #a8b5c8;
-  --text-tertiary: #5a6d7f;
-  --border-color: #2d3e54;
-  --accent-color: #2b8fe8;
-  --accent-hover: #2079d4;
-  --success-color: #2ecc71;
-  --error-color: #e74c3c;
-  --warning-color: #f39c12;
+  /* 暗色主题（默认）— zinc 色调 */
+  --background: hsl(240 10% 3.9%);
+  --foreground: hsl(0 0% 98%);
+  --card: hsl(240 10% 3.9%);
+  --card-foreground: hsl(0 0% 98%);
+  --popover: hsl(240 10% 3.9%);
+  --popover-foreground: hsl(0 0% 98%);
+  --primary: hsl(0 0% 98%);
+  --primary-foreground: hsl(240 5.9% 10%);
+  --secondary: hsl(240 3.7% 15.9%);
+  --secondary-foreground: hsl(0 0% 98%);
+  --muted: hsl(240 3.7% 15.9%);
+  --muted-foreground: hsl(240 5% 64.9%);
+  --accent: hsl(240 3.7% 15.9%);
+  --accent-foreground: hsl(0 0% 98%);
+  --destructive: hsl(0 72.2% 50.6%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --success: hsl(142.1 70.6% 45.3%);
+  --warning: hsl(38 92% 50%);
+  --success-soft: hsla(142.1 70.6% 45.3% / 0.14);
+  --warning-soft: hsla(38 92% 50% / 0.14);
+  --destructive-soft: hsla(0 72.2% 50.6% / 0.14);
+  --border: hsl(240 3.7% 15.9%);
+  --input: hsl(240 3.7% 15.9%);
+  --ring: hsl(240 4.9% 83.9%);
+  --radius: 0.5rem;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.25);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.35);
+  --shadow-lg: 0 16px 40px -8px rgb(0 0 0 / 0.5);
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Monaco', 'Courier New', monospace;
 }
 
-/* Light Theme (explicit) */
+/* 亮色主题（显式） */
 [data-theme="light"] {
-  --bg-primary: #f5f7fa;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #e4e7eb;
-  --text-primary: #1a202c;
-  --text-secondary: #4a5568;
-  --text-tertiary: #718096;
-  --border-color: #cbd5e0;
-  --accent-color: #3182ce;
-  --accent-hover: #2c5aa0;
-  --success-color: #38a169;
-  --error-color: #e53e3e;
-  --warning-color: #dd6b20;
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(240 10% 3.9%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(240 10% 3.9%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(240 10% 3.9%);
+  --primary: hsl(240 5.9% 10%);
+  --primary-foreground: hsl(0 0% 98%);
+  --secondary: hsl(240 4.8% 95.9%);
+  --secondary-foreground: hsl(240 5.9% 10%);
+  --muted: hsl(240 4.8% 95.9%);
+  --muted-foreground: hsl(240 3.8% 46.1%);
+  --accent: hsl(240 4.8% 95.9%);
+  --accent-foreground: hsl(240 5.9% 10%);
+  --destructive: hsl(0 84.2% 60.2%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --success: hsl(142.1 76.2% 36.3%);
+  --warning: hsl(24.6 95% 53.1%);
+  --success-soft: hsla(142.1 76.2% 36.3% / 0.1);
+  --warning-soft: hsla(24.6 95% 53.1% / 0.1);
+  --destructive-soft: hsla(0 84.2% 60.2% / 0.1);
+  --border: hsl(240 5.9% 90%);
+  --input: hsl(240 5.9% 90%);
+  --ring: hsl(240 5.9% 10%);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 16px 40px -8px rgb(0 0 0 / 0.2);
 }
 
-/* Light Theme (auto via prefers-color-scheme) */
+/* 亮色主题（跟随系统） */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
-    --bg-primary: #f5f7fa;
-    --bg-secondary: #ffffff;
-    --bg-tertiary: #e4e7eb;
-    --text-primary: #1a202c;
-    --text-secondary: #4a5568;
-    --text-tertiary: #718096;
-    --border-color: #cbd5e0;
-    --accent-color: #3182ce;
-    --accent-hover: #2c5aa0;
-    --success-color: #38a169;
-    --error-color: #e53e3e;
-    --warning-color: #dd6b20;
+    --background: hsl(0 0% 100%);
+    --foreground: hsl(240 10% 3.9%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(240 10% 3.9%);
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(240 10% 3.9%);
+    --primary: hsl(240 5.9% 10%);
+    --primary-foreground: hsl(0 0% 98%);
+    --secondary: hsl(240 4.8% 95.9%);
+    --secondary-foreground: hsl(240 5.9% 10%);
+    --muted: hsl(240 4.8% 95.9%);
+    --muted-foreground: hsl(240 3.8% 46.1%);
+    --accent: hsl(240 4.8% 95.9%);
+    --accent-foreground: hsl(240 5.9% 10%);
+    --destructive: hsl(0 84.2% 60.2%);
+    --destructive-foreground: hsl(0 0% 98%);
+    --success: hsl(142.1 76.2% 36.3%);
+    --warning: hsl(24.6 95% 53.1%);
+    --success-soft: hsla(142.1 76.2% 36.3% / 0.1);
+    --warning-soft: hsla(24.6 95% 53.1% / 0.1);
+    --destructive-soft: hsla(0 84.2% 60.2% / 0.1);
+    --border: hsl(240 5.9% 90%);
+    --input: hsl(240 5.9% 90%);
+    --ring: hsl(240 5.9% 10%);
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 16px 40px -8px rgb(0 0 0 / 0.2);
   }
 }
 
@@ -1189,58 +1468,138 @@ export default {
   box-sizing: border-box;
 }
 
-.container {
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
   display: flex;
   height: 100vh;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
-    sans-serif;
+  background: var(--background);
+  color: var(--foreground);
 }
 
-/* Sidebar */
+/* ============ Sidebar ============ */
 .sidebar {
   width: 180px;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
-  padding: 20px 0;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  padding: 16px 10px;
+  gap: 8px;
 }
 
-.sidebar-content {
+.sidebar-brand {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 10px;
-  padding: 0 10px;
+  padding: 8px 10px 18px;
 }
 
-.sidebar-btn {
-  padding: 12px 15px;
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: 6px;
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--shadow-sm);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.brand-title {
   font-size: 14px;
-  transition: all 0.2s ease;
-  text-align: left;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
-.sidebar-btn:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+.brand-sub {
+  font-size: 11px;
+  color: var(--muted-foreground);
 }
 
-.sidebar-btn.active {
-  background: var(--accent-color);
-  color: white;
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 13.5px;
   font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
-/* Main Content */
-.main-content {
+.nav-item svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.nav-item:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.nav-item.active {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  font-weight: 600;
+}
+
+.nav-item.active svg {
+  opacity: 1;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 8px 10px 4px;
+}
+
+.version-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+
+/* ============ Main ============ */
+.main {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -1248,328 +1607,472 @@ export default {
 
 .view {
   flex: 1;
-  padding: 20px;
-  overflow: auto;
+  overflow-y: auto;
+  padding: 28px 32px 40px;
 }
 
-/* Clients View */
-.clients-view {
+.page-header {
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
 }
 
-.header {
-  display: flex;
-  gap: 10px;
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
 }
 
-.input-group {
-  display: flex;
-  gap: 10px;
-  flex: 1;
+.page-desc {
+  font-size: 13.5px;
+  color: var(--muted-foreground);
 }
 
-.command-input {
-  flex: 1;
-  padding: 10px 15px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  border-radius: 6px;
-  font-size: 14px;
-  transition: border-color 0.2s ease;
-}
-
-.command-input:focus {
-  outline: none;
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 2px rgba(43, 143, 232, 0.1);
-}
-
+/* ============ Buttons ============ */
 .btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font-size: 13.5px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  font-family: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
 }
 
-.btn-primary {
-  background: var(--accent-color);
-  color: white;
+.btn:active {
+  transform: translateY(0.5px);
 }
 
-.btn-primary:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
+.btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
-.btn-primary:active {
-  transform: translateY(0);
+.btn-default {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--shadow-sm);
 }
 
-.btn-secondary {
-  background: var(--border-color);
-  color: var(--text-primary);
+.btn-default:hover {
+  opacity: 0.9;
 }
 
-.btn-secondary:hover {
-  background: var(--bg-tertiary);
-  transform: translateY(-1px);
+.btn-outline {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--foreground);
 }
 
-.btn-secondary:active {
-  transform: translateY(0);
+.btn-outline:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
 
-.btn-scroll-to-bottom {
-  background: var(--warning-color);
-  color: white;
+.btn-ghost {
+  background: transparent;
+  color: var(--muted-foreground);
 }
 
-.btn-scroll-to-bottom:hover {
-  background: #e67e22;
+.btn-ghost:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
 
-/* Clients Grid */
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.btn-icon svg {
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+
+/* ============ Update Banner ============ */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.update-banner-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--success-soft);
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+.update-banner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.update-banner-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.update-banner-desc {
+  font-size: 12.5px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+.update-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ============ Input / Select ============ */
+.input,
+.select {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13.5px;
+  font-family: inherit;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.input:focus-visible,
+.select:focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 1px var(--ring);
+}
+
+.select {
+  cursor: pointer;
+  min-width: 0;
+}
+
+.select option {
+  background: var(--popover);
+  color: var(--popover-foreground);
+}
+
+/* ============ Card ============ */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ============ Toolbar ============ */
+.toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.toolbar-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ============ Clients Grid ============ */
 .clients-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 15px;
+  gap: 16px;
 }
 
 .empty-state {
   grid-column: 1 / -1;
-  padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 72px 24px;
+  border: 1px dashed var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  color: var(--muted-foreground);
   text-align: center;
-  color: var(--text-secondary);
+}
+
+.empty-state svg {
+  opacity: 0.5;
+  margin-bottom: 4px;
+}
+
+.empty-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.empty-desc {
+  font-size: 13px;
+  color: var(--muted-foreground);
 }
 
 .client-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: all 0.2s ease;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .client-card:hover {
-  border-color: var(--accent-color);
-  box-shadow: 0 4px 12px rgba(43, 143, 232, 0.1);
+  border-color: var(--ring);
+  box-shadow: var(--shadow-md);
 }
 
 .card-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 15px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .card-title {
-  font-size: 16px;
+  font-size: 14.5px;
   font-weight: 600;
-  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.btn-close {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 18px;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.btn-close:hover {
-  color: #ff6b6b;
-  background: rgba(255, 107, 107, 0.1);
-}
-
-.card-content {
-  padding: 15px;
+.card-body {
   flex: 1;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .info-row {
   display: flex;
+  align-items: baseline;
   gap: 10px;
-  margin-bottom: 8px;
   font-size: 13px;
 }
 
-.info-row:last-child {
-  margin-bottom: 0;
-}
-
-.info-row.error-message {
-  color: var(--error-color);
-  background: rgba(231, 76, 60, 0.1);
-  padding: 8px;
-  border-radius: 4px;
-  border-left: 3px solid var(--error-color);
-}
-
 .label {
-  color: var(--text-secondary);
-  min-width: 50px;
+  color: var(--muted-foreground);
+  min-width: 42px;
+  flex-shrink: 0;
 }
 
 .value {
-  color: var(--text-primary);
+  color: var(--foreground);
   word-break: break-all;
   flex: 1;
 }
 
-.value.code {
-  font-family: 'Monaco', 'Courier New', monospace;
-  background: var(--bg-secondary);
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 12px;
+.value.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: var(--muted);
+  padding: 2px 8px;
+  border-radius: 6px;
+  line-height: 1.7;
+}
+
+.error-row {
+  margin-top: 2px;
+}
+
+.error-text {
+  color: var(--destructive);
 }
 
 .card-footer {
-  padding: 12px 15px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .status-error {
-  margin-top: 8px;
-  padding: 8px;
-  border-radius: 4px;
-  background: rgba(231, 76, 60, 0.1);
-  border-left: 3px solid var(--error-color);
-  color: var(--error-color);
+  flex: 1;
+  margin-right: 12px;
   font-size: 12px;
-  line-height: 1.4;
+  color: var(--destructive);
+  word-break: break-all;
 }
 
-/* Toggle Switch */
-.toggle-switch {
-  display: flex;
+/* ============ Badge ============ */
+.badge {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  user-select: none;
+  gap: 6px;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.toggle-switch input {
-  display: none;
-}
-
-.toggle-slider {
-  width: 44px;
-  height: 24px;
-  background: var(--border-color);
-  border-radius: 12px;
-  position: relative;
-  transition: background 0.3s ease;
-}
-
-.toggle-switch input:checked + .toggle-slider {
-  background: var(--accent-color);
-}
-
-.toggle-slider::after {
-  content: '';
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  background: white;
+.badge-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  top: 2px;
+  background: currentColor;
+}
+
+.badge-success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.badge-warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.badge-muted {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+/* ============ Switch ============ */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  border-radius: 9999px;
+  background: var(--input);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 50%;
   left: 2px;
-  transition: left 0.3s ease;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--background);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  transform: translateY(-50%);
+  transition: left 0.2s ease, background 0.2s ease;
+  pointer-events: none;
 }
 
-.toggle-switch input:checked + .toggle-slider::after {
-  left: 22px;
+.switch input:checked + .switch-thumb {
+  left: 20px;
+  background: var(--primary-foreground);
 }
 
-.toggle-label {
-  font-size: 13px;
-  color: var(--text-secondary);
+.switch:has(input:checked) {
+  background: var(--primary);
+  border-color: var(--primary);
 }
 
-/* Logs View */
+/* ============ Logs View ============ */
 .logs-view {
   display: flex;
   flex-direction: column;
-  gap: 15px;
 }
 
-.logs-header {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 15px;
+.logs-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  overflow: hidden;
 }
 
-.logs-controls {
+.logs-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
 }
 
-.logs-controls label {
-  font-size: 14px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.client-select {
-  padding: 8px 12px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: 13px;
-  cursor: pointer;
+.logs-select {
   flex: 1;
-  min-width: 200px;
+  max-width: 360px;
 }
 
-.client-select:hover {
-  border-color: var(--bg-tertiary);
-}
-
-.client-select:focus {
-  outline: none;
-  border-color: #4a5d76;
-  box-shadow: 0 0 0 2px rgba(74, 93, 118, 0.2);
+.logs-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
 }
 
 .logs-container {
   flex: 1;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 15px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 300px;
+  background: var(--background);
 }
 
 .log-content {
   flex: 1;
-  font-family: 'Monaco', 'Courier New', monospace;
-  font-size: 13px;
-  color: var(--text-secondary);
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
   overflow-y: auto;
   word-break: break-all;
   white-space: pre-wrap;
@@ -1580,125 +2083,188 @@ export default {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-tertiary);
+  color: var(--muted-foreground);
   font-style: italic;
 }
 
 .log-item {
-  padding: 6px 0;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
+  padding: 3px 0;
+  border-radius: 4px;
+}
+
+.log-item:hover {
+  background: var(--accent);
+}
+
+.log-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 6px;
+  background: var(--muted-foreground);
 }
 
 .log-timestamp {
-  color: var(--text-tertiary);
+  color: var(--muted-foreground);
   flex-shrink: 0;
   font-weight: 500;
 }
 
 .log-message {
-  color: var(--text-secondary);
+  color: var(--foreground);
   flex: 1;
 }
 
-.log-info .log-timestamp {
-  color: #5a9fd4;
+.log-success .log-dot {
+  background: var(--success);
 }
 
-.log-info .log-message {
-  color: var(--text-secondary);
+.log-warning .log-dot {
+  background: var(--warning);
+}
+
+.log-error .log-dot {
+  background: var(--destructive);
 }
 
 .log-success .log-timestamp {
-  color: var(--success-color);
-}
-
-.log-success .log-message {
-  color: var(--success-color);
+  color: var(--success);
 }
 
 .log-warning .log-timestamp {
-  color: var(--warning-color);
-}
-
-.log-warning .log-message {
-  color: var(--warning-color);
+  color: var(--warning);
 }
 
 .log-error .log-timestamp {
-  color: var(--error-color);
+  color: var(--destructive);
+}
+
+.log-success .log-message {
+  color: var(--success);
+}
+
+.log-warning .log-message {
+  color: var(--warning);
 }
 
 .log-error .log-message {
-  color: var(--error-color);
+  color: var(--destructive);
 }
 
-/* Settings View */
-.settings-view {
+/* ============ Settings View ============ */
+.settings-view {}
+
+.settings-card {
+  padding: 6px 0;
+}
+
+.settings-group {
+  padding: 8px 0;
+}
+
+.setting-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
 }
 
-.settings-container {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 20px;
+.setting-row:first-of-type {
+  border-top: none;
 }
 
-.theme-select {
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-primary);
+.setting-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-label {
   font-size: 14px;
-  cursor: pointer;
-  min-width: 120px;
+  font-weight: 500;
 }
 
-.theme-select:hover {
-  border-color: var(--bg-tertiary);
+.setting-desc {
+  font-size: 12.5px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
 }
 
-.theme-select:focus {
-  outline: none;
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 2px rgba(43, 143, 232, 0.1);
+.logdir-field {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
 }
 
-/* Message */
-.message {
+.logdir-input {
+  width: 320px;
+}
+
+.update-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding: 0 4px;
+}
+
+.settings-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+/* ============ Toast ============ */
+.toast {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  border-radius: 6px;
-  font-size: 14px;
-  animation: slideIn 0.2s ease;
-  z-index: 1000;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  background: var(--popover);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  font-size: 13.5px;
+  z-index: 3000;
+  animation: toast-in 0.2s ease;
 }
 
-.message.success {
-  background: var(--success-color);
-  color: white;
+.toast-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.message.error {
-  background: var(--error-color);
-  color: white;
+.toast-success .toast-dot {
+  background: var(--success);
 }
 
-.message.info {
-  background: var(--accent-color);
-  color: white;
+.toast-error .toast-dot {
+  background: var(--destructive);
 }
 
-@keyframes slideIn {
+.toast-info .toast-dot {
+  background: var(--ring);
+}
+
+@keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -1706,22 +2272,20 @@ export default {
   }
 }
 
-/* Modal */
+/* ============ Modal ============ */
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  inset: 0;
+  background: hsl(240 10% 3.9% / 0.6);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 2000;
-  animation: fadeIn 0.2s ease;
+  animation: fade-in 0.15s ease;
 }
 
-@keyframes fadeIn {
+@keyframes fade-in {
   from {
     opacity: 0;
   }
@@ -1731,54 +2295,62 @@ export default {
 }
 
 .modal-dialog {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
   width: 90%;
-  max-width: 500px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  animation: slideUp 0.3s ease;
+  max-width: 440px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: var(--shadow-lg);
+  animation: modal-in 0.18s ease;
 }
 
-@keyframes slideUp {
+.modal-dialog-sm {
+  max-width: 360px;
+}
+
+@keyframes modal-in {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(12px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 .modal-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid var(--border-color);
+  justify-content: space-between;
+  padding: 18px 20px 14px;
 }
 
-.modal-header h3 {
-  margin: 0;
-  font-size: 18px;
+.modal-title {
+  font-size: 16px;
   font-weight: 600;
-  color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .modal-body {
-  padding: 20px;
+  padding: 4px 20px 20px;
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  padding: 15px 20px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+  padding: 14px 20px 18px;
 }
 
+.confirm-text {
+  font-size: 14px;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+/* ============ Form ============ */
 .form-group {
   margin-bottom: 16px;
 }
@@ -1787,38 +2359,21 @@ export default {
   margin-bottom: 0;
 }
 
-.form-group label {
+.form-label {
   display: block;
-  margin-bottom: 8px;
-  font-size: 14px;
-  color: var(--text-secondary);
+  margin-bottom: 6px;
+  font-size: 13px;
   font-weight: 500;
+  color: var(--foreground);
+}
+
+.form-group .input {
+  width: 100%;
 }
 
 .required {
-  color: var(--error-color);
+  color: var(--destructive);
   margin-left: 2px;
-}
-
-.form-input {
-  width: 100%;
-  padding: 10px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: 14px;
-  transition: border-color 0.2s ease;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 2px rgba(43, 143, 232, 0.1);
-}
-
-.form-input::placeholder {
-  color: var(--text-tertiary);
 }
 
 .checkbox-label {
@@ -1827,31 +2382,29 @@ export default {
   gap: 8px;
   cursor: pointer;
   user-select: none;
+  font-size: 13.5px;
+  color: var(--foreground);
 }
 
 .checkbox-label input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
   cursor: pointer;
 }
 
-.checkbox-label span {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
 .form-error {
-  margin-top: 12px;
+  margin-top: 14px;
   padding: 10px 12px;
-  background: rgba(231, 76, 60, 0.1);
-  border: 1px solid var(--error-color);
-  border-radius: 6px;
-  color: var(--error-color);
+  background: var(--destructive-soft);
+  border: 1px solid var(--destructive);
+  border-radius: var(--radius);
+  color: var(--destructive);
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
-/* Scrollbar */
+/* ============ Scrollbar ============ */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -1862,11 +2415,11 @@ export default {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: var(--border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--bg-tertiary);
+  background: var(--muted-foreground);
 }
 </style>

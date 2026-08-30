@@ -89,6 +89,9 @@ func NewMux(c net.Conn, connType string, pingCheckThreshold int) *Mux {
 	return m
 }
 
+// IsClose returns whether the mux connection has been closed.
+func (s *Mux) IsClose() bool { return s.isClose.Load() }
+
 func (s *Mux) NewConn() (*conn, error) {
 	if s.isClose.Load() {
 		return nil, errors.New("the mux has closed")
@@ -367,7 +370,7 @@ func (s *Mux) release() {
 	s.newConnQueue.Stop()
 }
 
-//Get New connId as unique flag
+// Get New connId as unique flag
 func (s *Mux) getId() (id int32) {
 	//Avoid going beyond the scope
 	if (math.MaxInt32 - s.id) < 10000 {

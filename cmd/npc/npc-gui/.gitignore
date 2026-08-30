@@ -23,5 +23,14 @@ Thumbs.db
 
 # 构建临时文件
 *.tmp
-build/windows/
+*.syso
 dist/
+
+# wails3 构建输出
+bin/
+
+# wails3 task 缓存
+.task/
+
+# NSIS 打包产物（WebView2 bootstrapper / 安装器）
+build/windows/nsis/*.exe

@@ -37,7 +37,6 @@ func (pListener *PortListener) Accept() (net.Conn, error) {
 }
 
 func (pListener *PortListener) Close() error {
-	//close
 	if pListener.isClose {
 		return errors.New("the listener has closed")
 	}

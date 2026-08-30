@@ -4,10 +4,9 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
-
-	"github.com/astaxie/beego/logs"
 )
 
 const (
@@ -65,7 +64,7 @@ func enableStartupImpl() error {
 		return fmt.Errorf("写入 desktop 文件失败: %v", err)
 	}
 
-	logs.Info("成功添加开机启动项: %s -> %s", appName, desktopPath)
+	slog.Info("成功添加开机启动项", "app", appName, "path", desktopPath)
 	return nil
 }
 
@@ -79,13 +78,13 @@ func disableStartupImpl() error {
 	// 删除 .desktop 文件
 	if err := os.Remove(desktopPath); err != nil {
 		if os.IsNotExist(err) {
-			logs.Info("开机启动项不存在，无需删除")
+			slog.Info("开机启动项不存在，无需删除")
 			return nil
 		}
 		return fmt.Errorf("删除 desktop 文件失败: %v", err)
 	}
 
-	logs.Info("成功删除开机启动项: %s", desktopPath)
+	slog.Info("成功删除开机启动项", "path", desktopPath)
 	return nil
 }
 

@@ -4,8 +4,8 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 
-	"github.com/astaxie/beego/logs"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -32,7 +32,7 @@ func enableStartupImpl() error {
 		return fmt.Errorf("设置注册表值失败: %v", err)
 	}
 
-	logs.Info("成功添加开机启动项: %s -> %s", appName, exePath)
+	slog.Info("成功添加开机启动项", "app", appName, "path", exePath)
 	return nil
 }
 
@@ -50,13 +50,13 @@ func disableStartupImpl() error {
 	if err != nil {
 		// 如果键不存在，不算错误
 		if err == registry.ErrNotExist {
-			logs.Info("开机启动项不存在，无需删除")
+			slog.Info("开机启动项不存在，无需删除")
 			return nil
 		}
 		return fmt.Errorf("删除注册表值失败: %v", err)
 	}
 
-	logs.Info("成功删除开机启动项: %s", appName)
+	slog.Info("成功删除开机启动项", "app", appName)
 	return nil
 }
 
