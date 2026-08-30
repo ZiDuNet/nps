@@ -74,7 +74,7 @@
 				languages['default'] = languages['content']['default'];
 				// Keep Chinese as the first-run default; only an explicit user cookie
 				// overrides it.
-				languages['navigator'] = (getCookie ('lang') || languages['default']);
+				languages['navigator'] = (getCookie ('lang-v2') || languages['default']);
 				for(var key in languages['menu']){
 					if ($('#languagemenu').next().find('li[lang="' + key + '"]').length) continue;
 					$('#languagemenu').next().append('<li lang="' + key + '"><a href="#">' + languages['menu'][key] +'</a></li>');
@@ -90,7 +90,7 @@
 		languages['current'] = $('#languagemenu').attr('lang');
 		if ( dom == '' ) {
 			$('#languagemenu span').text(' ' + languages['menu'][languages['current']]);
-			if (languages['current'] != getCookie('lang')) setCookie('lang', languages['current']);
+			if (languages['current'] != getCookie('lang-v2')) setCookie('lang-v2', languages['current']);
 			if($("#table").length>0) $('#table').bootstrapTable('refreshOptions', { 'locale': languages['current']});
 		}
 		$.each($(dom + ' [langtag]'), function (i, item) {
