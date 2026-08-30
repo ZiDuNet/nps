@@ -3,7 +3,24 @@ package file
 import (
 	"sort"
 	"strings"
+	"sync"
 )
+
+func sortClientByKey(m sync.Map, sortField, order string) []int {
+	clients := make([]*Client, 0)
+	m.Range(func(key, value interface{}) bool {
+		if c, ok := value.(*Client); ok {
+			clients = append(clients, c)
+		}
+		return true
+	})
+	SortClients(clients, sortField, order)
+	keys := make([]int, 0, len(clients))
+	for _, c := range clients {
+		keys = append(keys, c.Id)
+	}
+	return keys
+}
 
 func lessBool(a, b bool, asc bool) bool {
 	if a == b {

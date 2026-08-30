@@ -38,6 +38,7 @@ type Client struct {
 	UserName        string     `json:"-"` //关联用户名称，仅用于展示
 	VerifyKey       string     //verify key
 	Addr            string     //the ip of client
+	LocalAddr       string     // client private/LAN addresses reported by npc
 	Remark          string     //remark
 	Status          bool       //is allow connect
 	IsConnect       bool       //is the client connect
@@ -81,6 +82,7 @@ func NewClient(vKey string, noStore bool, noDisplay bool) *Client {
 		Id:        0,
 		VerifyKey: vKey,
 		Addr:      "",
+		LocalAddr: "",
 		Remark:    "",
 		Status:    true,
 		IsConnect: false,
