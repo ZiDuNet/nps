@@ -117,11 +117,11 @@ func dealCommon(s string) *CommonConfig {
 			item = append(item, "")
 		}
 		switch item[0] {
-		case "server_addr":
+		case "server_addr", "server":
 			c.Server = item[1]
 		case "vkey":
 			c.VKey = item[1]
-		case "conn_type":
+		case "conn_type", "tp":
 			c.Tp = item[1]
 		case "auto_reconnection":
 			c.AutoReconnection = common.GetBoolByStr(item[1])
