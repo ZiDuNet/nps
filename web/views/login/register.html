@@ -7,6 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title langtag="title-register"></title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23087c70'/%3E%3Cpath d='M15 40V24l17 12 17-12v16' fill='none' stroke='white' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 
     <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
@@ -54,16 +55,16 @@
                     <div class="form-group">
                         <div class="input-icon-wrap">
                             <i class="fa fa-user input-icon"></i>
-                            <input name="username" class="form-control has-icon" placeholder="username" required="" langtag="word-username">
+                            <input name="username" class="form-control has-icon" placeholder="username" required="" autocomplete="username" langtag="word-username">
                         </div>
                     </div>
                     <div class="form-group">
                         <div class="input-icon-wrap">
                             <i class="fa fa-lock input-icon"></i>
-                            <input name="password" type="password" class="form-control has-icon" placeholder="password" required="" langtag="word-password">
+                            <input name="password" type="password" class="form-control has-icon" placeholder="password" required="" autocomplete="new-password" langtag="word-password">
                         </div>
                     </div>
-                    <button onclick="register()" class="login-btn" langtag="word-register"></button>
+                    <button type="button" onclick="register()" class="login-btn" langtag="word-register"></button>
                 </form>
                 <div class="register-link" style="margin-top:18px;">
                     <small langtag="info-haveaccount"></small>
@@ -85,6 +86,7 @@
     window.nps = {"web_base_url": {{.web_base_url}} }
 
     function register() {
+        if (!validateNpsForm(document.querySelector('.login-form-wrap form'), true)) return false;
         $.ajax({
             type: "POST",
             url: "{{.web_base_url}}/login/register",

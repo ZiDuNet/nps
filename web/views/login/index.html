@@ -7,6 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title langtag="title-login"></title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23087c70'/%3E%3Cpath d='M15 40V24l17 12 17-12v16' fill='none' stroke='white' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 
     <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
@@ -55,39 +56,39 @@
                 <div class="feature-grid">
                     <div class="feature-card">
                         <i class="fa fa-network-wired feature-icon"></i>
-                        <div class="feature-text">多协议支持</div>
+                        <div class="feature-text" data-i18n-zh="多协议支持" data-i18n-en="Multi-protocol">多协议支持</div>
                     </div>
                     <div class="feature-card">
                         <i class="fa fa-desktop feature-icon"></i>
-                        <div class="feature-text">全平台兼容</div>
+                        <div class="feature-text" data-i18n-zh="全平台兼容" data-i18n-en="Cross-platform">全平台兼容</div>
                     </div>
                     <div class="feature-card">
                         <i class="fa fa-lock feature-icon"></i>
-                        <div class="feature-text">HTTPS 集成</div>
+                        <div class="feature-text" data-i18n-zh="HTTPS 集成" data-i18n-en="HTTPS support">HTTPS 集成</div>
                     </div>
                     <div class="feature-card">
                         <i class="fa fa-tachometer-alt feature-icon"></i>
-                        <div class="feature-text">实时监控</div>
+                        <div class="feature-text" data-i18n-zh="实时监控" data-i18n-en="Live monitoring">实时监控</div>
                     </div>
                     <div class="feature-card">
                         <i class="fa fa-compress feature-icon"></i>
-                        <div class="feature-text">压缩加密</div>
+                        <div class="feature-text" data-i18n-zh="压缩加密" data-i18n-en="Encrypt & compress">压缩加密</div>
                     </div>
                     <div class="feature-card">
                         <i class="fa fa-users feature-icon"></i>
-                        <div class="feature-text">多用户管理</div>
+                        <div class="feature-text" data-i18n-zh="多用户管理" data-i18n-en="Multi-user">多用户管理</div>
                     </div>
                     <div class="feature-card">
                         <i class="fa fa-globe feature-icon"></i>
-                        <div class="feature-text">域名解析</div>
+                        <div class="feature-text" data-i18n-zh="域名解析" data-i18n-en="Domain routing">域名解析</div>
                     </div>
                     <div class="feature-card">
                         <i class="fa fa-sliders-h feature-icon"></i>
-                        <div class="feature-text">流量管控</div>
+                        <div class="feature-text" data-i18n-zh="流量管控" data-i18n-en="Traffic controls">流量管控</div>
                     </div>
                     <div class="feature-card">
                         <i class="fa fa-cogs feature-icon"></i>
-                        <div class="feature-text">一键部署</div>
+                        <div class="feature-text" data-i18n-zh="一键部署" data-i18n-en="Quick deployment">一键部署</div>
                     </div>
                 </div>
             </div>
@@ -96,13 +97,13 @@
                     <div class="form-group">
                         <div class="input-icon-wrap">
                             <i class="fa fa-user input-icon"></i>
-                            <input name="username" class="form-control has-icon" placeholder="username" required="" langtag="word-username">
+                            <input name="username" class="form-control has-icon" placeholder="username" required="" autocomplete="username" langtag="word-username">
                         </div>
                     </div>
                     <div class="form-group">
                         <div class="input-icon-wrap">
                             <i class="fa fa-lock input-icon"></i>
-                            <input name="password" type="password" class="form-control has-icon" placeholder="password" required="" langtag="word-password">
+                            <input name="password" type="password" class="form-control has-icon" placeholder="password" required="" autocomplete="current-password" langtag="word-password">
                         </div>
                     </div>
                     {{if eq true .captcha_open}}
@@ -114,7 +115,7 @@
                         </div>
                     </div>
                     {{end}}
-                    <button onclick="login()" class="login-btn" langtag="word-login"></button>
+                    <button type="button" onclick="login()" class="login-btn" langtag="word-login"></button>
                 </form>
                 {{if eq true .register_allow}}
                 <div class="register-link">
@@ -139,6 +140,7 @@
     window.nps = {"web_base_url": {{.web_base_url}}, "version": "{{.version}}" }
 
     function login() {
+        if (!validateNpsForm(document.querySelector('.login-form-wrap form'), true)) return false;
         $.ajax({
             type: "POST",
             url: "{{.web_base_url}}/login/verify",

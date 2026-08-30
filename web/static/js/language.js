@@ -114,6 +114,10 @@
 				$(item).attr('placeholder', string);
 			}
 		});
+		$.each($(dom + ' [data-i18n-zh]'), function (i, item) {
+			var language = languages['current'] === 'en-US' ? 'en' : 'zh';
+			$(item).text($(item).attr('data-i18n-' + language));
+		});
 
 		if ( !$.isEmptyObject(chartdatas) ) {
 			setchartlang(languages['content']['charts'],chartdatas);
@@ -160,6 +164,77 @@ function npsNotify(type, msg) {
     }
 }
 
+function npsFormMessage(key) {
+    var chinese = typeof languages === 'undefined' || languages['current'] !== 'en-US';
+    var messages = {
+        required: chinese ? '请填写必填字段：' : 'Please complete the required fields: ',
+        invalid: chinese ? '此项不能为空' : 'This field is required'
+    };
+    return messages[key];
+}
+
+function npsFieldLabel(field) {
+    var group = field.closest('.form-group, .form-field');
+    var label = group ? group.querySelector('label') : null;
+    var text = label ? label.textContent.replace(/[\\*\\s:：]+$/g, '').trim() : '';
+    return text || field.getAttribute('aria-label') || field.getAttribute('placeholder') || field.getAttribute('name') || npsFormMessage('invalid');
+}
+
+function npsSetFieldValidity(field, valid) {
+    var group = field.closest('.form-group, .form-field');
+    if (!group) return valid;
+    group.classList.toggle('has-field-error', !valid);
+    field.classList.toggle('is-invalid', !valid);
+    var message = group.querySelector('.field-validation-message');
+    if (!valid && !message) {
+        message = document.createElement('span');
+        message.className = 'field-validation-message';
+        message.textContent = npsFormMessage('invalid');
+        field.parentNode.appendChild(message);
+    }
+    if (valid && message) message.remove();
+    return valid;
+}
+
+function validateNpsForm(form, announce) {
+    if (!form) return true;
+    var required = form.querySelectorAll('input[required], textarea[required], select[required]');
+    var missing = [];
+    var first = null;
+    for (var i = 0; i < required.length; i++) {
+        var field = required[i];
+        if (field.type === 'checkbox' || field.type === 'radio' || field.offsetParent === null) continue;
+        var valid = !!field.value && field.value.trim() !== '';
+        npsSetFieldValidity(field, valid);
+        if (!valid) {
+            missing.push(npsFieldLabel(field));
+            if (!first) first = field;
+        }
+    }
+    if (first) {
+        if (announce) npsNotify('warning', npsFormMessage('required') + missing.join('、'));
+        first.focus();
+        return false;
+    }
+    return true;
+}
+
+$(function () {
+    $('[required]').each(function () {
+        var label = this.closest('.form-group, .form-field');
+        label = label ? label.querySelector('label') : null;
+        if (label && !label.querySelector('.required-mark')) {
+            var mark = document.createElement('span');
+            mark.className = 'required-mark';
+            mark.setAttribute('aria-hidden', 'true');
+            mark.textContent = '*';
+            label.appendChild(mark);
+        }
+    }).on('input change blur', function () {
+        if (this.value && this.value.trim() !== '') npsSetFieldValidity(this, true);
+    });
+});
+
 function submitform(action, url, postdata) {
     postsubmit = false;
     switch (action) {
@@ -173,42 +248,8 @@ function submitform(action, url, postdata) {
             postsubmit = true;
         case 'add':
         case 'edit':
-            // Check required fields before submitting
             var form = document.querySelector('form.form-horizontal');
-            if (form) {
-                var missing = [];
-                var reqs = form.querySelectorAll('input[required], textarea[required], select[required]');
-                for (var i = 0; i < reqs.length; i++) {
-                    var el = reqs[i];
-                    if (el.type === 'checkbox' || el.type === 'radio') {
-                        // skip (not used as a required field here)
-                        continue;
-                    }
-                    if (!el.value || el.value.trim() === '') {
-                        var name = el.getAttribute('name') || '';
-                        // Try to find a human label
-                        var lbl = form.querySelector('label[for="' + el.id + '"]');
-                        if (!lbl) {
-                            var prev = el.closest('.form-group, .form-field');
-                            if (prev) lbl = prev.querySelector('label');
-                        }
-                        var labelText = lbl ? lbl.textContent.replace(/[*\s:：]+$/, '').trim() : (name || '该字段');
-                        missing.push(labelText);
-                    }
-                }
-                if (missing.length) {
-                    npsNotify('warning', '请填写必填字段：' + missing.join('、'));
-                    // Focus the first missing field
-                    for (var k = 0; k < reqs.length; k++) {
-                        if (reqs[k].type !== 'checkbox' && reqs[k].type !== 'radio'
-                            && (!reqs[k].value || reqs[k].value.trim() === '')) {
-                            reqs[k].focus();
-                            break;
-                        }
-                    }
-                    return;
-                }
-            }
+            if (!validateNpsForm(form, true)) return;
             $.ajax({
                 type: "POST",
                 url: url,
@@ -226,30 +267,8 @@ function submitform(action, url, postdata) {
             });
 			return;
 		case 'global':
-			// Check required fields before submitting
 			var formG = document.querySelector('form.form-horizontal');
-			if (formG) {
-				var missingG = [];
-				var reqsG = formG.querySelectorAll('input[required], textarea[required], select[required]');
-				for (var j = 0; j < reqsG.length; j++) {
-					var eg = reqsG[j];
-					if (eg.type === 'checkbox' || eg.type === 'radio') continue;
-					if (!eg.value || eg.value.trim() === '') {
-						missingG.push(eg.getAttribute('name') || '该字段');
-					}
-				}
-				if (missingG.length) {
-					npsNotify('warning', '请填写必填字段：' + missingG.join('、'));
-					for (var m = 0; m < reqsG.length; m++) {
-						if (reqsG[m].type !== 'checkbox' && reqsG[m].type !== 'radio'
-							&& (!reqsG[m].value || reqsG[m].value.trim() === '')) {
-							reqsG[m].focus();
-							break;
-						}
-					}
-					return;
-				}
-			}
+			if (!validateNpsForm(formG, true)) return;
 			$.ajax({
 				type: "POST",
 				url: url,

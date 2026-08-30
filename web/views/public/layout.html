@@ -64,10 +64,10 @@
                 {{if eq true .isAdmin}}
                 <li class="{{if eq "user" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/user/list"><i class="fa fa-users fa-lg"></i>
-                    <span class="nav-label">用户管理</span></a>
+                    <span class="nav-label" data-i18n-zh="用户管理" data-i18n-en="Users">用户管理</span></a>
                 </li>
                 {{end}}
-                <li class="nav-group-title"><span>隧道管理</span></li>
+                <li class="nav-group-title"><span data-i18n-zh="隧道管理" data-i18n-en="Tunnels">隧道管理</span></li>
                 <li class="{{if eq "host" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/index/hostlist"><i class="fa fa-globe fa-lg"></i>
                     <span class="nav-label" langtag="scheme-host"></span></a>
@@ -100,7 +100,7 @@
                     <a href="{{.web_base_url}}/index/file"><i class="fa fa-briefcase fa-lg"></i>
                     <span class="nav-label" langtag="scheme-file"></span></a>
                 </li>
-                <li class="nav-group-title"><span>系统</span></li>
+                <li class="nav-group-title"><span data-i18n-zh="系统" data-i18n-en="System">系统</span></li>
                 <li class="{{if eq "global" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/global/index"><i class="fa fa-cog fa-lg"></i>
                     <span class="nav-label" langtag="word-globalparam"></span></a>
