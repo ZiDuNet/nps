@@ -249,7 +249,6 @@ func storeSyncMapToFile(m sync.Map, filePath string) {
 				return true
 			}
 			b, err = json.Marshal(obj)
-<<<<<<< HEAD
 		case *User:
 			b, err = json.Marshal(value.(*User))
 		//case *Glob:
