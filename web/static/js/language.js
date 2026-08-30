@@ -202,10 +202,8 @@ function npsDecorateForms(dom) {
     $(scope + 'input, ' + scope + 'textarea, ' + scope + 'select').each(function () {
         if (this.type === 'hidden' || this.type === 'checkbox' || this.type === 'radio') return;
         var hint = npsFieldHints[this.name];
-        if (this.name === 'password' && this.closest('.login-form-wrap')) {
-            hint = ['用于登录管理面板的密码。', 'The password used to sign in to the admin panel.'];
-        }
         var group = this.closest('.form-group, .form-field');
+        if (this.closest('.login-form-wrap')) return;
         if (!hint || !group || group.querySelector('.help-block, .form-field-hint')) return;
         var node = document.createElement('span');
         node.className = 'form-field-hint';
