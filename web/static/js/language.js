@@ -72,7 +72,9 @@
 				languages['content'] = xml2json($(xml).children())['content'];
 				languages['menu'] = languages['content']['languages'];
 				languages['default'] = languages['content']['default'];
-				languages['navigator'] = (getCookie ('lang') || navigator.language || navigator.browserLanguage || languages['default']);
+				// Keep Chinese as the first-run default; only an explicit user cookie
+				// overrides it.
+				languages['navigator'] = (getCookie ('lang') || languages['default']);
 				for(var key in languages['menu']){
 					if ($('#languagemenu').next().find('li[lang="' + key + '"]').length) continue;
 					$('#languagemenu').next().append('<li lang="' + key + '"><a href="#">' + languages['menu'][key] +'</a></li>');
