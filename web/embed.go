@@ -21,10 +21,10 @@ func ExtractWebFiles(runPath string) {
 	staticDir := filepath.Join(webDir, "static")
 	viewsDir := filepath.Join(webDir, "views")
 
-	if !common.FileExists(staticDir) {
-		extractFS(StaticFS, "static", webDir)
-		logs.Info("Extracted embedded web/static to", staticDir)
-	}
+	// Always sync embedded static assets so upgraded JS/CSS is not masked by
+	// files left from an earlier server version.
+	extractFS(StaticFS, "static", webDir)
+	logs.Info("Synced embedded web/static to", staticDir)
 	extractFS(ViewsFS, "views", webDir)
 	logs.Info("Synced embedded web/views to", viewsDir)
 }
