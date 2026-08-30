@@ -3,7 +3,7 @@
 配置文件路径：`<nps 可执行文件目录>/conf/nps.conf`
 
 
-> 首次启动时若 `conf/nps.conf` 不存在会**自动生成默认配置**，其中 `web_username`（默认 `admin`）、`web_password`、`auth_key`、`auth_crypt_key` **均为随机值**并打印到终端，请在启动日志或配置文件中查看。
+> 首次启动时若 `conf/nps.conf` 不存在会**自动生成默认配置**。用户名默认为 `admin`，`web_password`、`auth_key`、`auth_crypt_key` 会随机生成并打印到终端。已有配置不会被覆盖，请以当前 `conf/nps.conf` 中的值为准。
 
 ## 通用配置
 
@@ -39,7 +39,7 @@
 | 名称 | 含义 | 默认值 |
 | --- | --- | --- |
 | web_host | web 管理使用的二级域名，端口复用时区分用 | `a.o.com` |
-| web_username | web 后台用户名（默认 `admin` | `admin` |
+| web_username | web 后台用户名 | `admin` |
 | web_password | web 后台密码 | 首次启动随机生成 |
 | web_port | web 管理端口，留空关闭 web | `8081` |
 | web_ip | web 管理监听 IP | `0.0.0.0` |

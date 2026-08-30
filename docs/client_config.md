@@ -93,6 +93,8 @@ server_addr=1.1.1.1:8024
 conn_type=tcp
 vkey=your-key
 auto_reconnection=true
+compress=true
+crypt=true
 
 [ssh]
 mode=tcp
@@ -101,6 +103,15 @@ server_port=9001
 ```
 
 配置文件模式适合旧版用法或不使用 Web 面板管理的场景。常规部署建议继续使用无配置文件模式。
+
+### common 传输选项
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `compress` | 使用 Snappy 压缩 Bridge 数据，可降低带宽占用；CPU 较弱时可关闭 | `false` |
+| `crypt` | 加密 Bridge 数据，需与服务端/客户端配置保持一致 | `false` |
+| `server_addr` | 服务端地址；兼容上游别名 `server` | 空 |
+| `conn_type` | 连接类型；兼容上游别名 `tp` | `tcp` |
 
 ## 交互式菜单
 

@@ -1,6 +1,6 @@
 # 服务端配置
 
-服务端配置文件为 `conf/nps.conf`。首次启动时如果文件不存在，程序会自动生成默认配置。管理员账号默认为 `admin`，管理员密码、`auth_key` 和 `auth_crypt_key` 会随机生成。
+服务端配置文件为 `conf/nps.conf`。首次启动时如果文件不存在，程序会自动生成默认配置。管理员账号默认为 `admin`，管理员密码、`auth_key` 和 `auth_crypt_key` 会随机生成并打印到终端；已有配置不会被覆盖，请以当前 `conf/nps.conf` 为准。
 
 ## 配置文件位置
 
@@ -26,6 +26,8 @@
 | `web_cert_file` | Web HTTPS 证书路径 | `conf/server.pem` |
 | `web_key_file` | Web HTTPS 私钥路径 | `conf/server.key` |
 | `open_captcha` | 登录验证码 | `false` |
+
+管理面板默认使用简体中文，登录页右上角可以切换中英文。若浏览器仍显示旧页面，请重启服务或清理缓存后重新加载。
 
 管理员账号只保存在 `nps.conf` 中。普通用户在 Web 面板「用户管理」中维护，保存到 `conf/users.json`。
 

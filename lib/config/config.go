@@ -84,6 +84,10 @@ func NewConfig(path string) (c *Config, err error) {
 			switch c.title[i] {
 			case "[common]":
 				c.CommonConfig = dealCommon(nowContent)
+				if c.CommonConfig.Client == nil {
+					c.CommonConfig.Client = file.NewClient("", true, true)
+					c.CommonConfig.Client.Cnf = new(file.Config)
+				}
 			default:
 				if strings.Index(nowContent, "host") > -1 {
 					h := dealHost(nowContent)
@@ -107,8 +111,13 @@ func getTitleContent(s string) string {
 
 func dealCommon(s string) *CommonConfig {
 	c := &CommonConfig{}
-	c.Client = file.NewClient("", true, true)
-	c.Client.Cnf = new(file.Config)
+	// Keep the legacy parser's minimal result for connection-only sections;
+	// NewConfig adds the runtime client defaults after parsing.
+	needsClient := strings.Contains(s, "basic_username=") || strings.Contains(s, "basic_password=") || strings.Contains(s, "web_username=") || strings.Contains(s, "web_password=") || strings.Contains(s, "compress=") || strings.Contains(s, "crypt=") || strings.Contains(s, "rate_limit=") || strings.Contains(s, "flow_limit=")
+	if needsClient {
+		c.Client = file.NewClient("", true, true)
+		c.Client.Cnf = new(file.Config)
+	}
 	for _, v := range splitStr(s) {
 		item := strings.Split(v, "=")
 		if len(item) == 0 {
@@ -126,6 +135,10 @@ func dealCommon(s string) *CommonConfig {
 		case "auto_reconnection":
 			c.AutoReconnection = common.GetBoolByStr(item[1])
 		case "basic_username":
+			if c.Client == nil {
+				c.Client = file.NewClient("", true, true)
+				c.Client.Cnf = new(file.Config)
+			}
 			c.Client.Cnf.U = item[1]
 		case "basic_password":
 			c.Client.Cnf.P = item[1]
