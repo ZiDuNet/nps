@@ -57,7 +57,7 @@ func CopyBuffer(dst io.Writer, src io.Reader, flow *file.Flow, task *file.Tunnel
 		}
 		nr, er := src.Read(buf)
 
-		if task != nil {
+		if task != nil && task.Client != nil {
 			if task.Client.IpWhite && task.Client.IpWhitePass != "" {
 
 				if common.IsAuthIp(remote, task.Client.VerifyKey, task.Client.IpWhiteList) {
@@ -89,10 +89,10 @@ func CopyBuffer(dst io.Writer, src io.Reader, flow *file.Flow, task *file.Tunnel
 						if pass == task.Client.IpWhitePass {
 							task.Client.IpWhiteList = append(task.Client.IpWhiteList, ip)
 							file.GetDb().UpdateClient(task.Client)
-							logs.Info("客户端IP白名单认证授权成功:vkey [%s] ip [%s] password [%s]", task.Client.VerifyKey, ip, pass)
+							logs.Info("客户端IP白名单认证授权成功:client_id [%d] ip [%s]", task.Client.Id, ip)
 							jsonBytes, err = json.Marshal(map[string]interface{}{"success": true, "message": "授权成功"})
 						} else {
-							logs.Error("客户端IP白名单认证授权密码错误:vkey [%s] ip [%s] password [%s]", task.Client.VerifyKey, ip, pass)
+							logs.Error("客户端IP白名单认证授权密码错误:client_id [%d] ip [%s]", task.Client.Id, ip)
 							jsonBytes, err = json.Marshal(map[string]interface{}{"success": false, "message": "密码错误"})
 						}
 						response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(jsonBytes), jsonBytes)
@@ -126,8 +126,14 @@ func CopyBuffer(dst io.Writer, src io.Reader, flow *file.Flow, task *file.Tunnel
 				if flow != nil {
 					flow.Add(int64(nw), int64(nw))
 					// <<20 = 1024 * 1024
-					if flow.FlowLimit > 0 && (flow.FlowLimit<<20) < (flow.ExportFlow+flow.InletFlow) {
-						logs.Error("隧道[%s]流量已经超出", task.Client.VerifyKey)
+					if flow.Exceeded() {
+						clientID := 0
+						if task != nil && task.Client != nil {
+							clientID = task.Client.Id
+						} else if host != nil && host.Client != nil {
+							clientID = host.Client.Id
+						}
+						logs.Error("客户端[%d]流量已经超出", clientID)
 						break
 					}
 				}

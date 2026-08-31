@@ -1,10 +1,24 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 
 <head>
-
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        function readRegisterThemePreference() {
+            try {
+                return window.localStorage ? window.localStorage.getItem('nps-theme') : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        (function () {
+            var savedTheme = readRegisterThemePreference();
+            var theme = savedTheme || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+        }());
+    </script>
 
     <title langtag="title-register"></title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23087c70'/%3E%3Cpath d='M15 40V24l17 12 17-12v16' fill='none' stroke='white' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -13,77 +27,125 @@
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/style.css?v={{.version}}" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20260831-15" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/popper.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/bootstrap.min.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}" type="text/javascript"></script>
-
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20260831-15" type="text/javascript"></script>
 </head>
 
-<body class="gray-bg">
-<div class="login-page-bg">
-    <canvas id="particle-canvas"></canvas>
-
-    <div class="login-nav">
-        <div class="login-logo">
-            <span class="logo-text" langtag="application"></span>
-            <span class="pro-badge">PRO</span>
+<body class="gray-bg auth-body">
+<div class="auth-page">
+    <header class="auth-page__header">
+        <div class="auth-brand" aria-label="NPS">
+            <span class="auth-brand__mark" aria-hidden="true"><i class="fa fa-network-wired"></i></span>
+            <span class="auth-brand__name" langtag="application"></span>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-            <a href="#" onclick="toggleTheme()" class="theme-toggle" id="theme-toggle" title="Toggle theme">
-                <i class="fa fa-moon" id="theme-icon"></i>
-            </a>
-            <span class="btn-group dropdown">
-                <button id="languagemenu" class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown"
-                        aria-haspopup="true" aria-expanded="false"><i class="fa fa-globe-asia fa-lg"></i><span></span></button>
-                    <ul class="dropdown-menu">
-                        <li lang="zh-CN"><a href="#" onclick="return switchLanguage('zh-CN')">简体中文</a></li>
-                        <li lang="en-US"><a href="#" onclick="return switchLanguage('en-US')">English</a></li>
-                    </ul>
-            </span>
-        </div>
-    </div>
 
-    <div class="login-container">
-        <div class="login-card" style="max-width:440px;">
-            <div class="login-form-wrap">
-                <h3 style="text-align:center;margin-bottom:24px;font-weight:700;font-size:20px;color:var(--c-text);" langtag="info-register"></h3>
-                <p style="text-align:center;margin-bottom:20px;color:var(--c-text-secondary);font-size:14px;" langtag="info-createaccount"></p>
-                <form onsubmit="return false">
-                    <div class="form-group">
-                        <div class="input-icon-wrap">
-                            <i class="fa fa-user input-icon"></i>
-                            <input name="username" class="form-control has-icon" placeholder="username" required="" autocomplete="username" langtag="word-username">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <div class="input-icon-wrap">
-                            <i class="fa fa-lock input-icon"></i>
-                            <input name="password" type="password" class="form-control has-icon" placeholder="password" required="" autocomplete="new-password" langtag="word-password">
-                        </div>
-                    </div>
-                    <button type="button" onclick="register()" class="login-btn" langtag="word-register"></button>
-                </form>
-                <div class="register-link" style="margin-top:18px;">
-                    <small langtag="info-haveaccount"></small>
-                    <a href="{{.web_base_url}}/login/index" langtag="word-login"></a>
-                </div>
+        <div class="auth-page__tools">
+            <button type="button" onclick="toggleTheme()" class="auth-icon-button theme-toggle" id="theme-toggle" title="切换主题" data-title-zh="切换主题" data-title-en="Toggle theme" aria-label="切换主题" data-aria-label-zh="切换主题" data-aria-label-en="Toggle theme" aria-pressed="false">
+                <i class="fa fa-moon" id="theme-icon" aria-hidden="true"></i>
+            </button>
+            <div class="auth-language btn-group dropdown">
+                <button id="languagemenu" class="btn btn-default dropdown-toggle auth-language__toggle" type="button" data-toggle="dropdown"
+                        aria-haspopup="true" aria-expanded="false" title="语言" data-title-zh="语言" data-title-en="Language" aria-label="语言" data-aria-label-zh="语言" data-aria-label-en="Language">
+                    <i class="fa fa-globe-asia" aria-hidden="true"></i><span></span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-right">
+                    <li lang="zh-CN"><a href="#" onclick="return switchLanguage('zh-CN')">简体中文</a></li>
+                    <li lang="en-US"><a href="#" onclick="return switchLanguage('en-US')">English</a></li>
+                </ul>
             </div>
         </div>
-    </div>
+    </header>
 
-    <div class="login-footer">
-        <strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2026
-    </div>
+    <main class="auth-page__main">
+        <div class="auth-layout auth-layout--register">
+            <aside class="auth-context" aria-labelledby="auth-context-title">
+                <div class="auth-context__brand-mark" aria-hidden="true"><i class="fa fa-network-wired"></i></div>
+                <h1 class="auth-context__title" id="auth-context-title" langtag="application"></h1>
+                <p class="auth-context__description" langtag="info-tagline"></p>
+
+                <ul class="auth-context__feature-list">
+                    <li class="auth-feature">
+                        <i class="fa fa-network-wired auth-feature__icon" aria-hidden="true"></i>
+                        <span class="auth-feature__label" data-i18n-zh="多协议支持" data-i18n-en="Multi-protocol">多协议支持</span>
+                    </li>
+                    <li class="auth-feature">
+                        <i class="fa fa-desktop auth-feature__icon" aria-hidden="true"></i>
+                        <span class="auth-feature__label" data-i18n-zh="全平台兼容" data-i18n-en="Cross-platform">全平台兼容</span>
+                    </li>
+                    <li class="auth-feature">
+                        <i class="fa fa-lock auth-feature__icon" aria-hidden="true"></i>
+                        <span class="auth-feature__label" data-i18n-zh="HTTPS 集成" data-i18n-en="HTTPS support">HTTPS 集成</span>
+                    </li>
+                    <li class="auth-feature">
+                        <i class="fa fa-tachometer-alt auth-feature__icon" aria-hidden="true"></i>
+                        <span class="auth-feature__label" data-i18n-zh="实时监控" data-i18n-en="Live monitoring">实时监控</span>
+                    </li>
+                    <li class="auth-feature">
+                        <i class="fa fa-compress auth-feature__icon" aria-hidden="true"></i>
+                        <span class="auth-feature__label" data-i18n-zh="压缩加密" data-i18n-en="Encrypt &amp; compress">压缩加密</span>
+                    </li>
+                    <li class="auth-feature">
+                        <i class="fa fa-users auth-feature__icon" aria-hidden="true"></i>
+                        <span class="auth-feature__label" data-i18n-zh="多用户管理" data-i18n-en="Multi-user">多用户管理</span>
+                    </li>
+                    <li class="auth-feature">
+                        <i class="fa fa-globe auth-feature__icon" aria-hidden="true"></i>
+                        <span class="auth-feature__label" data-i18n-zh="域名解析" data-i18n-en="Domain routing">域名解析</span>
+                    </li>
+                    <li class="auth-feature">
+                        <i class="fa fa-sliders-h auth-feature__icon" aria-hidden="true"></i>
+                        <span class="auth-feature__label" data-i18n-zh="流量管控" data-i18n-en="Traffic controls">流量管控</span>
+                    </li>
+                    <li class="auth-feature">
+                        <i class="fa fa-cogs auth-feature__icon" aria-hidden="true"></i>
+                        <span class="auth-feature__label" data-i18n-zh="一键部署" data-i18n-en="Quick deployment">一键部署</span>
+                    </li>
+                </ul>
+            </aside>
+
+            <section class="auth-panel login-form-wrap" aria-labelledby="auth-register-title">
+                <header class="auth-panel__header">
+                    <h2 class="auth-panel__title" id="auth-register-title" langtag="info-register"></h2>
+                    <p class="auth-panel__description" langtag="info-createaccount"></p>
+                </header>
+
+                <form class="auth-form" onsubmit="return register()">
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" for="auth-username" langtag="word-username"></label>
+                        <div class="auth-control input-icon-wrap">
+                            <i class="fa fa-user input-icon" aria-hidden="true"></i>
+                            <input id="auth-username" name="username" class="form-control has-icon" placeholder="username" required="" autocomplete="username" langtag="word-username">
+                        </div>
+                    </div>
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" for="auth-password" langtag="word-password"></label>
+                        <div class="auth-control input-icon-wrap">
+                            <i class="fa fa-lock input-icon" aria-hidden="true"></i>
+                            <input id="auth-password" name="password" type="password" class="form-control has-icon" placeholder="password" required="" autocomplete="new-password" langtag="word-password">
+                        </div>
+                    </div>
+                    <button type="button" onclick="register()" class="auth-submit login-btn" langtag="word-register"></button>
+                </form>
+
+                <div class="auth-switch register-link">
+                    <span class="auth-switch__copy" langtag="info-haveaccount"></span>
+                    <a class="auth-switch__link" href="{{.web_base_url}}/login/index" langtag="word-login"></a>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer class="auth-page__footer">
+        <span><strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2026</span>
+    </footer>
 </div>
 
-</body>
-</html>
-
 <script type="text/javascript">
-    window.nps = {"web_base_url": {{.web_base_url}} }
+    window.nps = {"web_base_url": {{.web_base_url}}, "version": "{{.version}}"}
 
     function register() {
         if (!validateNpsForm(document.querySelector('.login-form-wrap form'), true)) return false;
@@ -92,10 +154,15 @@
             url: "{{.web_base_url}}/login/register",
             data: $("form").serializeArray(),
             success: function (res) {
-                alert(res.msg)
+                npsNotify(res.status ? 'success' : 'error', res.msg)
                 if (res.status) {
-                    window.location.href = "{{.web_base_url}}/login/index"
+                    window.setTimeout(function () {
+                        window.location.href = "{{.web_base_url}}/login/index";
+                    }, 450);
                 }
+            },
+            error: function () {
+                npsNotify('error', npsRequestErrorMessage());
             }
         })
         return false
@@ -106,83 +173,25 @@
         var isDark = html.getAttribute('data-theme') === 'dark';
         var next = isDark ? 'light' : 'dark';
         html.setAttribute('data-theme', next);
-        localStorage.setItem('nps-theme', next);
+        try {
+            if (window.localStorage) window.localStorage.setItem('nps-theme', next);
+        } catch (error) {
+            // Keep the current theme for this page when storage is unavailable.
+        }
         var icon = document.getElementById('theme-icon');
+        var toggle = document.getElementById('theme-toggle');
         if (icon) icon.className = next === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
+        if (toggle) toggle.setAttribute('aria-pressed', next === 'dark' ? 'true' : 'false');
     }
 
     (function() {
-        var saved = localStorage.getItem('nps-theme') || 'dark';
-        if (saved) {
-            document.documentElement.setAttribute('data-theme', saved);
-            var icon = document.getElementById('theme-icon');
-            if (icon) icon.className = saved === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
-        }
-    })();
-
-    // Particle animation
-    (function() {
-        var canvas = document.getElementById('particle-canvas');
-        if (!canvas) return;
-        var ctx = canvas.getContext('2d');
-        var particles = [];
-        var particleCount = 50;
-        var maxDist = 120;
-
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        resize();
-        window.addEventListener('resize', resize);
-
-        function Particle() {
-            this.x = Math.random() * canvas.width;
-            this.y = Math.random() * canvas.height;
-            this.vx = (Math.random() - 0.5) * 0.6;
-            this.vy = (Math.random() - 0.5) * 0.6;
-            this.radius = Math.random() * 2 + 1;
-        }
-
-        for (var i = 0; i < particleCount; i++) {
-            particles.push(new Particle());
-        }
-
-        function animate() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-            var dotColor = isDark ? 'rgba(93,173,255,' : 'rgba(59,130,246,';
-            var lineColor = isDark ? 'rgba(93,173,255,' : 'rgba(59,130,246,';
-
-            for (var i = 0; i < particles.length; i++) {
-                var p = particles[i];
-                p.x += p.vx;
-                p.y += p.vy;
-                if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-                if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-                ctx.fillStyle = dotColor + '0.4)';
-                ctx.fill();
-
-                for (var j = i + 1; j < particles.length; j++) {
-                    var p2 = particles[j];
-                    var dx = p.x - p2.x;
-                    var dy = p.y - p2.y;
-                    var dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < maxDist) {
-                        ctx.beginPath();
-                        ctx.moveTo(p.x, p.y);
-                        ctx.lineTo(p2.x, p2.y);
-                        ctx.strokeStyle = lineColor + (0.15 * (1 - dist / maxDist)) + ')';
-                        ctx.lineWidth = 0.6;
-                        ctx.stroke();
-                    }
-                }
-            }
-            requestAnimationFrame(animate);
-        }
-        animate();
+        var saved = readRegisterThemePreference() || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', saved);
+        var icon = document.getElementById('theme-icon');
+        var toggle = document.getElementById('theme-toggle');
+        if (icon) icon.className = saved === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
+        if (toggle) toggle.setAttribute('aria-pressed', saved === 'dark' ? 'true' : 'false');
     })();
 </script>
+</body>
+</html>

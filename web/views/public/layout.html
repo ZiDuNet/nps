@@ -7,6 +7,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
 
+    <script>
+        (function () {
+            try {
+                var savedTheme = localStorage.getItem('nps-theme');
+                var systemTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', savedTheme || systemTheme);
+            } catch (error) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
+
     <title langtag="title-admin"></title>
 
     <link href="{{.web_base_url}}/static/css/toastr.min.css?v={{.version}}" rel="stylesheet">
@@ -15,7 +27,7 @@
     <link href="{{.web_base_url}}/static/css/bootstrap.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap-table.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/style.css?v={{.version}}" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20260831-15" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/flatpickr.min.css?v={{.version}}" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
@@ -29,7 +41,7 @@
     <script src="{{.web_base_url}}/static/js/inspinia.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/flatpickr.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/flatpickr-l10n-zh.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}" type="text/javascript"></script>
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20260831-15" type="text/javascript"></script>
 
 </head>
 
@@ -39,19 +51,20 @@
         <div class="sidebar-collapse">
             <ul class="nav metismenu" id="side-menu">
                 <li class="nav-header">
-                    <div class="dropdown profile-element">
-                    {{if eq true .isAdmin}}
-                        <span><i class="fa fa-network-wired fa-3x"></i></span>
-                        <span class="clear"> <span class="block m-t-xs"><strong class="font-bold" langtag="word-admin"></strong></span>
-                        <span class="text-muted text-xs block" langtag="word-system">
-                    {{else}}
-                        <span><i class="fa fa-globe fa-3x"></i></span>
-                        <span class="clear"> <span class="block m-t-xs"><strong class="font-bold">{{.username}}</strong></span>
-                        <span class="text-muted text-xs block" langtag="word-user">
-                    {{end}}
-                        </span>
+                    <div class="nps-brand">
+                        <span class="nps-brand-mark"><i class="fa fa-network-wired"></i></span>
+                        <span class="nps-brand-copy"><strong>NPS</strong><small data-i18n-zh="内网穿透控制台" data-i18n-en="Network tunnel control">内网穿透控制台</small></span>
                     </div>
-                    <div class="logo-element" langtag="application"></div>
+                    <div class="nav-account">
+                    {{if eq true .isAdmin}}
+                        <i class="fa fa-user-shield"></i>
+                        <span><strong class="font-bold" langtag="word-admin"></strong><small langtag="word-system"></small></span>
+                    {{else}}
+                        <i class="fa fa-user"></i>
+                        <span><strong class="font-bold">{{.username}}</strong><small langtag="word-user"></small></span>
+                    {{end}}
+                    </div>
+                    <div class="logo-element">NPS</div>
                 </li>
                 <li class="{{if eq "index" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/"><i class="fa fa-tachometer-alt fa-lg"></i>
@@ -106,7 +119,7 @@
                     <span class="nav-label" langtag="word-globalparam"></span></a>
                 </li>
                 <li class="{{if eq "help" .menu}}active{{end}}">
-                <a href="https://zidunet.github.io/nps/#/" target="_blank"><i class="fa fa-lightbulb fa-lg"></i>
+                <a href="{{.web_base_url}}/index/help"><i class="fa fa-lightbulb fa-lg"></i>
                     <span class="nav-label" langtag="word-help"></span></a>
                 </li>
             </ul>
@@ -116,7 +129,7 @@
         <div class="row border-bottom">
             <nav class="navbar white-bg navbar-fixed-top" role="navigation" style="margin-bottom: 0">
                 <div class="navbar-header">
-                    <a class="navbar-minimalize minimalize-styl-2 btn btn-primary " href="#"><i class="fa fa-bars"></i></a>
+                    <button type="button" class="navbar-minimalize minimalize-styl-2 btn btn-primary" aria-label="切换导航" data-aria-label-zh="切换导航" data-aria-label-en="Toggle navigation" data-title-zh="切换导航" data-title-en="Toggle navigation"><i class="fa fa-bars" aria-hidden="true"></i></button>
                 </div>
                 <ul class="nav navbar-top-links navbar-right">
                     <li>
@@ -124,9 +137,9 @@
                         <a href="https://github.com/ZiDuNet/nps" langtag="application"></a></span>
                     </li>
                     <li>
-                        <a href="#" onclick="toggleTheme()" class="theme-toggle" id="theme-toggle" title="Toggle theme">
+                        <button type="button" onclick="toggleTheme()" class="theme-toggle" id="theme-toggle" aria-label="切换主题" data-aria-label-zh="切换主题" data-aria-label-en="Toggle theme" data-title-zh="切换主题" data-title-en="Toggle theme" aria-pressed="false">
                             <i class="fa fa-moon" id="theme-icon"></i>
-                        </a>
+                        </button>
                     </li>
                     <li>
                         <span class="btn-group dropdown">
@@ -139,7 +152,7 @@
                     </li>
                     <li>
                         <a href="{{.web_base_url}}/login/out">
-                            <i class="fa fa-sign-in-alt"></i><span langtag="word-logout"></span>
+                            <i class="fa fa-sign-out-alt"></i><span langtag="word-logout"></span>
                         </a>
                     </li>
                 </ul>
@@ -157,11 +170,24 @@
     </div>
 </div>
 
-</body>
-</html>
-
 <script>
     window.nps = { "web_base_url": {{.web_base_url}}, "version": "{{.version}}" }
+
+    function getThemePreference() {
+        try {
+            return window.localStorage.getItem('nps-theme');
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function saveThemePreference(theme) {
+        try {
+            window.localStorage.setItem('nps-theme', theme);
+        } catch (error) {
+            // The system preference remains active when storage is unavailable.
+        }
+    }
 
     // Toggle switch: sync hidden input with checkbox state
     $(document).on('change', '.toggle-switch input[type="checkbox"]', function() {
@@ -175,16 +201,18 @@
         var isDark = html.getAttribute('data-theme') === 'dark';
         var next = isDark ? 'light' : 'dark';
         html.setAttribute('data-theme', next);
-        localStorage.setItem('nps-theme', next);
+        saveThemePreference(next);
         updateThemeIcon(next);
         applyChartTheme(next);
     }
 
     function updateThemeIcon(theme) {
         var icon = document.getElementById('theme-icon');
+        var toggle = document.getElementById('theme-toggle');
         if (icon) {
             icon.className = theme === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
         }
+        if (toggle) toggle.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
     }
 
     function applyChartTheme(theme) {
@@ -219,7 +247,7 @@
     }
 
     (function() {
-        var saved = localStorage.getItem('nps-theme') || 'dark';
+        var saved = getThemePreference() || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         if (saved) {
             document.documentElement.setAttribute('data-theme', saved);
             updateThemeIcon(saved);
@@ -227,3 +255,6 @@
         }
     })();
 </script>
+
+</body>
+</html>

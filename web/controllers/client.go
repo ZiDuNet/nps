@@ -97,6 +97,7 @@ func (s *ClientController) Add() {
 		}
 		if err := file.GetDb().NewClient(t); err != nil {
 			s.AjaxErr(err.Error())
+			return
 		}
 		s.AjaxOkWithId("add success", id)
 	}
@@ -144,7 +145,7 @@ func (s *ClientController) Edit() {
 				}
 				c.VerifyKey = s.getEscapeString("vkey")
 				c.UserId = s.GetIntNoErr("user_id")
-				c.Flow.FlowLimit = int64(s.GetIntNoErr("flow_limit"))
+				c.Flow.SetLimit(int64(s.GetIntNoErr("flow_limit")))
 				c.RateLimit = s.GetIntNoErr("rate_limit")
 				c.MaxConn = s.GetIntNoErr("max_conn")
 				c.MaxTunnelNum = s.GetIntNoErr("max_tunnel")

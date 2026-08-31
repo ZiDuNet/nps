@@ -17,16 +17,22 @@ import (
 )
 
 var (
-	ports             []int
-	ServerStatus      []map[string]interface{}
-	ServerStatusLock  sync.RWMutex
-	ServerStatusMu    sync.RWMutex
-	IORateCache       atomic.Value
+	ports            []int
+	ServerStatus     []map[string]interface{}
+	ServerStatusLock sync.RWMutex
+	// ServerStatusMu is retained for source compatibility. ServerStatusLock is
+	// the single lock used by the collector and dashboard readers.
+	ServerStatusMu sync.RWMutex
+	IORateCache    atomic.Value
 )
+
+const serverStatusHistoryLimit = 1440
 
 func StartSystemInfo() {
 	if b, err := beego.AppConfig.Bool("system_info_display"); err == nil && b {
-		ServerStatus = make([]map[string]interface{}, 0, 1500)
+		ServerStatusLock.Lock()
+		ServerStatus = make([]map[string]interface{}, 0, serverStatusHistoryLimit)
+		ServerStatusLock.Unlock()
 		go getSeverStatus()
 	}
 }
@@ -73,47 +79,141 @@ func GenerateServerPort(m string) int {
 
 func getSeverStatus() {
 	for {
-		if len(ServerStatus) < 10 {
+		if serverStatusCount() < 10 {
 			time.Sleep(time.Second)
 		} else {
 			time.Sleep(time.Minute)
 		}
-		cpuPercet, _ := cpu.Percent(0, true)
-		var cpuAll float64
-		for _, v := range cpuPercet {
-			cpuAll += v
-		}
-		m := make(map[string]interface{})
-		loads, _ := load.Avg()
-		m["load1"] = math.Round(loads.Load1*100) / 100
-		m["load5"] = loads.Load5
-		m["load15"] = loads.Load15
-		m["cpu"] = math.Round(cpuAll / float64(len(cpuPercet)))
-		swap, _ := mem.SwapMemory()
-		m["swap_mem"] = math.Round(swap.UsedPercent)
-		vir, _ := mem.VirtualMemory()
-		m["virtual_mem"] = math.Round(vir.UsedPercent)
-		conn, _ := net.ProtoCounters(nil)
-		// 从后台 IO 采集缓存获取
-		if ioData, ok := IORateCache.Load().(map[string]interface{}); ok {
-			m["io_send"] = ioData["io_send"]
-			m["io_recv"] = ioData["io_recv"]
-		}
-		t := time.Now()
-		m["time"] = strconv.Itoa(t.Hour()) + ":" + strconv.Itoa(t.Minute()) + ":" + strconv.Itoa(t.Second())
-
-		for _, v := range conn {
-			m[v.Protocol] = v.Stats["CurrEstab"]
-		}
-		ServerStatusMu.Lock()
-		if len(ServerStatus) >= 1440 {
-			ServerStatus = ServerStatus[1:]
-		}
-		ServerStatusLock.Lock()
-		ServerStatus = append(ServerStatus, m)
-		ServerStatusLock.Unlock()
-		ServerStatusMu.Unlock()
+		appendServerStatus(GetSystemStatus())
 	}
+}
+
+// GetSystemStatus returns a complete dashboard snapshot. Every field consumed by
+// the dashboard is initialized first so an unsupported system counter cannot
+// leave invalid JavaScript in the rendered page.
+func GetSystemStatus() map[string]interface{} {
+	status := newSystemStatus(time.Now())
+
+	if cpuPercent, err := cpu.Percent(0, true); err == nil && len(cpuPercent) > 0 {
+		var cpuTotal float64
+		for _, value := range cpuPercent {
+			cpuTotal += value
+		}
+		status["cpu"] = math.Round(cpuTotal / float64(len(cpuPercent)))
+	}
+	if loads, err := load.Avg(); err == nil && loads != nil {
+		status["load1"] = math.Round(loads.Load1*100) / 100
+		status["load5"] = loads.Load5
+		status["load15"] = loads.Load15
+		status["load"] = loads.String()
+	}
+	if swap, err := mem.SwapMemory(); err == nil && swap != nil {
+		status["swap_mem"] = math.Round(swap.UsedPercent)
+	}
+	if virtual, err := mem.VirtualMemory(); err == nil && virtual != nil {
+		status["virtual_mem"] = math.Round(virtual.UsedPercent)
+	}
+	if counters, err := net.ProtoCounters(nil); err == nil {
+		for _, counter := range counters {
+			if established, ok := counter.Stats["CurrEstab"]; ok {
+				status[counter.Protocol] = established
+			}
+		}
+	}
+	status["io_send"], status["io_recv"] = ioRates()
+	return status
+}
+
+// GetServerStatusSamples returns evenly-spaced, independent history snapshots.
+// It pads an empty history with zero-value samples so the dashboard charts can
+// render safely while the collector is warming up.
+func GetServerStatusSamples(count int) []map[string]interface{} {
+	if count <= 0 {
+		return nil
+	}
+
+	samples := make([]map[string]interface{}, count)
+	ServerStatusLock.RLock()
+	defer ServerStatusLock.RUnlock()
+
+	if len(ServerStatus) == 0 {
+		for index := range samples {
+			samples[index] = newSystemStatus(time.Time{})
+		}
+		return samples
+	}
+
+	historyLen := len(ServerStatus)
+	for index := range samples {
+		statusIndex := 0
+		if count > 1 && historyLen > 1 {
+			// Use the endpoints as anchors so a dashboard refresh always includes
+			// the newest observation, even when downsampling the ring buffer.
+			statusIndex = index * (historyLen - 1) / (count - 1)
+		}
+		samples[index] = cloneSystemStatus(ServerStatus[statusIndex])
+	}
+	return samples
+}
+
+func newSystemStatus(now time.Time) map[string]interface{} {
+	timestamp := ""
+	if !now.IsZero() {
+		timestamp = strconv.Itoa(now.Hour()) + ":" + strconv.Itoa(now.Minute()) + ":" + strconv.Itoa(now.Second())
+	}
+	return map[string]interface{}{
+		"load":        `{"load1":0,"load5":0,"load15":0}`,
+		"load1":       float64(0),
+		"load5":       float64(0),
+		"load15":      float64(0),
+		"cpu":         float64(0),
+		"swap_mem":    float64(0),
+		"virtual_mem": float64(0),
+		"io_send":     uint64(0),
+		"io_recv":     uint64(0),
+		"tcp":         int64(0),
+		"udp":         int64(0),
+		"time":        timestamp,
+	}
+}
+
+func cloneSystemStatus(status map[string]interface{}) map[string]interface{} {
+	clone := newSystemStatus(time.Time{})
+	for key, value := range status {
+		clone[key] = value
+	}
+	return clone
+}
+
+func serverStatusCount() int {
+	ServerStatusLock.RLock()
+	defer ServerStatusLock.RUnlock()
+	return len(ServerStatus)
+}
+
+func appendServerStatus(status map[string]interface{}) {
+	if status == nil {
+		status = newSystemStatus(time.Now())
+	}
+	ServerStatusLock.Lock()
+	defer ServerStatusLock.Unlock()
+	if len(ServerStatus) >= serverStatusHistoryLimit {
+		copy(ServerStatus, ServerStatus[len(ServerStatus)-serverStatusHistoryLimit+1:])
+		ServerStatus = ServerStatus[:serverStatusHistoryLimit-1]
+	}
+	ServerStatus = append(ServerStatus, status)
+}
+
+func ioRates() (send, receive uint64) {
+	if data, ok := IORateCache.Load().(map[string]interface{}); ok {
+		if value, ok := data["io_send"].(uint64); ok {
+			send = value
+		}
+		if value, ok := data["io_recv"].(uint64); ok {
+			receive = value
+		}
+	}
+	return send, receive
 }
 
 // StartIORateCollector 启动后台 IO 速率采集协程
@@ -122,20 +222,32 @@ func StartIORateCollector() {
 }
 
 func collectIORate() {
-	// 初始化缓存，避免空值 panic
 	IORateCache.Store(map[string]interface{}{
 		"io_send": uint64(0),
 		"io_recv": uint64(0),
 	})
+	var previous []net.IOCountersStat
 	for {
-		io1, _ := net.IOCounters(false)
-		time.Sleep(time.Second)
-		io2, _ := net.IOCounters(false)
-		if len(io2) > 0 && len(io1) > 0 {
+		current, err := net.IOCounters(false)
+		if err != nil || len(current) == 0 {
+			previous = nil
+			time.Sleep(time.Second)
+			continue
+		}
+		if len(previous) > 0 {
 			IORateCache.Store(map[string]interface{}{
-				"io_send": io2[0].BytesSent - io1[0].BytesSent,
-				"io_recv": io2[0].BytesRecv - io1[0].BytesRecv,
+				"io_send": counterDelta(current[0].BytesSent, previous[0].BytesSent),
+				"io_recv": counterDelta(current[0].BytesRecv, previous[0].BytesRecv),
 			})
 		}
+		previous = current
+		time.Sleep(time.Second)
 	}
+}
+
+func counterDelta(current, previous uint64) uint64 {
+	if current < previous {
+		return 0
+	}
+	return current - previous
 }

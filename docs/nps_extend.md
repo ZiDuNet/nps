@@ -80,7 +80,7 @@ web_base_url=/nps
 
 **注意：** nps不会持久化通过公钥连接的客户端
 ## 系统信息显示
-nps服务端支持在web上显示和统计服务器的相关信息，但默认一些统计图表是关闭的，如需开启请在`nps.conf`中设置`system_info_display=true`
+nps 服务端支持在 web 上显示和统计服务器相关信息，`system_info_display` 默认开启；如需关闭可在 `nps.conf` 中设置 `system_info_display=false`。
 
 ## 自定义客户端连接密钥
 web上可以自定义客户端连接的密钥，但是必须具有唯一性

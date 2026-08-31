@@ -155,7 +155,7 @@ func dealCommon(s string) *CommonConfig {
 		case "rate_limit":
 			c.Client.RateLimit = common.GetIntNoErrByStr(item[1])
 		case "flow_limit":
-			c.Client.Flow.FlowLimit = int64(common.GetIntNoErrByStr(item[1]))
+			c.Client.Flow.SetLimit(int64(common.GetIntNoErrByStr(item[1])))
 		case "max_conn":
 			c.Client.MaxConn = common.GetIntNoErrByStr(item[1])
 		case "remark":

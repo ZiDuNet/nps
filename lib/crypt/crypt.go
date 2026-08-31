@@ -5,12 +5,13 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"math/rand"
+	"fmt"
+	"math/big"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -69,12 +70,21 @@ func Md5(s string) string {
 
 // Generating Random Verification Key
 func GetRandomString(l int) string {
-	str := "0123456789abcdefghijklmnopqrstuvwxyz"
-	bytes := []byte(str)
-	result := []byte{}
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := 0; i < l; i++ {
-		result = append(result, bytes[r.Intn(len(bytes))])
+	if l <= 0 {
+		return ""
+	}
+	const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
+	result := make([]byte, l)
+	max := big.NewInt(int64(len(alphabet)))
+	for i := range result {
+		index, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			// crypto/rand failures are exceptionally rare, but returning a
+			// predictable secret would be worse than failing closed. Keep the
+			// function's historical string-only API and make the failure visible.
+			panic(fmt.Errorf("generate random secret: %w", err))
+		}
+		result[i] = alphabet[index.Int64()]
 	}
 	return string(result)
 }

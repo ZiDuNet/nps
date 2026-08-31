@@ -13,7 +13,7 @@ Based on the original nps 0.26.10, with extensive bug fixes, performance and sec
 
 - 🚀 **Comprehensive Protocols** — TCP, UDP, HTTP(S), SOCKS5, P2P, Secret, File access
 - 🖥️ **Cross-platform** — Linux / Windows / macOS / ARM / Synology, with one-click system service installation
-- 🎨 **Web UI** — Modern interface with light/dark theme, real-time traffic and speed monitoring
+- 🎨 **Web UI** — Operations-focused console with light/dark theme, responsive layout, Chinese/English localization, keyboard-friendly controls, and real-time traffic monitoring
 - 👥 **User Management** — One user can manage multiple clients, with user-level tunnel quotas and expiration
 - 🔒 **Security** — Random password on first start, IP whitelist/blacklist, CAPTCHA, rate limiting
 - 🌐 **Domain Proxy** — Custom headers, 404 pages, host rewrite, URL routing, wildcard, auto HTTPS
@@ -42,7 +42,7 @@ docker run -d --name nps \
   wushuo98/nps
 ```
 
-After starting, visit `http://<server-ip>:8081` to access the web panel. The username is `admin`, and a random password is printed in the terminal on first launch.
+After starting, visit `http://<server-ip>:8081` to access the web panel. The username is `admin`, and a random password is printed in the terminal on first launch. Known `CHANGE_ME` and historical weak template values are rotated automatically; explicit custom or empty values are preserved (except the historical shared `public_vkey=123`, which is disabled).
 
 <details>
 <summary>📋 Port Reference</summary>
@@ -75,6 +75,8 @@ docker run -d --name npc \
 ```
 
 > 💡 **Recommended**: Delete the `conf` folder under the npc directory to use config-free mode. All settings are managed via the server's web panel.
+
+The Bridge transport currently supports TCP and KCP; TLS is exposed on the separate TLS Bridge port. QUIC and WebSocket Bridge transports are not supported yet.
 
 ## Tunnel Modes
 

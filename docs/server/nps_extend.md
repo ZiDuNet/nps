@@ -98,7 +98,7 @@ open_captcha=true
 **注意：** nps 不会持久化通过公钥连接的客户端。
 
 ## 系统信息显示
-nps 服务端支持在 web 上显示和统计服务器相关信息，但默认部分统计图表是关闭的。如需开启请在 `nps.conf` 中设置 `system_info_display=true`。
+nps 服务端支持在 web 上显示和统计服务器相关信息，`system_info_display` 默认开启；如需关闭可在 `nps.conf` 中设置 `system_info_display=false`。
 
 
 ## 关闭 web 管理
@@ -125,12 +125,12 @@ server_ip=xxx
 
 ## 首次启动随机凭据
 
-为避免默认密码被恶意扫描，**首次启动时** `web_username`（默认 `admin`）、`web_password`、`auth_key`、`auth_crypt_key` 全部随机生成，并直接打印到终端：
+为避免默认密码被恶意扫描，**首次启动时**用户名默认为 `admin`，`web_password`、`auth_key`、`auth_crypt_key` 会随机生成，并直接打印到终端：
 
 ```text
-[INFO] generated random web_password: <xxxxxxxx>
-[INFO] generated random auth_key: <xxxxxxxx>
-[INFO] generated random auth_crypt_key: <xxxxxxxxxxxxxxxx>
+[INFO] Web login username: admin, password: <xxxxxxxx>
+[INFO] auth_key: <xxxxxxxx>
+[INFO] auth_crypt_key: <xxxxxxxxxxxxxxxx>
 ```
 
 请在第一次启动时妥善记录。后续可在 `nps.conf` 中手工修改。

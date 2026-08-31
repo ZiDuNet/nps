@@ -1,10 +1,23 @@
-<div class="row">
+<section class="form-page form-page-client form-page-create" aria-labelledby="client-form-title">
+    <header class="dashboard-page-header form-page-header">
+        <div class="form-page-heading">
+            <div class="dashboard-page-kicker" data-i18n-zh="客户端管理" data-i18n-en="Client management">客户端管理</div>
+            <h1 id="client-form-title" langtag="page-clientadd"></h1>
+            <p data-i18n-zh="创建客户端并设置访问凭证与资源限制。" data-i18n-en="Create a client and configure access credentials and resource limits.">创建客户端并设置访问凭证与资源限制。</p>
+        </div>
+        <div class="dashboard-page-actions form-page-actions">
+            <a class="btn btn-outline btn-primary form-page-back" href="{{.web_base_url}}/client/list">
+                <i class="fa fa-arrow-left" aria-hidden="true"></i>
+                <span data-i18n-zh="返回列表" data-i18n-en="Back to list">返回列表</span>
+            </a>
+        </div>
+    </header>
+    <div class="row form-page-grid">
     <div class="col-md-12 col-md-auto">
-        <div class="ibox float-e-margins">
-            <h3 class="ibox-title" langtag="page-clientadd"></h3>
-            <div class="ibox-content">
-                <form class="form-horizontal">
-                    <div class="form-section-title"><i class="fa fa-info-circle"></i> 基本信息</div>
+        <section class="ibox float-e-margins form-workflow-card">
+            <div class="ibox-content form-workflow-content">
+                <form class="form-horizontal form-workflow-form" data-form-workflow="client-create">
+                    <div class="form-section-title"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
                     <div class="form-group" id="remark">
                         <label class="col-sm-2 control-label font-bold" langtag="word-remark"></label>
                         <div class="col-sm-10">
@@ -19,10 +32,10 @@
                         </div>
                     </div>
                     <div class="form-group" id="user_id">
-                        <label class="col-sm-2 control-label font-bold">所属用户</label>
+                        <label class="col-sm-2 control-label font-bold" data-i18n-zh="所属用户" data-i18n-en="Assigned user">所属用户</label>
                         <div class="col-sm-10">
                             <select class="form-control" name="user_id">
-                                <option value="0">未分配</option>
+                                <option value="0" data-i18n-zh="未分配" data-i18n-en="Unassigned">未分配</option>
                                 {{range .users}}
                                 <option value="{{.Id}}">{{.UserName}}</option>
                                 {{end}}
@@ -30,7 +43,7 @@
                         </div>
                     </div>
 
-                    <div class="form-section-title"><i class="fa fa-sliders-h"></i> 资源限制</div>
+                    <div class="form-section-title"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
                 {{if eq true .allow_flow_limit}}
                     <div class="form-group" id="flow_limit">
                         <label class="col-sm-2 control-label font-bold" langtag="word-flowlimit"></label>
@@ -66,7 +79,7 @@
                     </div>
                 {{end}}
 
-                    <div class="form-section-title"><i class="fa fa-key"></i> 认证配置</div>
+                    <div class="form-section-title"><i class="fa fa-key" aria-hidden="true"></i><span data-i18n-zh="认证配置" data-i18n-en="Authentication">认证配置</span></div>
                     <div class="form-group" id="u">
                         <label class="col-sm-2 control-label font-bold" langtag="word-basicusername"></label>
                         <div class="col-sm-10">
@@ -114,14 +127,14 @@
                     </div>
                 {{end}}
 
-                    <div class="form-section-title"><i class="fa fa-shield-alt"></i> 访问控制</div>
+                    <div class="form-section-title"><i class="fa fa-shield-alt" aria-hidden="true"></i><span data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</span></div>
                     <div class="form-group" id="config_conn_allow">
                         <label class="col-sm-2 control-label font-bold" langtag="word-connectbyconfig"></label>
                         <div class="col-sm-10">
                             <div class="toggle-field">
                                 <input type="hidden" name="config_conn_allow" value="1">
                                 <label class="toggle-switch"><input type="checkbox" checked><span class="toggle-slider"></span></label>
-                                <span class="toggle-label">是</span>
+                                <span class="toggle-label" data-i18n-zh="是" data-i18n-en="Yes">是</span>
                             </div>
                         </div>
                     </div>
@@ -131,7 +144,7 @@
                             <div class="toggle-field">
                                 <input type="hidden" name="ipwhite" value="0">
                                 <label class="toggle-switch"><input type="checkbox"><span class="toggle-slider"></span></label>
-                                <span class="toggle-label">否</span>
+                                <span class="toggle-label" data-i18n-zh="否" data-i18n-en="No">否</span>
                             </div>
                         </div>
                     </div>
@@ -157,7 +170,7 @@
                         </div>
                     </div>
 
-                    <div class="form-section-title"><i class="fa fa-clock"></i> 有效期</div>
+                    <div class="form-section-title"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
                     <div class="form-group" id="expire_time">
                         <label class="col-sm-2 control-label font-bold" langtag="word-expiretime"></label>
                         <div class="col-sm-10">
@@ -176,9 +189,10 @@
                     </div>
                 </form>
             </div>
-        </div>
+        </section>
     </div>
 </div>
+</section>
 
 <script>
 $(document).ready(function() {
@@ -186,7 +200,7 @@ $(document).ready(function() {
     var $ipToggle = $('#ip_white .toggle-switch input[type="checkbox"]');
     function updateIpWhiteUI() {
         var checked = $ipToggle.is(':checked');
-        $ipToggle.closest('.toggle-field').find('.toggle-label').text(checked ? '是' : '否');
+        npsSetToggleLabel($ipToggle.closest('.toggle-field').find('.toggle-label'), checked);
         if (checked) {
             $('#Ip_white_pass').show();
             $('#ip_white_list').show();
@@ -202,7 +216,7 @@ $(document).ready(function() {
     // config_conn_allow 标签
     var $connToggle = $('#config_conn_allow .toggle-switch input[type="checkbox"]');
     $connToggle.on('change', function() {
-        $(this).closest('.toggle-field').find('.toggle-label').text(this.checked ? '是' : '否');
+        npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked);
     });
 
     if (typeof flatpickr !== 'undefined') {

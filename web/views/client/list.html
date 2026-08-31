@@ -1,41 +1,28 @@
-<div class="wrapper wrapper-content animated fadeInRight">
-
+<section class="wrapper wrapper-content animated fadeInRight management-page" aria-labelledby="client-list-title">
+    <header class="dashboard-page-header management-page-header">
+        <div>
+            <div class="dashboard-page-kicker" data-i18n-zh="客户端管理" data-i18n-en="Client management">客户端管理</div>
+            <h1 id="client-list-title" langtag="page-clientlist"></h1>
+            <p data-i18n-zh="管理客户端、访问凭证与连接状态。" data-i18n-en="Manage clients, access credentials, and connection status.">管理客户端、访问凭证与连接状态。</p>
+        </div>
+    </header>
     <div class="row">
         <div class="col-lg-12">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title">
-                    <h5 langtag="page-clientlist"></h5>
-
-                    <div class="ibox-tools">
-                        <a class="collapse-link">
-                            <i class="fa fa-chevron-up"></i>
-                        </a>
-                        <a class="close-link">
-                            <i class="fa fa-times"></i>
-                        </a>
-                    </div>
-                </div>
-            <div class="content">
-            {{if eq true .isAdmin}}
-
-                <div class="table-responsive">
-                    <div id="toolbar">
+            <section class="ibox float-e-margins management-table-card">
+                <div class="ibox-content management-table-content">
+                    {{if eq true .isAdmin}}
+                    <div id="toolbar" class="management-table-toolbar">
                         <a href="{{.web_base_url}}/client/add" class="btn btn-primary dim">
-                        <i class="fa fa-fw fa-lg fa-plus"></i> <span langtag="word-add"></span></a>
+                            <i class="fa fa-fw fa-lg fa-plus"></i> <span langtag="word-add"></span>
+                        </a>
                     </div>
-                    <table id="taskList_table" class="table-striped table-hover" data-mobile-responsive="true"></table>
-                </div>
-            </div>
-            {{end}}
-                <div class="ibox-content">
-
+                    {{end}}
                     <table id="table"></table>
-
                 </div>
-            </div>
+            </section>
         </div>
     </div>
-</div>
+</section>
 
 <script>
     /*bootstrap table*/
@@ -55,59 +42,78 @@
         pageList: [5, 10, 20, 50],//分页步进值
         detailView: true,
         smartDisplay: true, // 智能显示 pagination 和 cardview 等
-        onExpandRow: function () {$('body').setLang ('.detail-view');},
-        onPostBody: function (data) { if ($(this)[0].locale != undefined ) $('body').setLang ('#table'); },
+        formatLoadingMessage: function () { return npsTableState('client', true); },
+        formatNoMatches: function () { return npsTableState('client', false); },
+        onExpandRow: function () {
+            $('body').setLang('.detail-view');
+            npsDecorateDetailControls('#table');
+        },
+        onCollapseRow: function () { window.setTimeout(function () { npsDecorateDetailControls('#table'); }, 0); },
+        onPostBody: function (data) {
+            $('body').setLang('#table');
+            npsApplyTableState(this, 'client');
+        },
         detailFormatter: function (index, row, element) {
-            var expireDisplay = row.ExpireTime || '<span langtag="info-unrestricted"></span>';
+            var english = npsIsEnglish();
+            var flow = row.Flow || {};
+            var config = row.Cnf || {};
+            var text = function (value, fallback) {
+                if (value == null || value === '') value = fallback == null ? '' : fallback;
+                return npsEscapeHtml(value);
+            };
+            var listText = function (value) {
+                if (!value || !value.length) return '-';
+                return text(Array.isArray(value) ? value.join(', ') : value);
+            };
+            var expireDisplay = row.ExpireTime ? text(row.ExpireTime) : '<span langtag="info-unrestricted"></span>';
             var kv = function(label, value) {
-                return '<div style="display:inline-block;width:33%;padding:3px 0;font-size:13px;line-height:1.8">'
-                    + '<span style="color:var(--c-text-secondary)">' + label + '</span>'
-                    + '<span style="color:var(--c-text);margin-left:6px;font-weight:500">' + value + '</span></div>';
+                return '<div class="client-detail__item">'
+                    + '<span class="client-detail__label">' + label + '</span>'
+                    + '<span class="client-detail__value">' + value + '</span></div>';
             };
             var section = function(icon, title, content) {
-                return '<div style="margin-bottom:12px">'
-                    + '<div style="font-size:11px;font-weight:600;color:var(--c-accent);padding-bottom:6px;border-bottom:1px solid var(--c-border);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">'
-                    + '<i class="fa fa-' + icon + '" style="margin-right:6px"></i>' + title + '</div>'
-                    + '<div style="display:flex;flex-wrap:wrap">' + content + '</div></div>';
+                return '<section class="client-detail__section">'
+                    + '<h6 class="client-detail__section-title"><i class="fa fa-' + icon + '" aria-hidden="true"></i>' + title + '</h6>'
+                    + '<div class="client-detail__grid">' + content + '</div></section>';
             };
             var cmdRow = function(label, code) {
-                return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
-                    + '<span style="color:var(--c-text-secondary);font-size:13px;white-space:nowrap;min-width:80px">' + label + '</span>'
-                    + '<code style="flex:1;font-size:12px;padding:3px 8px;background:var(--c-accent-light);color:var(--c-accent);border-radius:4px;word-break:break-all;min-width:0">' + code + '</code>'
-                    + '<button class="copy btn btn-outline btn-primary btn-xs" onclick="copyCommand(this)" data-clipboard-text="" style="flex-shrink:0">复制</button></div>';
+                return '<div class="client-detail__command">'
+                    + '<span class="client-detail__command-label">' + label + '</span>'
+                    + '<code>' + text(code) + '</code>'
+                    + '<button type="button" class="copy btn btn-outline btn-primary btn-xs client-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i> <span data-i18n-zh="复制" data-i18n-en="Copy">' + (english ? 'Copy' : '复制') + '</span></button></div>';
             };
-            return '<div style="padding:6px 8px">'
-                + section('sliders-h', '基础配置',
-                    kv('<span langtag="word-maxconnections"></span>', row.MaxConn)
-                    + kv('<span langtag="word-curconnections"></span>', row.NowConn)
-                    + kv('<span langtag="word-flowlimit"></span>', row.Flow.FlowLimit + ' M')
-                    + kv('<span langtag="word-ratelimit"></span>', row.RateLimit + ' KB/s')
-                    + kv('<span langtag="word-maxtunnels"></span>', row.MaxTunnelNum)
-                    + kv('<span langtag="word-connectbyconfig"></span>', '<span langtag="word-' + row.ConfigConnAllow + '"></span>'))
-                + '<div style="display:flex;gap:20px;flex-wrap:wrap">'
-                + '<div style="flex:1;min-width:280px">'
-                + section('key', '认证信息',
-                    kv('<span langtag="word-webusername"></span>', row.WebUserName || '-')
-                    + kv('<span langtag="word-webpassword"></span>', row.WebPassword || '-')
-                    + kv('<span langtag="word-basicusername"></span>', row.Cnf.U || '-')
-                    + kv('<span langtag="word-basicpassword"></span>', row.Cnf.P || '-'))
+            return '<div class="client-detail">'
+                + section('sliders-h', english ? 'Connection' : '基础配置',
+                    kv('<span langtag="word-maxconnections"></span>', text(row.MaxConn))
+                    + kv('<span langtag="word-curconnections"></span>', text(row.NowConn))
+                    + kv('<span langtag="word-flowlimit"></span>', text(flow.FlowLimit, 0) + ' M')
+                    + kv('<span langtag="word-ratelimit"></span>', text(row.RateLimit, 0) + ' KB/s')
+                    + kv('<span langtag="word-maxtunnels"></span>', text(row.MaxTunnelNum, 0))
+                    + kv('<span langtag="word-connectbyconfig"></span>', npsBooleanMarkup(!!row.ConfigConnAllow)))
+                + '<div class="client-detail__columns">'
+                + '<div class="client-detail__column">'
+                + section('key', english ? 'Authentication' : '认证信息',
+                    kv('<span langtag="word-webusername"></span>', text(row.WebUserName, '-'))
+                    + kv('<span langtag="word-webpassword"></span>', text(row.WebPassword, '-'))
+                    + kv('<span langtag="word-basicusername"></span>', text(config.U, '-'))
+                    + kv('<span langtag="word-basicpassword"></span>', text(config.P, '-')))
                 + '</div>'
-                + '<div style="flex:1;min-width:280px">'
-                + section('shield-alt', '访问控制',
-                    kv('<span langtag="word-ipwhite"></span>', row.IpWhite)
-                    + kv('<span langtag="word-ipwhitepass"></span>', row.IpWhitePass || '-'))
-                + '<div style="font-size:13px;padding:2px 0;color:var(--c-text-secondary)"><span langtag="word-ipwhitelist"></span>: <span style="color:var(--c-text)">' + (row.IpWhiteList || '-') + '</span></div>'
-                + '<div style="font-size:13px;padding:2px 0;color:var(--c-text-secondary)"><span langtag="word-blackip"></span>: <span style="color:var(--c-text)">' + (row.BlackIpList || '-') + '</span></div>'
+                + '<div class="client-detail__column">'
+                + section('shield-alt', english ? 'Access control' : '访问控制',
+                    kv('<span langtag="word-ipwhite"></span>', npsBooleanMarkup(!!row.IpWhite))
+                    + kv('<span langtag="word-ipwhitepass"></span>', text(row.IpWhitePass, '-')))
+                + '<p class="client-detail__line"><span langtag="word-ipwhitelist"></span>: <span>' + listText(row.IpWhiteList) + '</span></p>'
+                + '<p class="client-detail__line"><span langtag="word-blackip"></span>: <span>' + listText(row.BlackIpList) + '</span></p>'
                 + '</div></div>'
-                + section('clock', '时间信息',
-                    kv('<span langtag="word-createtime"></span>', row.CreateTime)
-                    + kv('<span langtag="word-lastonlinetime"></span>', row.LastOnlineTime || '-')
+                + section('clock', english ? 'Timestamps' : '时间信息',
+                    kv('<span langtag="word-createtime"></span>', text(row.CreateTime, '-'))
+                    + kv('<span langtag="word-lastonlinetime"></span>', text(row.LastOnlineTime, '-'))
                     + kv('<span langtag="word-expiretime"></span>', expireDisplay))
-                + section('terminal', '连接命令',
-                    cmdRow('<span langtag="word-quicklycommand"></span>', encodeToBase64(row.Remark + '|{{.ip}}:{{.p}}|' + row.VerifyKey + '|false'))
-                    + cmdRow('<span langtag="word-tlsquicklycommand"></span>', encodeToBase64(row.Remark + '|{{.ip}}:{{.tls_p}}|' + row.VerifyKey + '|true'))
-                    + cmdRow('<span langtag="word-commandclient"></span>', '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + row.VerifyKey + ' -type=' + {{.bridgeType}})
-                    + cmdRow('<span langtag="word-commandclient-tls"></span>', '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + row.VerifyKey + ' -tls_enable=true'))
+                + section('terminal', english ? 'Connection commands' : '连接命令',
+                    cmdRow('<span langtag="word-quicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.p}}|' + (row.VerifyKey || '') + '|false'))
+                    + cmdRow('<span langtag="word-tlsquicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.tls_p}}|' + (row.VerifyKey || '') + '|true'))
+                    + cmdRow('<span langtag="word-commandclient"></span>', '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + (row.VerifyKey || '') + ' -type={{.bridgeType}}')
+                    + cmdRow('<span langtag="word-commandclient-tls"></span>', '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + (row.VerifyKey || '') + ' -tls_enable=true'))
                 + '</div>';
         },
         //表格的列
@@ -122,22 +128,24 @@
                 field: 'Remark',//域值
                 title: '<span langtag="word-remark"></span>',//标题
                 halign: 'center',
-                visible: true//false表示不显示
+                visible: true,//false表示不显示
+                escape: true
             },
             {
                 field: 'UserName',
-                title: '所属用户',
+                title: '<span data-i18n-zh="所属用户" data-i18n-en="Assigned user">所属用户</span>',
                 halign: 'center',
                 visible: true,
                 formatter: function(value) {
-                    return value || '-'
+                    return npsEscapeHtml(value || '-')
                 }
             },
             {
                 field: 'Version',//域值
                 title: '<span langtag="word-version"></span>',//标题
                 halign: 'center',
-                visible: true//false表示不显示
+                visible: true,//false表示不显示
+                escape: true
             },
             {
                 field: 'VerifyKey',//域值
@@ -146,7 +154,7 @@
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
                     if (!row.NoStore) {
-                        return value
+                        return npsEscapeHtml(value)
                     } else {
                         return '<span langtag="word-publicvkey"></span>'
                     }
@@ -156,7 +164,8 @@
                 field: 'Addr',//域值
                 title: '<span langtag="word-address"></span>',//标题
                 halign: 'center',
-                visible: true//false表示不显示
+                visible: true,//false表示不显示
+                escape: true
             },
             {
                 field: 'InletFlow',//域值
@@ -165,7 +174,7 @@
                 visible: true,//false表示不显示
                 sortable: true,//启用排序
                 formatter: function (value, row, index) {
-                    return changeunit(row.Flow.InletFlow)
+                    return changeunit((row.Flow || {}).InletFlow)
                 }
             },
             {
@@ -175,7 +184,7 @@
                 visible: true,//false表示不显示
                 sortable: true,//启用排序
                 formatter: function (value, row, index) {
-                    return changeunit(row.Flow.ExportFlow)
+                    return changeunit((row.Flow || {}).ExportFlow)
                 }
             },
             {
@@ -223,36 +232,40 @@
                 halign: 'center',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    btn_group = '<div class="btn-group">'
+                    var clientId = Number(row.Id);
+                    if (!isFinite(clientId) || Math.floor(clientId) !== clientId || clientId <= 0) return '';
+                    var btn_group = '<div class="btn-group">'
 
                     {{if eq true .isAdmin}}
                     if (row.Status) {
-                        btn_group += '<a onclick="submitform(\'stop\', \'{{.web_base_url}}/client/changestatus\', {\'id\':' + row.Id
-                        btn_group += ', \'status\': 0})" class="btn btn-outline btn-warning"><i class="fa fa-pause"></i></a>'
+                        btn_group += '<button type="button" onclick="submitform(\'stop\', \'{{.web_base_url}}/client/changestatus\', {\'id\':' + clientId
+                        btn_group += ', \'status\': 0})" class="btn btn-outline btn-warning" data-title-zh="停用客户端" data-title-en="Disable client" data-aria-label-zh="停用客户端" data-aria-label-en="Disable client"><i class="fa fa-pause" aria-hidden="true"></i></button>'
                     } else {
-                        btn_group += '<a onclick="submitform(\'start\', \'{{.web_base_url}}/client/changestatus\', {\'id\':' + row.Id
-                        btn_group += ', \'status\': 1})" class="btn btn-outline btn-primary"><i class="fa fa-play"></i></a>'
+                        btn_group += '<button type="button" onclick="submitform(\'start\', \'{{.web_base_url}}/client/changestatus\', {\'id\':' + clientId
+                        btn_group += ', \'status\': 1})" class="btn btn-outline btn-primary" data-title-zh="启用客户端" data-title-en="Enable client" data-aria-label-zh="启用客户端" data-aria-label-en="Enable client"><i class="fa fa-play" aria-hidden="true"></i></button>'
                     }
-                    btn_group += '<a onclick="submitform(\'delete\', \'{{.web_base_url}}/client/del\', {\'id\':' + row.Id
-                    btn_group += '})" class="btn btn-outline btn-danger"><i class="fa fa-trash"></i></a>'
+                    btn_group += '<button type="button" onclick="submitform(\'delete\', \'{{.web_base_url}}/client/del\', {\'id\':' + clientId
+                    btn_group += '})" class="btn btn-outline btn-danger" data-title-zh="删除客户端" data-title-en="Delete client" data-aria-label-zh="删除客户端" data-aria-label-en="Delete client"><i class="fa fa-trash" aria-hidden="true"></i></button>'
                     {{end}}
 
-                    btn_group += '<a href="{{.web_base_url}}/client/edit?id=' + row.Id
-                    btn_group += '" class="btn btn-outline btn-success"><i class="fa fa-edit"></i></a></div>'
+                    btn_group += '<a href="{{.web_base_url}}/client/edit?id=' + clientId
+                    btn_group += '" class="btn btn-outline btn-success" data-title-zh="编辑客户端" data-title-en="Edit client" data-aria-label-zh="编辑客户端" data-aria-label-en="Edit client"><i class="fa fa-edit" aria-hidden="true"></i></a></div>'
                     return btn_group
                 }
             },
             {
                 field: 'show',//域值
-                title: '<span langtag="word-show">',//内容
+                title: '<span langtag="word-show"></span>',//内容
                 align: 'center',
                 halign: 'center',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    return '<div class="btn-group"><a href="{{.web_base_url}}/index/all?client_id=' + row.Id
-                        + '" class="btn btn-outline btn-primary" langtag="word-tunnel"></a>'
-                        + '<a href="{{.web_base_url}}/index/hostlist?client_id=' + row.Id
-                        + '" class="btn btn-outline btn-success" langtag="word-host"></a></div>'
+                    var clientId = Number(row.Id);
+                    if (!isFinite(clientId) || Math.floor(clientId) !== clientId || clientId <= 0) return '';
+                    return '<div class="btn-group"><a href="{{.web_base_url}}/index/all?client_id=' + clientId
+                        + '" class="btn btn-outline btn-primary" data-title-zh="查看隧道" data-title-en="View tunnels" data-aria-label-zh="查看隧道" data-aria-label-en="View tunnels"><i class="fa fa-retweet" aria-hidden="true"></i> <span langtag="word-tunnel"></span></a>'
+                        + '<a href="{{.web_base_url}}/index/hostlist?client_id=' + clientId
+                        + '" class="btn btn-outline btn-success" data-title-zh="查看主机" data-title-en="View hosts" data-aria-label-zh="查看主机" data-aria-label-en="View hosts"><i class="fa fa-globe" aria-hidden="true"></i> <span langtag="word-host"></span></a></div>'
                 }
             }
         ]
@@ -264,19 +277,17 @@
     }
 
     function copyCommand(data) {
-        data.setAttribute("data-clipboard-text", data.previousElementSibling.innerHTML)
+        data.setAttribute("data-clipboard-text", data.previousElementSibling ? data.previousElementSibling.textContent : '')
     }
 
     var clipboard = new ClipboardJS('.copy');
     clipboard.on('success', function (e) {
-        // alert("复制成功"+e.text)
-        toastr.success('复制成功');
+        npsNotify('success', npsIsEnglish() ? 'Copied' : '复制成功');
         e.clearSelection();
     });
 
     clipboard.on('error', function (e) {
-        // alert("复制失败")
-        toastr.error('复制失败', '提示');
+        npsNotify('error', npsIsEnglish() ? 'Copy failed' : '复制失败');
     });
 
 

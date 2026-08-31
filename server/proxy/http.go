@@ -23,6 +23,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 type httpServer struct {
@@ -36,6 +38,30 @@ type httpServer struct {
 	addOrigin     bool
 	cache         *cache.Cache
 	cacheLen      int
+}
+
+const httpResponseWaitTimeout = 5 * time.Second
+
+// waitHTTPResponse bounds the hand-off wait used by keep-alive Host changes.
+// A client that stops reading can otherwise leave CopyBuffer blocked in c.Write
+// forever even after the upstream stream is closed. Closing the client socket
+// on timeout makes the response goroutine observable and lets the handler exit.
+func waitHTTPResponse(wg *sync.WaitGroup, c *conn.Conn) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	timer := time.NewTimer(httpResponseWaitTimeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		logs.Warn("timeout waiting for HTTP upstream response; closing client connection")
+		_ = c.Close()
+		return false
+	}
 }
 
 func NewHttp(bridge *bridge.Bridge, c *file.Tunnel, httpPort, httpsPort int, useCache bool, cacheLen int, addOrigin bool) *httpServer {
@@ -142,32 +168,38 @@ func (s *httpServer) handleTunneling(w http.ResponseWriter, r *http.Request) {
 
 func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader) {
 	var (
-		host       *file.Host
-		target     net.Conn
-		err        error
-		connClient io.ReadWriteCloser
-		scheme     = r.URL.Scheme
-		lk         *conn.Link
-		targetAddr string
-		lenConn    *conn.LenConn
-		isReset    bool
-		wg         sync.WaitGroup
-		remoteAddr string
+		host            *file.Host
+		target          net.Conn
+		err             error
+		connClient      io.ReadWriteCloser
+		scheme          = r.URL.Scheme
+		lk              *conn.Link
+		targetAddr      string
+		lenConn         *conn.LenConn
+		isReset         atomic.Bool
+		wg              sync.WaitGroup
+		remoteAddr      string
+		accountedClient *file.Client
+		failureContent  = s.errorContent
 	)
+	releaseClientConn := func() {
+		if accountedClient == nil {
+			return
+		}
+		accountedClient.AddConn()
+		accountedClient = nil
+	}
 	defer func() {
+		releaseClientConn()
 		if connClient != nil {
 			connClient.Close()
 		} else {
-			s.writeConnFail(c.Conn)
+			s.writeConnFailContent(c.Conn, failureContent)
 		}
 		c.Close()
 	}()
 	firstReq := true
 reset:
-	if isReset {
-		host.Client.AddConn()
-	}
-
 	remoteAddr = strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
 	if len(remoteAddr) == 0 {
 		remoteAddr = c.RemoteAddr().String()
@@ -190,9 +222,10 @@ reset:
 		c.Close()
 		return
 	}
-	if !isReset {
-		defer host.Client.AddConn()
-	}
+	// Hold exactly one connection slot for the host currently serving this
+	// keep-alive stream. The slot is released when the host changes or when the
+	// stream exits; this avoids accounting against the newly selected host.
+	accountedClient = host.Client
 	if err = s.auth(r, c, host.Client.Cnf.U, host.Client.Cnf.P); err != nil {
 		logs.Warn("auth error", err, r.RemoteAddr)
 		return
@@ -217,26 +250,24 @@ reset:
 					if pass == host.Client.IpWhitePass {
 						host.Client.IpWhiteList = append(host.Client.IpWhiteList, ip)
 						file.GetDb().UpdateClient(host.Client)
-						logs.Info("客户端IP白名单认证授权成功:vkey [%s] ip [%s] password [%s]", host.Client.VerifyKey, ip, pass)
+						logs.Info("客户端IP白名单认证授权成功:client_id [%d] ip [%s]", host.Client.Id, ip)
 						jsonBytes, err = json.Marshal(map[string]interface{}{"success": true, "message": "授权成功"})
 					} else {
-						logs.Error("客户端IP白名单认证授权密码错误:vkey [%s] ip [%s] password [%s]", host.Client.VerifyKey, ip, pass)
+						logs.Error("客户端IP白名单认证授权密码错误:client_id [%d] ip [%s]", host.Client.Id, ip)
 						jsonBytes, err = json.Marshal(map[string]interface{}{"success": false, "message": "密码错误"})
 					}
 				} else {
 					logs.Error("客户端IP白名单认证授权密码错误:vkey [%s] ip [%s]", host.Client.VerifyKey, ip)
 					jsonBytes, err = json.Marshal(map[string]interface{}{"success": false, "message": "参数错误"})
 				}
-				s.errorContent, err = jsonBytes, err
-				s.errorCode = 200
+				failureContent = jsonBytes
 				return
 			}
 
 			errorContent, _ := web.ReadStaticFile("page/auth.html")
 			authHtml := string(errorContent)
 			authHtml = strings.ReplaceAll(authHtml, "${ip}", common.GetIpByAddr(c.RemoteAddr().String()))
-			s.errorContent, err = []byte(authHtml), err
-			s.errorCode = 401
+			failureContent = []byte(authHtml)
 			return
 		}
 	}
@@ -253,23 +284,24 @@ reset:
 		return
 	}
 	connClient = conn.GetConn(target, lk.Crypt, lk.Compress, host.Client.Rate, true)
+	currentHost := host
 
-	//read from inc-client
-	go func() {
-		wg.Add(1)
-		isReset = false
-		defer connClient.Close()
+	// Read response bytes from the client-side target connection.
+	isReset.Store(false)
+	wg.Add(1)
+	go func(targetConn io.ReadWriteCloser, requestHost *file.Host) {
+		defer targetConn.Close()
 		defer func() {
-			wg.Done()
-			if !isReset {
+			if !isReset.Load() {
 				c.Close()
 			}
+			wg.Done()
 		}()
 
-		if err1 := goroutine.CopyBuffer(c, connClient, host.Client.Flow, nil, host, ""); err1 != nil {
+		if err1 := goroutine.CopyBuffer(c, targetConn, requestHost.Client.Flow, nil, requestHost, ""); err1 != nil {
 			return
 		}
-	}()
+	}(connClient, currentHost)
 
 	for {
 		//if the cache start and the request is in the cache list, return the cache
@@ -325,13 +357,17 @@ reset:
 			logs.Notice("the url %s %s %s can't be parsed!", r.URL.Scheme, r.Host, r.RequestURI)
 			break
 		} else if host != hostTmp {
-			host = hostTmp
-			isReset = true
+			isReset.Store(true)
 			connClient.Close()
+			if !waitHTTPResponse(&wg, c) {
+				return
+			}
+			releaseClientConn()
+			host = hostTmp
 			goto reset
 		}
 	}
-	wg.Wait()
+	waitHTTPResponse(&wg, c)
 }
 
 func writeRequestRaw(w io.Writer, r *http.Request, br *bufio.Reader) error {

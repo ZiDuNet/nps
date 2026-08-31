@@ -1,26 +1,26 @@
-<div class="wrapper wrapper-content animated fadeInRight">
+<section class="wrapper wrapper-content animated fadeInRight management-page" aria-labelledby="user-list-title">
+    <header class="dashboard-page-header management-page-header">
+        <div>
+            <div class="dashboard-page-kicker" data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</div>
+            <h1 id="user-list-title" data-i18n-zh="用户管理" data-i18n-en="User management">用户管理</h1>
+            <p data-i18n-zh="维护面板账号、资源配额和可用状态。" data-i18n-en="Maintain dashboard accounts, resource limits, and availability.">维护面板账号、资源配额和可用状态。</p>
+        </div>
+    </header>
     <div class="row">
         <div class="col-lg-12">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title">
-                    <h5>用户管理</h5>
-                    <div class="ibox-tools">
-                        <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
-                        <a class="close-link"><i class="fa fa-times"></i></a>
-                    </div>
-                </div>
-                <div class="ibox-content">
-                    <div id="toolbar">
+            <section class="ibox float-e-margins management-table-card">
+                <div class="ibox-content management-table-content">
+                    <div id="toolbar" class="management-table-toolbar">
                         <a href="{{.web_base_url}}/user/add" class="btn btn-primary dim">
-                            <i class="fa fa-fw fa-lg fa-plus"></i> 新增用户
+                            <i class="fa fa-fw fa-lg fa-plus"></i> <span data-i18n-zh="新增用户" data-i18n-en="New user">新增用户</span>
                         </a>
                     </div>
                     <table id="table"></table>
                 </div>
-            </div>
+            </section>
         </div>
     </div>
-</div>
+</section>
 
 <script>
     $('#table').bootstrapTable({
@@ -38,39 +38,57 @@
         pageNumber: 1,
         pageList: [5, 10, 20, 50],
         smartDisplay: true,
+        formatLoadingMessage: function () { return npsTableState('user', true); },
+        formatNoMatches: function () { return npsTableState('user', false); },
+        onPostBody: function () {
+            $('body').setLang('#table');
+            npsApplyTableState(this, 'user');
+        },
         columns: [
             { field: 'Id', title: 'ID', halign: 'center' },
-            { field: 'UserName', title: '用户名', halign: 'center' },
-            { field: 'Remark', title: '备注', halign: 'center' },
-            { field: 'MaxTunnelNum', title: '总隧道上限', halign: 'center', formatter: function(value) { return value || '不限'; } },
-            { field: 'ExpireTime', title: '有效期', halign: 'center', formatter: function(value) { return value || '不限'; } },
+            { field: 'UserName', title: '<span data-i18n-zh="用户名" data-i18n-en="Username">用户名</span>', halign: 'center', escape: true },
+            { field: 'Remark', title: '<span data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', halign: 'center', escape: true },
+            { field: 'MaxTunnelNum', title: '<span data-i18n-zh="总隧道上限" data-i18n-en="Tunnel limit">总隧道上限</span>', halign: 'center', formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedText()); } },
+            { field: 'ExpireTime', title: '<span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span>', halign: 'center', formatter: function(value) { return userTableText(value || userUnlimitedText()); } },
             {
                 field: 'Status',
-                title: '状态',
+                title: '<span data-i18n-zh="状态" data-i18n-en="Status">状态</span>',
                 align: 'center',
                 halign: 'center',
                 formatter: function(value) {
-                    return value ? '<span class="badge badge-primary">启用</span>' : '<span class="badge badge-badge">停用</span>';
+                    return value
+                        ? '<span class="badge badge-primary">' + (npsIsEnglish() ? 'Active' : '启用') + '</span>'
+                        : '<span class="badge badge-danger">' + (npsIsEnglish() ? 'Disabled' : '停用') + '</span>';
                 }
             },
             {
                 field: 'option',
-                title: '操作',
+                title: '<span data-i18n-zh="操作" data-i18n-en="Actions">操作</span>',
                 align: 'center',
                 halign: 'center',
                 formatter: function(value, row) {
+                    var userId = Number(row.Id);
+                    if (!isFinite(userId) || Math.floor(userId) !== userId || userId <= 0) return '';
                     var btn = '<div class="btn-group">';
                     if (row.Status) {
-                        btn += '<a onclick="submitform(\'stop\', \'{{.web_base_url}}/user/changestatus\', {\'id\':' + row.Id + ', \'status\': 0})" class="btn btn-outline btn-warning"><i class="fa fa-pause"></i></a>';
+                        btn += '<button type="button" onclick="submitform(\'stop\', \'{{.web_base_url}}/user/changestatus\', {\'id\':' + userId + ', \'status\': 0})" class="btn btn-outline btn-warning" title="' + (npsIsEnglish() ? 'Disable user' : '停用用户') + '" aria-label="' + (npsIsEnglish() ? 'Disable user' : '停用用户') + '"><i class="fa fa-pause" aria-hidden="true"></i></button>';
                     } else {
-                        btn += '<a onclick="submitform(\'start\', \'{{.web_base_url}}/user/changestatus\', {\'id\':' + row.Id + ', \'status\': 1})" class="btn btn-outline btn-primary"><i class="fa fa-play"></i></a>';
+                        btn += '<button type="button" onclick="submitform(\'start\', \'{{.web_base_url}}/user/changestatus\', {\'id\':' + userId + ', \'status\': 1})" class="btn btn-outline btn-primary" title="' + (npsIsEnglish() ? 'Enable user' : '启用用户') + '" aria-label="' + (npsIsEnglish() ? 'Enable user' : '启用用户') + '"><i class="fa fa-play" aria-hidden="true"></i></button>';
                     }
-                    btn += '<a href="{{.web_base_url}}/user/edit?id=' + row.Id + '" class="btn btn-outline btn-success"><i class="fa fa-edit"></i></a>';
-                    btn += '<a onclick="submitform(\'delete\', \'{{.web_base_url}}/user/del\', {\'id\':' + row.Id + '})" class="btn btn-outline btn-danger"><i class="fa fa-trash"></i></a>';
+                    btn += '<a href="{{.web_base_url}}/user/edit?id=' + userId + '" class="btn btn-outline btn-success" title="' + (npsIsEnglish() ? 'Edit user' : '编辑用户') + '" aria-label="' + (npsIsEnglish() ? 'Edit user' : '编辑用户') + '"><i class="fa fa-edit" aria-hidden="true"></i></a>';
+                    btn += '<button type="button" onclick="submitform(\'delete\', \'{{.web_base_url}}/user/del\', {\'id\':' + userId + '})" class="btn btn-outline btn-danger" title="' + (npsIsEnglish() ? 'Delete user' : '删除用户') + '" aria-label="' + (npsIsEnglish() ? 'Delete user' : '删除用户') + '"><i class="fa fa-trash" aria-hidden="true"></i></button>';
                     btn += '</div>';
                     return btn;
                 }
             }
         ]
     });
+
+    function userTableText(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
+    function userUnlimitedText() {
+        return npsIsEnglish() ? 'Unlimited' : '不限';
+    }
 </script>

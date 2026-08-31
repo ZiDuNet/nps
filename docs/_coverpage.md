@@ -4,7 +4,7 @@
 
 > 轻量级、高性能、功能强大的内网穿透代理服务器
 >
-> **v1.1.2** · 上游同步 · 用户管理 · 多客户端归属 · 流式玻璃 Web UI
+> **v1.1.2** · 上游同步 · 用户管理 · 多客户端归属 · 运维控制台 Web UI
 
 - 支持 TCP/UDP/HTTP(S)/SOCKS5/P2P 等协议
 - 现代化 Web 管理面板，支持明暗主题切换
@@ -13,4 +13,3 @@
 
 [GitHub](https://github.com/ZiDuNet/nps)
 [开始使用](https://zidunet.github.io/nps/#/start)
-

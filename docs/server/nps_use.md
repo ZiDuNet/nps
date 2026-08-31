@@ -2,7 +2,7 @@
 
 进入 web 界面：`公网IP:web 端口`（默认  `8081`）。
 
-> **首次启动 `web_username`（默认 `admin`）、`web_password`、`auth_key`、`auth_crypt_key` 均为随机生成**，会打印到终端日志中，请第一时间复制保存。后续如需变更可直接修改 `conf/nps.conf` 后 `nps reload`。
+> **首次启动用户名默认为 `admin`，`web_password`、`auth_key`、`auth_crypt_key` 会随机生成**，并打印到终端日志中，请第一时间复制保存。发布模板中的 `CHANGE_ME` 和历史弱默认值也会自动轮换；显式自定义值或留空值会保留。认证配置可用 `nps reload` 重新加载，端口、Bridge、代理和隧道配置修改后请执行 `nps restart`。
 
 进入 web 管理界面，有详细的说明。
 
@@ -47,4 +47,3 @@ nps_dir/
 ## 数据迁移
 
 数据迁移只需迁移 `conf` 目录，该目录包含配置文件以及用户数据（json格式文件），放到 nps(.exe) 的同级目录下，直接启动即可。
-

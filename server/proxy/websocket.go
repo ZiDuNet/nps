@@ -24,6 +24,7 @@ type HTTPError struct {
 
 type HttpReverseProxy struct {
 	proxy                 *ReverseProxy
+	server                *httpServer
 	responseHeaderTimeout time.Duration
 }
 type flowConn struct {
@@ -33,6 +34,22 @@ type flowConn struct {
 	flowIn   int64
 	flowOut  int64
 	once     sync.Once
+}
+
+func (rp *HttpReverseProxy) reserveClientConnection(client *file.Client) error {
+	if client == nil {
+		return errors.New("client is nil")
+	}
+	if rp.server != nil {
+		return rp.server.CheckFlowAndConnNum(client)
+	}
+	if client.Flow != nil && client.Flow.Exceeded() {
+		return errors.New("Traffic exceeded")
+	}
+	if !client.GetConn() {
+		return errors.New("Connections exceed the current client limit")
+	}
+	return nil
 }
 
 func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
@@ -46,6 +63,11 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		rw.Write([]byte(req.Host + " not found"))
 		return
 	}
+	if host.Client == nil || host.Client.Cnf == nil || host.Target == nil {
+		rw.WriteHeader(http.StatusBadGateway)
+		rw.Write([]byte("502 Bad Gateway"))
+		return
+	}
 	if host.Client.Cnf.U != "" && host.Client.Cnf.P != "" && !common.CheckAuth(req, host.Client.Cnf.U, host.Client.Cnf.P) {
 		rw.WriteHeader(http.StatusUnauthorized)
 		rw.Write([]byte("Unauthorized"))
@@ -56,7 +78,11 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		rw.Write([]byte("502 Bad Gateway"))
 		return
 	}
-	host.Client.CutConn()
+	if err := rp.reserveClientConnection(host.Client); err != nil {
+		logs.Warn("client id %d, host id %d, error %s, when websocket connection", host.Client.Id, host.Id, err.Error())
+		http.Error(rw, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+		return
+	}
 
 	req = req.WithContext(context.WithValue(req.Context(), "host", host))
 	req = req.WithContext(context.WithValue(req.Context(), "target", targetAddr))
@@ -94,6 +120,7 @@ func (*flowConn) SetWriteDeadline(t time.Time) error { return nil }
 
 func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 	rp := &HttpReverseProxy{
+		server:                s,
 		responseHeaderTimeout: 30 * time.Second,
 	}
 	local, _ := net.ResolveTCPAddr("tcp", "127.0.0.1")

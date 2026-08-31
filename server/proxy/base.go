@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"sort"
 	"sync"
 
 	"ehang.io/nps/bridge"
@@ -29,7 +28,6 @@ type BaseServer struct {
 	bridge       NetBridge
 	task         *file.Tunnel
 	errorContent []byte
-	errorCode    int
 	sync.Mutex
 }
 
@@ -44,24 +42,31 @@ func NewBaseServer(bridge *bridge.Bridge, task *file.Tunnel) *BaseServer {
 
 // add the flow
 func (s *BaseServer) FlowAdd(in, out int64) {
-	s.Lock()
-	defer s.Unlock()
-	s.task.Flow.ExportFlow += out
-	s.task.Flow.InletFlow += in
+	if s.task != nil && s.task.Flow != nil {
+		s.task.Flow.Add(in, out)
+	}
 }
 
 // change the flow
 func (s *BaseServer) FlowAddHost(host *file.Host, in, out int64) {
-	s.Lock()
-	defer s.Unlock()
-	host.Flow.ExportFlow += out
-	host.Flow.InletFlow += in
+	if host != nil && host.Flow != nil {
+		host.Flow.Add(in, out)
+	}
 }
 
 // write fail bytes to the connection
 func (s *BaseServer) writeConnFail(c net.Conn) {
+	s.writeConnFailContent(c, s.errorContent)
+}
+
+// writeConnFailContent writes a request-specific failure body. HTTP proxy
+// handlers may customize the body per request, so callers should pass their
+// local snapshot instead of mutating BaseServer.errorContent.
+func (s *BaseServer) writeConnFailContent(c net.Conn, content []byte) {
 	c.Write([]byte(common.ConnectionFailBytes))
-	c.Write(s.errorContent)
+	if len(content) > 0 {
+		_, _ = c.Write(content)
+	}
 }
 
 // auth check for reverse-proxy hosts (401 + WWW-Authenticate).
@@ -85,7 +90,10 @@ func (s *BaseServer) doAuth(r *http.Request, c *conn.Conn, u, p, failBytes, errM
 
 // check flow limit of the client ,and decrease the allow num of client
 func (s *BaseServer) CheckFlowAndConnNum(client *file.Client) error {
-	if client.Flow.FlowLimit > 0 && (client.Flow.FlowLimit<<20) < (client.Flow.ExportFlow+client.Flow.InletFlow) {
+	if client == nil {
+		return errors.New("client is nil")
+	}
+	if client.Flow != nil && client.Flow.Exceeded() {
 		return errors.New("Traffic exceeded")
 	}
 	if !client.GetConn() {
@@ -95,10 +103,10 @@ func (s *BaseServer) CheckFlowAndConnNum(client *file.Client) error {
 }
 
 func in(target string, str_array []string) bool {
-	sort.Strings(str_array)
-	index := sort.SearchStrings(str_array, target)
-	if index < len(str_array) && str_array[index] == target {
-		return true
+	for _, value := range str_array {
+		if value == target {
+			return true
+		}
 	}
 	return false
 }

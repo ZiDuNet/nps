@@ -28,39 +28,72 @@
 	function setCookie (c_name, value, expiredays) {
 		var exdate = new Date();
 		exdate.setDate(exdate.getDate() + expiredays);
-		document.cookie = c_name + '=' + escape(value) + ((expiredays == null) ? '' : ';expires=' + exdate.toGMTString())+ '; path='+window.nps.web_base_url+'/;';
+		var basePath = (window.nps && typeof window.nps.web_base_url === 'string') ? window.nps.web_base_url : '';
+		var cookiePath = basePath || '/';
+		if (cookiePath.charAt(cookiePath.length - 1) !== '/') cookiePath += '/';
+		document.cookie = encodeURIComponent(c_name) + '=' + encodeURIComponent(value)
+			+ ((expiredays == null) ? '' : '; expires=' + exdate.toUTCString())
+			+ '; path=' + cookiePath + '; SameSite=Lax';
 	}
 
 	function getCookie (c_name) {
 		if (document.cookie.length > 0) {
-			c_start = document.cookie.indexOf(c_name + '=');
+			var c_start = document.cookie.indexOf(c_name + '=');
 			if (c_start != -1) {
 				c_start = c_start + c_name.length + 1;
-				c_end = document.cookie.indexOf(';', c_start);
+				var c_end = document.cookie.indexOf(';', c_start);
 				if (c_end == -1) c_end = document.cookie.length;
-				return unescape(document.cookie.substring(c_start, c_end));
+				return decodeURIComponent(document.cookie.substring(c_start, c_end));
 			}
 		}
 		return null;
 	}
 
+	function getLanguagePreference () {
+		try {
+			return window.localStorage.getItem('nps-language');
+		} catch (error) {
+			return null;
+		}
+	}
+
+	function saveLanguagePreference (value) {
+		try {
+			window.localStorage.setItem('nps-language', value);
+		} catch (error) {
+			// Cookie persistence below remains the fallback for restricted storage.
+		}
+	}
+
 	function setchartlang (langobj,chartobj) {
-		if ( $.type (langobj) == 'string' ) return langobj;
-		if ( $.type (langobj) == 'chartobj' ) return false;
-		var flag = true;
-		for (key in langobj) {
-			var item = key;
-			children = (chartobj.hasOwnProperty(item)) ? setchartlang (langobj[item],chartobj[item]) : setchartlang (langobj[item],undefined);
-			switch ($.type(children)) {
-				case 'string':
-					if ($.type(chartobj[item]) != 'string' ) continue;
-				case 'object':
-					chartobj[item] = (children['value'] || children);
-				default:
-					flag = false;
+		if ($.type(langobj) == 'string') return langobj;
+		if (!langobj || $.type(langobj) != 'object') return undefined;
+
+		// Locale leaves are objects such as {"zh-CN": "入口", "en-US": "In"}.
+		// Resolve them before checking chartobj so empty chart labels can still be
+		// populated.
+		var translated = langobj[languages['current']] || langobj[languages['default']];
+		if ($.type(translated) == 'string') return {'value': translated};
+		var chartType = $.type(chartobj);
+		if (!chartobj || (chartType != 'object' && chartType != 'array')) return undefined;
+
+		var changed = false;
+		for (var key in langobj) {
+			if (!Object.prototype.hasOwnProperty.call(langobj, key)) continue;
+			if (key == languages['current'] || key == languages['default']) continue;
+			if (!Object.prototype.hasOwnProperty.call(chartobj, key)) continue;
+			var children = setchartlang(langobj[key], chartobj[key]);
+			if ($.type(children) == 'string' && $.type(chartobj[key]) == 'string') {
+				chartobj[key] = children;
+				changed = true;
+			} else if (children && Object.prototype.hasOwnProperty.call(children, 'value')) {
+				chartobj[key] = children.value;
+				changed = true;
+			} else if (children === true) {
+				changed = true;
 			}
 		}
-		if (flag) { return {'value':(langobj[languages['current']] || langobj[languages['default']] || 'N/A')}}
+		return changed ? true : undefined;
 	}
 
 	$.fn.cloudLang = function () {
@@ -74,12 +107,13 @@
 				languages['default'] = languages['content']['default'];
 				// Keep Chinese as the first-run default; only an explicit user cookie
 				// overrides it.
-				languages['navigator'] = (getCookie ('lang-v2') || languages['default']);
-				for(var key in languages['menu']){
-					if ($('#languagemenu').next().find('li[lang="' + key + '"]').length) continue;
-					$('#languagemenu').next().append('<li lang="' + key + '"><a href="#">' + languages['menu'][key] +'</a></li>');
-					if ( key.toLowerCase() == languages['navigator'].toLowerCase() ) languages['current'] = key;
-				}
+					languages['navigator'] = (getCookie ('lang-v2') || getLanguagePreference() || languages['default']);
+					for(var key in languages['menu']){
+						if (!Object.prototype.hasOwnProperty.call(languages['menu'], key)) continue;
+						if (key.toLowerCase() == languages['navigator'].toLowerCase()) languages['current'] = key;
+						if ($('#languagemenu').next().find('li[lang="' + key + '"]').length) continue;
+						$('#languagemenu').next().append('<li lang="' + key + '"><a href="#">' + languages['menu'][key] +'</a></li>');
+					}
 				$('#languagemenu').attr('lang',(languages['current'] || languages['default']));
 				$('body').setLang ('');
 			}
@@ -87,15 +121,17 @@
 	};
 
 	$.fn.setLang = function (dom) {
+		if (!languages || !languages['content']) return false;
 		languages['current'] = $('#languagemenu').attr('lang');
 		if ( dom == '' ) {
 			$('#languagemenu span').text(' ' + languages['menu'][languages['current']]);
 			if (languages['current'] != getCookie('lang-v2')) setCookie('lang-v2', languages['current']);
+			saveLanguagePreference(languages['current']);
 			if($("#table").length>0) $('#table').bootstrapTable('refreshOptions', { 'locale': languages['current']});
 		}
 		$.each($(dom + ' [langtag]'), function (i, item) {
 			var index = $(item).attr('langtag');
-			string = languages['content'][index.toLowerCase()];
+			var string = languages['content'][index.toLowerCase()];
 			switch ($.type(string)) {
 				case 'string':
 					break;
@@ -118,15 +154,36 @@
 			var language = languages['current'] === 'en-US' ? 'en' : 'zh';
 			$(item).text($(item).attr('data-i18n-' + language));
 		});
+		var language = languages['current'] === 'en-US' ? 'en' : 'zh';
+		$.each($(dom + ' [data-placeholder-zh]'), function (i, item) {
+			$(item).attr('placeholder', $(item).attr('data-placeholder-' + language));
+		});
+		$.each($(dom + ' [data-aria-label-zh]'), function (i, item) {
+			$(item).attr('aria-label', $(item).attr('data-aria-label-' + language));
+		});
+		$.each($(dom + ' [data-title-zh]'), function (i, item) {
+			$(item).attr('title', $(item).attr('data-title-' + language));
+		});
+		npsRefreshToggleLabels(dom);
 		npsDecorateForms(dom);
+		npsDecorateDetailControls(dom);
 
 		if ( !$.isEmptyObject(chartdatas) ) {
 			setchartlang(languages['content']['charts'],chartdatas);
+			if (typeof applyDashboardChartLabels === 'function') {
+				applyDashboardChartLabels();
+			}
 			for(var key in chartdatas){
+				if (!Object.prototype.hasOwnProperty.call(chartdatas, key)) continue;
 				if ($('#'+key).length == 0) continue;
-				if($.type(chartdatas[key]) == 'object')
-				charts[key] = echarts.init(document.getElementById(key));
+				if ($.type(chartdatas[key]) != 'object') continue;
+				if (!charts[key] || (typeof charts[key].isDisposed === 'function' && charts[key].isDisposed())) {
+					charts[key] = echarts.init(document.getElementById(key));
+				}
 				charts[key].setOption(chartdatas[key], true);
+			}
+			if (typeof applyChartTheme === 'function') {
+				applyChartTheme(document.documentElement.getAttribute('data-theme') || 'light');
 			}
 		}
 	}
@@ -217,23 +274,134 @@ function npsDecorateForms(dom) {
     });
 }
 
+function npsSetToggleLabel(element, checked) {
+    var $label = $(element);
+    if (!$label.length) return;
+    var english = npsIsEnglish();
+    $label.attr('data-toggle-state', checked ? 'yes' : 'no')
+        .text(checked ? (english ? 'Yes' : '是') : (english ? 'No' : '否'));
+}
+
+function npsRefreshToggleLabels(dom) {
+    var scope = dom ? dom + ' ' : '';
+    $(scope + '.toggle-label[data-toggle-state]').each(function () {
+        npsSetToggleLabel(this, $(this).attr('data-toggle-state') === 'yes');
+    });
+}
+
 function langreply(langstr) {
+    if (!languages || !languages['content'] || !languages['content']['reply']) return langstr;
     var langobj = languages['content']['reply'][langstr.replace(/[\s,\.\?]*/g,"").toLowerCase()];
     if ($.type(langobj) == 'undefined') return langstr
     langobj = (langobj[languages['current']] || langobj[languages['default']] || langstr);
     return langobj
 }
 
+function npsIsEnglish() {
+    return typeof languages !== 'undefined' && languages['current'] === 'en-US';
+}
+
+function npsEscapeHtml(value) {
+    var element = document.createElement('div');
+    element.textContent = value == null ? '' : String(value);
+    return element.innerHTML
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/`/g, '&#x60;');
+}
+
+function npsBooleanMarkup(value) {
+    var zh = value ? '是' : '否';
+    var en = value ? 'Yes' : 'No';
+    return '<span data-i18n-zh="' + zh + '" data-i18n-en="' + en + '">' + (npsIsEnglish() ? en : zh) + '</span>';
+}
+
+function npsRequestErrorMessage() {
+    return npsIsEnglish()
+        ? 'The request failed. Check the connection and try again.'
+        : '请求失败，请检查连接后重试。';
+}
+
 function npsNotify(type, msg) {
+    msg = msg == null ? '' : String(msg);
     if (typeof toastr !== 'undefined') {
         var opts = { positionClass: 'toast-top-center', timeOut: 3000, closeButton: true };
-        if (type === 'error') toastr.error(msg, '', opts);
-        else if (type === 'success') toastr.success(msg, '', opts);
-        else if (type === 'warning') toastr.warning(msg, '', opts);
-        else toastr.info(msg, '', opts);
+        var safeMsg = npsEscapeHtml(msg);
+        if (type === 'error') toastr.error(safeMsg, '', opts);
+        else if (type === 'success') toastr.success(safeMsg, '', opts);
+        else if (type === 'warning') toastr.warning(safeMsg, '', opts);
+        else toastr.info(safeMsg, '', opts);
     } else {
-        alert(msg);
+        var previous = document.querySelector('.nps-inline-notice');
+        if (previous) previous.remove();
+        var notice = document.createElement('div');
+        notice.className = 'nps-inline-notice nps-inline-notice--' + type;
+        notice.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        notice.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+        var icon = document.createElement('i');
+        icon.className = type === 'success' ? 'fa fa-check-circle' : type === 'warning' ? 'fa fa-exclamation-triangle' : type === 'error' ? 'fa fa-exclamation-circle' : 'fa fa-info-circle';
+        icon.setAttribute('aria-hidden', 'true');
+        var message = document.createElement('span');
+        message.textContent = msg;
+        notice.appendChild(icon);
+        notice.appendChild(message);
+        document.body.appendChild(notice);
+        window.setTimeout(function () {
+            notice.classList.add('is-visible');
+        }, 0);
+        window.setTimeout(function () {
+            notice.classList.remove('is-visible');
+            window.setTimeout(function () { notice.remove(); }, 180);
+        }, 3200);
     }
+}
+
+function npsTableState(kind, loading) {
+    var english = npsIsEnglish();
+    var copy = {
+        client: english ? ['No clients yet', 'Create a client to connect a local network to this server.', 'desktop'] : ['还没有客户端', '创建客户端后即可连接内网服务。', 'desktop'],
+        tunnel: english ? ['No tunnels match this view', 'Create a tunnel or adjust the current search.', 'exchange-alt'] : ['当前没有匹配的隧道', '可以新建隧道，或调整当前搜索条件。', 'exchange-alt'],
+        host: english ? ['No host rules yet', 'Create a host rule to route domain traffic.', 'globe'] : ['还没有域名规则', '创建域名规则后即可转发站点流量。', 'globe'],
+        user: english ? ['No users yet', 'Create a user to delegate management access.', 'users'] : ['还没有用户', '创建用户后即可分配管理权限。', 'users']
+    }[kind] || (english ? ['No records found', 'Adjust the search or create a new record.', 'inbox'] : ['没有可显示的记录', '可以调整搜索条件或创建新的记录。', 'inbox']);
+    if (loading) {
+        return '<div class="table-loading-state" role="status"><i class="fa fa-circle-notch fa-spin" aria-hidden="true"></i><span>' + (english ? 'Loading records...' : '正在加载记录...') + '</span></div>';
+    }
+    return '<div class="table-empty-state" role="status"><div class="table-empty-state__content"><i class="fa fa-' + copy[2] + '" aria-hidden="true"></i><strong>' + copy[0] + '</strong><span>' + copy[1] + '</span></div></div>';
+}
+
+function npsDecorateDetailControls(scope) {
+    var $scope = scope ? $(scope) : $('#table');
+    if (!$scope.length) return;
+    var $controls = $scope.filter('a.detail-icon').add($scope.find('a.detail-icon'));
+    if (!$controls.length) return;
+    var english = npsIsEnglish();
+    $controls.each(function () {
+        var expanded = $(this).closest('tr').next('tr.detail-view').length > 0;
+        var label = expanded
+            ? (english ? 'Collapse details' : '折叠详情')
+            : (english ? 'Expand details' : '展开详情');
+        $(this).attr({
+            role: 'button',
+            tabindex: '0',
+            'aria-expanded': expanded ? 'true' : 'false',
+            'aria-label': label,
+            title: label
+        });
+        $(this).find('i').attr('aria-hidden', 'true');
+    });
+}
+
+function npsApplyTableState(table, kind) {
+    var apply = function () {
+        var $scope = $(table).closest('.bootstrap-table');
+        if (!$scope.length) $scope = $('#table').closest('.bootstrap-table');
+        var $emptyCell = $scope.find('tbody tr.no-records-found > td');
+        if ($emptyCell.length) $emptyCell.html(npsTableState(kind, false));
+        npsDecorateDetailControls($scope);
+    };
+    apply();
+    window.setTimeout(apply, 0);
 }
 
 function npsFormMessage(key) {
@@ -284,7 +452,7 @@ function validateNpsForm(form, announce) {
         }
     }
     if (first) {
-        if (announce) npsNotify('warning', npsFormMessage('required') + missing.join('、'));
+        if (announce) npsNotify('warning', npsFormMessage('required') + missing.join(npsIsEnglish() ? ', ' : '、'));
         first.focus();
         return false;
     }
@@ -293,6 +461,12 @@ function validateNpsForm(form, announce) {
 
 $(function () {
     npsDecorateForms('');
+    $(document).on('keydown.npsDetailA11y', 'a.detail-icon[role="button"]', function (event) {
+        if (event.key === ' ' || event.key === 'Spacebar') {
+            event.preventDefault();
+            $(this).trigger('click');
+        }
+    });
     $('[required]').on('input change blur', function () {
         if (this.value && this.value.trim() !== '') npsSetFieldValidity(this, true);
     });
@@ -305,8 +479,10 @@ function submitform(action, url, postdata) {
         case 'stop':
         case 'delete':
 		case 'copy':
-            var langobj = languages['content']['confirm'][action];
-            action = (langobj[languages['current']] || langobj[languages['default']] || 'Are you sure you want to ' + action + ' it?');
+            var confirmCatalog = languages && languages['content'] && languages['content']['confirm'];
+            var langobj = confirmCatalog && confirmCatalog[action];
+            action = (langobj && (langobj[languages['current']] || langobj[languages['default']]))
+                || (npsIsEnglish() ? 'Are you sure you want to ' + action + ' it?' : '确定要执行此操作吗？');
             if (! confirm(action)) return;
             postsubmit = true;
         case 'add':
@@ -323,9 +499,12 @@ function submitform(action, url, postdata) {
                         if (postsubmit) {
 							document.location.reload();
 						}else{
-							window.location.href= document.referrer
-						}
+                            window.location.href = document.referrer || (window.nps && window.nps.web_base_url ? window.nps.web_base_url + '/' : '/');
+                        }
                     }
+                },
+                error: function () {
+                    npsNotify('error', npsRequestErrorMessage());
                 }
             });
 			return;
@@ -341,12 +520,18 @@ function submitform(action, url, postdata) {
 					if (res.status) {
 						document.location.reload();
 					}
+				},
+				error: function () {
+					npsNotify('error', npsRequestErrorMessage());
 				}
 			});
     }
 }
 
 function changeunit(limit) {
+    limit = Number(limit);
+    if (!isFinite(limit)) return "0B";
+    if (limit < 0) return "-" + changeunit(-limit);
     var size = "";
     if (limit < 0.1 * 1024) {
         size = limit.toFixed(2) + "B";

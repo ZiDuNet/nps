@@ -89,7 +89,7 @@ func main() {
 	logs.SetLogFuncCallDepth(3)
 
 	if logPath == "" {
-		logPath := beego.AppConfig.String("log_path")
+		logPath = beego.AppConfig.String("log_path")
 		if logPath == "" {
 			logPath = common.GetLogPath()
 		}
@@ -433,28 +433,127 @@ func run() {
 
 func initConfig(confDir string) {
 	if !common.FileExists(confDir) {
-		os.MkdirAll(confDir, 0755)
+		if err := os.MkdirAll(confDir, 0750); err != nil {
+			logs.Error("create config directory failed:", err)
+			return
+		}
 	}
 	confPath := filepath.Join(confDir, "nps.conf")
 	if !common.FileExists(confPath) {
-		webPassword := crypt.GetRandomString(8)
-		authKey := crypt.GetRandomString(8)
-		authCryptKey := crypt.GetRandomString(16)
-		content := strings.Replace(defaultNpsConf, "web_password=123", "web_password="+webPassword, 1)
-		content = strings.Replace(content, "auth_key=123", "auth_key="+authKey, 1)
-		content = strings.Replace(content, "auth_crypt_key =213", "auth_crypt_key ="+authCryptKey, 1)
-		f, err := os.Create(confPath)
+		content, secrets := rotateInsecureConfig(defaultNpsConf)
+		f, err := os.OpenFile(confPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 		if err != nil {
+			logs.Error("create config file failed:", err)
 			return
 		}
-		defer f.Close()
-		f.WriteString(content)
+		if _, err := f.WriteString(content); err != nil {
+			_ = f.Close()
+			logs.Error("write config file failed:", err)
+			return
+		}
+		_ = f.Close()
+		_ = os.Chmod(confPath, 0600)
 		logs.Info("Auto-generated default config file:", confPath)
-		logs.Info("Web login username: admin, password:", webPassword)
-		logs.Info("auth_key:", authKey)
-		logs.Info("auth_crypt_key:", authCryptKey)
+		logGeneratedSecrets(secrets)
+	} else if content, err := os.ReadFile(confPath); err == nil {
+		updated, secrets := rotateInsecureConfig(string(content))
+		if len(secrets) > 0 {
+			if err := os.WriteFile(confPath, []byte(updated), 0600); err != nil {
+				logs.Error("rotate insecure config secrets failed:", err)
+			} else {
+				_ = os.Chmod(confPath, 0600)
+				logs.Warn("rotated known default config secrets in:", confPath)
+				logGeneratedSecrets(secrets)
+			}
+		} else {
+			_ = os.Chmod(confPath, 0600)
+		}
+	} else {
+		logs.Warn("read config file for secret check failed:", err)
 	}
 	web.ExtractWebFiles(common.GetRunPath())
+}
+
+// rotateInsecureConfig replaces only values that are known release-template
+// defaults. Empty values remain untouched because they are a supported way to
+// explicitly disable optional authentication in an existing deployment.
+func rotateInsecureConfig(content string) (string, map[string]string) {
+	secrets := make(map[string]string)
+	for _, item := range []struct {
+		key      string
+		length   int
+		defaults []string
+	}{
+		{key: "web_password", length: 8, defaults: []string{"123", "CHANGE_ME"}},
+		{key: "auth_key", length: 8, defaults: []string{"123", "CHANGE_ME"}},
+		{key: "auth_crypt_key", length: 16, defaults: []string{"213", "CHANGE_ME_16CHAR"}},
+	} {
+		for _, value := range item.defaults {
+			if !configValueEquals(content, item.key, value) {
+				continue
+			}
+			generated := crypt.GetRandomString(item.length)
+			var changed bool
+			content, changed = replaceConfigValue(content, item.key, value, generated)
+			if changed {
+				secrets[item.key] = generated
+			}
+			break
+		}
+	}
+	// The historical public key was shared by every packaged installation.
+	// Disable it in-place; users can opt in with an explicit value later.
+	if configValueEquals(content, "public_vkey", "123") {
+		content, _ = replaceConfigValue(content, "public_vkey", "123", "")
+		secrets["public_vkey"] = "(disabled)"
+	}
+	return content, secrets
+}
+
+func configValueEquals(content, key, expected string) bool {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
+		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 && strings.TrimSpace(parts[0]) == key && strings.TrimSpace(parts[1]) == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func replaceConfigValue(content, key, expected, replacement string) (string, bool) {
+	lines := strings.SplitAfter(content, "\n")
+	changed := false
+	for i, line := range lines {
+		body := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+		parts := strings.SplitN(body, "=", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) != key || strings.TrimSpace(parts[1]) != expected {
+			continue
+		}
+		newline := line[len(body):]
+		lines[i] = body[:strings.Index(body, "=")+1] + replacement + newline
+		changed = true
+	}
+	return strings.Join(lines, ""), changed
+}
+
+func logGeneratedSecrets(secrets map[string]string) {
+	if value, ok := secrets["web_password"]; ok {
+		logs.Info("Web login username: admin, password:", value)
+	}
+	if value, ok := secrets["auth_key"]; ok {
+		logs.Info("auth_key:", value)
+	}
+	if value, ok := secrets["auth_crypt_key"]; ok {
+		logs.Info("auth_crypt_key:", value)
+	}
+	if value, ok := secrets["public_vkey"]; ok {
+		logs.Info("public_vkey:", value)
+	}
 }
 
 const defaultNpsConf = `###########################################################################
@@ -483,7 +582,7 @@ bridge_ip=0.0.0.0
 # 客户端认证与连接限制
 ###########################################################################
 # 客户端连接服务端的公共验证密钥；留空则禁止使用公共密钥连接
-public_vkey=123
+public_vkey=
 # 是否按客户端来源 IP 限制连接；true 启用、false 禁用，留空则忽略
 #ip_limit=true
 
@@ -513,7 +612,7 @@ web_host=a.o.com
 # 管理面板管理员用户名
 web_username=admin
 # 管理面板管理员密码；首次启动时会自动生成随机值
-web_password=123
+web_password=CHANGE_ME
 # 管理面板监听端口
 web_port = 8081
 # 管理面板监听 IP，0.0.0.0 表示允许外部访问
@@ -531,9 +630,9 @@ web_key_file=conf/server.key
 # Web API 认证配置
 ###########################################################################
 # Web API 认证密钥；首次启动时会自动生成随机值
-auth_key=123
+auth_key=CHANGE_ME
 # 获取服务端 auth_key 使用的 AES 密钥，必须恰好为 16 个字符；首次启动时会自动生成
-auth_crypt_key =213
+auth_crypt_key =CHANGE_ME_16CHAR
 
 ###########################################################################
 # 端口权限配置（可选）

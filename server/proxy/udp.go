@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"io"
 	"net"
 	"strings"
@@ -32,15 +33,83 @@ const (
 //   - 只有"赢家"消耗一个 NowConn 配额，输家不再重复占用
 //   - 避免了 race window 期间的 NowConn 配额泄漏
 type udpSession struct {
+	mu         sync.RWMutex
+	writeMu    sync.Mutex
 	target     io.ReadWriteCloser // 用于 Read/Write 的封装层（可能含加密/压缩）
-	rawConn    net.Conn           // 底层 mux conn，用于 SetReadDeadline
 	lastActive int64              // 最近活跃时间（unix nano，原子读写）
 	ready      chan struct{}      // 会话就绪后关闭；建立失败时也关闭
 	err        error              // 建立失败时设置；ready 关闭后才允许读
+	closed     bool               // 会话已被清理，禁止后续安装 target
 }
 
 func (u *udpSession) touch() {
 	atomic.StoreInt64(&u.lastActive, time.Now().UnixNano())
+}
+
+func (u *udpSession) setError(err error) {
+	u.mu.Lock()
+	u.err = err
+	u.mu.Unlock()
+}
+
+func (u *udpSession) buildError() error {
+	u.mu.RLock()
+	err := u.err
+	u.mu.RUnlock()
+	return err
+}
+
+// installTarget publishes the stream only after it is fully constructed. If
+// the server was closed while the bridge was dialing, close the late stream
+// immediately instead of leaking it outside addrMap.
+func (u *udpSession) installTarget(target io.ReadWriteCloser) bool {
+	u.writeMu.Lock()
+	defer u.writeMu.Unlock()
+	u.mu.Lock()
+	if u.closed {
+		u.mu.Unlock()
+		_ = target.Close()
+		return false
+	}
+	u.target = target
+	u.mu.Unlock()
+	return true
+}
+
+func (u *udpSession) getTarget() io.ReadWriteCloser {
+	u.mu.RLock()
+	target := u.target
+	u.mu.RUnlock()
+	return target
+}
+
+// write serializes packets for a single mux stream. nps_mux's send window is
+// stateful and cannot be mutated by concurrent UDP receive goroutines.
+func (u *udpSession) write(data []byte) (int, error) {
+	u.writeMu.Lock()
+	defer u.writeMu.Unlock()
+	target := u.getTarget()
+	if target == nil {
+		return 0, io.ErrClosedPipe
+	}
+	return target.Write(data)
+}
+
+func (u *udpSession) closeTarget() {
+	u.writeMu.Lock()
+	defer u.writeMu.Unlock()
+	u.mu.Lock()
+	if u.closed {
+		u.mu.Unlock()
+		return
+	}
+	u.closed = true
+	target := u.target
+	u.target = nil
+	u.mu.Unlock()
+	if target != nil {
+		_ = target.Close()
+	}
 }
 
 type UdpModeServer struct {
@@ -65,7 +134,7 @@ func (s *UdpModeServer) Start() error {
 	if s.task.ServerIp == "" {
 		s.task.ServerIp = "0.0.0.0"
 	}
-	s.listener, err = net.ListenUDP("udp", &net.UDPAddr{net.ParseIP(s.task.ServerIp), s.task.Port, ""})
+	s.listener, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(s.task.ServerIp), Port: s.task.Port})
 	if err != nil {
 		return err
 	}
@@ -75,7 +144,7 @@ func (s *UdpModeServer) Start() error {
 		n, addr, err := s.listener.ReadFromUDP(buf)
 		if err != nil {
 			common.BufPoolUdp.Put(buf)
-			if strings.Contains(err.Error(), "use of closed network connection") {
+			if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection") {
 				break
 			}
 			continue
@@ -126,8 +195,8 @@ func (s *UdpModeServer) dispatch(key string, sess *udpSession, data []byte, n in
 	if sess.ready != nil {
 		select {
 		case <-sess.ready:
-			if sess.err != nil {
-				logs.Trace("udp session build failed for %s: %v", key, sess.err)
+			if err := sess.buildError(); err != nil {
+				logs.Trace("udp session build failed for %s: %v", key, err)
 				return
 			}
 		case <-time.After(udpBuildTimeout):
@@ -137,7 +206,7 @@ func (s *UdpModeServer) dispatch(key string, sess *udpSession, data []byte, n in
 			return
 		}
 	}
-	if _, err := sess.target.Write(data); err != nil {
+	if _, err := sess.write(data); err != nil {
 		logs.Warn(err)
 		s.removeSession(key, sess)
 		return
@@ -154,9 +223,9 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 
 	// 失败时统一清理：关 ready 通道唤醒所有输家、删占位、归还 buf。
 	failBuild := func(err error) {
-		sess.err = err
+		sess.setError(err)
 		close(sess.ready)
-		s.addrMap.Delete(key)
+		s.deleteSession(key, sess)
 		common.BufPoolUdp.Put(buf)
 	}
 
@@ -176,8 +245,11 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 	}
 
 	target := conn.GetConn(clientConn, s.task.Client.Cnf.Crypt, s.task.Client.Cnf.Compress, nil, true)
-	sess.target = target
-	sess.rawConn = clientConn
+	if !sess.installTarget(target) {
+		close(sess.ready)
+		common.BufPoolUdp.Put(buf)
+		return
+	}
 	sess.touch()
 	close(sess.ready) // 唤醒所有等待该会话的输家
 
@@ -185,7 +257,7 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 
 	logs.Trace("New udp connection,client %d,remote address %s", s.task.Client.Id, addr)
 
-	if _, err := target.Write(data); err != nil {
+	if _, err := sess.write(data); err != nil {
 		logs.Warn(err)
 		common.BufPoolUdp.Put(buf)
 		return
@@ -220,11 +292,13 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 // removeSession 安全地从 addrMap 移除并关闭会话。
 // 用 == 比对避免误删被替换的新 session（虽然当前协议不会发生，但保持防御性）。
 func (s *UdpModeServer) removeSession(key string, sess *udpSession) {
+	s.deleteSession(key, sess)
+	sess.closeTarget()
+}
+
+func (s *UdpModeServer) deleteSession(key string, sess *udpSession) {
 	if v, ok := s.addrMap.Load(key); ok && v.(*udpSession) == sess {
 		s.addrMap.Delete(key)
-	}
-	if sess.target != nil {
-		sess.target.Close()
 	}
 }
 
@@ -244,7 +318,7 @@ func (s *UdpModeServer) sweeper() {
 			s.addrMap.Range(func(k, v interface{}) bool {
 				sess := v.(*udpSession)
 				// 跳过仍在建立中的占位（target 尚未填充）
-				if sess.target == nil {
+				if sess.getTarget() == nil {
 					return true
 				}
 				if now-atomic.LoadInt64(&sess.lastActive) > idleNs {
@@ -264,5 +338,8 @@ func (s *UdpModeServer) Close() error {
 		s.removeSession(k.(string), v.(*udpSession))
 		return true
 	})
+	if s.listener == nil {
+		return nil
+	}
 	return s.listener.Close()
 }

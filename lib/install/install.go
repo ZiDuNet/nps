@@ -465,8 +465,8 @@ func InstallNps() string {
 		if err := CopyDir(filepath.Join(common.GetAppPath(), "conf"), filepath.Join(path, "conf")); err != nil {
 			log.Fatalln(err)
 		}
-		chMod(filepath.Join(path, "conf"), 0766)
 	}
+	chMod(filepath.Join(path, "conf"), 0700)
 	binPath, err := copyStaticFile(common.GetAppPath(), "nps")
 	if err != nil {
 		log.Fatalln(err)
@@ -483,7 +483,7 @@ anywhere!`)
 nps.exe start|stop|restart|uninstall|update
 now!`)
 	}
-	chMod(common.GetLogPath(), 0777)
+	chMod(common.GetLogPath(), 0640)
 	return binPath
 }
 
@@ -491,7 +491,7 @@ func InstallNpsToCurrentDir() string {
 	path := common.GetAppPath()
 	log.Println("install path:" + path)
 	log.Println("install ok!")
-	chMod(filepath.Join(path, "nps.log"), 0777)
+	chMod(filepath.Join(path, "nps.log"), 0640)
 
 	if !common.IsWindows() {
 		path = filepath.Join(path, "nps")
@@ -535,9 +535,11 @@ func CopyDir(srcPath string, destPath string) error {
 		if !f.IsDir() {
 			destNewPath := strings.Replace(path, srcPath, destPath, -1)
 			log.Println("copy file ::" + path + " to " + destNewPath)
-			copyFile(path, destNewPath)
+			if _, copyErr := copyFile(path, destNewPath); copyErr != nil {
+				return copyErr
+			}
 			if !common.IsWindows() {
-				chMod(destNewPath, 0766)
+				chMod(destNewPath, 0600)
 			}
 		}
 		return nil
@@ -552,26 +554,10 @@ func copyFile(src, dest string) (w int64, err error) {
 		return
 	}
 	defer srcFile.Close()
-	//分割path目录
-	destSplitPathDirs := strings.Split(dest, string(filepath.Separator))
-
-	//检测时候存在目录
-	destSplitPath := ""
-	for index, dir := range destSplitPathDirs {
-		if index < len(destSplitPathDirs)-1 {
-			destSplitPath = destSplitPath + dir + string(filepath.Separator)
-			b, _ := pathExists(destSplitPath)
-			if b == false {
-				log.Println("mkdir:" + destSplitPath)
-				//创建目录
-				err := os.Mkdir(destSplitPath, os.ModePerm)
-				if err != nil {
-					log.Fatalln(err)
-				}
-			}
-		}
+	if err := os.MkdirAll(filepath.Dir(dest), 0750); err != nil {
+		return 0, err
 	}
-	dstFile, err := os.Create(dest)
+	dstFile, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return
 	}

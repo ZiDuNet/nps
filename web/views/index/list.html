@@ -1,44 +1,44 @@
-<div class="wrapper wrapper-content animated fadeInRight">
-
+<section class="wrapper wrapper-content animated fadeInRight management-page" aria-labelledby="tunnel-list-title">
+    <header class="dashboard-page-header management-page-header">
+        <div>
+            <div class="dashboard-page-kicker" data-i18n-zh="隧道管理" data-i18n-en="Tunnel management">隧道管理</div>
+            <h1 id="tunnel-list-title"><span id="langtag"></span><span id="list-title-name"></span></h1>
+            <p data-i18n-zh="查看、筛选并维护当前客户端的转发规则。" data-i18n-en="Review, filter, and maintain forwarding rules for the selected client.">查看、筛选并维护当前客户端的转发规则。</p>
+        </div>
+    </header>
     <div class="row">
         <div class="col-lg-12">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title">
-                    <h5><span id="langtag"></span><span></span></h5>
-
-                    <div class="ibox-tools">
-                        <a class="collapse-link">
-                            <i class="fa fa-chevron-up"></i>
+            <section class="ibox float-e-margins management-table-card">
+                <div class="ibox-content management-table-content">
+                    <div id="toolbar" class="management-table-toolbar">
+                        <a href="{{.web_base_url}}/index/add?type={{.type}}&client_id={{.client_id}}" class="btn btn-primary dim">
+                            <i class="fa fa-fw fa-lg fa-plus"></i> <span langtag="word-add"></span>
                         </a>
-                        <a class="close-link">
-                            <i class="fa fa-times"></i>
+                        <a href="#" onclick="batchDelete('{{.web_base_url}}/index/del');return false;" class="btn btn-danger dim">
+                            <i class="fa fa-fw fa-lg fa-trash"></i> <span langtag="word-batchdelete"></span>
                         </a>
                     </div>
-                </div>
-                <div class="content">
-                    <div class="table-responsive">
-                        <div id="toolbar">
-                            <a href="{{.web_base_url}}/index/add?type={{.type}}&client_id={{.client_id}}" class="btn btn-primary dim">
-                            <i class="fa fa-fw fa-lg fa-plus"></i> <span langtag="word-add"></span></a>
-                            <a href="#" onclick="batchDelete('{{.web_base_url}}/index/del');return false;" class="btn btn-danger dim">
-                            <i class="fa fa-fw fa-lg fa-trash"></i> <span langtag="word-batchdelete"></span></a>
-                        </div>
-                        <table id="taskList_table" class="table-striped table-hover" data-mobile-responsive="true"></table>
-                    </div>
-                </div>
-                <div class="ibox-content">
-
                     <table id="table"></table>
-
                 </div>
-            </div>
+            </section>
         </div>
     </div>
-</div>
+</section>
 
 <script>
-    name = '{{.name}}:'.replace(/\s*/g,"")
-    $('#langtag').attr('langtag','page-list' + name.replace(/:.*/,"")).next().text(name.split(":")[1])
+    var tunnelListName = '{{.name}}:'.replace(/\s*/g, "");
+    var tunnelListType = tunnelListName.split(":")[0];
+    var tunnelListLanguageKey = tunnelListType === 'host' ? 'page-hostlist' : 'page-list' + tunnelListType;
+    $('#langtag').attr('langtag', tunnelListLanguageKey);
+    $('#list-title-name').text(tunnelListName.split(":")[1]);
+
+    function tunnelText(value) {
+        return npsEscapeHtml(value);
+    }
+
+    function tunnelBoolean(value) {
+        return npsBooleanMarkup(!!value);
+    }
 
     /*bootstrap table*/
     $('#table').bootstrapTable({
@@ -68,43 +68,56 @@
         pageList: [5, 10, 20, 50],//分页步进值
         detailView: true,
         smartDisplay: true, // 智能显示 pagination 和 cardview 等
-        onExpandRow: function () {$('body').setLang ('.detail-view');},
+        formatLoadingMessage: function () { return npsTableState('tunnel', true); },
+        formatNoMatches: function () { return npsTableState('tunnel', false); },
+        onExpandRow: function () {
+            $('body').setLang('.detail-view');
+            npsDecorateDetailControls('#table');
+        },
+        onCollapseRow: function () { window.setTimeout(function () { npsDecorateDetailControls('#table'); }, 0); },
         onLoadSuccess:function (data) {$('body').setLang ('.detail-view');},
-        onPostBody: function (data) { if ($(this)[0].locale != undefined ) $('body').setLang ('#table'); },
+        onPostBody: function (data) {
+            $('body').setLang('#table');
+            npsApplyTableState(this, 'tunnel');
+        },
         detailFormatter: function (index, row, element) {
-            tmp = '<b langtag="word-exportflow"></b>: ' + changeunit(row.Flow.ExportFlow) + '&emsp;'
-                    + '<b langtag="word-inletflow"></b>: ' + changeunit(row.Flow.InletFlow) + '&emsp;'
-                    + '<b langtag="word-crypt"></b>: ' + row.Client.Cnf.Crypt + '&emsp;'
-                    + '<b langtag="word-compress"></b>: ' + row.Client.Cnf.Compress + '&emsp;'
-                    + '<b langtag="word-basicusername"></b>: ' + row.Client.Cnf.U + '&emsp;'
-                    + '<b langtag="word-basicpassword"></b>: ' + row.Client.Cnf.P + '&emsp;'
-                    + '<b langtag="word-protoversion"></b>: ' + row.ProtoVersion + '&emsp;'
-            var copyBtn = '<button class="copy btn btn-info btn-xs" onclick="copyCommand(this)" data-clipboard-text="">复制</button>'
+            var flow = row.Flow || {};
+            var client = row.Client || {};
+            var config = client.Cnf || {};
+            var target = row.Target || {};
+            var tmp = '<b langtag="word-exportflow"></b>: ' + tunnelText(changeunit(flow.ExportFlow)) + '&emsp;'
+                    + '<b langtag="word-inletflow"></b>: ' + tunnelText(changeunit(flow.InletFlow)) + '&emsp;'
+                    + '<b langtag="word-crypt"></b>: ' + tunnelBoolean(config.Crypt) + '&emsp;'
+                    + '<b langtag="word-compress"></b>: ' + tunnelBoolean(config.Compress) + '&emsp;'
+                    + '<b langtag="word-basicusername"></b>: ' + tunnelText(config.U) + '&emsp;'
+                    + '<b langtag="word-basicpassword"></b>: ' + tunnelText(config.P) + '&emsp;'
+                    + '<b langtag="word-protoversion"></b>: ' + tunnelText(row.ProtoVersion) + '&emsp;'
+            var copyBtn = '<button type="button" class="copy btn btn-info btn-xs" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i> <span data-i18n-zh="复制" data-i18n-en="Copy">复制</span></button>'
             if (row.Mode == "p2p") {
                 var p2pCmd = tmp + "<br/><br>"
-                        + '<b langtag="word-commandaccessp2p"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + row.Client.VerifyKey 
-                        + " -type=" +{{.bridgeType}} +" -password=" + row.Password + " -target=" + row.Target.TargetStr + "</code>" + copyBtn + "<br/><br>"
-                        + '<b langtag="word-commandaccessp2ps"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + row.Client.VerifyKey 
-                        + " -type=" +{{.bridgeType}} +" -password=" + row.Password + " -local_type=p2ps" + "</code>" + copyBtn + "<br/><br>"
-                        + '<b langtag="word-commandaccessp2pt"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + row.Client.VerifyKey 
-                        + " -type=" +{{.bridgeType}} +" -password=" + row.Password + " -local_type=p2pt" + "</code>" + copyBtn
+                        + '<b langtag="word-commandaccessp2p"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + tunnelText(client.VerifyKey)
+                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -target=" + tunnelText(target.TargetStr) + "</code>" + copyBtn + "<br/><br>"
+                        + '<b langtag="word-commandaccessp2ps"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + tunnelText(client.VerifyKey)
+                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=p2ps" + "</code>" + copyBtn + "<br/><br>"
+                        + '<b langtag="word-commandaccessp2pt"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + tunnelText(client.VerifyKey)
+                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=p2pt" + "</code>" + copyBtn
                 {{if .tls_enable}}
                 p2pCmd += "<br/><br>"
-                        + '<b langtag="word-commandaccessp2p-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + row.Client.VerifyKey
-                        + " -type=" +{{.bridgeType}} +" -password=" + row.Password + " -target=" + row.Target.TargetStr + " -tls_enable=true</code>" + copyBtn + "<br/><br>"
-                        + '<b langtag="word-commandaccessp2ps-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + row.Client.VerifyKey
-                        + " -type=" +{{.bridgeType}} +" -password=" + row.Password + " -local_type=p2ps -tls_enable=true</code>" + copyBtn + "<br/><br>"
-                        + '<b langtag="word-commandaccessp2pt-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + row.Client.VerifyKey
-                        + " -type=" +{{.bridgeType}} +" -password=" + row.Password + " -local_type=p2pt -tls_enable=true</code>" + copyBtn
+                        + '<b langtag="word-commandaccessp2p-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + tunnelText(client.VerifyKey)
+                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -target=" + tunnelText(target.TargetStr) + " -tls_enable=true</code>" + copyBtn + "<br/><br>"
+                        + '<b langtag="word-commandaccessp2ps-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + tunnelText(client.VerifyKey)
+                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=p2ps -tls_enable=true</code>" + copyBtn + "<br/><br>"
+                        + '<b langtag="word-commandaccessp2pt-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + tunnelText(client.VerifyKey)
+                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=p2pt -tls_enable=true</code>" + copyBtn
                 {{end}}
                 return p2pCmd
             }
             if (row.Mode == "secret") {
-                var secretCmd = tmp + "<br/><br>" + '<b langtag="word-commandaccess"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + row.Client.VerifyKey 
-                        + " -type=" +{{.bridgeType}} +" -password=" + row.Password + " -local_type=secret" + "</code>" + copyBtn
+                var secretCmd = tmp + "<br/><br>" + '<b langtag="word-commandaccess"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + tunnelText(client.VerifyKey)
+                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=secret" + "</code>" + copyBtn
                 {{if .tls_enable}}
-                secretCmd += "<br/><br>" + '<b langtag="word-commandaccess-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + row.Client.VerifyKey
-                        + " -type=" +{{.bridgeType}} +" -password=" + row.Password + " -local_type=secret -tls_enable=true</code>" + copyBtn
+                secretCmd += "<br/><br>" + '<b langtag="word-commandaccess-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + tunnelText(client.VerifyKey)
+                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=secret -tls_enable=true</code>" + copyBtn
                 {{end}}
                 return secretCmd
             }
@@ -131,7 +144,8 @@
                 visible: true,//false表示不显示
                 sortable: true, //启用排序
                 formatter: function (value, row, index) {
-                    return row.Client.Id + '-' + row.Client.Remark
+                    var client = row.Client || {};
+                    return tunnelText((client.Id == null ? '' : client.Id) + '-' + (client.Remark || ''));
                 }
             },
             {
@@ -139,14 +153,16 @@
                 title: '<span langtag="word-remark"></span>',//标题
                 halign: 'center',
                 sortable: true,
-                visible: true//false表示不显示
+                visible: true,//false表示不显示
+                escape: true
             },
             {
                 field: 'Client.VerifyKey',//域值
                 title: '<span langtag="word-verifykey"></span>',//标题
                 halign: 'center',
                 sortable: true, //启用排序
-                visible: true//false表示不显示
+                visible: true,//false表示不显示
+                escape: true
             },
             {
                 field: 'Mode',//域值
@@ -155,7 +171,8 @@
                 sortable: true,
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    return '<span langtag="scheme-' + value + '"></span>'
+                    var scheme = String(value || '').replace(/[^A-Za-z0-9_-]/g, '');
+                    return '<span langtag="scheme-' + scheme + '"></span>'
                 }
             },
             {
@@ -172,8 +189,9 @@
                 sortable: false, //计算列，按 Port 排序即可
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    var address = {{.ip}} + ":" + row.Port
-                    return "<a href='http://" + address + "' target='_blank'>" + address + "</a>"
+                    var address = "{{.ip}}" + ":" + Number(row.Port);
+                    var safeAddress = tunnelText(address);
+                    return "<a href='http://" + safeAddress + "' target='_blank' rel='noopener noreferrer'>" + safeAddress + "</a>"
                 }
             },
             {
@@ -183,7 +201,7 @@
                 visible: true,//false表示不显示
                 sortable: true, //启用排序
                 formatter: function (value, row, index) {
-                    return row.Target.TargetStr
+                    return tunnelText((row.Target || {}).TargetStr);
                 }
             },
             {
@@ -191,7 +209,8 @@
                 title: '<span langtag="word-identificationkey"></span>',//标题
                 halign: 'center',
                 sortable: true,
-                visible: true//false表示不显示
+                visible: true,//false表示不显示
+                escape: true
             },
             {
                 field: 'Status',//域值
@@ -231,7 +250,7 @@
                 visible: true,//false表示不显示
                 sortable: true,
                 formatter: function (value, row, index) {
-                    if (row.Client.IsConnect) {
+                    if (row.Client && row.Client.IsConnect) {
                         return '<span class="badge badge-primary" langtag="word-online"></span>'
                     } else {
                         return '<span class="badge badge-badge" langtag="word-offline"></span>'
@@ -246,22 +265,24 @@
                 width: '200px',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    btn_group = '<div class="btn-group">'
+                    var tunnelId = Number(row.Id);
+                    if (!isFinite(tunnelId) || Math.floor(tunnelId) !== tunnelId || tunnelId <= 0) return '';
+                    var btn_group = '<div class="btn-group">'
                     if (row.Status) {
-                        btn_group += "<a onclick=\"submitform('stop', '{{.web_base_url}}/index/stop', {'id':" + row.Id
-                        btn_group += '})" class="btn btn-outline btn-warning"><i class="fa fa-pause"></i></a>'
+                        btn_group += "<button type=\"button\" onclick=\"submitform('stop', '{{.web_base_url}}/index/stop', {'id':" + tunnelId
+                        btn_group += '})" class="btn btn-outline btn-warning" data-title-zh="停止隧道" data-title-en="Stop tunnel" data-aria-label-zh="停止隧道" data-aria-label-en="Stop tunnel"><i class="fa fa-pause" aria-hidden="true"></i></button>'
                     } else {
-                        btn_group += "<a onclick=\"submitform('start', '{{.web_base_url}}/index/start', {\'id\':" + row.Id
-                        btn_group += '})" class="btn btn-outline btn-primary"><i class="fa fa-play"></i></a>'
+                        btn_group += "<button type=\"button\" onclick=\"submitform('start', '{{.web_base_url}}/index/start', {\'id\':" + tunnelId
+                        btn_group += '})" class="btn btn-outline btn-primary" data-title-zh="启动隧道" data-title-en="Start tunnel" data-aria-label-zh="启动隧道" data-aria-label-en="Start tunnel"><i class="fa fa-play" aria-hidden="true"></i></button>'
                     }
-                    btn_group += "<a onclick=\"submitform('delete', '{{.web_base_url}}/index/del', {'id':" + row.Id
-                    btn_group += '})" class="btn btn-outline btn-danger"><i class="fa fa-trash"></i></a>'
+                    btn_group += "<button type=\"button\" onclick=\"submitform('delete', '{{.web_base_url}}/index/del', {'id':" + tunnelId
+                    btn_group += '})" class="btn btn-outline btn-danger" data-title-zh="删除隧道" data-title-en="Delete tunnel" data-aria-label-zh="删除隧道" data-aria-label-en="Delete tunnel"><i class="fa fa-trash" aria-hidden="true"></i></button>'
 
-                    btn_group += '<a  href="{{.web_base_url}}/index/edit?id=' + row.Id
-                    btn_group += '" class="btn btn-outline btn-success"><i class="fa fa-edit"></i></a>'
+                    btn_group += '<a href="{{.web_base_url}}/index/edit?id=' + tunnelId
+                    btn_group += '" class="btn btn-outline btn-success" data-title-zh="编辑隧道" data-title-en="Edit tunnel" data-aria-label-zh="编辑隧道" data-aria-label-en="Edit tunnel"><i class="fa fa-edit" aria-hidden="true"></i></a>'
 
-                    btn_group += "<a onclick=\"submitform('copy', '{{.web_base_url}}/index/copy', {'id':" + row.Id
-                    btn_group += '})" class="btn btn-outline btn-primary"><i class="fa fa-copy"></i></a></div>'
+                    btn_group += "<button type=\"button\" onclick=\"submitform('copy', '{{.web_base_url}}/index/copy', {'id':" + tunnelId
+                    btn_group += '})" class="btn btn-outline btn-primary" data-title-zh="复制隧道" data-title-en="Copy tunnel" data-aria-label-zh="复制隧道" data-aria-label-en="Copy tunnel"><i class="fa fa-copy" aria-hidden="true"></i></button></div>'
                     return btn_group
                 }
             }
@@ -269,15 +290,15 @@
     });
 
     function copyCommand(data) {
-        data.setAttribute("data-clipboard-text", data.previousElementSibling.innerHTML)
+        data.setAttribute("data-clipboard-text", data.previousElementSibling ? data.previousElementSibling.textContent : '')
     }
 
     var clipboard = new ClipboardJS('.copy');
     clipboard.on('success', function (e) {
-        toastr.success('复制成功');
+        npsNotify('success', npsIsEnglish() ? 'Copied' : '复制成功');
         e.clearSelection();
     });
     clipboard.on('error', function (e) {
-        toastr.error('复制失败', '提示');
+        npsNotify('error', npsIsEnglish() ? 'Copy failed' : '复制失败');
     });
 </script>

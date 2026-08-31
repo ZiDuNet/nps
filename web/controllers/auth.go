@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"github.com/astaxie/beego/logs"
 	"html"
+	"strings"
 	"time"
 
 	"ehang.io/nps/lib/file"
@@ -46,9 +47,21 @@ func (s *AuthController) GetTime() {
 }
 
 func (s *AuthController) IpWhiteAuth() {
-	s.Ctx.ResponseWriter.Header().Set("Access-Control-Allow-Origin", "*")
-	s.Ctx.ResponseWriter.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	s.Ctx.ResponseWriter.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	// The authorization page is same-origin. Do not grant every site access to
+	// this credential-bearing endpoint; echo an Origin only for the current host.
+	if origin := strings.TrimSpace(s.Ctx.Input.Header("Origin")); origin != "" {
+		expected := s.Ctx.Input.Scheme() + "://" + s.Ctx.Input.Host()
+		if origin == expected {
+			s.Ctx.ResponseWriter.Header().Set("Access-Control-Allow-Origin", origin)
+			s.Ctx.ResponseWriter.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+			s.Ctx.ResponseWriter.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			s.Ctx.ResponseWriter.Header().Add("Vary", "Origin")
+		}
+	}
+	if s.Ctx.Request.Method == "OPTIONS" {
+		s.Ctx.ResponseWriter.WriteHeader(204)
+		return
+	}
 
 	vkey := s.getEscapeString("vkey")
 	ip := s.getEscapeString("ip")
@@ -70,14 +83,14 @@ func (s *AuthController) IpWhiteAuth() {
 	if err != nil {
 		s.Data["json"] = map[string]interface{}{"success": false, "message": "客户端密钥错误"}
 		s.ServeJSON()
-		logs.Error("客户端IP白名单认证失败,客户端密钥错误:vkey [%s] ip [%s] password [%s]", vkey, ip, password)
+		logs.Error("客户端IP白名单认证失败,客户端密钥错误:ip [%s]", ip)
 		return
 	}
 
 	if c.IpWhitePass != password {
 		s.Data["json"] = map[string]interface{}{"success": false, "message": "授权密码错误"}
 		s.ServeJSON()
-		logs.Error("客户端IP白名单认证失败,授权密码错误:vkey [%s] ip [%s] password [%s]", vkey, ip, password)
+		logs.Error("客户端IP白名单认证失败,授权密码错误:client_id [%d] ip [%s]", c.Id, ip)
 		return
 	}
 
@@ -97,7 +110,7 @@ func (s *AuthController) IpWhiteAuth() {
 	s.Data["json"] = map[string]interface{}{"success": true, "message": "授权成功"}
 	s.ServeJSON()
 
-	logs.Info("客户端IP白名单认证授权成功:vkey [%s] ip [%s] password [%s]", vkey, ip, password)
+	logs.Info("客户端IP白名单认证授权成功:client_id [%d] ip [%s]", c.Id, ip)
 
 }
 

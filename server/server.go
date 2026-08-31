@@ -3,7 +3,6 @@ package server
 import (
 	"ehang.io/nps/lib/version"
 	"errors"
-	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -19,10 +18,6 @@ import (
 	"ehang.io/nps/server/tool"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/load"
-	"github.com/shirou/gopsutil/v3/mem"
-	"github.com/shirou/gopsutil/v3/net"
 )
 
 var (
@@ -441,10 +436,11 @@ func GetDashboardData() map[string]interface{} {
 	data := make(map[string]interface{})
 	data["version"] = version.VERSION
 	data["hostCount"] = common.GeSynctMapLen(file.GetDb().JsonDb.Hosts)
-	data["clientCount"] = common.GeSynctMapLen(file.GetDb().JsonDb.Clients)
-	if beego.AppConfig.String("public_vkey") != "" { //remove public vkey
-		data["clientCount"] = data["clientCount"].(int) - 1
+	clientCount := common.GeSynctMapLen(file.GetDb().JsonDb.Clients)
+	if beego.AppConfig.String("public_vkey") != "" && clientCount > 0 { // remove public vkey
+		clientCount--
 	}
+	data["clientCount"] = clientCount
 	dealClientData()
 	c := 0
 	var in, out int64
@@ -453,8 +449,11 @@ func GetDashboardData() map[string]interface{} {
 		if v.IsConnect {
 			c += 1
 		}
-		in += v.Flow.InletFlow
-		out += v.Flow.ExportFlow
+		if v.Flow != nil {
+			clientIn, clientOut, _ := v.Flow.Snapshot()
+			in += clientIn
+			out += clientOut
+		}
 		return true
 	})
 	data["clientOnlineCount"] = c
@@ -500,37 +499,12 @@ func GetDashboardData() map[string]interface{} {
 		return true
 	})
 	data["tcpCount"] = tcpCount
-	cpuPercet, _ := cpu.Percent(0, true)
-	var cpuAll float64
-	for _, v := range cpuPercet {
-		cpuAll += v
+	for key, value := range tool.GetSystemStatus() {
+		data[key] = value
 	}
-	loads, _ := load.Avg()
-	data["load"] = loads.String()
-	data["cpu"] = math.Round(cpuAll / float64(len(cpuPercet)))
-	swap, _ := mem.SwapMemory()
-	data["swap_mem"] = math.Round(swap.UsedPercent)
-	vir, _ := mem.VirtualMemory()
-	data["virtual_mem"] = math.Round(vir.UsedPercent)
-	conn, _ := net.ProtoCounters(nil)
-	// 从后台 IO 采集缓存获取，不再 Sleep 阻塞请求
-	if ioData, ok := tool.IORateCache.Load().(map[string]interface{}); ok {
-		data["io_send"] = ioData["io_send"]
-		data["io_recv"] = ioData["io_recv"]
+	for index, status := range tool.GetServerStatusSamples(10) {
+		data["sys"+strconv.Itoa(index+1)] = status
 	}
-	for _, v := range conn {
-		data[v.Protocol] = v.Stats["CurrEstab"]
-	}
-	//chart
-	var fg int
-	tool.ServerStatusLock.RLock()
-	if len(tool.ServerStatus) >= 10 {
-		fg = len(tool.ServerStatus) / 10
-		for i := 0; i <= 9; i++ {
-			data["sys"+strconv.Itoa(i+1)] = tool.ServerStatus[i*fg]
-		}
-	}
-	tool.ServerStatusLock.RUnlock()
 	return data
 }
 

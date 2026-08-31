@@ -27,7 +27,7 @@
     .tunnel-form.tunnel-type-file #local_path,
     .tunnel-form.tunnel-type-file #strip_pre,
     .tunnel-form.tunnel-type-file #client_id {
-        display: flex !important;
+        display: var(--tunnel-field-display, flex) !important;
     }
 
     .tunnel-form #usecase span {
@@ -44,15 +44,28 @@
         display: inline !important;
     }
 </style>
-<div class="row tile tunnel-form tunnel-type-{{.t.Mode}}">
+<section class="form-page form-page-tunnel form-page-edit" aria-labelledby="tunnel-form-title">
+    <header class="dashboard-page-header form-page-header">
+        <div class="form-page-heading">
+            <div class="dashboard-page-kicker" data-i18n-zh="隧道管理" data-i18n-en="Tunnel management">隧道管理</div>
+            <h1 id="tunnel-form-title" langtag="page-edit"></h1>
+            <p data-i18n-zh="更新隧道参数前，请确认监听端口和目标服务均可用。" data-i18n-en="Confirm that the listening port and target service are available before updating this tunnel.">更新隧道参数前，请确认监听端口和目标服务均可用。</p>
+        </div>
+        <div class="dashboard-page-actions form-page-actions">
+            <a class="btn btn-outline btn-primary form-page-back" href="{{.web_base_url}}/index/{{if eq .t.Mode "httpProxy"}}http{{else}}{{.t.Mode}}{{end}}">
+                <i class="fa fa-arrow-left" aria-hidden="true"></i>
+                <span data-i18n-zh="返回列表" data-i18n-en="Back to list">返回列表</span>
+            </a>
+        </div>
+    </header>
+    <div class="row form-page-grid tunnel-form tunnel-type-{{.t.Mode}}">
     <div class="col-md-12 col-md-auto">
-        <div class="ibox float-e-margins">
-            <h3 class="ibox-title" langtag="page-edit"></h3>
-            <div class="ibox-content">
-                <form class="form-horizontal">
+        <div class="ibox float-e-margins form-workflow-card">
+            <div class="ibox-content form-workflow-content">
+                <form class="form-horizontal form-workflow-form" data-form-workflow="tunnel-edit">
                     <input type="hidden" name="id" value="{{.t.Id}}">
 
-                    <div class="form-section-title"><i class="fa fa-cog"></i> 隧道类型</div>
+                    <div class="form-section-title"><i class="fa fa-cog" aria-hidden="true"></i><span data-i18n-zh="隧道类型" data-i18n-en="Tunnel type">隧道类型</span></div>
                     <div class="form-group">
                         <label class="col-sm-2 control-label font-bold" langtag="word-scheme"></label>
                         <div class="col-sm-10">
@@ -78,7 +91,7 @@
                         </div>
                     </div>
 
-                    <div class="form-section-title"><i class="fa fa-link"></i> 基础配置</div>
+                    <div class="form-section-title"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="基础配置" data-i18n-en="Connection">基础配置</span></div>
                     <div class="form-group" id="client_id">
                         <label class="col-sm-2 control-label font-bold" langtag="word-clientid"></label>
                         <div class="col-sm-10">
@@ -116,13 +129,13 @@
                             <div class="toggle-field">
                                 <input type="hidden" name="local_proxy" value="{{if eq true .t.Target.LocalProxy}}1{{else}}0{{end}}">
                                 <label class="toggle-switch"><input type="checkbox" {{if eq true .t.Target.LocalProxy}}checked{{end}}><span class="toggle-slider"></span></label>
-                                <span class="toggle-label">{{if eq true .t.Target.LocalProxy}}是{{else}}否{{end}}</span>
+                                <span class="toggle-label" data-toggle-state="{{if eq true .t.Target.LocalProxy}}yes{{else}}no{{end}}">{{if eq true .t.Target.LocalProxy}}是{{else}}否{{end}}</span>
                             </div>
                         </div>
                     </div>
                     {{end}}
 
-                    <div class="form-section-title"><i class="fa fa-bullseye"></i> 目标配置</div>
+                    <div class="form-section-title"><i class="fa fa-bullseye" aria-hidden="true"></i><span data-i18n-zh="目标配置" data-i18n-en="Target">目标配置</span></div>
                     <div class="form-group" id="target">
                         <label class="col-sm-2 control-label font-bold" langtag="word-target"></label>
                         <div class="col-sm-10">
@@ -146,7 +159,7 @@
                         </div>
                     </div>
 
-                    <div class="form-section-title"><i class="fa fa-lock"></i> 安全配置</div>
+                    <div class="form-section-title"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="安全配置" data-i18n-en="Security">安全配置</span></div>
                     <div class="form-group" id="password">
                         <label class="col-sm-2 control-label font-bold" langtag="word-identificationkey"></label>
                         <div class="col-sm-10">
@@ -156,19 +169,19 @@
                         </div>
                     </div>
                     <div class="form-group" id="proto_version">
-                        <label class="control-label col-sm-2 font-bold">Proxy Protocol</label>
+                        <label class="control-label col-sm-2 font-bold" data-i18n-zh="Proxy Protocol" data-i18n-en="Proxy Protocol">Proxy Protocol</label>
                         <div class="col-sm-10">
                             <select class="form-control" name="proto_version" id="ProtoVersion">
-                                <option value="">关闭</option>
+                                <option value="" data-i18n-zh="关闭" data-i18n-en="Disabled">关闭</option>
                                 <option value="V1">V1</option>
                                 <option value="V2">V2</option>
                             </select>
-                            <span class="help-block m-b-none">开启此功能，请确保本地的服务能够支持 Proxy Protocol 协议。</span>
+                            <span class="help-block m-b-none" data-i18n-zh="开启此功能，请确保本地的服务能够支持 Proxy Protocol 协议。" data-i18n-en="Enable this only when the local service supports Proxy Protocol.">开启此功能，请确保本地的服务能够支持 Proxy Protocol 协议。</span>
                         </div>
                     </div>
 
-                    <div class="hr-line-dashed"></div>
-                    <div class="form-group">
+                    <div class="hr-line-dashed form-workflow-divider"></div>
+                    <div class="form-group form-workflow-actions">
                         <div class="col-sm-4 col-sm-offset-2">
                             <button class="btn btn-success" type="button"
                                     onclick="submitform('edit', '{{.web_base_url}}/index/edit', $('form').serializeArray())">
@@ -181,6 +194,7 @@
         </div>
     </div>
 </div>
+</section>
 <script>
     var fieldMap = {
         tcp: ["client_id", "port", "target", "local_proxy", "proto_version"],
@@ -214,7 +228,7 @@
         })
 
         $('.toggle-switch input[type="checkbox"]').on('change', function() {
-            $(this).closest('.toggle-field').find('.toggle-label').text(this.checked ? '是' : '否');
+            npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked);
         });
     })
 </script>

@@ -1,7 +1,18 @@
-<div class="wrapper wrapper-content dashboard-compact">
+<div class="wrapper wrapper-content dashboard-compact dashboard-page">
 
-    <!-- Stat Cards -->
-    <div class="row" style="margin-bottom:12px">
+    <div class="dashboard-page-header">
+        <div>
+            <div class="dashboard-page-kicker" data-i18n-zh="服务器概览" data-i18n-en="SERVER OVERVIEW">服务器概览</div>
+            <h1 data-i18n-zh="控制台" data-i18n-en="Control plane">控制台</h1>
+            <p data-i18n-zh="查看服务状态、当前连接和代理运行情况。" data-i18n-en="Review service status, current connections, and proxy activity.">查看服务状态、当前连接和代理运行情况。</p>
+        </div>
+        <div class="dashboard-page-actions">
+            <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/client/list"><i class="fa fa-desktop"></i><span data-i18n-zh="客户端" data-i18n-en="Clients">客户端</span></a>
+            <a class="btn btn-primary" href="{{.web_base_url}}/index/add?type=tcp"><i class="fa fa-plus"></i><span data-i18n-zh="新建隧道" data-i18n-en="New tunnel">新建隧道</span></a>
+        </div>
+    </div>
+
+    <div class="row dashboard-stat-grid">
         <div class="col-lg-3 col-md-6">
             <div class="stat-card card-blue">
                 <div class="ibox float-e-margins">
@@ -56,44 +67,43 @@
         </div>
     </div>
 
-    <!-- Config & System Info -->
-    <div class="row" style="margin-bottom:12px">
+    <div class="row dashboard-information-grid">
         <div class="col-lg-6">
             <div class="ibox float-e-margins">
                 <div class="ibox-title">
                     <h5 langtag="word-configurationinformation"></h5>
                     <div class="ibox-tools">
-                        <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
-                        <a class="close-link"><i class="fa fa-times"></i></a>
+                        <button type="button" class="collapse-link" aria-label="折叠配置信息" data-aria-label-zh="折叠配置信息" data-aria-label-en="Collapse configuration information" data-title-zh="折叠配置信息" data-title-en="Collapse configuration information"><i class="fa fa-chevron-up" aria-hidden="true"></i></button>
+                        <button type="button" class="close-link" aria-label="关闭配置信息" data-aria-label-zh="关闭配置信息" data-aria-label-en="Close configuration information" data-title-zh="关闭配置信息" data-title-en="Close configuration information"><i class="fa fa-times" aria-hidden="true"></i></button>
                     </div>
                 </div>
                 <div class="ibox-content no-padding">
-                    <ul class="list-group list-group-sm">
-                        <li class="list-group-item">
+                    <ul class="list-group list-group-sm dashboard-data-list">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-bridgingmode"></strong></div><div class="col-sm-6 text-right"><strong>{{.data.bridgeType}}</strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-httpport"></strong></div><div class="col-sm-6 text-right"><strong>{{.data.httpProxyPort}}</strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-httpsport"></strong></div><div class="col-sm-6 text-right"><strong>{{.data.httpsProxyPort}}</strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-iprestriction"></strong></div><div class="col-sm-6 text-right"><strong langtag="word-{{.data.ipLimit}}"></strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-trafficdatapersistence"></strong></div><div class="col-sm-6 text-right"><strong>{{.data.flowStoreInterval}}</strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-loglevel"></strong></div><div class="col-sm-6 text-right"><strong>{{.data.logLevel}}</strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-p2pport"></strong></div><div class="col-sm-6 text-right"><strong>{{.data.p2pPort}}</strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-serveriP"></strong></div><div class="col-sm-6 text-right"><strong>{{.data.serverIp}}</strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-serverversion"></strong></div><div class="col-sm-6 text-right"><strong>{{.data.version}}</strong></div></div>
                         </li>
                     </ul>
@@ -105,33 +115,33 @@
                 <div class="ibox-title">
                     <h5 langtag="word-systeminformation"></h5>
                     <div class="ibox-tools">
-                        <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
-                        <a class="close-link"><i class="fa fa-times"></i></a>
+                        <button type="button" class="collapse-link" aria-label="折叠系统信息" data-aria-label-zh="折叠系统信息" data-aria-label-en="Collapse system information" data-title-zh="折叠系统信息" data-title-en="Collapse system information"><i class="fa fa-chevron-up" aria-hidden="true"></i></button>
+                        <button type="button" class="close-link" aria-label="关闭系统信息" data-aria-label-zh="关闭系统信息" data-aria-label-en="Close system information" data-title-zh="关闭系统信息" data-title-en="Close system information"><i class="fa fa-times" aria-hidden="true"></i></button>
                     </div>
                 </div>
                 <div class="ibox-content no-padding">
-                    <ul class="list-group list-group-sm">
-                        <li class="list-group-item">
+                    <ul class="list-group list-group-sm dashboard-data-list">
+                        <li class="list-group-item dashboard-data-item dashboard-meter-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-cpu"></strong></div><div class="col-sm-6 text-right"><strong id="overview_cpu"></strong></div></div>
                             <div class="progress progress-small"><div id="overview_cpu_bar" class="progress-bar"></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item dashboard-meter-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-memory"></strong></div><div class="col-sm-6 text-right"><strong id="overview_memory"></strong></div></div>
                             <div class="progress progress-small"><div id="overview_memory_bar" class="progress-bar"></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-load"></strong></div><div class="col-sm-6 text-right"><strong id="overview_load"></strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-tcpconnections_established"></strong></div><div class="col-sm-6 text-right"><strong id="overview_tcp"></strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-udpconnections_established"></strong></div><div class="col-sm-6 text-right"><strong id="overview_udp"></strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-outbandwidth"></strong></div><div class="col-sm-6 text-right"><strong id="overview_send"></strong></div></div>
                         </li>
-                        <li class="list-group-item">
+                        <li class="list-group-item dashboard-data-item">
                             <div class="row"><div class="col-sm-6"><strong langtag="word-inbandwidth"></strong></div><div class="col-sm-6 text-right"><strong id="overview_recv"></strong></div></div>
                         </li>
                     </ul>
@@ -141,57 +151,55 @@
     </div>
 
 {{if eq true .system_info_display}}
-    <!-- Charts: 2x2 Grid -->
-    <div class="row" style="margin-bottom:12px">
+    <div class="row dashboard-chart-grid">
         <div class="col-lg-6">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title"><h5 langtag="word-cpu"></h5><div class="ibox-tools"><a class="collapse-link"><i class="fa fa-chevron-up"></i></a><a class="close-link"><i class="fa fa-times"></i></a></div></div>
-                <div class="ibox-content"><div id="cpu" style="height: 200px"></div></div>
+            <div class="ibox float-e-margins dashboard-chart-card">
+                <div class="ibox-title"><h5 langtag="word-cpu"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠 CPU 图表" data-aria-label-zh="折叠 CPU 图表" data-aria-label-en="Collapse CPU chart" data-title-zh="折叠 CPU 图表" data-title-en="Collapse CPU chart"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭 CPU 图表" data-aria-label-zh="关闭 CPU 图表" data-aria-label-en="Close CPU chart" data-title-zh="关闭 CPU 图表" data-title-en="Close CPU chart"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
+                <div class="ibox-content"><div id="cpu" class="dashboard-chart" role="img" aria-label="CPU 使用率图表" data-aria-label-zh="CPU 使用率图表" data-aria-label-en="CPU usage chart"></div></div>
             </div>
         </div>
         <div class="col-lg-6">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title"><h5 langtag="word-memory"></h5><div class="ibox-tools"><a class="collapse-link"><i class="fa fa-chevron-up"></i></a><a class="close-link"><i class="fa fa-times"></i></a></div></div>
-                <div class="ibox-content"><div id="memory" style="height: 200px"></div></div>
-            </div>
-        </div>
-    </div>
-    <div class="row" style="margin-bottom:12px">
-        <div class="col-lg-6">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title"><h5 langtag="word-load"></h5><div class="ibox-tools"><a class="collapse-link"><i class="fa fa-chevron-up"></i></a><a class="close-link"><i class="fa fa-times"></i></a></div></div>
-                <div class="ibox-content"><div id="load" style="height: 200px"></div></div>
-            </div>
-        </div>
-        <div class="col-lg-6">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title"><h5 langtag="word-connections_established"></h5><div class="ibox-tools"><a class="collapse-link"><i class="fa fa-chevron-up"></i></a><a class="close-link"><i class="fa fa-times"></i></a></div></div>
-                <div class="ibox-content"><div id="connections" style="height: 200px"></div></div>
+            <div class="ibox float-e-margins dashboard-chart-card">
+                <div class="ibox-title"><h5 langtag="word-memory"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠内存图表" data-aria-label-zh="折叠内存图表" data-aria-label-en="Collapse memory chart" data-title-zh="折叠内存图表" data-title-en="Collapse memory chart"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭内存图表" data-aria-label-zh="关闭内存图表" data-aria-label-en="Close memory chart" data-title-zh="关闭内存图表" data-title-en="Close memory chart"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
+                <div class="ibox-content"><div id="memory" class="dashboard-chart" role="img" aria-label="内存使用率图表" data-aria-label-zh="内存使用率图表" data-aria-label-en="Memory usage chart"></div></div>
             </div>
         </div>
     </div>
-    <div class="row" style="margin-bottom:12px">
+    <div class="row dashboard-chart-grid">
+        <div class="col-lg-6">
+            <div class="ibox float-e-margins dashboard-chart-card">
+                <div class="ibox-title"><h5 langtag="word-load"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠负载图表" data-aria-label-zh="折叠负载图表" data-aria-label-en="Collapse load chart" data-title-zh="折叠负载图表" data-title-en="Collapse load chart"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭负载图表" data-aria-label-zh="关闭负载图表" data-aria-label-en="Close load chart" data-title-zh="关闭负载图表" data-title-en="Close load chart"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
+                <div class="ibox-content"><div id="load" class="dashboard-chart" role="img" aria-label="系统负载图表" data-aria-label-zh="系统负载图表" data-aria-label-en="System load chart"></div></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="ibox float-e-margins dashboard-chart-card">
+                <div class="ibox-title"><h5 langtag="word-connections_established"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠连接图表" data-aria-label-zh="折叠连接图表" data-aria-label-en="Collapse connection chart" data-title-zh="折叠连接图表" data-title-en="Collapse connection chart"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭连接图表" data-aria-label-zh="关闭连接图表" data-title-zh="关闭连接图表" data-title-en="Close connection chart" data-aria-label-en="Close connection chart"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
+                <div class="ibox-content"><div id="connections" class="dashboard-chart" role="img" aria-label="连接数图表" data-aria-label-zh="连接数图表" data-aria-label-en="Connection count chart"></div></div>
+            </div>
+        </div>
+    </div>
+    <div class="row dashboard-chart-grid">
         <div class="col-lg-12">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title"><h5 langtag="word-bandwidth"></h5><div class="ibox-tools"><a class="collapse-link"><i class="fa fa-chevron-up"></i></a><a class="close-link"><i class="fa fa-times"></i></a></div></div>
-                <div class="ibox-content"><div id="bandwidth" style="height: 200px"></div></div>
+            <div class="ibox float-e-margins dashboard-chart-card">
+                <div class="ibox-title"><h5 langtag="word-bandwidth"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠带宽图表" data-aria-label-zh="折叠带宽图表" data-aria-label-en="Collapse bandwidth chart" data-title-zh="折叠带宽图表" data-title-en="Collapse bandwidth chart"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭带宽图表" data-aria-label-zh="关闭带宽图表" data-aria-label-en="Close bandwidth chart" data-title-zh="关闭带宽图表" data-title-en="Close bandwidth chart"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
+                <div class="ibox-content"><div id="bandwidth" class="dashboard-chart" role="img" aria-label="带宽图表" data-aria-label-zh="带宽图表" data-aria-label-en="Bandwidth chart"></div></div>
             </div>
         </div>
     </div>
 {{end}}
 
-    <!-- Pie Charts -->
-    <div class="row" style="margin-bottom:12px">
+    <div class="row dashboard-distribution-grid">
         <div class="col-lg-6">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title"><h5 langtag="word-trafficstatistics"></h5><div class="ibox-tools"><a class="collapse-link"><i class="fa fa-chevron-up"></i></a><a class="close-link"><i class="fa fa-times"></i></a></div></div>
-                <div class="ibox-content"><div id="flow" style="height: 300px;"></div></div>
+            <div class="ibox float-e-margins dashboard-chart-card">
+                <div class="ibox-title"><h5 langtag="word-trafficstatistics"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠流量统计" data-aria-label-zh="折叠流量统计" data-aria-label-en="Collapse traffic statistics" data-title-zh="折叠流量统计" data-title-en="Collapse traffic statistics"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭流量统计" data-aria-label-zh="关闭流量统计" data-aria-label-en="Close traffic statistics" data-title-zh="关闭流量统计" data-title-en="Close traffic statistics"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
+                <div class="ibox-content"><div id="flow" class="dashboard-chart dashboard-chart--tall" role="img" aria-label="流量统计图表" data-aria-label-zh="流量统计图表" data-aria-label-en="Traffic statistics chart"></div></div>
             </div>
         </div>
         <div class="col-lg-6">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title"><h5 langtag="word-type"></h5><div class="ibox-tools"><a class="collapse-link"><i class="fa fa-chevron-up"></i></a><a class="close-link"><i class="fa fa-times"></i></a></div></div>
-                <div class="ibox-content"><div id="counts" style="height:300px;"></div></div>
+            <div class="ibox float-e-margins dashboard-chart-card">
+                <div class="ibox-title"><h5 langtag="word-type"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠连接类型" data-aria-label-zh="折叠连接类型" data-aria-label-en="Collapse connection types" data-title-zh="折叠连接类型" data-title-en="Collapse connection types"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭连接类型" data-aria-label-zh="关闭连接类型" data-aria-label-en="Close connection types" data-title-zh="关闭连接类型" data-title-en="Close connection types"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
+                <div class="ibox-content"><div id="counts" class="dashboard-chart dashboard-chart--tall" role="img" aria-label="连接类型图表" data-aria-label-zh="连接类型图表" data-aria-label-en="Connection type chart"></div></div>
             </div>
         </div>
     </div>
@@ -203,7 +211,7 @@
     $("#overview_cpu_bar").width("{{.data.cpu}}%")
     $("#overview_memory").text("{{.data.virtual_mem}}%")
     $("#overview_memory_bar").width("{{.data.virtual_mem}}%")
-    $.each( JSON.parse({{.data.load}}), function(i, value) { $("#overview_load").append('&emsp;' + value) });
+    $("#overview_load").text("{{.data.load1}} / {{.data.load5}} / {{.data.load15}}");
     $("#overview_tcp").text("{{.data.tcp}}")
     $("#overview_udp").text("{{.data.udp}}")
     $("#overview_send").text(changeunit({{.data.io_send}}) + "/s")
@@ -213,9 +221,9 @@
 			tooltip: {
 				trigger: 'axis',
 				formatter: function (params) {
-					var str = params[0].axisValue + '<br/>';
-					for (i in params){
-						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'</br>';
+					var str = params.length ? params[0].axisValue + '<br>' : '';
+					for (var i = 0; i < params.length; i++){
+						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'<br>';
 					}
 					return str;
 				}
@@ -264,9 +272,9 @@
 			tooltip: {
 				trigger: 'axis',
 				formatter: function (params) {
-					var str = params[0].axisValue + '<br/>';
-					for (i in params){
-						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'%</br>';
+					var str = params.length ? params[0].axisValue + '<br>' : '';
+					for (var i = 0; i < params.length; i++){
+						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'%<br>';
 					}
 					return str;
 				}
@@ -306,9 +314,9 @@
 			tooltip: {
 				trigger: 'axis',
 				formatter: function (params) {
-					var str = params[0].axisValue + '<br/>';
-					for (i in params){
-						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'MB</br>';
+					var str = params.length ? params[0].axisValue + '<br>' : '';
+					for (var i = 0; i < params.length; i++){
+						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'MB<br>';
 					}
 					return str;
 				}
@@ -392,9 +400,9 @@
 			tooltip: {
 				trigger: 'axis',
 				formatter: function (params) {
-					var str = params[0].axisValue + '<br/>';
-					for (i in params){
-						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ changeunit(params[i].data) +'/s</br>';
+					var str = params.length ? params[0].axisValue + '<br>' : '';
+					for (var i = 0; i < params.length; i++){
+						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ changeunit(params[i].data) +'/s<br>';
 					}
 					return str;
 				}
@@ -447,16 +455,22 @@
 				}
 			},
 			legend: {
-				orient: 'vertical',
-				left: 'left',
+				orient: 'horizontal',
+				left: 'center',
+				bottom: 2,
+				itemWidth: 12,
+				itemHeight: 8,
+				itemGap: 12,
 				data: ['', '']
 			},
 			series: [
 				{
 					name: '',
 					type: 'pie',
-					radius: '55%',
-					center: ['50%', '60%'],
+					radius: '52%',
+					center: ['50%', '43%'],
+					label: { show: false },
+					labelLine: { show: false },
 					data: [
 						{
 							name: '',
@@ -484,16 +498,23 @@
 				formatter: '{a} <br/>{b} : {c} ({d}%)'
 			},
 			legend: {
-				orient: 'vertical',
-				left: 'left',
+				type: 'scroll',
+				orient: 'horizontal',
+				left: 'center',
+				bottom: 2,
+				itemWidth: 12,
+				itemHeight: 8,
+				itemGap: 10,
 				data: ['', '', '', '', '', '', '']
 			},
 			series: [
 				{
 					name: '',
 					type: 'pie',
-					radius: '55%',
-					center: ['50%', '60%'],
+					radius: '48%',
+					center: ['50%', '40%'],
+					label: { show: false },
+					labelLine: { show: false },
 					data: [
 						{
 							name: '',
@@ -533,11 +554,38 @@
 					}
 				}
 			]
-		};
+			};
 
-	    window.addEventListener('resize', () => {
+		function applyDashboardChartLabels() {
+			var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
+			if (chartdatas['flow'] && chartdatas['flow'].legend && chartdatas['flow'].series && chartdatas['flow'].series[0]) {
+				var flowNames = english ? ['In', 'Out'] : ['入口', '出口'];
+				chartdatas['flow'].legend.data = flowNames.slice();
+				chartdatas['flow'].series[0].name = english ? 'Traffic' : '流量统计';
+				if (chartdatas['flow'].series[0].data) {
+					for (var flowIndex = 0; flowIndex < chartdatas['flow'].series[0].data.length; flowIndex++) {
+						chartdatas['flow'].series[0].data[flowIndex].name = flowNames[flowIndex] || '';
+					}
+				}
+			}
+			if (chartdatas['counts'] && chartdatas['counts'].legend && chartdatas['counts'].series && chartdatas['counts'].series[0]) {
+				var countNames = english ? ['HOST', 'TCP', 'UDP', 'HTTP', 'SOCKS 5', 'Secret', 'P2P'] : ['域名转发', 'TCP 隧道', 'UDP 隧道', 'HTTP 代理', 'SOCKS 代理', '私密代理', 'P2P 连接'];
+				chartdatas['counts'].legend.data = countNames.slice();
+				chartdatas['counts'].series[0].name = english ? 'Scheme type' : '协议类型';
+				if (chartdatas['counts'].series[0].data) {
+					for (var countIndex = 0; countIndex < chartdatas['counts'].series[0].data.length; countIndex++) {
+						chartdatas['counts'].series[0].data[countIndex].name = countNames[countIndex] || '';
+					}
+				}
+			}
+		}
+		applyDashboardChartLabels();
+
+		window.addEventListener('resize', () => {
 	        for(var key in charts){
-	            charts[key].resize();
+	            if (charts[key] && typeof charts[key].resize === 'function') {
+	                charts[key].resize();
+	            }
 	        }
 	    });
 </script>

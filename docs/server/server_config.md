@@ -5,6 +5,8 @@
 
 > 首次启动时若 `conf/nps.conf` 不存在会**自动生成默认配置**。用户名默认为 `admin`，`web_password`、`auth_key`、`auth_crypt_key` 会随机生成并打印到终端。已有配置不会被覆盖，请以当前 `conf/nps.conf` 中的值为准。
 
+发布包中的已知占位值会在启动时自动轮换；显式填写的自定义值和空值不会被覆盖。生产环境建议将 Web 面板限制在管理网段、启用 HTTPS，并按最小权限开放端口。
+
 ## 通用配置
 
 | 名称 | 含义 | 默认值 |
@@ -79,7 +81,7 @@
 | allow_multi_ip | 是否允许每个隧道监听不同的服务端 IP | `true` |
 | allow_local_proxy | 是否允许把隧道目标转发到 nps 所在服务器本地 | `false` |
 | allow_ports | 限制可开放的隧道端口范围，例如 `9001-9009,10001,11000-12000`，留空不限制 | （空） |
-| system_info_display | 是否在 web 上展示服务器系统监控信息图表 | `true` |
+| system_info_display | 是否在 web 上展示服务器系统监控信息图表 | `true`（默认开启） |
 
 ## debug / pprof
 

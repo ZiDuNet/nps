@@ -1,6 +1,10 @@
 package controllers
 
 import (
+	"errors"
+	"html"
+	"strconv"
+	"strings"
 	"time"
 
 	"ehang.io/nps/lib/file"
@@ -8,6 +12,86 @@ import (
 
 type UserController struct {
 	BaseController
+}
+
+// userListRow deliberately keeps the historical response shape while never
+// sending stored credentials to the browser.
+type userListRow struct {
+	Id           int
+	UserName     string
+	Password     string
+	Status       bool
+	Remark       string
+	MaxTunnelNum int
+	ExpireTime   string
+	CreateTime   string
+}
+
+func newUserListRows(users []*file.User) []*userListRow {
+	rows := make([]*userListRow, 0, len(users))
+	for _, user := range users {
+		if user == nil {
+			continue
+		}
+		rows = append(rows, &userListRow{
+			Id:           user.Id,
+			UserName:     html.UnescapeString(user.UserName),
+			Password:     "",
+			Status:       user.Status,
+			Remark:       html.UnescapeString(user.Remark),
+			MaxTunnelNum: user.MaxTunnelNum,
+			ExpireTime:   user.ExpireTime,
+			CreateTime:   user.CreateTime,
+		})
+	}
+	return rows
+}
+
+func normalizeUserTunnelLimit(limit int) int {
+	if limit < 0 {
+		return 0
+	}
+	return limit
+}
+
+func normalizeUserExpireTime(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	expireTime := normalizeExpireTime(value)
+	if expireTime == "" {
+		return "", errors.New("invalid expiration time")
+	}
+	return expireTime, nil
+}
+
+func parseUserStatus(value string) (bool, error) {
+	value = strings.TrimSpace(value)
+	if value == "0" {
+		return false, nil
+	}
+	if value == "1" {
+		return true, nil
+	}
+	return strconv.ParseBool(value)
+}
+
+func newUserUpdateCandidate(existing *file.User, username, password, remark string, maxTunnelNum int, expireTime string) *file.User {
+	updated := &file.User{
+		Id:           existing.Id,
+		UserName:     username,
+		Password:     existing.Password,
+		Status:       existing.Status,
+		Remark:       remark,
+		MaxTunnelNum: maxTunnelNum,
+		ExpireTime:   expireTime,
+		CreateTime:   existing.CreateTime,
+	}
+	if password != "" {
+		updated.Password = password
+	}
+	return updated
 }
 
 func (s *UserController) List() {
@@ -19,7 +103,7 @@ func (s *UserController) List() {
 	}
 	start, length := s.GetAjaxParams()
 	list, cnt := file.GetDb().GetUserList(start, length, s.getEscapeString("search"))
-	s.AjaxTable(list, cnt, cnt, nil)
+	s.AjaxTable(newUserListRows(list), cnt, cnt, nil)
 }
 
 func (s *UserController) Add() {
@@ -29,17 +113,23 @@ func (s *UserController) Add() {
 		s.display()
 		return
 	}
+	expireTime, err := normalizeUserExpireTime(s.GetString("expire_time"))
+	if err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
 	u := &file.User{
 		UserName:     s.getEscapeString("username"),
-		Password:     s.getEscapeString("password"),
+		Password:     s.GetString("password"),
 		Status:       true,
 		Remark:       s.getEscapeString("remark"),
-		MaxTunnelNum: s.GetIntNoErr("max_tunnel"),
-		ExpireTime:   normalizeExpireTime(s.getEscapeString("expire_time")),
+		MaxTunnelNum: normalizeUserTunnelLimit(s.GetIntNoErr("max_tunnel")),
+		ExpireTime:   expireTime,
 		CreateTime:   time.Now().Format("2006-01-02 15:04:05"),
 	}
 	if err := file.GetDb().NewUser(u); err != nil {
 		s.AjaxErr(err.Error())
+		return
 	}
 	s.AjaxOkWithId("add success", u.Id)
 }
@@ -48,11 +138,12 @@ func (s *UserController) Edit() {
 	id := s.GetIntNoErr("id")
 	if s.Ctx.Request.Method == "GET" {
 		s.Data["menu"] = "user"
-		if u, err := file.GetDb().GetUser(id); err != nil {
+		u, err := file.GetDb().GetUser(id)
+		if err != nil {
 			s.error()
-		} else {
-			s.Data["u"] = u
+			return
 		}
+		s.Data["u"] = u
 		s.SetInfo("edit user")
 		s.display()
 		return
@@ -62,31 +153,62 @@ func (s *UserController) Edit() {
 		s.AjaxErr("user ID not found")
 		return
 	}
-	u.UserName = s.getEscapeString("username")
-	u.Password = s.getEscapeString("password")
-	u.Remark = s.getEscapeString("remark")
-	u.MaxTunnelNum = s.GetIntNoErr("max_tunnel")
-	u.ExpireTime = normalizeExpireTime(s.getEscapeString("expire_time"))
-	if err := file.GetDb().UpdateUser(u); err != nil {
+	expireTime, err := normalizeUserExpireTime(s.GetString("expire_time"))
+	if err != nil {
 		s.AjaxErr(err.Error())
+		return
+	}
+	updated := newUserUpdateCandidate(
+		u,
+		s.getEscapeString("username"),
+		s.GetString("password"),
+		s.getEscapeString("remark"),
+		normalizeUserTunnelLimit(s.GetIntNoErr("max_tunnel")),
+		expireTime,
+	)
+	if err := file.GetDb().UpdateUser(updated); err != nil {
+		s.AjaxErr(err.Error())
+		return
 	}
 	s.AjaxOk("save success")
 }
 
 func (s *UserController) ChangeStatus() {
 	id := s.GetIntNoErr("id")
-	if user, err := file.GetDb().GetUser(id); err == nil {
-		user.Status = s.GetBoolNoErr("status")
-		file.GetDb().JsonDb.StoreUsersToJsonFile()
-		s.AjaxOk("modified success")
+	if id <= 0 {
+		s.AjaxErr("user ID not found")
+		return
 	}
-	s.AjaxErr("modified fail")
+	status, err := parseUserStatus(s.GetString("status"))
+	if err != nil {
+		s.AjaxErr("invalid status")
+		return
+	}
+	user, err := file.GetDb().GetUser(id)
+	if err != nil {
+		s.AjaxErr("user ID not found")
+		return
+	}
+	user.Lock()
+	user.Status = status
+	file.GetDb().JsonDb.StoreUsersToJsonFile()
+	user.Unlock()
+	s.AjaxOk("modified success")
 }
 
 func (s *UserController) Del() {
 	id := s.GetIntNoErr("id")
+	if id <= 0 {
+		s.AjaxErr("user ID not found")
+		return
+	}
+	if _, err := file.GetDb().GetUser(id); err != nil {
+		s.AjaxErr("user ID not found")
+		return
+	}
 	if err := file.GetDb().DelUser(id); err != nil {
 		s.AjaxErr("delete error")
+		return
 	}
 	s.AjaxOk("delete success")
 }

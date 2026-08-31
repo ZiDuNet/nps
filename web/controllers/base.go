@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"crypto/subtle"
 	"html"
 	"math"
 	"strconv"
@@ -27,27 +28,41 @@ type BaseController struct {
 func (s *BaseController) Prepare() {
 	s.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
 	controllerName, actionName := s.GetControllerAndAction()
-	s.controllerName = strings.ToLower(controllerName[0 : len(controllerName)-10])
+	if len(controllerName) > len("Controller") {
+		s.controllerName = strings.ToLower(controllerName[0 : len(controllerName)-len("Controller")])
+	} else {
+		s.controllerName = strings.ToLower(controllerName)
+	}
 	s.actionName = strings.ToLower(actionName)
 	// web api verify
 	// param 1 is md5(authKey+Current timestamp)
 	// param 2 is timestamp (It's limited to 20 seconds.)
 	md5Key := s.getEscapeString("auth_key")
 	timestamp := s.GetIntNoErr("timestamp")
-	configKey := beego.AppConfig.String("auth_key")
-	if configKey == "" {
-		configKey = crypt.GetRandomString(64)
-	}
+	configKey := strings.TrimSpace(beego.AppConfig.String("auth_key"))
 	timeNowUnix := time.Now().Unix()
-	if !(md5Key != "" && (math.Abs(float64(timeNowUnix-int64(timestamp))) <= 20) && (crypt.Md5(configKey+strconv.Itoa(timestamp)) == md5Key)) {
-		if s.GetSession("auth") != true {
-			s.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
-		}
-	} else {
+	expectedKey := crypt.Md5(configKey + strconv.Itoa(timestamp))
+	apiAuthorized := configKey != "" && md5Key != "" &&
+		(math.Abs(float64(timeNowUnix-int64(timestamp))) <= 20) &&
+		subtle.ConstantTimeCompare([]byte(expectedKey), []byte(md5Key)) == 1
+	if apiAuthorized {
 		s.SetSession("isAdmin", true)
 		s.Data["isAdmin"] = true
+	} else if !sessionBool(s.GetSession("auth")) {
+		// A redirect does not stop Beego from invoking the action. Return here so
+		// an unauthenticated request cannot continue with an elevated default.
+		s.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
+		s.StopRun()
+		return
 	}
-	if s.GetSession("isAdmin") != nil && !s.GetSession("isAdmin").(bool) {
+	isAdminSession := s.GetSession("isAdmin")
+	isAdmin := sessionBool(isAdminSession)
+	if _, ok := isAdminSession.(bool); !ok {
+		// Keep downstream controllers compatible with their historical bool
+		// assertions even when a session store returns a string or nil.
+		s.SetSession("isAdmin", isAdmin)
+	}
+	if !isAdmin {
 		s.Data["isAdmin"] = false
 		s.Data["username"] = s.GetSession("username")
 		if s.controllerName == "user" || s.controllerName == "global" {
@@ -71,6 +86,46 @@ func (s *BaseController) Prepare() {
 	httpPort := beego.AppConfig.String("http_proxy_port")
 	if httpPort != "80" && showHttpProxyPort {
 		s.Data["http_proxy_port"] = ":" + httpPort
+	}
+}
+
+// sessionBool accepts the values produced by Beego's session backends. Some
+// deployments serialize booleans as strings or numeric flags.
+func sessionBool(value interface{}) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		if typed == "1" {
+			return true
+		}
+		if typed == "0" {
+			return false
+		}
+		parsed, err := strconv.ParseBool(typed)
+		return err == nil && parsed
+	case int:
+		return typed != 0
+	case int8:
+		return typed != 0
+	case int16:
+		return typed != 0
+	case int32:
+		return typed != 0
+	case int64:
+		return typed != 0
+	case uint:
+		return typed != 0
+	case uint8:
+		return typed != 0
+	case uint16:
+		return typed != 0
+	case uint32:
+		return typed != 0
+	case uint64:
+		return typed != 0
+	default:
+		return false
 	}
 }
 

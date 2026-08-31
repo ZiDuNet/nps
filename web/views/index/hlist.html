@@ -1,41 +1,29 @@
-<div class="wrapper wrapper-content animated fadeInRight">
-
+<section class="wrapper wrapper-content animated fadeInRight management-page" aria-labelledby="host-list-title">
+    <header class="dashboard-page-header management-page-header">
+        <div>
+            <div class="dashboard-page-kicker" data-i18n-zh="虚拟主机" data-i18n-en="Virtual hosts">虚拟主机</div>
+            <h1 id="host-list-title" langtag="page-hostlist"></h1>
+            <p data-i18n-zh="将域名、证书和后端目标组合为可管理的站点入口。" data-i18n-en="Combine domains, certificates, and backend targets into managed site entries.">将域名、证书和后端目标组合为可管理的站点入口。</p>
+        </div>
+    </header>
     <div class="row">
         <div class="col-lg-12">
-            <div class="ibox float-e-margins">
-                <div class="ibox-title">
-                    <h5 langtag="page-hostlist"></h5>
-
-                    <div class="ibox-tools">
-                        <a class="collapse-link">
-                            <i class="fa fa-chevron-up"></i>
+            <section class="ibox float-e-margins management-table-card">
+                <div class="ibox-content management-table-content">
+                    <div id="toolbar" class="management-table-toolbar">
+                        <a href="{{.web_base_url}}/index/addhost?vkey={{.task_id}}&client_id={{.client_id}}" class="btn btn-primary dim">
+                            <i class="fa fa-fw fa-lg fa-plus"></i> <span langtag="word-add"></span>
                         </a>
-                        <a class="close-link">
-                            <i class="fa fa-times"></i>
+                        <a href="#" onclick="batchDelete('{{.web_base_url}}/index/delhost');return false;" class="btn btn-danger dim">
+                            <i class="fa fa-fw fa-lg fa-trash"></i> <span langtag="word-batchdelete"></span>
                         </a>
                     </div>
-                </div>
-                <div class="content">
-                    <div class="table-responsive">
-                        <div id="toolbar">
-                            <a href="{{.web_base_url}}/index/addhost?vkey={{.task_id}}&client_id={{.client_id}}" class="btn btn-primary dim">
-                            <i class="fa fa-fw fa-lg fa-plus"></i> <span langtag="word-add"></span></a>
-                            <a href="#" onclick="batchDelete('{{.web_base_url}}/index/delhost');return false;" class="btn btn-danger dim">
-                            <i class="fa fa-fw fa-lg fa-trash"></i> <span langtag="word-batchdelete"></span></a>
-                        </div>
-                        <table id="taskList_table" class="table-striped table-hover"
-                               data-mobile-responsive="true"></table>
-                    </div>
-                </div>
-                <div class="ibox-content">
-
                     <table id="table"></table>
-
                 </div>
-            </div>
+            </section>
         </div>
     </div>
-</div>
+</section>
 
 <script>
     /*bootstrap table*/
@@ -65,19 +53,31 @@
         pageList: [5, 10, 20, 50],//分页步进值
         detailView: true,
         smartDisplay: true, // 智能显示 pagination 和 cardview 等
-        onExpandRow: function () {$('body').setLang ('.detail-view');},
-        onPostBody: function (data) { if ($(this)[0].locale != undefined ) $('body').setLang ('#table'); },
+        formatLoadingMessage: function () { return npsTableState('host', true); },
+        formatNoMatches: function () { return npsTableState('host', false); },
+        onExpandRow: function () {
+            $('body').setLang('.detail-view');
+            npsDecorateDetailControls('#table');
+        },
+        onCollapseRow: function () { window.setTimeout(function () { npsDecorateDetailControls('#table'); }, 0); },
+        onPostBody: function (data) {
+            $('body').setLang('#table');
+            npsApplyTableState(this, 'host');
+        },
         detailFormatter: function (index, row, element) {
-            return '<b langtag="word-exportflow"></b>: ' + changeunit(row.Flow.ExportFlow) + '&emsp;'
-                    + '<b langtag="word-inletflow"></b>: ' + changeunit(row.Flow.InletFlow) + '&emsp;'
-                    + '<b langtag="word-crypt"></b>: ' + row.Client.Cnf.Crypt + '&emsp;'
-                    + '<b langtag="word-compress"></b>: ' + row.Client.Cnf.Compress + '&emsp;'
-                    + '<b langtag="word-basicusername"></b>: ' + row.Client.Cnf.U + '&emsp;'
-                    + '<b langtag="word-basicpassword"></b>: ' + row.Client.Cnf.P + '&emsp;<br/><br>'
-                    + '<b langtag="word-httpscert"></b>: ' + row.CertFilePath + '&emsp;'
-                    + '<b langtag="word-httpskey"></b>: ' + row.KeyFilePath + '&emsp;<br/><br>'
-                    + '<b langtag="word-requestheader"></b>: ' + row.HeaderChange + '&emsp;<br/><br>'
-                    + '<b langtag="word-requesthost"></b>: ' + row.HostChange + '&emsp;'
+            var flow = row.Flow || {};
+            var client = row.Client || {};
+            var config = client.Cnf || {};
+            return '<b langtag="word-exportflow"></b>: ' + npsEscapeHtml(changeunit(flow.ExportFlow)) + '&emsp;'
+                    + '<b langtag="word-inletflow"></b>: ' + npsEscapeHtml(changeunit(flow.InletFlow)) + '&emsp;'
+                    + '<b langtag="word-crypt"></b>: ' + npsBooleanMarkup(config.Crypt) + '&emsp;'
+                    + '<b langtag="word-compress"></b>: ' + npsBooleanMarkup(config.Compress) + '&emsp;'
+                    + '<b langtag="word-basicusername"></b>: ' + npsEscapeHtml(config.U) + '&emsp;'
+                    + '<b langtag="word-basicpassword"></b>: ' + npsEscapeHtml(config.P) + '&emsp;<br/><br>'
+                    + '<b langtag="word-httpscert"></b>: ' + npsEscapeHtml(row.CertFilePath) + '&emsp;'
+                    + '<b langtag="word-httpskey"></b>: ' + npsEscapeHtml(row.KeyFilePath) + '&emsp;<br/><br>'
+                    + '<b langtag="word-requestheader"></b>: ' + npsEscapeHtml(row.HeaderChange) + '&emsp;<br/><br>'
+                    + '<b langtag="word-requesthost"></b>: ' + npsEscapeHtml(row.HostChange) + '&emsp;'
         },
         //表格的列
         columns: [
@@ -91,7 +91,8 @@
                 title: '<span langtag="word-id"></span>',//标题
                 halign: 'center',
                 sortable: true,
-                visible: true//false表示不显示
+                visible: true,//false表示不显示
+                escape: true
             },
             {
                 field: 'ClientId',//域值
@@ -100,7 +101,8 @@
                 sortable: true,
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    return row.Client.Id + '-' + row.Client.Remark
+                    var client = row.Client || {};
+                    return npsEscapeHtml((client.Id == null ? '' : client.Id) + '-' + (client.Remark || ''));
                 }
             },
             {
@@ -108,14 +110,16 @@
                 title: '<span langtag="word-remark"></span>',//标题
                 halign: 'center',
                 sortable: true,
-                visible: true//false表示不显示
+                visible: true,//false表示不显示
+                escape: true
             },
             {
                 field: 'Client.VerifyKey',//域值
                 title: '<span langtag="word-verifykey"></span>',//标题
                 halign: 'center',
                 sortable: true,
-                visible: true//false表示不显示
+                visible: true,//false表示不显示
+                escape: true
             },
             {
                 field: 'Host',//域值
@@ -124,7 +128,9 @@
                 sortable: true,
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    return "<a href='http://" + row.Host + '{{.http_proxy_port}}'  + "' target='_blank'>" + row.Host + '{{.http_proxy_port}}' + "</a>"
+                    var hostAddress = String(row.Host || '') + '{{.http_proxy_port}}';
+                    var safeHostAddress = npsEscapeHtml(hostAddress);
+                    return "<a href='http://" + safeHostAddress + "' target='_blank' rel='noopener noreferrer'>" + safeHostAddress + "</a>"
                 }
             },
             {
@@ -134,7 +140,8 @@
                 sortable: true,
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    return '<span langtag="word-' +value+ '"></span>'
+                    var scheme = String(value || '').replace(/[^A-Za-z0-9_-]/g, '');
+                    return '<span langtag="word-' + scheme + '"></span>'
                 }
             },
             {
@@ -144,7 +151,7 @@
                 sortable: true,
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    return row.Target.TargetStr
+                    return npsEscapeHtml((row.Target || {}).TargetStr);
                 }
             },
             {
@@ -152,7 +159,8 @@
                 title: '<span langtag="word-location"></span>',//标题
                 halign: 'center',
                 sortable: true,
-                visible: true//false表示不显示
+                visible: true,//false表示不显示
+                escape: true
             },
             {
                 field: 'IsClose',//域值
@@ -177,9 +185,10 @@
                 sortable: true,
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    hosturl = ((row.Scheme == 'http' ) ? 'http://' : 'https://') + row.Host + row.Location
-                    if (row.Client.IsConnect) {
-                        return '<a href="' + hosturl + '" target="_blank"><span class="badge badge-primary" langtag="word-online"></span></a>'
+                    var hosturl = ((row.Scheme == 'http' ) ? 'http://' : 'https://') + (row.Host || '') + (row.Location || '');
+                    hosturl = npsEscapeHtml(hosturl);
+                    if (row.Client && row.Client.IsConnect) {
+                        return '<a href="' + hosturl + '" target="_blank" rel="noopener noreferrer"><span class="badge badge-primary" langtag="word-online"></span></a>'
                     } else {
                         return '<span class="badge badge-badge" langtag="word-offline"></span>'
                     }
@@ -192,20 +201,22 @@
                 halign: 'center',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    btn_group = '<div class="btn-group">'
+                    var hostId = Number(row.Id);
+                    if (!isFinite(hostId) || Math.floor(hostId) !== hostId || hostId <= 0) return '';
+                    var btn_group = '<div class="btn-group">'
 
                     if (!row.IsClose) {
-                        btn_group += "<a onclick=\"submitform('stop', '{{.web_base_url}}/index/hoststop', {'id':" + row.Id
-                        btn_group += '})" class="btn btn-outline btn-warning"><i class="fa fa-pause"></i></a>'
+                        btn_group += "<button type=\"button\" onclick=\"submitform('stop', '{{.web_base_url}}/index/hoststop', {'id':" + hostId
+                        btn_group += '})" class="btn btn-outline btn-warning" data-title-zh="停止主机" data-title-en="Stop host" data-aria-label-zh="停止主机" data-aria-label-en="Stop host"><i class="fa fa-pause" aria-hidden="true"></i></button>'
                     } else {
-                        btn_group += "<a onclick=\"submitform('start', '{{.web_base_url}}/index/hoststart', {\'id\':" + row.Id
-                        btn_group += '})" class="btn btn-outline btn-primary"><i class="fa fa-play"></i></a>'
+                        btn_group += "<button type=\"button\" onclick=\"submitform('start', '{{.web_base_url}}/index/hoststart', {\'id\':" + hostId
+                        btn_group += '})" class="btn btn-outline btn-primary" data-title-zh="启动主机" data-title-en="Start host" data-aria-label-zh="启动主机" data-aria-label-en="Start host"><i class="fa fa-play" aria-hidden="true"></i></button>'
                     }
 
-                    btn_group += "<a onclick=\"submitform('delete', '{{.web_base_url}}/index/delhost', {'id':" + row.Id
-                    btn_group += '})" class="btn btn-outline btn-danger"><i class="fa fa-trash"></i></a>'
-                    btn_group += '<a href="{{.web_base_url}}/index/edithost?id=' + row.Id
-                    btn_group += '" class="btn btn-outline btn-success"><i class="fa fa-edit"></i></a></div>'
+                    btn_group += "<button type=\"button\" onclick=\"submitform('delete', '{{.web_base_url}}/index/delhost', {'id':" + hostId
+                    btn_group += '})" class="btn btn-outline btn-danger" data-title-zh="删除主机" data-title-en="Delete host" data-aria-label-zh="删除主机" data-aria-label-en="Delete host"><i class="fa fa-trash" aria-hidden="true"></i></button>'
+                    btn_group += '<a href="{{.web_base_url}}/index/edithost?id=' + hostId
+                    btn_group += '" class="btn btn-outline btn-success" data-title-zh="编辑主机" data-title-en="Edit host" data-aria-label-zh="编辑主机" data-aria-label-en="Edit host"><i class="fa fa-edit" aria-hidden="true"></i></a></div>'
                     return btn_group
                 }
             }

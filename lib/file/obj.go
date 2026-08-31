@@ -24,6 +24,33 @@ func (s *Flow) Add(in, out int64) {
 	s.ExportFlow += int64(out)
 }
 
+// Snapshot returns a consistent view of the counters and configured limit.
+// Callers that render status or enforce quotas should use this instead of
+// reading the exported fields while traffic goroutines are updating them.
+func (s *Flow) Snapshot() (inlet, export, limit int64) {
+	if s == nil {
+		return 0, 0, 0
+	}
+	s.RLock()
+	inlet, export, limit = s.InletFlow, s.ExportFlow, s.FlowLimit
+	s.RUnlock()
+	return inlet, export, limit
+}
+
+func (s *Flow) SetLimit(limit int64) {
+	if s == nil {
+		return
+	}
+	s.Lock()
+	s.FlowLimit = limit
+	s.Unlock()
+}
+
+func (s *Flow) Exceeded() bool {
+	inlet, export, limit := s.Snapshot()
+	return limit > 0 && (limit<<20) < inlet+export
+}
+
 type Config struct {
 	U        string
 	P        string
@@ -104,11 +131,20 @@ func (s *Client) AddConn() {
 }
 
 func (s *Client) GetConn() bool {
-	if s.MaxConn == 0 || int(s.NowConn) < s.MaxConn {
+	maxConn := int64(s.MaxConn)
+	if maxConn <= 0 {
 		s.CutConn()
 		return true
 	}
-	return false
+	for {
+		current := atomic.LoadInt32(&s.NowConn)
+		if int64(current) >= maxConn {
+			return false
+		}
+		if atomic.CompareAndSwapInt32(&s.NowConn, current, current+1) {
+			return true
+		}
+	}
 }
 
 func (s *Client) HasTunnel(t *Tunnel) (exist bool) {

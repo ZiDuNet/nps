@@ -97,14 +97,16 @@ func flowInlet(c *Client) int64 {
 	if c == nil || c.Flow == nil {
 		return 0
 	}
-	return c.Flow.InletFlow
+	inlet, _, _ := c.Flow.Snapshot()
+	return inlet
 }
 
 func flowExport(c *Client) int64 {
 	if c == nil || c.Flow == nil {
 		return 0
 	}
-	return c.Flow.ExportFlow
+	_, export, _ := c.Flow.Snapshot()
+	return export
 }
 
 func nowRate(c *Client) int64 {

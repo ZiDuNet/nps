@@ -71,6 +71,37 @@ func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 	}
 }
 
+func TestTunnelListCopyControlsAreLocalized(t *testing.T) {
+	content := readTemplateForTest(t, "../views/index/list.html")
+	for _, marker := range []string{
+		`data-i18n-zh="复制" data-i18n-en="Copy"`,
+		`data-title-zh="复制命令" data-title-en="Copy command"`,
+		`npsNotify('success', npsIsEnglish() ? 'Copied' : '复制成功')`,
+		`npsNotify('error', npsIsEnglish() ? 'Copy failed' : '复制失败')`,
+		`var tunnelListLanguageKey = tunnelListType === 'host' ? 'page-hostlist' : 'page-list' + tunnelListType;`,
+		`$('body').setLang('#table');`,
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("tunnel list misses localized copy marker: %s", marker)
+		}
+	}
+}
+
+func TestHostListTemplateUsesSafeDynamicOutput(t *testing.T) {
+	content := readTemplateForTest(t, "../views/index/hlist.html")
+	for _, marker := range []string{
+		`rel="noopener noreferrer"`,
+		`npsBooleanMarkup(config.Crypt)`,
+		`npsEscapeHtml((row.Target || {}).TargetStr)`,
+		`type=\"button\"`,
+		`$('body').setLang('#table');`,
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("host list misses safety/accessibility marker: %s", marker)
+		}
+	}
+}
+
 func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -82,7 +113,7 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 		{
 			name:      "add",
 			path:      "../views/index/add.html",
-			typeClass: `class="row tile tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}"`,
+			typeClass: `class="row form-page-grid tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}"`,
 			expectedRules: []string{
 				`.tunnel-form.tunnel-type-tcp #server_ip`,
 				`.tunnel-form.tunnel-type-file #server_ip`,
@@ -91,7 +122,7 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 		{
 			name:      "edit",
 			path:      "../views/index/edit.html",
-			typeClass: `class="row tile tunnel-form tunnel-type-{{.t.Mode}}"`,
+			typeClass: `class="row form-page-grid tunnel-form tunnel-type-{{.t.Mode}}"`,
 			forbiddenRules: []string{
 				`.tunnel-form.tunnel-type-tcp #server_ip`,
 				`.tunnel-form.tunnel-type-udp #server_ip`,
@@ -116,7 +147,7 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 		`.tunnel-form.tunnel-type-p2p #password`,
 		`.tunnel-form.tunnel-type-file #local_path`,
 		`.tunnel-form.tunnel-type-file #strip_pre`,
-		`display: flex !important;`,
+		`display: var(--tunnel-field-display, flex) !important;`,
 		`tunnelTypeClasses`,
 		`applyTypeClass(type);`,
 	}
@@ -214,6 +245,43 @@ func TestTunnelFormTemplatesExecuteWithInitialTypeClass(t *testing.T) {
 				t.Fatalf("rendered template misses %s", tt.wantClass)
 			}
 		})
+	}
+}
+
+func TestTunnelListTemplateQuotesRuntimeJavaScriptValues(t *testing.T) {
+	tpl := template.Must(template.ParseFiles("../views/index/list.html"))
+	data := map[string]interface{}{
+		"ip":           "127.0.0.1",
+		"p":            8024,
+		"tls_p":        8025,
+		"win":          "./npc",
+		"bridgeType":   "kcp",
+		"tls_enable":   true,
+		"web_base_url": "",
+		"isAdmin":      true,
+	}
+	var rendered bytes.Buffer
+	if err := tpl.Execute(&rendered, data); err != nil {
+		t.Fatalf("execute tunnel list template: %v", err)
+	}
+	content := rendered.String()
+	for _, marker := range []string{
+		`var address = "127.0.0.1" + ":"`,
+		`-type=kcp -password=`,
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("rendered tunnel list misses safely quoted runtime value %q", marker)
+		}
+	}
+}
+
+func TestDashboardTemplateUsesScalarLoadValues(t *testing.T) {
+	content := readTemplateForTest(t, "../views/index/index.html")
+	if strings.Contains(content, "JSON.parse({{.data.load}})") {
+		t.Fatal("dashboard must not pass an unquoted JSON object to JSON.parse")
+	}
+	if !strings.Contains(content, `$("#overview_load").text("{{.data.load1}} / {{.data.load5}} / {{.data.load15}}");`) {
+		t.Fatal("dashboard should render load averages from scalar status fields")
 	}
 }
 

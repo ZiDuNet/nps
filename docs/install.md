@@ -70,6 +70,8 @@ docker logs nps --tail=50
 - `auth_key`
 - `auth_crypt_key`
 
+如果挂载目录中已有发布包模板，启动时只会轮换已知的 `CHANGE_ME` 或历史弱默认值；显式设置的自定义值和留空的可选鉴权项不会被覆盖。生产环境建议将 `web_ip` 限制为管理网段、启用 `web_open_ssl`，并只开放实际使用的端口。
+
 浏览器访问：
 
 ```text

@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"bytes"
 	"encoding/json"
+	"html/template"
 	"os"
 	"strings"
 	"testing"
@@ -52,7 +54,59 @@ func TestClientFormTemplatesExposeUserSelect(t *testing.T) {
 					t.Fatalf("%s template misses user select marker: %s", tt.name, expected)
 				}
 			}
+			workflowName := map[string]string{"add": "client-create", "edit": "client-edit"}[tt.name]
+			workflow := `data-form-workflow="` + workflowName + `"`
+			if !strings.Contains(content, workflow) {
+				t.Fatalf("%s template misses workflow marker: %s", tt.name, workflow)
+			}
+			for _, expected := range []string{
+				`class="form-page form-page-client`,
+				`form-page-back`,
+				`form-workflow-card`,
+			} {
+				if !strings.Contains(content, expected) {
+					t.Fatalf("%s template misses shared form layout marker: %s", tt.name, expected)
+				}
+			}
 		})
+	}
+}
+
+func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
+	content := readClientTemplateForTest(t, "../views/client/list.html")
+	for _, marker := range []string{
+		`$('body').setLang('#table');`,
+		`npsBooleanMarkup(!!row.ConfigConnAllow)`,
+		`text(row.WebPassword`,
+		`npsApplyTableState(this, 'client')`,
+		`type="button"`,
+		`data-title-en="Disable client"`,
+		`data-title-en="Copy command"`,
+		`npsNotify('success', npsIsEnglish() ? 'Copied' : '复制成功')`,
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("client list misses safety/accessibility marker: %s", marker)
+		}
+	}
+}
+
+func TestClientListTemplateQuotesBridgeType(t *testing.T) {
+	tpl := template.Must(template.ParseFiles("../views/client/list.html"))
+	data := map[string]interface{}{
+		"ip":           "127.0.0.1",
+		"p":            8024,
+		"tls_p":        8025,
+		"win":          "./npc",
+		"bridgeType":   "kcp",
+		"isAdmin":      true,
+		"web_base_url": "",
+	}
+	var rendered bytes.Buffer
+	if err := tpl.Execute(&rendered, data); err != nil {
+		t.Fatalf("execute client list template: %v", err)
+	}
+	if !strings.Contains(rendered.String(), "-type=kcp'") {
+		t.Fatalf("rendered client list must keep bridge type inside the command string: %s", rendered.String())
 	}
 }
 
