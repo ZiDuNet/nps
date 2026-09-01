@@ -15,7 +15,7 @@
     <div class="row dashboard-stat-grid">
         <div class="col-lg-3 col-md-6">
             <div class="stat-card card-blue">
-                <div class="ibox float-e-margins">
+                <div class="panel ibox float-e-margins zui-panel">
                     <i class="fa fa-plug stat-icon"></i>
                     <div class="ibox-title">
                         <h5 langtag="word-connectionport"></h5>
@@ -28,7 +28,7 @@
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="stat-card card-purple">
-                <div class="ibox float-e-margins">
+                <div class="panel ibox float-e-margins zui-panel">
                     <i class="fa fa-users stat-icon"></i>
                     <div class="ibox-title">
                         <h5 langtag="word-totalclients"></h5>
@@ -41,7 +41,7 @@
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="stat-card card-green">
-                <div class="ibox float-e-margins">
+                <div class="panel ibox float-e-margins zui-panel">
                     <i class="fa fa-signal stat-icon"></i>
                     <div class="ibox-title">
                         <h5 langtag="word-onlineclients"></h5>
@@ -54,7 +54,7 @@
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="stat-card card-amber">
-                <div class="ibox float-e-margins">
+                <div class="panel ibox float-e-margins zui-panel">
                     <i class="fa fa-network-wired stat-icon"></i>
                     <div class="ibox-title">
                         <h5 langtag="word-tcpconnections"></h5>
@@ -69,7 +69,7 @@
 
     <div class="row dashboard-information-grid">
         <div class="col-lg-6">
-            <div class="ibox float-e-margins">
+            <div class="panel ibox float-e-margins zui-panel">
                 <div class="ibox-title">
                     <h5 langtag="word-configurationinformation"></h5>
                     <div class="ibox-tools">
@@ -111,7 +111,7 @@
             </div>
         </div>
         <div class="col-lg-6">
-            <div class="ibox float-e-margins">
+            <div class="panel ibox float-e-margins zui-panel">
                 <div class="ibox-title">
                     <h5 langtag="word-systeminformation"></h5>
                     <div class="ibox-tools">
@@ -153,13 +153,13 @@
 {{if eq true .system_info_display}}
     <div class="row dashboard-chart-grid">
         <div class="col-lg-6">
-            <div class="ibox float-e-margins dashboard-chart-card">
+            <div class="panel ibox float-e-margins dashboard-chart-card zui-panel">
                 <div class="ibox-title"><h5 langtag="word-cpu"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠 CPU 图表" data-aria-label-zh="折叠 CPU 图表" data-aria-label-en="Collapse CPU chart" data-title-zh="折叠 CPU 图表" data-title-en="Collapse CPU chart"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭 CPU 图表" data-aria-label-zh="关闭 CPU 图表" data-aria-label-en="Close CPU chart" data-title-zh="关闭 CPU 图表" data-title-en="Close CPU chart"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
                 <div class="ibox-content"><div id="cpu" class="dashboard-chart" role="img" aria-label="CPU 使用率图表" data-aria-label-zh="CPU 使用率图表" data-aria-label-en="CPU usage chart"></div></div>
             </div>
         </div>
         <div class="col-lg-6">
-            <div class="ibox float-e-margins dashboard-chart-card">
+            <div class="panel ibox float-e-margins dashboard-chart-card zui-panel">
                 <div class="ibox-title"><h5 langtag="word-memory"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠内存图表" data-aria-label-zh="折叠内存图表" data-aria-label-en="Collapse memory chart" data-title-zh="折叠内存图表" data-title-en="Collapse memory chart"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭内存图表" data-aria-label-zh="关闭内存图表" data-aria-label-en="Close memory chart" data-title-zh="关闭内存图表" data-title-en="Close memory chart"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
                 <div class="ibox-content"><div id="memory" class="dashboard-chart" role="img" aria-label="内存使用率图表" data-aria-label-zh="内存使用率图表" data-aria-label-en="Memory usage chart"></div></div>
             </div>
@@ -167,13 +167,13 @@
     </div>
     <div class="row dashboard-chart-grid">
         <div class="col-lg-6">
-            <div class="ibox float-e-margins dashboard-chart-card">
+            <div class="panel ibox float-e-margins dashboard-chart-card zui-panel">
                 <div class="ibox-title"><h5 langtag="word-load"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠负载图表" data-aria-label-zh="折叠负载图表" data-aria-label-en="Collapse load chart" data-title-zh="折叠负载图表" data-title-en="Collapse load chart"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭负载图表" data-aria-label-zh="关闭负载图表" data-aria-label-en="Close load chart" data-title-zh="关闭负载图表" data-title-en="Close load chart"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
                 <div class="ibox-content"><div id="load" class="dashboard-chart" role="img" aria-label="系统负载图表" data-aria-label-zh="系统负载图表" data-aria-label-en="System load chart"></div></div>
             </div>
         </div>
         <div class="col-lg-6">
-            <div class="ibox float-e-margins dashboard-chart-card">
+            <div class="panel ibox float-e-margins dashboard-chart-card zui-panel">
                 <div class="ibox-title"><h5 langtag="word-connections_established"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠连接图表" data-aria-label-zh="折叠连接图表" data-aria-label-en="Collapse connection chart" data-title-zh="折叠连接图表" data-title-en="Collapse connection chart"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭连接图表" data-aria-label-zh="关闭连接图表" data-title-zh="关闭连接图表" data-title-en="Close connection chart" data-aria-label-en="Close connection chart"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
                 <div class="ibox-content"><div id="connections" class="dashboard-chart" role="img" aria-label="连接数图表" data-aria-label-zh="连接数图表" data-aria-label-en="Connection count chart"></div></div>
             </div>
@@ -181,7 +181,7 @@
     </div>
     <div class="row dashboard-chart-grid">
         <div class="col-lg-12">
-            <div class="ibox float-e-margins dashboard-chart-card">
+            <div class="panel ibox float-e-margins dashboard-chart-card zui-panel">
                 <div class="ibox-title"><h5 langtag="word-bandwidth"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠带宽图表" data-aria-label-zh="折叠带宽图表" data-aria-label-en="Collapse bandwidth chart" data-title-zh="折叠带宽图表" data-title-en="Collapse bandwidth chart"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭带宽图表" data-aria-label-zh="关闭带宽图表" data-aria-label-en="Close bandwidth chart" data-title-zh="关闭带宽图表" data-title-en="Close bandwidth chart"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
                 <div class="ibox-content"><div id="bandwidth" class="dashboard-chart" role="img" aria-label="带宽图表" data-aria-label-zh="带宽图表" data-aria-label-en="Bandwidth chart"></div></div>
             </div>
@@ -191,13 +191,13 @@
 
     <div class="row dashboard-distribution-grid">
         <div class="col-lg-6">
-            <div class="ibox float-e-margins dashboard-chart-card">
+            <div class="panel ibox float-e-margins dashboard-chart-card zui-panel">
                 <div class="ibox-title"><h5 langtag="word-trafficstatistics"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠流量统计" data-aria-label-zh="折叠流量统计" data-aria-label-en="Collapse traffic statistics" data-title-zh="折叠流量统计" data-title-en="Collapse traffic statistics"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭流量统计" data-aria-label-zh="关闭流量统计" data-aria-label-en="Close traffic statistics" data-title-zh="关闭流量统计" data-title-en="Close traffic statistics"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
                 <div class="ibox-content"><div id="flow" class="dashboard-chart dashboard-chart--tall" role="img" aria-label="流量统计图表" data-aria-label-zh="流量统计图表" data-aria-label-en="Traffic statistics chart"></div></div>
             </div>
         </div>
         <div class="col-lg-6">
-            <div class="ibox float-e-margins dashboard-chart-card">
+            <div class="panel ibox float-e-margins dashboard-chart-card zui-panel">
                 <div class="ibox-title"><h5 langtag="word-type"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠连接类型" data-aria-label-zh="折叠连接类型" data-aria-label-en="Collapse connection types" data-title-zh="折叠连接类型" data-title-en="Collapse connection types"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭连接类型" data-aria-label-zh="关闭连接类型" data-aria-label-en="Close connection types" data-title-zh="关闭连接类型" data-title-en="Close connection types"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
                 <div class="ibox-content"><div id="counts" class="dashboard-chart dashboard-chart--tall" role="img" aria-label="连接类型图表" data-aria-label-zh="连接类型图表" data-aria-label-en="Connection type chart"></div></div>
             </div>

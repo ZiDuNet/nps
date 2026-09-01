@@ -1,6 +1,10 @@
 package file
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,6 +78,67 @@ func TestMigrateUsersFromClientsSplitsSameNameWithDifferentPasswords(t *testing.
 	}
 	if got := countUsers(db); got != 2 {
 		t.Fatalf("expected two migrated users, got %d", got)
+	}
+}
+
+func TestMigrateUsersFromClientsRecoversMissingLegacyOwner(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	client := &Client{
+		Id:          9,
+		UserId:      42,
+		VerifyKey:   "legacy-client",
+		Status:      true,
+		WebUserName: "legacy-user",
+		WebPassword: "legacy-password",
+	}
+	db.Clients.Store(client.Id, client)
+
+	utils := &DbUtils{JsonDb: db}
+	if err := utils.MigrateUsersFromClients(); err != nil {
+		t.Fatal(err)
+	}
+	user, err := utils.GetUser(client.UserId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.UserName != client.WebUserName || user.Password != client.WebPassword || !user.Status {
+		t.Fatalf("legacy owner was not recovered: %#v", user)
+	}
+	if _, err := os.Stat(db.UserFilePath); err != nil {
+		t.Fatalf("recovered users were not persisted: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Clean(db.UserFilePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted User
+	record := strings.Split(string(b), "\n"+common.CONN_DATA_SEQ)[0]
+	if err := json.Unmarshal([]byte(record), &persisted); err != nil || persisted.Id != client.UserId {
+		t.Fatalf("unexpected persisted users: %s", b)
+	}
+}
+
+func TestMigrateUsersFromClientsDoesNotRecreateDeletedOwnerWhenFileExists(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	client := &Client{
+		Id:          10,
+		UserId:      43,
+		VerifyKey:   "revoked-client",
+		Status:      true,
+		WebUserName: "revoked-user",
+		WebPassword: "revoked-password",
+	}
+	db.Clients.Store(client.Id, client)
+	if err := os.WriteFile(db.UserFilePath, []byte("[]"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	utils := &DbUtils{JsonDb: db}
+	if err := utils.MigrateUsersFromClients(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := utils.GetUser(client.UserId); err == nil {
+		t.Fatal("a deleted owner was recreated even though users.json exists")
 	}
 }
 

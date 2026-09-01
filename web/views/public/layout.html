@@ -21,6 +21,7 @@
 
     <title langtag="title-admin"></title>
 
+    <link href="{{.web_base_url}}/static/css/zui-3.0.0.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/toastr.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
@@ -28,8 +29,10 @@
     <link href="{{.web_base_url}}/static/css/bootstrap-table.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/style.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20260831-15" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/zui-console.css?v={{.version}}&ui=20260901-1" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/flatpickr.min.css?v={{.version}}" rel="stylesheet">
 
+    <script src="{{.web_base_url}}/static/js/zui-3.0.0.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/clipboard.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
@@ -45,81 +48,81 @@
 
 </head>
 
-<body class="pace-done fixed-nav fixed-nav-basic">
+<body class="pace-done fixed-nav fixed-nav-basic zui-app">
 <div id="wrapper">
     <nav class="navbar-default navbar-static-side" role="navigation">
         <div class="sidebar-collapse">
-            <ul class="nav metismenu" id="side-menu">
+            <ul class="nav metismenu zui-nav" id="side-menu">
                 <li class="nav-header">
                     <div class="nps-brand">
-                        <span class="nps-brand-mark"><i class="fa fa-network-wired"></i></span>
+                        <span class="nps-brand-mark"><i class="icon icon-sitemap" aria-hidden="true"></i></span>
                         <span class="nps-brand-copy"><strong>NPS</strong><small data-i18n-zh="内网穿透控制台" data-i18n-en="Network tunnel control">内网穿透控制台</small></span>
                     </div>
                     <div class="nav-account">
                     {{if eq true .isAdmin}}
-                        <i class="fa fa-user-shield"></i>
+                        <i class="icon icon-shield" aria-hidden="true"></i>
                         <span><strong class="font-bold" langtag="word-admin"></strong><small langtag="word-system"></small></span>
                     {{else}}
-                        <i class="fa fa-user"></i>
+                        <i class="icon icon-user" aria-hidden="true"></i>
                         <span><strong class="font-bold">{{.username}}</strong><small langtag="word-user"></small></span>
                     {{end}}
                     </div>
                     <div class="logo-element">NPS</div>
                 </li>
                 <li class="{{if eq "index" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/"><i class="fa fa-tachometer-alt fa-lg"></i>
+                    <a href="{{.web_base_url}}/"><i class="icon icon-dashboard" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-dashboard"></span></a>
                 </li>
                 <li class="{{if eq "client" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/client/list"><i class="fa fa-desktop fa-lg"></i>
+                    <a href="{{.web_base_url}}/client/list"><i class="icon icon-desktop" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-client"></span></a>
                 </li>
                 {{if eq true .isAdmin}}
                 <li class="{{if eq "user" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/user/list"><i class="fa fa-users fa-lg"></i>
+                    <a href="{{.web_base_url}}/user/list"><i class="icon icon-group" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="用户管理" data-i18n-en="Users">用户管理</span></a>
                 </li>
                 {{end}}
                 <li class="nav-group-title"><span data-i18n-zh="隧道管理" data-i18n-en="Tunnels">隧道管理</span></li>
                 <li class="{{if eq "host" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/hostlist"><i class="fa fa-globe fa-lg"></i>
+                    <a href="{{.web_base_url}}/index/hostlist"><i class="icon icon-globe" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-host"></span></a>
                 </li>
                 <li class="{{if eq "tcp" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/tcp"><i class="fa fa-retweet fa-lg"></i>
+                    <a href="{{.web_base_url}}/index/tcp"><i class="icon icon-exchange" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-tcp"></span></a>
                 </li>
                 <li class="{{if eq "udp" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/udp"><i class="fa fa-random fa-lg"></i>
+                    <a href="{{.web_base_url}}/index/udp"><i class="icon icon-random" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-udp"></span></a>
                 </li>
                 <li class="{{if eq "http" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/http"><i class="fa fa-server fa-lg"></i>
+                    <a href="{{.web_base_url}}/index/http"><i class="icon icon-server" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-httpproxy"></span></a>
                 </li>
                 <li class="{{if eq "socks5" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/socks5"><i class="fa fa-layer-group fa-lg"></i>
+                    <a href="{{.web_base_url}}/index/socks5"><i class="icon icon-cubes" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-socks5"></span></a>
                 </li>
                 <li class="{{if eq "secret" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/secret"><i class="fa fa-low-vision fa-lg"></i>
+                    <a href="{{.web_base_url}}/index/secret"><i class="icon icon-eye-close" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-secret"></span></a>
                 </li>
                 <li class="{{if eq "p2p" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/p2p"><i class="fa fa-exchange-alt fa-lg"></i>
+                    <a href="{{.web_base_url}}/index/p2p"><i class="icon icon-share-alt" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-p2p"></span></a>
                 </li>
                 <li class="{{if eq "file" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/file"><i class="fa fa-briefcase fa-lg"></i>
+                    <a href="{{.web_base_url}}/index/file"><i class="icon icon-file" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-file"></span></a>
                 </li>
                 <li class="nav-group-title"><span data-i18n-zh="系统" data-i18n-en="System">系统</span></li>
                 <li class="{{if eq "global" .menu}}active{{end}}">
-                <a href="{{.web_base_url}}/global/index"><i class="fa fa-cog fa-lg"></i>
+                <a href="{{.web_base_url}}/global/index"><i class="icon icon-cog" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-globalparam"></span></a>
                 </li>
                 <li class="{{if eq "help" .menu}}active{{end}}">
-                <a href="{{.web_base_url}}/index/help"><i class="fa fa-lightbulb fa-lg"></i>
+                <a href="{{.web_base_url}}/index/help"><i class="icon icon-lightbulb" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-help"></span></a>
                 </li>
             </ul>
@@ -127,7 +130,7 @@
     </nav>
     <div id="page-wrapper" class="gray-bg">
         <div class="row border-bottom">
-            <nav class="navbar white-bg navbar-fixed-top" role="navigation" style="margin-bottom: 0">
+            <nav class="navbar white-bg navbar-fixed-top zui-topbar" role="navigation" style="margin-bottom: 0">
                 <div class="navbar-header">
                     <button type="button" class="navbar-minimalize minimalize-styl-2 btn btn-primary" aria-label="切换导航" data-aria-label-zh="切换导航" data-aria-label-en="Toggle navigation" data-title-zh="切换导航" data-title-en="Toggle navigation"><i class="fa fa-bars" aria-hidden="true"></i></button>
                 </div>

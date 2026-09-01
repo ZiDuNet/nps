@@ -1,0 +1,426 @@
+/* NPS operations console skin built on ZUI 3 design tokens and components. */
+@font-face {
+    font-family: "ZenIcon";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../webfonts/zenicon.woff") format("woff"),
+        url("../webfonts/zenicon.ttf") format("truetype");
+}
+
+:root {
+    --nps-canvas: #f4f7fb;
+    --nps-surface: #ffffff;
+    --nps-surface-subtle: #f8fafc;
+    --nps-surface-hover: #eef6ff;
+    --nps-ink: #172033;
+    --nps-muted: #5f6f85;
+    --nps-faint: #8a98aa;
+    --nps-line: #dbe4ef;
+    --nps-line-strong: #c4d1e0;
+    --nps-primary: #1e40af;
+    --nps-primary-hover: #1d4ed8;
+    --nps-primary-soft: #e8efff;
+    --nps-cyan: #087ea4;
+    --nps-cyan-soft: #e2f5fb;
+    --nps-sidebar: #111b2e;
+    --nps-sidebar-ink: #d7e0ef;
+    --nps-sidebar-muted: #8b9ab0;
+    --nps-sidebar-hover: #1a2943;
+    --nps-sidebar-active: #203a6e;
+    --nps-sidebar-line: rgba(210, 225, 250, .13);
+    --nps-success: #16794c;
+    --nps-success-soft: #e5f5ec;
+    --nps-warning: #a46105;
+    --nps-warning-soft: #fff2d8;
+    --nps-danger: #b42332;
+    --nps-danger-soft: #fde8eb;
+    --nps-info: #1769aa;
+    --nps-info-soft: #e6f1fc;
+    --nps-shadow: 0 12px 30px rgba(27, 52, 84, .08);
+    --nps-shadow-sm: 0 2px 8px rgba(27, 52, 84, .07);
+    --nps-radius: 8px;
+    --nps-focus: 0 0 0 3px rgba(59, 130, 246, .2);
+    --c-accent: var(--nps-primary);
+    --c-accent-light: var(--nps-primary-soft);
+    --c-border: var(--nps-line);
+    --c-text: var(--nps-ink);
+    --c-text-secondary: var(--nps-muted);
+}
+
+[data-theme="dark"] {
+    --nps-canvas: #0f1726;
+    --nps-surface: #172235;
+    --nps-surface-subtle: #1b2a40;
+    --nps-surface-hover: #203653;
+    --nps-ink: #edf3fc;
+    --nps-muted: #aab8cb;
+    --nps-faint: #8191a8;
+    --nps-line: #2a3b54;
+    --nps-line-strong: #3b4f6b;
+    --nps-primary: #80a9ff;
+    --nps-primary-hover: #a8c4ff;
+    --nps-primary-soft: #223a67;
+    --nps-cyan: #6bd0e8;
+    --nps-cyan-soft: #173c4a;
+    --nps-sidebar: #0a1220;
+    --nps-sidebar-ink: #dce8f8;
+    --nps-sidebar-muted: #8b9db6;
+    --nps-sidebar-hover: #14243b;
+    --nps-sidebar-active: #1a3158;
+    --nps-sidebar-line: rgba(210, 225, 250, .12);
+    --nps-success: #65d19b;
+    --nps-success-soft: #163b2a;
+    --nps-warning: #f2bf71;
+    --nps-warning-soft: #49351d;
+    --nps-danger: #ff9da6;
+    --nps-danger-soft: #4b272d;
+    --nps-info: #8dc5f4;
+    --nps-info-soft: #1b3853;
+    --nps-shadow: 0 14px 34px rgba(0, 0, 0, .28);
+    --nps-shadow-sm: 0 3px 10px rgba(0, 0, 0, .22);
+    --nps-focus: 0 0 0 3px rgba(128, 169, 255, .24);
+}
+
+html {
+    background: var(--nps-canvas);
+    scroll-padding-top: 74px;
+}
+body.zui-app,
+body.zui-app .gray-bg,
+body.zui-app #page-wrapper.gray-bg {
+    min-width: 320px;
+    color: var(--nps-ink) !important;
+    background: var(--nps-canvas) !important;
+    font-family: "Fira Sans", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif !important;
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+body.zui-app a { color: var(--nps-primary); }
+body.zui-app a:hover,
+body.zui-app a:focus { color: var(--nps-primary-hover); }
+body.zui-app :focus-visible { outline: 0; box-shadow: var(--nps-focus) !important; }
+body.zui-app ::selection { color: #fff; background: var(--nps-primary); }
+
+/* Shell: the legacy IDs remain in place for Inspinia's collapse behavior. */
+body.zui-app .navbar-default.navbar-static-side {
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    z-index: 1040;
+    width: 256px !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background: var(--nps-sidebar) !important;
+    border: 0 !important;
+    border-right: 1px solid var(--nps-sidebar-line) !important;
+    box-shadow: 1px 0 0 rgba(0, 0, 0, .08);
+    transition: width .18s ease, transform .18s ease;
+}
+body.zui-app .sidebar-collapse { min-height: 100%; }
+body.zui-app .nav-header {
+    min-height: 130px;
+    padding: 24px 22px 20px !important;
+    background: transparent !important;
+    border-bottom: 1px solid var(--nps-sidebar-line) !important;
+}
+body.zui-app .nps-brand { display: flex; align-items: center; gap: 11px; }
+body.zui-app .nps-brand-mark {
+    display: inline-flex;
+    width: 39px;
+    height: 39px;
+    align-items: center;
+    justify-content: center;
+    color: #c9dcff;
+    background: #1c3563;
+    border: 1px solid #4265a1;
+    border-radius: var(--nps-radius);
+}
+body.zui-app .nps-brand-mark i { color: #9dbdff !important; font-size: 17px !important; }
+body.zui-app .nps-brand-copy { display: grid; gap: 1px; min-width: 0; }
+body.zui-app .nps-brand-copy strong { color: #f5f8ff; font-size: 18px; font-weight: 750; letter-spacing: .03em; }
+body.zui-app .nps-brand-copy small { color: var(--nps-sidebar-muted); font-size: 11px; line-height: 1.35; }
+body.zui-app .nav-account { display: flex; align-items: center; gap: 9px; margin-top: 16px; color: var(--nps-sidebar-muted); }
+body.zui-app .nav-account > i { width: 17px; color: #8db3ff; font-size: 13px; text-align: center; }
+body.zui-app .nav-account span { display: grid; gap: 1px; min-width: 0; }
+body.zui-app .nav-account strong { color: var(--nps-sidebar-ink); font-size: 12px; font-weight: 650; }
+body.zui-app .nav-account small { color: var(--nps-sidebar-muted); font-size: 11px; }
+body.zui-app .nav-header .logo-element { padding: 8px 0 !important; color: #9dbdff !important; font-weight: 750; letter-spacing: .08em; }
+body.zui-app #side-menu { padding: 13px 0 24px; }
+body.zui-app #side-menu li a,
+body.zui-app #side-menu .zui-nav-item {
+    display: flex;
+    align-items: center;
+    min-height: 43px;
+    margin: 2px 12px;
+    padding: 10px 13px !important;
+    color: var(--nps-sidebar-ink) !important;
+    border: 0 !important;
+    border-radius: 6px;
+    font-size: 13px;
+    transition: background-color .15s ease, color .15s ease;
+}
+body.zui-app #side-menu li a i { width: 21px; margin-right: 10px; color: var(--nps-sidebar-muted) !important; font-size: 15px !important; text-align: center; }
+body.zui-app #side-menu li a:hover { color: #fff !important; background: var(--nps-sidebar-hover) !important; }
+body.zui-app #side-menu li a:hover i { color: #a9c4ff !important; }
+body.zui-app #side-menu > li.active { background: transparent !important; border-left: 0 !important; }
+body.zui-app #side-menu li.active > a { color: #fff !important; background: var(--nps-sidebar-active) !important; box-shadow: inset 3px 0 #8db3ff; font-weight: 650; }
+body.zui-app #side-menu li.active > a i { color: #a9c4ff !important; }
+body.zui-app .nav-group-title { margin: 18px 22px 6px; padding: 0 0 7px !important; color: var(--nps-sidebar-muted) !important; border-bottom: 1px solid var(--nps-sidebar-line); font-size: 10px !important; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; pointer-events: none; }
+
+body.zui-app #page-wrapper { min-height: 100vh; margin-left: 256px !important; padding: 74px 28px 42px !important; border: 0 !important; transition: margin-left .18s ease; }
+body.zui-app #page-wrapper > .row.border-bottom { height: 0; margin: 0 !important; border: 0 !important; }
+body.zui-app .navbar-fixed-top,
+body.zui-app .navbar-static-top,
+body.zui-app .white-bg {
+    position: fixed !important;
+    top: 0;
+    right: 0;
+    left: 256px;
+    z-index: 1030;
+    min-height: 60px;
+    margin: 0 !important;
+    background: rgba(255, 255, 255, .96) !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--nps-line) !important;
+    box-shadow: 0 1px 5px rgba(27, 52, 84, .04);
+    transition: left .18s ease;
+}
+[data-theme="dark"] body.zui-app .navbar-fixed-top,
+[data-theme="dark"] body.zui-app .navbar-static-top,
+[data-theme="dark"] body.zui-app .white-bg { background: rgba(23, 34, 53, .97) !important; }
+body.zui-app .navbar-header { min-height: 60px; }
+body.zui-app .navbar-minimalize { width: 36px; height: 36px; margin: 12px 0 0 17px !important; padding: 0 !important; color: var(--nps-muted) !important; background: var(--nps-surface) !important; border: 1px solid var(--nps-line) !important; border-radius: 6px !important; box-shadow: none !important; }
+body.zui-app .navbar-minimalize:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; border-color: var(--nps-primary-soft) !important; }
+body.zui-app .navbar-top-links { min-height: 60px; }
+body.zui-app .navbar-top-links > li { display: inline-flex; align-items: center; min-height: 60px; }
+body.zui-app .nav.navbar-top-links a { color: var(--nps-muted) !important; }
+body.zui-app .nav.navbar-top-links a:hover { color: var(--nps-primary) !important; background: transparent !important; }
+body.zui-app .welcome-message, body.zui-app .welcome-message a { color: var(--nps-faint) !important; }
+body.zui-app .welcome-message a { color: var(--nps-primary) !important; font-weight: 650; }
+body.zui-app .theme-toggle { width: 36px; height: 36px; padding: 0 !important; color: var(--nps-muted) !important; background: transparent; border: 0; border-radius: 6px; }
+body.zui-app .theme-toggle:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft); }
+body.zui-app #languagemenu { min-width: 40px; height: 36px; padding: 0 10px; color: var(--nps-muted) !important; background: var(--nps-surface-subtle) !important; border: 1px solid var(--nps-line) !important; border-radius: 6px !important; }
+body.zui-app.mini-navbar .navbar-default.navbar-static-side { width: 68px !important; }
+body.zui-app.mini-navbar #page-wrapper { margin-left: 68px !important; }
+body.zui-app.mini-navbar .navbar-fixed-top, body.zui-app.mini-navbar .navbar-static-top, body.zui-app.mini-navbar .white-bg { left: 68px; }
+body.zui-app.mini-navbar .nav-header { min-height: 84px; padding: 20px 14px !important; }
+body.zui-app.mini-navbar .nav-header .nps-brand, body.zui-app.mini-navbar .nav-header .nav-account { display: none !important; }
+body.zui-app.mini-navbar .nav-header .logo-element { display: block !important; padding: 6px 0 !important; }
+body.zui-app.mini-navbar #side-menu li a { justify-content: center; margin: 2px 9px; padding: 11px !important; }
+body.zui-app.mini-navbar #side-menu li a i { width: auto; margin: 0; }
+body.zui-app.mini-navbar .nav-group-title { display: none; }
+
+/* ZUI panels and page headers. */
+body.zui-app .wrapper-content { max-width: 1600px; margin: 0 auto; padding: 0 !important; }
+body.zui-app .dashboard-page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin: 1px 0 23px; }
+body.zui-app .dashboard-page-kicker { margin-bottom: 5px; color: var(--nps-primary); font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+body.zui-app .dashboard-page-header h1 { margin: 0; color: var(--nps-ink); font-size: 25px; font-weight: 750; line-height: 1.2; }
+body.zui-app .dashboard-page-header p { margin: 7px 0 0; color: var(--nps-muted); font-size: 13px; }
+body.zui-app .dashboard-page-actions { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 2px; }
+body.zui-app .ibox,
+body.zui-app .panel,
+body.zui-app .management-table-card,
+body.zui-app .form-workflow-card,
+body.zui-app .tile {
+    background: var(--nps-surface) !important;
+    border: 1px solid var(--nps-line) !important;
+    border-radius: var(--nps-radius) !important;
+    box-shadow: var(--nps-shadow-sm) !important;
+}
+body.zui-app .ibox { margin-bottom: 17px !important; overflow: hidden; }
+body.zui-app .ibox-title,
+body.zui-app .panel-heading { display: flex; align-items: center; min-height: 53px; padding: 14px 18px !important; color: var(--nps-ink) !important; background: var(--nps-surface) !important; border: 0 !important; border-bottom: 1px solid var(--nps-line) !important; border-radius: var(--nps-radius) var(--nps-radius) 0 0 !important; }
+body.zui-app .ibox-title h5,
+body.zui-app h3.ibox-title,
+body.zui-app .panel-title { margin: 0; color: var(--nps-ink) !important; font-size: 14px !important; font-weight: 700 !important; letter-spacing: 0 !important; }
+body.zui-app .ibox-content,
+body.zui-app .panel-body { padding: 19px !important; color: var(--nps-ink) !important; background: transparent !important; border: 0 !important; }
+body.zui-app .ibox-content.no-padding,
+body.zui-app .management-table-card .ibox-content,
+body.zui-app .management-table-content { padding: 0 !important; }
+body.zui-app .ibox-tools { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; }
+body.zui-app .ibox-tools a, body.zui-app .ibox-tools button { display: inline-flex; align-items: center; justify-content: center; width: 29px; height: 29px; padding: 5px !important; color: var(--nps-faint) !important; background: transparent; border: 0; border-radius: 5px; }
+body.zui-app .ibox-tools a:hover, body.zui-app .ibox-tools button:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft); }
+body.zui-app .stat-card .ibox { position: relative; height: 125px; overflow: hidden; }
+body.zui-app .stat-card .ibox::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--nps-primary); }
+body.zui-app .stat-card.card-blue .ibox::before { background: var(--nps-cyan); }
+body.zui-app .stat-card.card-green .ibox::before { background: var(--nps-success); }
+body.zui-app .stat-card.card-amber .ibox::before { background: var(--nps-warning); }
+body.zui-app .stat-card .ibox-title { min-height: auto; padding: 16px 19px 0 !important; border: 0 !important; }
+body.zui-app .stat-card .ibox-title h5 { color: var(--nps-muted) !important; font-size: 12px !important; font-weight: 650 !important; }
+body.zui-app .stat-card .ibox-content { padding: 3px 19px 18px !important; }
+body.zui-app .stat-card .ibox-content h1 { margin: 0 !important; color: var(--nps-ink) !important; font-size: 30px !important; font-weight: 750 !important; line-height: 1.15; }
+body.zui-app .stat-card .stat-icon { position: absolute; top: 50%; right: 18px; color: var(--nps-line); font-size: 35px; transform: translateY(-40%); }
+
+/* ZUI button, badge, alert, table, and menu semantics. */
+body.zui-app .btn,
+body.zui-app button.btn {
+    min-height: 36px;
+    border-radius: 6px !important;
+    font-weight: 650 !important;
+    letter-spacing: 0 !important;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .1s ease !important;
+}
+body.zui-app .btn:active { transform: translateY(1px); }
+body.zui-app .btn-primary,
+body.zui-app .btn.primary,
+body.zui-app .form-horizontal .btn-success,
+body.zui-app .login-btn { color: #fff !important; background: var(--nps-primary) !important; border-color: var(--nps-primary) !important; }
+body.zui-app .btn-primary:hover,
+body.zui-app .btn-primary:focus,
+body.zui-app .btn.primary:hover,
+body.zui-app .btn.primary:focus,
+body.zui-app .form-horizontal .btn-success:hover,
+body.zui-app .form-horizontal .btn-success:focus,
+body.zui-app .login-btn:hover,
+body.zui-app .login-btn:focus { color: #fff !important; background: var(--nps-primary-hover) !important; border-color: var(--nps-primary-hover) !important; box-shadow: none !important; }
+body.zui-app .btn-success { color: #fff !important; background: var(--nps-success) !important; border-color: var(--nps-success) !important; }
+body.zui-app .btn-warning { color: #fff !important; background: var(--nps-warning) !important; border-color: var(--nps-warning) !important; }
+body.zui-app .btn-danger { color: #fff !important; background: var(--nps-danger) !important; border-color: var(--nps-danger) !important; }
+body.zui-app .btn-info { color: #fff !important; background: var(--nps-info) !important; border-color: var(--nps-info) !important; }
+body.zui-app .btn-outline,
+body.zui-app .btn-outline.btn-primary,
+body.zui-app .btn-outline.btn-success,
+body.zui-app .btn-outline.btn-warning,
+body.zui-app .btn-outline.btn-danger { color: var(--nps-primary) !important; background: transparent !important; border-color: var(--nps-line-strong) !important; }
+body.zui-app .btn-outline:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; border-color: var(--nps-primary) !important; }
+body.zui-app .btn-group > .btn { margin-right: 3px; }
+body.zui-app .btn-group > .btn:last-child { margin-right: 0; }
+body.zui-app .badge,
+body.zui-app .label { border-radius: 4px; font-weight: 650; }
+body.zui-app .badge-primary, body.zui-app .label-primary { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; }
+body.zui-app .badge-success, body.zui-app .label-success { color: var(--nps-success) !important; background: var(--nps-success-soft) !important; }
+body.zui-app .badge-warning, body.zui-app .label-warning { color: var(--nps-warning) !important; background: var(--nps-warning-soft) !important; }
+body.zui-app .badge-danger, body.zui-app .label-danger { color: var(--nps-danger) !important; background: var(--nps-danger-soft) !important; }
+body.zui-app .alert { border-radius: 6px; box-shadow: none; }
+body.zui-app .alert-success { color: var(--nps-success); background: var(--nps-success-soft); border-color: transparent; }
+body.zui-app .alert-warning { color: var(--nps-warning); background: var(--nps-warning-soft); border-color: transparent; }
+body.zui-app .alert-danger { color: var(--nps-danger); background: var(--nps-danger-soft); border-color: transparent; }
+
+body.zui-app .list-group-item { padding: 12px 17px !important; color: var(--nps-ink) !important; background: transparent !important; border-color: var(--nps-line) !important; }
+body.zui-app .list-group-item strong { font-weight: 650; }
+body.zui-app .progress { height: 5px !important; margin: 8px 0 0 !important; overflow: hidden; background: var(--nps-line) !important; border-radius: 99px !important; box-shadow: none !important; }
+body.zui-app .progress-bar { background: var(--nps-primary) !important; box-shadow: none !important; }
+body.zui-app .fixed-table-toolbar { display: flex; align-items: center; min-height: 67px; padding: 14px 18px 11px !important; border-bottom: 1px solid var(--nps-line); }
+body.zui-app .fixed-table-toolbar .columns, body.zui-app .fixed-table-toolbar .search { margin-top: 0 !important; }
+body.zui-app .fixed-table-toolbar .search input { width: 220px !important; height: 36px; }
+body.zui-app .fixed-table-container { border: 0 !important; border-radius: 0 0 var(--nps-radius) var(--nps-radius) !important; }
+body.zui-app .bootstrap-table .fixed-table-container .table { margin: 0 !important; }
+body.zui-app .table { color: var(--nps-ink) !important; }
+body.zui-app .table thead th,
+body.zui-app .bootstrap-table .fixed-table-container thead th { padding: 12px 14px !important; color: var(--nps-muted) !important; background: var(--nps-surface-subtle) !important; border-bottom: 1px solid var(--nps-line) !important; font-size: 11px !important; font-weight: 750 !important; letter-spacing: .04em; }
+body.zui-app .table td,
+body.zui-app .bootstrap-table .table td { padding: 13px 14px !important; vertical-align: middle !important; border-top: 1px solid var(--nps-line) !important; }
+body.zui-app .table-hover tbody tr:hover { background: var(--nps-surface-hover) !important; }
+body.zui-app .table-striped > tbody > tr:nth-of-type(odd) { background: var(--nps-surface-subtle) !important; }
+body.zui-app .fixed-table-pagination { padding: 14px 18px !important; color: var(--nps-muted); }
+body.zui-app .pagination > li > a, body.zui-app .pagination > li > span { color: var(--nps-muted); background: var(--nps-surface); border-color: var(--nps-line); }
+body.zui-app .pagination > .active > a, body.zui-app .pagination > .active > a:hover, body.zui-app .pagination > .active > span { color: #fff; background: var(--nps-primary); border-color: var(--nps-primary); }
+body.zui-app .pagination > li > a:hover { color: var(--nps-primary); background: var(--nps-primary-soft); border-color: var(--nps-primary-soft); }
+body.zui-app .dropdown-menu { padding: 5px; background: var(--nps-surface) !important; border: 1px solid var(--nps-line) !important; border-radius: 6px !important; box-shadow: var(--nps-shadow); }
+body.zui-app .dropdown-menu > li > a { color: var(--nps-ink) !important; border-radius: 4px; }
+body.zui-app .dropdown-menu > li > a:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; }
+
+/* Forms use ZUI's form-label/form-tip language while retaining legacy grid hooks. */
+body.zui-app .form-horizontal .form-group { margin-bottom: 21px !important; }
+body.zui-app .form-horizontal label.control-label,
+body.zui-app .form-label { padding-top: 8px !important; color: var(--nps-ink) !important; font-size: 13px !important; font-weight: 700 !important; }
+body.zui-app .form-control,
+body.zui-app input[type="text"],
+body.zui-app input[type="password"],
+body.zui-app input[type="number"],
+body.zui-app input[type="email"],
+body.zui-app textarea,
+body.zui-app select.form-control,
+body.zui-app select { min-height: 39px; color: var(--nps-ink) !important; background: var(--nps-surface) !important; border: 1px solid var(--nps-line-strong) !important; border-radius: 6px !important; box-shadow: none !important; transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease !important; }
+body.zui-app .form-control:focus,
+body.zui-app input:focus,
+body.zui-app select:focus,
+body.zui-app textarea:focus { color: var(--nps-ink) !important; background: var(--nps-surface) !important; border-color: var(--nps-primary) !important; box-shadow: var(--nps-focus) !important; outline: 0 !important; }
+body.zui-app .form-control::placeholder { color: var(--nps-faint) !important; }
+body.zui-app textarea.form-control { min-height: 102px; line-height: 1.55; resize: vertical; }
+body.zui-app .help-block,
+body.zui-app .form-tip,
+body.zui-app .form-field-hint { display: block; margin: 6px 0 0 !important; color: var(--nps-muted) !important; font-size: 12px !important; line-height: 1.5; }
+body.zui-app .form-section-title,
+body.zui-app .form-title { margin: 31px 0 16px !important; padding: 0 0 10px !important; color: var(--nps-primary) !important; border-bottom: 1px solid var(--nps-line); font-size: 13px !important; font-weight: 750 !important; letter-spacing: 0 !important; }
+body.zui-app .form-section-title:first-child { margin-top: 0 !important; }
+body.zui-app .form-section-title i { width: 18px; margin-right: 6px; text-align: center; }
+body.zui-app .hr-line-dashed { margin: 28px 0 !important; border-top: 1px solid var(--nps-line) !important; background: none !important; }
+body.zui-app .toggle-field { display: inline-flex; align-items: center; gap: 9px; min-height: 39px; }
+body.zui-app .toggle-slider { background: var(--nps-line-strong); }
+body.zui-app .toggle-switch input:checked + .toggle-slider { background: var(--nps-primary); }
+body.zui-app .toggle-label { color: var(--nps-muted); font-size: 13px; }
+body.zui-app .form-control.is-invalid, body.zui-app .has-field-error .form-control { border-color: var(--nps-danger) !important; box-shadow: 0 0 0 3px var(--nps-danger-soft) !important; }
+body.zui-app .field-validation-message { display: block; margin-top: 6px; color: var(--nps-danger); font-size: 12px; }
+body.zui-app .form-workflow-content { padding: 29px 31px 25px !important; }
+body.zui-app .form-workflow-form { max-width: 840px; }
+body.zui-app .form-workflow-actions { margin-bottom: 0 !important; }
+body.zui-app .form-workflow-actions .btn { min-width: 102px; }
+body.zui-app .input-group .form-control { border-right: 0 !important; }
+body.zui-app .input-group-btn .btn { min-width: 41px; height: 39px; color: var(--nps-muted); background: var(--nps-surface) !important; border: 1px solid var(--nps-line-strong) !important; border-left: 0 !important; border-radius: 0 6px 6px 0 !important; }
+
+/* Details, helper pages, footer, and error state. */
+body.zui-app .client-detail__section-title { color: var(--nps-primary); border-bottom-color: var(--nps-line); }
+body.zui-app .client-detail__label, body.zui-app .client-detail__command-label { color: var(--nps-muted); }
+body.zui-app .client-detail__value, body.zui-app .client-detail__line span:last-child { color: var(--nps-ink); }
+body.zui-app .client-detail__command code, body.zui-app .help-command { color: var(--nps-ink); background: var(--nps-surface-subtle); border-color: var(--nps-line); }
+body.zui-app .help-guide-card__icon, body.zui-app .error-page-card__icon { color: var(--nps-primary); background: var(--nps-primary-soft); }
+body.zui-app .help-guide-card__title, body.zui-app .error-page-card h1, body.zui-app .tile-title { color: var(--nps-ink) !important; }
+body.zui-app .help-guide-card__scope { color: var(--nps-muted); background: var(--nps-surface-subtle); border-left-color: var(--nps-primary); }
+body.zui-app .help-page-note { color: var(--nps-info); background: var(--nps-info-soft); }
+body.zui-app .footer.fixed { margin: 34px 0 0 !important; padding: 16px 0 0 !important; color: var(--nps-faint); background: transparent !important; border: 0 !important; border-top: 1px solid var(--nps-line) !important; font-size: 12px; }
+body.zui-app .error-page { display: grid; min-height: calc(100vh - 160px); align-items: center; }
+body.zui-app .error-page-card { max-width: 560px; margin: 0 auto !important; text-align: center; }
+body.zui-app .error-page-card__content { padding: 48px 30px !important; }
+
+/* Authentication pages share the same ZUI surface language. */
+body.zui-app.auth-body,
+body.auth-body { color: var(--nps-ink) !important; background: var(--nps-canvas) !important; }
+body.auth-body .auth-page { background: var(--nps-canvas); }
+body.auth-body .auth-panel { background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: var(--nps-radius); box-shadow: var(--nps-shadow); }
+body.auth-body .auth-brand__mark,
+body.auth-body .auth-context__brand-mark { color: var(--nps-primary); background: var(--nps-primary-soft); border-color: var(--nps-line); }
+body.auth-body .auth-context__title,
+body.auth-body .auth-panel__title,
+body.auth-body .auth-brand__name { color: var(--nps-ink) !important; }
+body.auth-body .auth-context__description,
+body.auth-body .auth-page__footer,
+body.auth-body .auth-switch { color: var(--nps-muted); }
+body.auth-body .auth-feature__icon { color: var(--nps-primary); }
+body.auth-body .auth-field__label { color: var(--nps-ink); }
+body.auth-body .auth-icon-button,
+body.auth-body .auth-language__toggle { color: var(--nps-muted) !important; background: var(--nps-surface) !important; border-color: var(--nps-line) !important; }
+body.auth-body .auth-icon-button:hover,
+body.auth-body .auth-language__toggle:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; border-color: var(--nps-primary-soft) !important; }
+body.auth-body .auth-page input.form-control { color: var(--nps-ink) !important; background: var(--nps-surface) !important; border-color: var(--nps-line-strong) !important; }
+body.auth-body .auth-page input.form-control:focus { border-color: var(--nps-primary) !important; box-shadow: var(--nps-focus) !important; }
+body.auth-body .auth-captcha__challenge { color: var(--nps-primary); background: var(--nps-primary-soft); border-color: var(--nps-line); }
+body.auth-body .auth-page__footer a, body.auth-body .auth-switch__link { color: var(--nps-primary); }
+
+@media (max-width: 991px) {
+    body.zui-app .navbar-default.navbar-static-side { width: 220px !important; }
+    body.zui-app #page-wrapper { margin-left: 220px !important; padding-right: 20px !important; padding-left: 20px !important; }
+    body.zui-app .navbar-fixed-top, body.zui-app .navbar-static-top, body.zui-app .white-bg { left: 220px; }
+    body.zui-app .dashboard-page-header { align-items: flex-start; flex-direction: column; gap: 14px; }
+}
+
+@media (max-width: 768px) {
+    html { scroll-padding-top: 72px; }
+    body.zui-app #page-wrapper { margin-left: 0 !important; padding: 72px 14px 34px !important; }
+    body.zui-app .navbar-default.navbar-static-side { width: 256px !important; transform: translateX(-100%); }
+    body.zui-app:not(.mini-navbar) .navbar-default.navbar-static-side { transform: translateX(-100%); }
+    body.zui-app.mini-navbar .navbar-default.navbar-static-side { transform: translateX(0); width: 68px !important; }
+    body.zui-app .navbar-fixed-top, body.zui-app .navbar-static-top, body.zui-app .white-bg { left: 0; }
+    body.zui-app .navbar-top-links > li:first-child { display: none; }
+    body.zui-app .form-workflow-content { padding: 22px 18px 20px !important; }
+    body.zui-app .fixed-table-toolbar { display: block; padding: 12px !important; }
+    body.zui-app .fixed-table-toolbar .search input { width: 100% !important; }
+    body.zui-app .fixed-table-toolbar .columns { margin-top: 9px !important; }
+    body.zui-app .table-responsive { border: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.zui-app *, body.auth-body * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}

@@ -366,7 +366,7 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 	//verify
 	id, err := file.GetDb().GetIdByVerifyKey(string(buf), c.Conn.RemoteAddr().String())
 	if err != nil {
-		logs.Info("Current client connection validation error, close this client:", c.Conn.RemoteAddr())
+		logs.Info("Current client connection validation error, close this client: %s, reason: %v", c.Conn.RemoteAddr(), err)
 		s.verifyError(c)
 		return
 	} else {

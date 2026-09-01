@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ehang.io/nps/lib/common"
@@ -252,7 +253,13 @@ func (s *DbUtils) MigrateUsersFromClients() error {
 		userId   int
 		password string
 	}
+	// Older releases persisted the dashboard credentials on each client but
+	// did not have users.json. Recover only when that whole file is absent. If
+	// it exists, a missing user is treated as an intentional revocation and the
+	// bridge continues to fail closed.
+	recoverMissingOwners := !common.FileExists(s.JsonDb.UserFilePath)
 	byName := make(map[string]credential)
+	byID := make(map[int]struct{})
 	s.JsonDb.Users.Range(func(key, value interface{}) bool {
 		u, ok := value.(*User)
 		if !ok || u == nil {
@@ -262,6 +269,7 @@ func (s *DbUtils) MigrateUsersFromClients() error {
 		userName, userID, password := u.UserName, u.Id, u.Password
 		u.RUnlock()
 		byName[userName] = credential{userId: userID, password: password}
+		byID[userID] = struct{}{}
 		return true
 	})
 
@@ -275,7 +283,35 @@ func (s *DbUtils) MigrateUsersFromClients() error {
 		c.RLock()
 		clientUserID, webUserName, webPassword, remark, clientID := c.UserId, c.WebUserName, c.WebPassword, c.Remark, c.Id
 		c.RUnlock()
-		if clientUserID != 0 || webUserName == "" || webPassword == "" {
+		if clientUserID != 0 {
+			if !recoverMissingOwners || webUserName == "" || webPassword == "" {
+				return true
+			}
+			if _, exists := byID[clientUserID]; exists {
+				return true
+			}
+			name := webUserName
+			if cred, exists := byName[name]; exists && (cred.password != webPassword || cred.userId != clientUserID) {
+				name = fmt.Sprintf("%s_%d", webUserName, clientUserID)
+			}
+			u := &User{
+				Id:         clientUserID,
+				UserName:   name,
+				Password:   webPassword,
+				Status:     true,
+				Remark:     remark,
+				CreateTime: time.Now().Format("2006-01-02 15:04:05"),
+			}
+			s.JsonDb.Users.Store(u.Id, u)
+			byID[u.Id] = struct{}{}
+			byName[name] = credential{userId: u.Id, password: u.Password}
+			if clientUserID > int(atomic.LoadInt32(&s.JsonDb.UserIncreaseId)) {
+				atomic.StoreInt32(&s.JsonDb.UserIncreaseId, int32(clientUserID))
+			}
+			changedUsers = true
+			return true
+		}
+		if webUserName == "" || webPassword == "" {
 			return true
 		}
 		name := webUserName
@@ -437,6 +473,7 @@ func (s *DbUtils) IsUserTunnelLimitReached(userId int) bool {
 
 func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error) {
 	var exist bool
+	var rejectReason error
 	normalizedAddr := common.GetIpByAddr(addr)
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
 		v, ok := value.(*Client)
@@ -446,14 +483,25 @@ func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error)
 		v.RLock()
 		verifyKey, status, userID, clientID := v.VerifyKey, v.Status, v.UserId, v.Id
 		v.RUnlock()
-		if common.Getverifyval(verifyKey) != vKey || !status {
+		if common.Getverifyval(verifyKey) != vKey {
+			return true
+		}
+		if !status {
+			rejectReason = errors.New("client disabled")
 			return true
 		}
 		// A user expiry stops and removes current resources, but the NPC can
 		// otherwise reconnect immediately and recreate its config-backed tunnels.
 		// Check the owning user at the bridge authentication boundary as well.
-		if userID != 0 && !s.IsUserActive(userID) {
-			return true
+		if userID != 0 {
+			if _, userErr := s.GetUser(userID); userErr != nil {
+				rejectReason = errors.New("client owner not found")
+				return true
+			}
+			if !s.IsUserActive(userID) {
+				rejectReason = errors.New("client owner inactive or expired")
+				return true
+			}
 		}
 		v.Lock()
 		v.Addr = normalizedAddr
@@ -464,6 +512,9 @@ func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error)
 	})
 	if exist {
 		return
+	}
+	if rejectReason != nil {
+		return 0, rejectReason
 	}
 	return 0, errors.New("not found")
 }
