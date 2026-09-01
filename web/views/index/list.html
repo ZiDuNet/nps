@@ -1,4 +1,4 @@
-<section class="wrapper wrapper-content animated fadeInRight management-page" aria-labelledby="tunnel-list-title">
+<section class="wrapper wrapper-content animated fadeInRight management-page management-page--tunnel" aria-labelledby="tunnel-list-title">
     <header class="dashboard-page-header management-page-header">
         <div>
             <div class="dashboard-page-kicker" data-i18n-zh="隧道管理" data-i18n-en="Tunnel management">隧道管理</div>
@@ -97,7 +97,7 @@
                     + '<b langtag="word-basicusername"></b>: ' + tunnelText(config.U) + '&emsp;'
                     + '<b langtag="word-basicpassword"></b>: ' + tunnelText(config.P) + '&emsp;'
                     + '<b langtag="word-protoversion"></b>: ' + tunnelText(row.ProtoVersion) + '&emsp;'
-            var copyBtn = '<button type="button" class="copy btn btn-info btn-xs" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i> <span data-i18n-zh="复制" data-i18n-en="Copy">复制</span></button>'
+            var copyBtn = '<button type="button" class="copy btn btn-info btn-xs" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button>'
             if (row.Mode == "p2p") {
                 var p2pCmd = tmp + "<br/><br>"
                         + '<b langtag="word-commandaccessp2p"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + tunnelText(client.VerifyKey)

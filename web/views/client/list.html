@@ -79,7 +79,7 @@
                 return '<div class="client-detail__command">'
                     + '<span class="client-detail__command-label">' + label + '</span>'
                     + '<code>' + text(code) + '</code>'
-                    + '<button type="button" class="copy btn btn-outline btn-primary btn-xs client-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i> <span data-i18n-zh="复制" data-i18n-en="Copy">' + (english ? 'Copy' : '复制') + '</span></button></div>';
+                    + '<button type="button" class="copy btn btn-outline btn-primary btn-xs client-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button></div>';
             };
             return '<div class="client-detail">'
                 + section('sliders-h', english ? 'Connection' : '基础配置',

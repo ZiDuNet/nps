@@ -74,7 +74,7 @@ func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 func TestTunnelListCopyControlsAreLocalized(t *testing.T) {
 	content := readTemplateForTest(t, "../views/index/list.html")
 	for _, marker := range []string{
-		`data-i18n-zh="复制" data-i18n-en="Copy"`,
+		`data-aria-label-zh="复制命令" data-aria-label-en="Copy command"`,
 		`data-title-zh="复制命令" data-title-en="Copy command"`,
 		`npsNotify('success', npsIsEnglish() ? 'Copied' : '复制成功')`,
 		`npsNotify('error', npsIsEnglish() ? 'Copy failed' : '复制失败')`,

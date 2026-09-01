@@ -29,7 +29,7 @@
     <link href="{{.web_base_url}}/static/css/bootstrap-table.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/style.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20260831-15" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/zui-console.css?v={{.version}}&ui=20260901-1" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/zui-console.css?v={{.version}}&ui=20260901-2" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/flatpickr.min.css?v={{.version}}" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/zui-3.0.0.js?v={{.version}}"></script>
@@ -68,6 +68,7 @@
                     {{end}}
                     </div>
                     <div class="logo-element">NPS</div>
+                    <button type="button" class="close-canvas-menu" aria-label="关闭导航" data-aria-label-zh="关闭导航" data-aria-label-en="Close navigation" data-title-zh="关闭导航" data-title-en="Close navigation"><i class="fa fa-times" aria-hidden="true"></i></button>
                 </li>
                 <li class="{{if eq "index" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/"><i class="icon icon-dashboard" aria-hidden="true"></i>

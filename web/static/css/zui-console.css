@@ -119,11 +119,13 @@ body.zui-app .navbar-default.navbar-static-side {
 }
 body.zui-app .sidebar-collapse { min-height: 100%; }
 body.zui-app .nav-header {
+    position: relative;
     min-height: 130px;
     padding: 24px 22px 20px !important;
     background: transparent !important;
     border-bottom: 1px solid var(--nps-sidebar-line) !important;
 }
+body.zui-app .close-canvas-menu { display: none; }
 body.zui-app .nps-brand { display: flex; align-items: center; gap: 11px; }
 body.zui-app .nps-brand-mark {
     display: inline-flex;
@@ -168,7 +170,7 @@ body.zui-app #side-menu li.active > a { color: #fff !important; background: var(
 body.zui-app #side-menu li.active > a i { color: #a9c4ff !important; }
 body.zui-app .nav-group-title { margin: 18px 22px 6px; padding: 0 0 7px !important; color: var(--nps-sidebar-muted) !important; border-bottom: 1px solid var(--nps-sidebar-line); font-size: 10px !important; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; pointer-events: none; }
 
-body.zui-app #page-wrapper { min-height: 100vh; margin-left: 256px !important; padding: 74px 28px 42px !important; border: 0 !important; transition: margin-left .18s ease; }
+body.zui-app #page-wrapper { min-height: 100vh; margin-left: 256px !important; padding: 74px clamp(16px, 1.2vw, 24px) 42px !important; border: 0 !important; transition: margin-left .18s ease; }
 body.zui-app #page-wrapper > .row.border-bottom { height: 0; margin: 0 !important; border: 0 !important; }
 body.zui-app .navbar-fixed-top,
 body.zui-app .navbar-static-top,
@@ -176,7 +178,7 @@ body.zui-app .white-bg {
     position: fixed !important;
     top: 0;
     right: 0;
-    left: 256px;
+    left: 256px !important;
     z-index: 1030;
     min-height: 60px;
     margin: 0 !important;
@@ -203,7 +205,7 @@ body.zui-app .theme-toggle:hover { color: var(--nps-primary) !important; backgro
 body.zui-app #languagemenu { min-width: 40px; height: 36px; padding: 0 10px; color: var(--nps-muted) !important; background: var(--nps-surface-subtle) !important; border: 1px solid var(--nps-line) !important; border-radius: 6px !important; }
 body.zui-app.mini-navbar .navbar-default.navbar-static-side { width: 68px !important; }
 body.zui-app.mini-navbar #page-wrapper { margin-left: 68px !important; }
-body.zui-app.mini-navbar .navbar-fixed-top, body.zui-app.mini-navbar .navbar-static-top, body.zui-app.mini-navbar .white-bg { left: 68px; }
+body.zui-app.mini-navbar .navbar-fixed-top, body.zui-app.mini-navbar .navbar-static-top, body.zui-app.mini-navbar .white-bg { left: 68px !important; }
 body.zui-app.mini-navbar .nav-header { min-height: 84px; padding: 20px 14px !important; }
 body.zui-app.mini-navbar .nav-header .nps-brand, body.zui-app.mini-navbar .nav-header .nav-account { display: none !important; }
 body.zui-app.mini-navbar .nav-header .logo-element { display: block !important; padding: 6px 0 !important; }
@@ -212,7 +214,7 @@ body.zui-app.mini-navbar #side-menu li a i { width: auto; margin: 0; }
 body.zui-app.mini-navbar .nav-group-title { display: none; }
 
 /* ZUI panels and page headers. */
-body.zui-app .wrapper-content { max-width: 1600px; margin: 0 auto; padding: 0 !important; }
+body.zui-app .wrapper-content { width: 100%; max-width: 1760px; margin: 0 auto; padding: 0 !important; }
 body.zui-app .dashboard-page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin: 1px 0 23px; }
 body.zui-app .dashboard-page-kicker { margin-bottom: 5px; color: var(--nps-primary); font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 body.zui-app .dashboard-page-header h1 { margin: 0; color: var(--nps-ink); font-size: 25px; font-weight: 750; line-height: 1.2; }
@@ -399,10 +401,131 @@ body.auth-body .auth-page input.form-control:focus { border-color: var(--nps-pri
 body.auth-body .auth-captcha__challenge { color: var(--nps-primary); background: var(--nps-primary-soft); border-color: var(--nps-line); }
 body.auth-body .auth-page__footer a, body.auth-body .auth-switch__link { color: var(--nps-primary); }
 
+/* Layout and table regressions: keep operational workspaces centered without wasting desktop width. */
+body.zui-app .management-page > .row,
+body.zui-app .form-page > .row {
+    margin-right: 0 !important;
+    margin-left: 0 !important;
+}
+body.zui-app .management-page > .row > [class*="col-"],
+body.zui-app .form-page > .row > [class*="col-"] {
+    padding-right: 0 !important;
+    padding-left: 0 !important;
+}
+body.zui-app .form-page { max-width: 1760px; }
+
+/* The surrounding auth layout owns the only visible frame. */
+body.auth-body .auth-layout > .auth-panel {
+    align-self: stretch;
+    min-width: 0;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+
+/* Bootstrap Table injects floats and margins around its toolbar controls. */
+body.zui-app .bootstrap-table .fixed-table-toolbar {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+}
+body.zui-app .bootstrap-table .fixed-table-toolbar > .bs-bars,
+body.zui-app .bootstrap-table .fixed-table-toolbar > .columns,
+body.zui-app .bootstrap-table .fixed-table-toolbar > .search {
+    float: none !important;
+    margin: 0 !important;
+}
+body.zui-app .bootstrap-table .fixed-table-toolbar > .bs-bars .management-table-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 !important;
+}
+body.zui-app .bootstrap-table .fixed-table-toolbar > .search { margin-left: auto !important; }
+
+/* Long client commands reserve a fixed action column and wrap inside their own track. */
+body.zui-app .client-detail__command {
+    grid-template-columns: minmax(94px, 124px) minmax(0, 1fr) 36px;
+    align-items: start;
+    gap: 10px;
+}
+body.zui-app .client-detail__command-label {
+    min-width: 0;
+    padding-top: 7px;
+    overflow-wrap: anywhere;
+}
+body.zui-app .client-detail__command code {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    min-height: 36px;
+    padding: 7px 9px;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+body.zui-app .client-detail__copy {
+    display: inline-flex;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+}
+
+/* Dense desktop tunnel tables fit the available workspace instead of creating a horizontal scroller. */
+@media (min-width: 992px) {
+    body.zui-app .management-page--tunnel .fixed-table-body,
+    body.zui-app .management-page--tunnel .fixed-table-header { overflow-x: hidden !important; }
+    body.zui-app .management-page--tunnel .fixed-table-container .table {
+        width: 100% !important;
+        table-layout: fixed;
+    }
+    body.zui-app .management-page--tunnel .fixed-table-container .table th,
+    body.zui-app .management-page--tunnel .fixed-table-container .table td {
+        padding: 10px 7px !important;
+        overflow: hidden;
+    }
+    body.zui-app .management-page--tunnel .fixed-table-container .table td {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(1),
+    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(1) { width: 42px !important; }
+    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(2),
+    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(2) { width: 42px !important; }
+    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(3),
+    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(3) { width: 54px !important; }
+    body.zui-app .management-page--tunnel .fixed-table-container .table th:last-child,
+    body.zui-app .management-page--tunnel .fixed-table-container .table td:last-child { width: 172px !important; }
+    body.zui-app .management-page--tunnel .fixed-table-container .table td:last-child .btn-group {
+        display: flex;
+        flex-wrap: nowrap;
+        justify-content: center;
+    }
+}
+
+/* On narrower desktop workspaces, retain the operational columns and move secondary data to the detail row. */
+@media (min-width: 992px) and (max-width: 1499px) {
+    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(5),
+    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(5),
+    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(6),
+    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(6),
+    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(11),
+    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(11),
+    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(13),
+    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(13),
+    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(14),
+    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(14) { display: none; }
+}
+
 @media (max-width: 991px) {
     body.zui-app .navbar-default.navbar-static-side { width: 220px !important; }
     body.zui-app #page-wrapper { margin-left: 220px !important; padding-right: 20px !important; padding-left: 20px !important; }
-    body.zui-app .navbar-fixed-top, body.zui-app .navbar-static-top, body.zui-app .white-bg { left: 220px; }
+    body.zui-app .navbar-fixed-top, body.zui-app .navbar-static-top, body.zui-app .white-bg { left: 220px !important; }
     body.zui-app .dashboard-page-header { align-items: flex-start; flex-direction: column; gap: 14px; }
 }
 
@@ -411,13 +534,48 @@ body.auth-body .auth-page__footer a, body.auth-body .auth-switch__link { color: 
     body.zui-app #page-wrapper { margin-left: 0 !important; padding: 72px 14px 34px !important; }
     body.zui-app .navbar-default.navbar-static-side { width: 256px !important; transform: translateX(-100%); }
     body.zui-app:not(.mini-navbar) .navbar-default.navbar-static-side { transform: translateX(-100%); }
-    body.zui-app.mini-navbar .navbar-default.navbar-static-side { transform: translateX(0); width: 68px !important; }
-    body.zui-app .navbar-fixed-top, body.zui-app .navbar-static-top, body.zui-app .white-bg { left: 0; }
+    body.zui-app.mini-navbar .navbar-default.navbar-static-side { transform: translateX(0); width: 256px !important; }
+    body.zui-app.mini-navbar .nav-header { min-height: 130px; padding: 24px 22px 20px !important; }
+    body.zui-app.mini-navbar .nav-header .nps-brand,
+    body.zui-app.mini-navbar .nav-header .nav-account { display: flex !important; }
+    body.zui-app.mini-navbar .nav-header .logo-element { display: none !important; }
+    body.zui-app.mini-navbar #side-menu li a { justify-content: flex-start; margin: 2px 12px; padding: 10px 13px !important; }
+    body.zui-app.mini-navbar #side-menu li a i { width: 21px; margin-right: 10px; }
+    body.zui-app.mini-navbar #side-menu .nav-label { display: inline !important; }
+    body.zui-app.mini-navbar .nav-group-title { display: block; }
+    body.zui-app.mini-navbar .navbar-minimalize { visibility: hidden; pointer-events: none; }
+    body.zui-app.mini-navbar .close-canvas-menu {
+        display: inline-flex;
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        z-index: 1;
+        width: 36px;
+        height: 36px;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        color: var(--nps-sidebar-ink);
+        background: transparent;
+        border: 1px solid var(--nps-sidebar-line);
+        border-radius: 6px;
+    }
+    body.zui-app.mini-navbar .close-canvas-menu:hover { color: #fff; background: var(--nps-sidebar-hover); }
+    body.zui-app .navbar-fixed-top, body.zui-app .navbar-static-top, body.zui-app .white-bg { left: 0 !important; }
     body.zui-app .navbar-top-links > li:first-child { display: none; }
     body.zui-app .form-workflow-content { padding: 22px 18px 20px !important; }
-    body.zui-app .fixed-table-toolbar { display: block; padding: 12px !important; }
+    body.zui-app .fixed-table-toolbar { padding: 12px !important; }
+    body.zui-app .bootstrap-table .fixed-table-toolbar { flex-wrap: wrap; }
+    body.zui-app .bootstrap-table .fixed-table-toolbar > .search {
+        flex: 0 0 100%;
+        order: 3;
+        width: 100%;
+        margin-left: 0 !important;
+    }
     body.zui-app .fixed-table-toolbar .search input { width: 100% !important; }
-    body.zui-app .fixed-table-toolbar .columns { margin-top: 9px !important; }
+    body.zui-app .fixed-table-toolbar .columns { margin-top: 0 !important; }
+    body.zui-app .client-detail__command { grid-template-columns: minmax(0, 1fr) 36px; gap: 6px 8px; }
+    body.zui-app .client-detail__command-label { grid-column: 1 / -1; padding-top: 0; }
     body.zui-app .table-responsive { border: 0; }
 }
 
