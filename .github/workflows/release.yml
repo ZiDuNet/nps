@@ -219,6 +219,7 @@ jobs:
   build_windows_gui:
     runs-on: windows-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - platform: windows/386
@@ -276,16 +277,19 @@ jobs:
 
   # ==================== macOS GUI ====================
   build_macos_gui:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - platform: darwin/amd64
             os_name: darwin
             arch: amd64
+            runner: macos-13
           - platform: darwin/arm64
             os_name: darwin
             arch: arm64
+            runner: macos-14
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -309,8 +313,6 @@ jobs:
         shell: bash
         working-directory: ${{ env.GUI_DIR }}
         run: |
-          export GOOS=darwin
-          export GOARCH="${{ matrix.arch }}"
           wails3 package EXTRA_TAGS=npcgui
           cd bin
           app="$(ls -1d *.app 2>/dev/null | head -n 1 || true)"

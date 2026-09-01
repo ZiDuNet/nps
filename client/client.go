@@ -25,6 +25,16 @@ import (
 	"ehang.io/nps/lib/crypt"
 )
 
+// ClientLogger receives logs emitted by one TRP client instance. It lets
+// embedders route a client's logs independently without replacing the
+// process-wide Beego logger.
+type ClientLogger interface {
+	Info(format string, v ...interface{})
+	Error(format string, v ...interface{})
+	Warn(format string, v ...interface{})
+	Trace(format string, v ...interface{})
+}
+
 type TRPClient struct {
 	svrAddr        string
 	bridgeConnType string
@@ -39,9 +49,10 @@ type TRPClient struct {
 	disconnectTime int
 	once           sync.Once
 	stateMu        sync.RWMutex
+	loggerMu       sync.RWMutex
 	closed         atomic.Bool
-	closeCh        chan struct{}   // closed when client is shutting down; stops ping
-	logger         *logs.BeeLogger // 每个客户端独立的 logger
+	closeCh        chan struct{} // closed when client is shutting down; stops ping
+	logger         ClientLogger  // 每个客户端独立的 logger
 }
 
 // new client
@@ -73,39 +84,48 @@ func NewRPClientWithTLS(svraddr string, vKey string, bridgeConnType string, prox
 	}
 }
 
-// SetLogger 设置客户端的独立 logger
-func (s *TRPClient) SetLogger(logger *logs.BeeLogger) {
+// SetLogger 设置客户端的独立 logger。
+func (s *TRPClient) SetLogger(logger ClientLogger) {
+	s.loggerMu.Lock()
 	s.logger = logger
+	s.loggerMu.Unlock()
+}
+
+func (s *TRPClient) instanceLogger() ClientLogger {
+	s.loggerMu.RLock()
+	logger := s.logger
+	s.loggerMu.RUnlock()
+	return logger
 }
 
 // log 辅助方法：如果设置了独立 logger 就使用，否则使用全局 logger
 func (s *TRPClient) logInfo(format string, v ...interface{}) {
-	if s.logger != nil {
-		s.logger.Info(format, v...)
+	if logger := s.instanceLogger(); logger != nil {
+		logger.Info(format, v...)
 	} else {
 		logs.Info(format, v...)
 	}
 }
 
 func (s *TRPClient) logError(format string, v ...interface{}) {
-	if s.logger != nil {
-		s.logger.Error(format, v...)
+	if logger := s.instanceLogger(); logger != nil {
+		logger.Error(format, v...)
 	} else {
 		logs.Error(format, v...)
 	}
 }
 
 func (s *TRPClient) logWarn(format string, v ...interface{}) {
-	if s.logger != nil {
-		s.logger.Warn(format, v...)
+	if logger := s.instanceLogger(); logger != nil {
+		logger.Warn(format, v...)
 	} else {
 		logs.Warn(format, v...)
 	}
 }
 
 func (s *TRPClient) logTrace(format string, v ...interface{}) {
-	if s.logger != nil {
-		s.logger.Trace(format, v...)
+	if logger := s.instanceLogger(); logger != nil {
+		logger.Trace(format, v...)
 	} else {
 		logs.Trace(format, v...)
 	}

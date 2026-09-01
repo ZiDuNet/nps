@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -10,6 +11,26 @@ import (
 
 	"ehang.io/nps/lib/conn"
 )
+
+type capturedClientLogger struct {
+	entries []string
+}
+
+func (l *capturedClientLogger) Info(format string, v ...interface{}) {
+	l.entries = append(l.entries, "info: "+fmt.Sprintf(format, v...))
+}
+
+func (l *capturedClientLogger) Error(format string, v ...interface{}) {
+	l.entries = append(l.entries, "error: "+fmt.Sprintf(format, v...))
+}
+
+func (l *capturedClientLogger) Warn(format string, v ...interface{}) {
+	l.entries = append(l.entries, "warn: "+fmt.Sprintf(format, v...))
+}
+
+func (l *capturedClientLogger) Trace(format string, v ...interface{}) {
+	l.entries = append(l.entries, "trace: "+fmt.Sprintf(format, v...))
+}
 
 type trackedSession struct {
 	net.Conn
@@ -50,6 +71,32 @@ func TestMatchesP2PRemoteAcceptsExpectedSession(t *testing.T) {
 	}
 	if session.closed {
 		t.Fatal("expected P2P session was closed")
+	}
+}
+
+func TestTRPClientUsesInstanceLogger(t *testing.T) {
+	client := NewRPClient("", "", "", "", nil, 0)
+	logger := &capturedClientLogger{}
+	client.SetLogger(logger)
+
+	client.logInfo("connected to %s", "server")
+	client.logError("failed: %d", 1)
+	client.logWarn("retrying")
+	client.logTrace("attempt %d", 2)
+
+	want := []string{
+		"info: connected to server",
+		"error: failed: 1",
+		"warn: retrying",
+		"trace: attempt 2",
+	}
+	if len(logger.entries) != len(want) {
+		t.Fatalf("logged %d entries, want %d: %#v", len(logger.entries), len(want), logger.entries)
+	}
+	for i, entry := range want {
+		if logger.entries[i] != entry {
+			t.Errorf("entry %d = %q, want %q", i, logger.entries[i], entry)
+		}
 	}
 }
 
