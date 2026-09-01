@@ -63,6 +63,18 @@ jobs:
       - name: Enable Yarn
         run: corepack enable
 
+      - name: Verify release version metadata
+        run: |
+          source_version=$(sed -nE 's/^const VERSION = "([^"]+)"$/\1/p' ../../../../lib/version/version.go)
+          package_version=$(node -p 'require("./package.json").version')
+          wails_version=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("../wails.json", "utf8")).info.productVersion)')
+          plist_versions=$(grep -A1 -E 'CFBundleVersion|CFBundleShortVersionString' ../build/darwin/Info.plist | grep '<string>' | sed -E 's/.*<string>([^<]+)<\/string>.*/\1/')
+          test -n "$source_version"
+          test "$package_version" = "$source_version"
+          test "$wails_version" = "$source_version"
+          test "$(printf '%s\n' "$plist_versions" | sort -u | wc -l | tr -d ' ')" = 1
+          test "$(printf '%s\n' "$plist_versions" | head -n 1)" = "$source_version"
+
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 

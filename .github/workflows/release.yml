@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: '要发布的 Git 标签，例如 v1.1.2；从标签运行时可留空'
+        description: '要发布的 Git 标签，例如 v1.1.3；必须与源码版本一致'
         required: false
         type: string
 
@@ -60,49 +60,6 @@ jobs:
             npc_sdk.tar.gz
           if-no-files-found: error
           retention-days: 14
-      - name: Upload
-        uses: softprops/action-gh-release@v2
-        if: github.ref_type == 'tag' || inputs.release_tag != ''
-        with:
-          files: |
-            freebsd_386_client.tar.gz
-            freebsd_386_server.tar.gz
-            freebsd_amd64_client.tar.gz
-            freebsd_amd64_server.tar.gz
-            freebsd_arm_client.tar.gz
-            freebsd_arm_server.tar.gz
-            linux_386_client.tar.gz
-            linux_386_server.tar.gz
-            linux_amd64_client.tar.gz
-            linux_amd64_server.tar.gz
-            linux_arm64_client.tar.gz
-            linux_arm64_server.tar.gz
-            linux_arm_v5_client.tar.gz
-            linux_arm_v6_client.tar.gz
-            linux_arm_v7_client.tar.gz
-            linux_arm_v5_server.tar.gz
-            linux_arm_v6_server.tar.gz
-            linux_arm_v7_server.tar.gz
-            linux_mips64le_client.tar.gz
-            linux_mips64le_server.tar.gz
-            linux_mips64_client.tar.gz
-            linux_mips64_server.tar.gz
-            linux_mipsle_client.tar.gz
-            linux_mipsle_server.tar.gz
-            linux_mips_client.tar.gz
-            linux_mips_server.tar.gz
-            darwin_amd64_client.tar.gz
-            darwin_amd64_server.tar.gz
-            darwin_arm64_client.tar.gz
-            darwin_arm64_server.tar.gz
-            windows_386_client.tar.gz
-            windows_386_server.tar.gz
-            windows_amd64_client.tar.gz
-            windows_amd64_server.tar.gz
-            npc_sdk.tar.gz
-          tag_name: ${{ inputs.release_tag || github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ==================== Android APK ====================
   build_android:
@@ -122,15 +79,6 @@ jobs:
           path: android_client.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Upload
-        uses: softprops/action-gh-release@v2
-        if: github.ref_type == 'tag' || inputs.release_tag != ''
-        with:
-          files: |
-            android_client.apk
-          tag_name: ${{ inputs.release_tag || github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ==================== Docker 镜像 ====================
   build_docker:
@@ -143,26 +91,30 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Set env
+      - name: Set Docker tags
         env:
           RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
         run: |
-          release_version="${RELEASE_TAG_INPUT:-$GITHUB_REF_NAME}"
-          printf 'RELEASE_VERSION=%s\n' "$release_version" >> "$GITHUB_ENV"
-      - name: Generate changelog
-        id: changelog
-        run: |
-          # 获取上一个 tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$PREV_TAG" ]; then
-            CHANGES=$(git log --pretty=format:"- %s" -20)
-          else
-            CHANGES=$(git log --pretty=format:"- %s" "${PREV_TAG}..HEAD")
+          source_version="$(sed -nE 's/^const VERSION = "([^"]+)"$/\1/p' lib/version/version.go)"
+          if [ -z "$source_version" ]; then
+            echo "Unable to read lib/version.VERSION"
+            exit 1
           fi
-          # 写入文件供后续使用
-          echo "$CHANGES" > CHANGELOG.txt
-          echo "Changes:"
-          cat CHANGELOG.txt
+          release_tag="${RELEASE_TAG_INPUT:-}"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            release_tag="$GITHUB_REF_NAME"
+          fi
+          if [ -n "$release_tag" ]; then
+            expected_tag="v${source_version}"
+            if [ "$release_tag" != "$expected_tag" ]; then
+              echo "Release tag $release_tag does not match $expected_tag"
+              exit 1
+            fi
+            release_version="$source_version"
+          else
+            release_version="sha-${GITHUB_SHA::7}"
+          fi
+          printf 'RELEASE_VERSION=%s\n' "$release_version" >> "$GITHUB_ENV"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Set up QEMU
@@ -274,6 +226,7 @@ jobs:
         with:
           name: windows-builds-${{ matrix.arch }}
           path: ${{ env.GUI_DIR }}/bin/${{ env.APP_NAME }}-${{ matrix.os_name }}-${{ matrix.arch }}.zip
+          retention-days: 14
 
   # ==================== macOS GUI ====================
   build_macos_gui:
@@ -330,6 +283,7 @@ jobs:
         with:
           name: macos-builds-${{ matrix.arch }}
           path: ${{ env.GUI_DIR }}/bin/${{ env.APP_NAME }}-${{ matrix.os_name }}-${{ matrix.arch }}.zip
+          retention-days: 14
 
   # ==================== Linux GUI ====================
   build_linux_gui:
@@ -362,6 +316,9 @@ jobs:
         with:
           go-version-file: ${{ env.GUI_DIR }}/go.mod
           check-latest: true
+      - name: Test GUI backend
+        working-directory: ${{ env.GUI_DIR }}
+        run: go test ./...
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
         working-directory: ${{ env.GUI_DIR }}
@@ -385,23 +342,50 @@ jobs:
         with:
           name: linux-builds-${{ matrix.arch }}
           path: ${{ env.GUI_DIR }}/bin/${{ env.APP_NAME }}-${{ matrix.os_name }}-${{ matrix.arch }}.zip
+          retention-days: 14
 
-  # ==================== GUI Release 上传 ====================
-  upload_gui_release:
+  # ==================== 正式 Release 汇总上传 ====================
+  publish_release:
     runs-on: ubuntu-latest
-    needs: [build_windows_gui, build_macos_gui, build_linux_gui]
+    needs: [build_assets, build_android, build_windows_gui, build_macos_gui, build_linux_gui]
     if: github.ref_type == 'tag' || inputs.release_tag != ''
     steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Validate release tag
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          release_tag="${RELEASE_TAG_INPUT:-$GITHUB_REF_NAME}"
+          source_version="$(sed -nE 's/^const VERSION = "([^"]+)"$/\1/p' lib/version/version.go)"
+          expected_tag="v${source_version}"
+          if [ -z "$source_version" ] || [ "$release_tag" != "$expected_tag" ]; then
+            echo "Release tag must equal ${expected_tag:-vX.Y.Z}; got $release_tag"
+            exit 1
+          fi
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: "*-builds-*"
+          pattern: "*"
           path: release-assets
           merge-multiple: true
-      - name: Upload release assets
+      - name: Generate checksums
+        run: |
+          cd release-assets
+          find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.apk' -o -name '*.zip' \) -print0 \
+            | sort -z | xargs -0 -r sha256sum > checksums.txt
+          test -s checksums.txt
+      - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: release-assets/**/*.zip
           tag_name: ${{ inputs.release_tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          make_latest: true
+          files: |
+            release-assets/*.tar.gz
+            release-assets/*.apk
+            release-assets/*.zip
+            release-assets/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

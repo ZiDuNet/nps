@@ -1,6 +1,12 @@
 # 更新日志
 
-## Unreleased
+## v1.1.3 (2026-09-02)
+
+### 发布与更新
+
+- 正式 Release 改为在所有平台构建完成后统一上传，并附带 SHA-256 校验文件。
+- CLI 与 GUI 更新器改为使用 `ZiDuNet/nps` 的规范语义版本 Release，校验平台资产和 SHA-256，避免误装上游或分支构建。
+- 补齐 Linux ARM 通用包和 Windows ARM64 CLI 包，macOS GUI 更新改为替换完整 `.app` 包。
 
 ### 上游同步与协议
 

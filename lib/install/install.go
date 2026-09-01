@@ -1,21 +1,22 @@
 package install
 
 import (
+	"crypto/sha256"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/version"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/c4milo/unpackit"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
+	"time"
 )
 
 // Keep it in sync with the template from service_sysv_linux.go file
@@ -137,17 +138,7 @@ WantedBy=multi-user.target
 `
 
 func UpdateNps() {
-	destPath, err := downloadLatest("server")
-	if err != nil {
-		log.Println("下载更新失败：", err)
-		return
-	}
-	//复制文件到对应目录
-	if _, err := copyStaticFile(destPath, "nps"); err != nil {
-		log.Println("替换服务端文件失败：", err)
-		return
-	}
-	fmt.Println("Update completed, please restart")
+	UpdateNpsNew()
 }
 
 func UpdateNpsNew() {
@@ -157,12 +148,17 @@ func UpdateNpsNew() {
 		return
 	}
 	fmt.Println("最新版本为：", latest)
-	if compareVersion(version.VERSION, latest) >= 0 {
+	available, err := updateAvailable(latest)
+	if err != nil {
+		log.Println("检查版本失败：", err)
+		return
+	}
+	if !available {
 		fmt.Println("当前已是最新版本，无需更新")
 		return
 	}
 	tempDir := filepath.Join(common.GetAppPath(), "temp")
-	destPath, err := downloadLatest2("server", tempDir)
+	destPath, err := downloadAndUnpack("server", tempDir)
 	if err != nil {
 		log.Println("下载更新失败：", err)
 		return
@@ -176,52 +172,26 @@ func UpdateNpsNew() {
 }
 
 func fetchLatestVersion() (string, error) {
-	resp, err := http.Get("https://api.github.com/repos/yisier/nps/releases/latest")
+	rl, err := fetchLatestRelease()
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	rl := new(release)
-	if err := json.Unmarshal(b, rl); err != nil {
-		return "", err
-	}
-	if rl.TagName == "" {
-		return "", errors.New("无法解析最新版本号")
+	if _, err := version.Compare(version.VERSION, rl.TagName); err != nil {
+		return "", fmt.Errorf("最新 Release 标签 %q 无效: %w", rl.TagName, err)
 	}
 	return rl.TagName, nil
 }
 
-func compareVersion(a, b string) int {
-	ai, _ := strconv.Atoi(strings.ReplaceAll(strings.TrimPrefix(a, "v"), ".", ""))
-	bi, _ := strconv.Atoi(strings.ReplaceAll(strings.TrimPrefix(b, "v"), ".", ""))
-	if ai < bi {
-		return -1
+func updateAvailable(latest string) (bool, error) {
+	comparison, err := version.Compare(version.VERSION, latest)
+	if err != nil {
+		return false, fmt.Errorf("最新 Release 标签 %q 无效: %w", latest, err)
 	}
-	if ai > bi {
-		return 1
-	}
-	return 0
+	return comparison < 0, nil
 }
 
 func UpdateNpc() {
-	destPath, err := downloadLatest("client")
-	if err != nil {
-		log.Println("下载更新失败：", err)
-		return
-	}
-	//复制文件到对应目录
-	if _, err := copyStaticFile(destPath, "npc"); err != nil {
-		log.Println("替换客户端文件失败：", err)
-		return
-	}
-	fmt.Println("Update completed, please restart")
+	UpdateNpcNew()
 }
 
 func UpdateNpcNew() {
@@ -231,12 +201,17 @@ func UpdateNpcNew() {
 		return
 	}
 	fmt.Println("最新版本为：", latest)
-	if compareVersion(version.VERSION, latest) >= 0 {
+	available, err := updateAvailable(latest)
+	if err != nil {
+		log.Println("检查版本失败：", err)
+		return
+	}
+	if !available {
 		fmt.Println("当前已是最新版本，无需更新")
 		return
 	}
 	tempDir := filepath.Join(common.GetAppPath(), "temp")
-	destPath, err := downloadLatest2("client", tempDir)
+	destPath, err := downloadAndUnpack("client", tempDir)
 	if err != nil {
 		log.Println("下载更新失败：", err)
 		return
@@ -249,53 +224,164 @@ func UpdateNpcNew() {
 }
 
 type release struct {
-	TagName string `json:"tag_name"`
+	TagName string         `json:"tag_name"`
+	Assets  []releaseAsset `json:"assets"`
 }
 
-func downloadLatest(bin string) (string, error) {
-	return downloadAndUnpack(bin, "")
+type releaseAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
-func downloadLatest2(bin string, path string) (string, error) {
-	return downloadAndUnpack(bin, path)
-}
+const (
+	latestReleaseAPI = "https://api.github.com/repos/" + version.GitHubRepository + "/releases/latest"
+	updaterUserAgent = "nps-updater"
+)
 
-// downloadAndUnpack fetches the latest release package for the current OS/arch.
-// Releases ship as .tar.gz (see build.assets.sh / release.yml).
-func downloadAndUnpack(bin, unpackPath string) (string, error) {
-	data, err := http.Get("https://api.github.com/repos/yisier/nps/releases/latest")
+var releaseHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
+func fetchLatestRelease() (*release, error) {
+	req, err := http.NewRequest(http.MethodGet, latestReleaseAPI, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	defer data.Body.Close()
-	if data.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("获取版本信息失败: HTTP %d", data.StatusCode)
-	}
-	b, err := ioutil.ReadAll(data.Body)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", updaterUserAgent)
+
+	resp, err := releaseHTTPClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("获取版本信息失败: HTTP %d", resp.StatusCode)
+	}
+
 	rl := new(release)
-	if err := json.Unmarshal(b, rl); err != nil {
-		return "", err
+	if err := json.NewDecoder(resp.Body).Decode(rl); err != nil {
+		return nil, err
 	}
 	if rl.TagName == "" {
-		return "", errors.New("无法解析最新版本号")
+		return nil, errors.New("无法解析最新版本号")
 	}
-	ver := rl.TagName
-	fmt.Println("the latest version is", ver)
-	filename := runtime.GOOS + "_" + runtime.GOARCH + "_" + bin + ".tar.gz"
-	downloadUrl := fmt.Sprintf("https://github.com/yisier/nps/releases/download/%s/%s", ver, filename)
-	fmt.Println("download package from ", downloadUrl)
-	resp, err := http.Get(downloadUrl)
+	return rl, nil
+}
+
+func releaseAssetName(goos, goarch, bin string) string {
+	return goos + "_" + goarch + "_" + bin + ".tar.gz"
+}
+
+func findReleaseAsset(rl *release, name string) (*releaseAsset, error) {
+	for i := range rl.Assets {
+		if rl.Assets[i].Name == name && rl.Assets[i].BrowserDownloadURL != "" {
+			return &rl.Assets[i], nil
+		}
+	}
+	return nil, fmt.Errorf("Release %s 中未找到 %s，当前平台暂不支持自动更新", rl.TagName, name)
+}
+
+func releaseAssetChecksum(rl *release, name string) (string, error) {
+	checksums, err := findReleaseAsset(rl, "checksums.txt")
+	if err != nil {
+		return "", fmt.Errorf("Release %s 缺少 checksums.txt: %w", rl.TagName, err)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, checksums.BrowserDownloadURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", updaterUserAgent)
+	resp, err := releaseHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("下载失败: HTTP %d %s", resp.StatusCode, downloadUrl)
+		return "", fmt.Errorf("下载 checksums.txt 失败: HTTP %d", resp.StatusCode)
 	}
-	destPath, err := unpackit.Unpack(resp.Body, unpackPath)
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || filepath.Base(strings.TrimPrefix(fields[len(fields)-1], "*")) != name {
+			continue
+		}
+		if len(fields[0]) != sha256.Size*2 {
+			return "", fmt.Errorf("%s 的 SHA-256 格式无效", name)
+		}
+		if _, err := hex.DecodeString(fields[0]); err != nil {
+			return "", fmt.Errorf("%s 的 SHA-256 格式无效: %w", name, err)
+		}
+		return strings.ToLower(fields[0]), nil
+	}
+	return "", fmt.Errorf("checksums.txt 中未找到 %s", name)
+}
+
+// downloadAndUnpack fetches the latest release package for the current OS/arch.
+// Releases ship as .tar.gz (see build.assets.sh / release.yml).
+func downloadAndUnpack(bin, unpackPath string) (string, error) {
+	rl, err := fetchLatestRelease()
+	if err != nil {
+		return "", err
+	}
+	if _, err := version.Compare(version.VERSION, rl.TagName); err != nil {
+		return "", fmt.Errorf("最新 Release 标签 %q 无效: %w", rl.TagName, err)
+	}
+
+	filename := releaseAssetName(runtime.GOOS, runtime.GOARCH, bin)
+	asset, err := findReleaseAsset(rl, filename)
+	if err != nil {
+		return "", err
+	}
+	checksum, err := releaseAssetChecksum(rl, filename)
+	if err != nil {
+		return "", err
+	}
+	fmt.Println("the latest version is", rl.TagName)
+	fmt.Println("download package from", asset.BrowserDownloadURL)
+
+	if unpackPath != "" {
+		if err := os.MkdirAll(unpackPath, 0755); err != nil {
+			return "", err
+		}
+	}
+	archive, err := os.CreateTemp(unpackPath, "nps-update-*.tar.gz")
+	if err != nil {
+		return "", err
+	}
+	archivePath := archive.Name()
+	defer os.Remove(archivePath)
+	defer archive.Close()
+
+	req, err := http.NewRequest(http.MethodGet, asset.BrowserDownloadURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", updaterUserAgent)
+	downloadClient := &http.Client{Timeout: 10 * time.Minute}
+	resp, err := downloadClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("下载失败: HTTP %d %s", resp.StatusCode, asset.BrowserDownloadURL)
+	}
+
+	hash := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(archive, hash), resp.Body); err != nil {
+		return "", err
+	}
+	if actual := hex.EncodeToString(hash.Sum(nil)); !strings.EqualFold(actual, checksum) {
+		return "", fmt.Errorf("更新包 %s 的 SHA-256 校验失败", filename)
+	}
+	if _, err := archive.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	destPath, err := unpackit.Unpack(archive, unpackPath)
 	if err != nil {
 		return "", err
 	}

@@ -1,3 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
 export GOPROXY=direct
 
 sudo apt-get update
@@ -37,6 +40,7 @@ tar -czvf linux_arm_v6_client.tar.gz npc
 CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/npc/npc.go
 
 tar -czvf linux_arm_v5_client.tar.gz npc
+cp linux_arm_v5_client.tar.gz linux_arm_client.tar.gz
 
 
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/npc/npc.go
@@ -73,6 +77,10 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -extldflags -st
 
 tar -czvf windows_amd64_client.tar.gz npc.exe
 
+CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/npc/npc.go
+
+tar -czvf windows_arm64_client.tar.gz npc.exe
+
 
 CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/npc/npc.go
 
@@ -94,6 +102,7 @@ tar -czvf linux_386_server.tar.gz nps
 CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=5 go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/nps/nps.go
 
 tar -czvf linux_arm_v5_server.tar.gz nps
+cp linux_arm_v5_server.tar.gz linux_arm_server.tar.gz
 
 CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/nps/nps.go
 
@@ -165,3 +174,7 @@ tar -czvf windows_amd64_server.tar.gz nps.exe
 CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/nps/nps.go
 
 tar -czvf windows_386_server.tar.gz nps.exe
+
+CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/nps/nps.go
+
+tar -czvf windows_arm64_server.tar.gz nps.exe

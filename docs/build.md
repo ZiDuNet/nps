@@ -106,9 +106,9 @@ docker build -f Dockerfile.npc -t npc .
 
 `.github/workflows/ci.yml` 在 `master` 分支提交和 Pull Request 上执行服务端/客户端构建、核心 Go 包测试，以及 GUI 前端的冻结依赖安装和构建。
 
-每次推送到 `master` 都会执行完整的跨平台构建：CLI 和 Android 产物会作为 Actions artifacts 保留 14 天，Windows/macOS/Linux GUI 包也会上传到对应运行记录；Docker 会推送多架构 `latest` 与 `master` 标签。为避免旧构建覆盖新镜像，同一分支的较旧发布任务会被自动取消。
+每次推送到 `master` 都会执行完整的跨平台构建：CLI、Android 和 Windows/macOS/Linux GUI 包会作为 Actions artifacts 保留 14 天；Docker 会推送多架构 `latest` 与不可变的 `sha-<短提交号>` 标签。为避免旧构建覆盖新镜像，同一分支的较旧发布任务会被自动取消。
 
-推送 `v*` 标签会在上述构建之外创建 GitHub Release，并将二进制、Android 和 GUI 包作为 Release 附件上传；Docker 同时推送 `latest` 和该版本标签。也可以在 Actions 页面手动执行 `workflow_dispatch`；从普通分支手动发布时必须填写 `release_tag`（例如 `v1.1.2`）。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
+推送与源码版本严格一致的标签（例如源码为 `1.1.3` 时推送 `v1.1.3`）会创建 GitHub Release。工作流会在所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`，避免并行任务争抢同一个 Release；Docker 同时推送 `latest` 和 `1.1.3`。也可以在 Actions 页面手动执行 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.3`）。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
 
 GUI 构建由 Wails 3 调用 `wails.json` 中配置的 Yarn 前端流程：
 

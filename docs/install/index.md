@@ -1,6 +1,6 @@
 ﻿## 程序安装
 
-从 [releases](https://github.com/yisier/nps/releases) 下载对应系统版本，服务端 (`nps`) 和客户端 (`npc`) 是单独的压缩包。
+从 [Releases](https://github.com/ZiDuNet/nps/releases) 下载对应系统版本，服务端 (`nps`) 和客户端 (`npc`) 是单独的压缩包。
 
 ::: tabs
 

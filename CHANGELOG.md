@@ -2,7 +2,7 @@
 
 所有重要变更记录在此。
 
-## [Unreleased] - 上游同步与体验修复
+## [1.1.3] - 2026-09-02
 
 ### 上游同步
 
@@ -26,6 +26,12 @@
 ### 兼容性
 
 - 配置文件兼容上游常用别名：`server` 等价于 `server_addr`，`tp` 等价于 `conn_type`。
+
+### 发布与更新
+
+- 正式 Release 改为在全部构建完成后统一上传，并附带 SHA-256 校验文件；普通 `master` 构建保留为 14 天 Actions artifacts。
+- CLI 和 GUI 更新器统一从 `ZiDuNet/nps` 获取严格的 `vX.Y.Z` Release，拒绝历史 `master` 等非版本标签，按发布资产下载并校验 SHA-256。
+- 补齐 Linux ARM 通用包、Windows ARM64 CLI 包和 macOS `.app` 整包更新，Docker 镜像增加不可变提交标签。
 
 ## [1.1.2] - 2026-06-23
 

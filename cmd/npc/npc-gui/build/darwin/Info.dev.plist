@@ -4,17 +4,17 @@
         <key>CFBundlePackageType</key>
             <string>APPL</string>
         <key>CFBundleName</key>
-            <string>NPS Client</string>
+            <string>NPS 客户端</string>
         <key>CFBundleExecutable</key>
-            <string>npc-gui</string>
+            <string>NPS 客户端</string>
         <key>CFBundleIdentifier</key>
             <string>com.nps.client</string>
         <key>CFBundleVersion</key>
-            <string>0.26.38</string>
+            <string>1.1.3</string>
         <key>CFBundleGetInfoString</key>
             <string>NPS 客户端</string>
         <key>CFBundleShortVersionString</key>
-            <string>0.26.38</string>
+            <string>1.1.3</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>CFBundleIconName</key>

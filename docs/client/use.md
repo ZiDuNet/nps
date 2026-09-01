@@ -34,7 +34,7 @@
 1. 粘贴 web 后台的【快捷启动命令】
 2. 手动填写 `-server`、`-vkey` 等参数
 
-详细说明请参考 [GUI 客户端 README](https://github.com/yisier/nps/blob/master/cmd/npc/npc-gui/README.md)。
+详细说明请参考 [GUI 客户端 README](https://github.com/ZiDuNet/nps/blob/master/cmd/npc/npc-gui/README.md)。
 
 ![img](/image/new/gui.png)
 

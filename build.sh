@@ -1,5 +1,10 @@
-#/bash/sh
-export VERSION=0.26.38
+#!/usr/bin/env bash
+VERSION="$(sed -nE 's/^const VERSION = "([^"]+)"$/\1/p' lib/version/version.go)"
+if [ -z "$VERSION" ]; then
+    echo "Unable to read lib/version.VERSION"
+    exit 1
+fi
+export VERSION
 export GOPROXY=direct
 
 sudo apt-get update
