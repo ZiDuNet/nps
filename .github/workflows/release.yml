@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: '要发布的 Git 标签，例如 v1.1.3；必须与源码版本一致'
+        description: '要发布的 Git 标签，例如 v1.1.4；必须与源码版本一致'
         required: false
         type: string
 
@@ -28,8 +28,72 @@ env:
 
 jobs:
 
+  # ==================== 发布前置校验 ====================
+  validate_release:
+    name: Validate source and release provenance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify release version metadata
+        working-directory: cmd/npc/npc-gui/frontend
+        run: |
+          source_version=$(sed -nE 's/^const VERSION = "([^"]+)"$/\1/p' ../../../../lib/version/version.go)
+          package_version=$(node -p 'require("./package.json").version')
+          wails_version=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("../wails.json", "utf8")).info.productVersion)')
+          plist_versions=$(grep -A1 -E 'CFBundleVersion|CFBundleShortVersionString' ../build/darwin/Info.plist | grep '<string>' | sed -E 's/.*<string>([^<]+)<\/string>.*/\1/')
+          test -n "$source_version"
+          test "$package_version" = "$source_version"
+          test "$wails_version" = "$source_version"
+          test "$(printf '%s\n' "$plist_versions" | sort -u | wc -l | tr -d ' ')" = 1
+          test "$(printf '%s\n' "$plist_versions" | head -n 1)" = "$source_version"
+      - name: Download Go dependencies
+        run: go mod download
+      - name: Test core packages
+        run: >-
+          go test -race
+          ./bridge ./client ./cmd/npc ./cmd/nps
+          ./lib/config ./lib/conn ./lib/file ./lib/install
+          ./server ./server/connection ./server/proxy ./server/tool ./web/...
+      - name: Validate formal release source
+        if: ${{ github.ref_type == 'tag' || inputs.release_tag != '' }}
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          release_tag="${RELEASE_TAG_INPUT:-$GITHUB_REF_NAME}"
+          source_version="$(sed -nE 's/^const VERSION = "([^"]+)"$/\1/p' lib/version/version.go)"
+          expected_tag="v${source_version}"
+          if [ -z "$source_version" ] || [ "$release_tag" != "$expected_tag" ]; then
+            echo "Release tag must equal ${expected_tag:-vX.Y.Z}; got $release_tag"
+            exit 1
+          fi
+          git fetch --force origin master "refs/tags/${release_tag}:refs/tags/${release_tag}"
+          tag_commit="$(git rev-list -n 1 "$release_tag")"
+          checkout_commit="$(git rev-parse HEAD)"
+          master_commit="$(git rev-parse origin/master)"
+          if [ "$tag_commit" != "$checkout_commit" ]; then
+            echo "Release tag $release_tag must point to the checked-out source commit"
+            exit 1
+          fi
+          if [ "$tag_commit" != "$master_commit" ]; then
+            echo "Release tag $release_tag must point to the current origin/master commit"
+            exit 1
+          fi
+
   # ==================== 跨平台服务端/客户端打包 ====================
   build_assets:
+    needs: validate_release
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -39,13 +103,8 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: true
-      - name: Get dependencies
-        run: |
-          go get -v -t -d ./...
-          if [ -f Gopkg.toml ]; then
-              curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-              dep ensure
-          fi
+      - name: Download dependencies
+        run: go mod download
       - name: Build
         run: |
           chmod +x build.assets.sh
@@ -63,6 +122,7 @@ jobs:
 
   # ==================== Android APK ====================
   build_android:
+    needs: validate_release
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -82,6 +142,7 @@ jobs:
 
   # ==================== Docker 镜像 ====================
   build_docker:
+    needs: validate_release
     if: github.ref == 'refs/heads/master' || github.ref_type == 'tag' || inputs.release_tag != ''
     runs-on: ubuntu-latest
     env:
@@ -169,6 +230,7 @@ jobs:
 
   # ==================== Windows GUI ====================
   build_windows_gui:
+    needs: validate_release
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -230,6 +292,7 @@ jobs:
 
   # ==================== macOS GUI ====================
   build_macos_gui:
+    needs: validate_release
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -287,6 +350,7 @@ jobs:
 
   # ==================== Linux GUI ====================
   build_linux_gui:
+    needs: validate_release
     runs-on: ubuntu-latest
     env:
       WAILS_TAGS: webkit2_41

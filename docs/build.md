@@ -104,11 +104,11 @@ docker build -f Dockerfile.npc -t npc .
 - Windows/macOS/Linux GUI 客户端打包
 - Release 附件上传
 
-`.github/workflows/ci.yml` 在 `master` 分支提交和 Pull Request 上执行服务端/客户端构建、核心 Go 包测试，以及 GUI 前端的冻结依赖安装和构建。
+`.github/workflows/ci.yml` 在 `master` 分支提交和 Pull Request 上执行服务端/客户端构建、核心 Go 包测试，以及 GUI 前端的冻结依赖安装和构建。文档站使用 `docs/package-lock.json` 与 `npm ci` 构建，确保 Pages 部署可复现。
 
 每次推送到 `master` 都会执行完整的跨平台构建：CLI、Android 和 Windows/macOS/Linux GUI 包会作为 Actions artifacts 保留 14 天；Docker 会推送多架构 `latest` 与不可变的 `sha-<短提交号>` 标签。为避免旧构建覆盖新镜像，同一分支的较旧发布任务会被自动取消。
 
-推送与源码版本严格一致的标签（例如源码为 `1.1.3` 时推送 `v1.1.3`）会创建 GitHub Release。工作流会在所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`，避免并行任务争抢同一个 Release；Docker 同时推送 `latest` 和 `1.1.3`。也可以在 Actions 页面手动执行 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.3`）。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
+推送与源码版本严格一致的标签（例如源码为 `1.1.4` 时推送 `v1.1.4`）会创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；这样 CLI/GUI 自动更新只会读取经过完整校验的 Release。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`，避免并行任务争抢同一个 Release；Docker 同时推送 `latest` 和 `1.1.4`。也可以在 Actions 页面手动执行 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.4`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
 
 GUI 构建由 Wails 3 调用 `wails.json` 中配置的 Yarn 前端流程：
 

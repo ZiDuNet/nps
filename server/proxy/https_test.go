@@ -2,10 +2,19 @@ package proxy
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/binary"
+	"encoding/pem"
+	"math/big"
 	"net"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"ehang.io/nps/lib/file"
 )
 
 func TestGetServerNameFromClientHelloRejectsIncompleteRecord(t *testing.T) {
@@ -163,5 +172,88 @@ func TestReleaseCertListenerKeepsSharedCertificateAlive(t *testing.T) {
 	}
 	if atomic.LoadInt32(&listener.closed) != 1 {
 		t.Fatal("unreferenced certificate listener was not closed")
+	}
+}
+
+func TestCertificateFingerprintIncludesPrivateKey(t *testing.T) {
+	cert := "certificate-content"
+	key := "private-key-content"
+	base := certificateFingerprint(cert, key)
+	if base != certificateFingerprint(cert, key) {
+		t.Fatal("certificate fingerprint is not stable")
+	}
+	if base == certificateFingerprint(cert, "rotated-private-key") {
+		t.Fatal("certificate fingerprint did not change after private-key rotation")
+	}
+	if base == certificateFingerprint("rotated-certificate", key) {
+		t.Fatal("certificate fingerprint did not change after certificate rotation")
+	}
+}
+
+func TestCertificateMaterialKeyRejectsExpiredCertificate(t *testing.T) {
+	certPEM, keyPEM := testTLSCertificatePEM(t, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+	if _, err := certificateMaterialKey(certPEM, keyPEM); err == nil {
+		t.Fatal("expired certificate unexpectedly accepted for hot reload")
+	}
+}
+
+func testTLSCertificatePEM(t *testing.T, notBefore, notAfter time.Time) (string, string) {
+	t.Helper()
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    notBefore,
+		NotAfter:     notAfter,
+		DNSNames:     []string{"example.com"},
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("marshal private key: %v", err)
+	}
+	cert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	key := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	return string(cert), string(key)
+}
+
+func TestInvalidCertificateUpdateKeepsLastValidListener(t *testing.T) {
+	server := &HttpsServer{}
+	listener := NewHttpsListener(nil)
+	const hostID = 42
+	const oldCertificateKey = "last-known-good"
+	server.hostIdCertMap.Store(hostID, oldCertificateKey)
+	server.httpsListenerMap.Store(oldCertificateKey, listener)
+
+	client, accepted := net.Pipe()
+	defer client.Close()
+	defer accepted.Close()
+
+	server.cert(&file.Host{Id: hostID}, accepted, []byte("client-hello"), "not a certificate", "not a private key")
+
+	select {
+	case queued := <-listener.acceptConn:
+		if queued == nil {
+			t.Fatal("invalid certificate update did not retain the queued connection")
+		}
+		if !bytes.Equal(queued.Rb, []byte("client-hello")) {
+			t.Fatalf("queued ClientHello = %q, want preserved bytes", queued.Rb)
+		}
+		_ = queued.Close()
+	case <-time.After(time.Second):
+		t.Fatal("invalid certificate update did not fall back to the last valid listener")
+	}
+
+	if actual, ok := server.hostIdCertMap.Load(hostID); !ok || actual != oldCertificateKey {
+		t.Fatalf("certificate mapping = %v, want %q", actual, oldCertificateKey)
+	}
+	if atomic.LoadInt32(&listener.closed) != 0 {
+		t.Fatal("last valid certificate listener was closed after an invalid update")
 	}
 }

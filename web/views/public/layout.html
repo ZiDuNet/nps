@@ -118,10 +118,12 @@
                     <span class="nav-label" langtag="scheme-file"></span></a>
                 </li>
                 <li class="nav-group-title"><span data-i18n-zh="系统" data-i18n-en="System">系统</span></li>
+                {{if eq true .isAdmin}}
                 <li class="{{if eq "global" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/global/index"><i class="icon icon-cog" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-globalparam"></span></a>
                 </li>
+                {{end}}
                 <li class="{{if eq "help" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/index/help"><i class="icon icon-lightbulb" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-help"></span></a>
@@ -198,6 +200,23 @@
         var field = $(this).closest('.toggle-field');
         var hidden = field.find('input[type="hidden"]');
         if (hidden.length) hidden.val(this.checked ? '1' : '0');
+    });
+
+    // Secret fields stay masked until the operator explicitly asks to reveal one.
+    $(document).on('click', '.credential-password-toggle', function() {
+        var target = document.getElementById(this.getAttribute('data-password-target'));
+        if (!target) return;
+        var revealing = target.type === 'password';
+        var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
+        var label = revealing
+            ? (english ? 'Hide password' : '隐藏密码')
+            : (english ? 'Show password' : '显示密码');
+        target.type = revealing ? 'text' : 'password';
+        $(this)
+            .attr('aria-pressed', revealing ? 'true' : 'false')
+            .attr('aria-label', label)
+            .attr('title', label)
+            .find('i').toggleClass('fa-eye fa-eye-slash');
     });
 
     function toggleTheme() {

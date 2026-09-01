@@ -2,55 +2,77 @@
     <header class="dashboard-page-header form-page-header">
         <div class="form-page-heading">
             <div class="dashboard-page-kicker" data-i18n-zh="系统配置" data-i18n-en="System settings">系统配置</div>
-            <h1 id="global-settings-title" langtag="word-globalparam"></h1>
-            <p data-i18n-zh="管理全局访问限制和服务器对外地址。" data-i18n-en="Manage global access restrictions and the public server address.">管理全局访问限制和服务器对外地址。</p>
+            <h1 id="global-settings-title" data-i18n-zh="全局参数" data-i18n-en="Global settings">全局参数</h1>
+            <p data-i18n-zh="管理服务器对外地址、访问限制与平台域名证书。" data-i18n-en="Manage the public server address, access restrictions, and platform-domain certificates.">管理服务器对外地址、访问限制与平台域名证书。</p>
         </div>
     </header>
 
-    <div class="row form-page-grid">
-        <div class="col-lg-12">
-            <article class="panel ibox float-e-margins form-workflow-card zui-panel">
-                <div class="ibox-content form-workflow-content">
-                    <form class="form form-horizontal form-workflow-form zui-form" data-form-workflow="global-settings">
-                        <div class="form-section-title"><i class="fa fa-shield-alt" aria-hidden="true"></i><span data-i18n-zh="IP 黑名单" data-i18n-en="IP denylist">IP 黑名单</span></div>
-                        <div class="form-group" id="black_ip_list">
-                            <label class="col-sm-2 control-label font-bold" langtag="word-globalblackiplist"></label>
-                            <div class="col-sm-10">
-                                <textarea class="form-control" rows="10" type="text" name="globalBlackIpList" placeholder=""
-                                          langtag="info-suchasblackiplist">{{.globalBlackIpList}}</textarea>
-                                <span class="help-block m-b-none" langtag="info-descblackiplist"></span>
-                            </div>
-                        </div>
+    <div class="row form-page-grid"><div class="col-md-12"><section class="panel ibox float-e-margins form-workflow-card zui-panel"><div class="ibox-content form-workflow-content">
+        <form id="global-form" class="form form-horizontal form-workflow-form zui-form" data-form-workflow="global-settings">
+            <div class="form-section-title"><i class="fa fa-server" aria-hidden="true"></i><span data-i18n-zh="服务配置" data-i18n-en="Server settings">服务配置</span></div>
+            <div class="form-group">
+                <label class="col-sm-2 control-label font-bold" for="server-url" data-i18n-zh="服务地址" data-i18n-en="Server address">服务地址</label>
+                <div class="col-sm-10"><input id="server-url" class="form-control" value="{{.serverUrl}}" type="text" name="serverUrl" autocomplete="off" placeholder="nps.example.com"><span class="help-block" data-i18n-zh="用于控制台展示的外部地址；不改变正在监听的端口。" data-i18n-en="Used as the external address shown in the console; it does not change listening ports.">用于控制台展示的外部地址；不改变正在监听的端口。</span></div>
+            </div>
+            <div class="form-group form-group--wide">
+                <label class="col-sm-2 control-label font-bold" for="black-ip-list" data-i18n-zh="IP 黑名单" data-i18n-en="IP denylist">IP 黑名单</label>
+                <div class="col-sm-10"><textarea id="black-ip-list" class="form-control" rows="6" name="globalBlackIpList" placeholder="203.0.113.10">{{.globalBlackIpList}}</textarea><span class="help-block" data-i18n-zh="每行一个 IP。此限制对服务端的入口连接生效。" data-i18n-en="One IP per line. This restriction applies to server entry connections.">每行一个 IP。此限制对服务端的入口连接生效。</span></div>
+            </div>
 
-                        <div class="form-section-title"><i class="fa fa-server" aria-hidden="true"></i><span data-i18n-zh="服务配置" data-i18n-en="Server settings">服务配置</span></div>
-                        <div class="form-group" id="server_url">
-                            <label class="col-sm-2 control-label font-bold" langtag="word-serverurl"></label>
-                            <div class="col-sm-10">
-                                <input class="form-control" value="{{.serverUrl}}" type="text" name="serverUrl"
-                                       placeholder="" langtag="info-servertips">
-                            </div>
+            <div class="form-section-title"><i class="fa fa-cloud" aria-hidden="true"></i><span data-i18n-zh="平台泛域名" data-i18n-en="Platform wildcard domains">平台泛域名</span></div>
+            <div class="form-group form-group--wide"><label class="col-sm-2 control-label font-bold" data-i18n-zh="域名池" data-i18n-en="Domain pool">域名池</label><div class="col-sm-10">
+                <p class="form-field-hint" data-i18n-zh="每个泛域名都绑定一对服务器上的 PEM/KEY 文件。用户创建平台域名时只能选择它和一个单层前缀，证书路径不会暴露给用户。" data-i18n-en="Each wildcard binds a PEM/KEY pair on the server. Users can only choose it and one single-label prefix; certificate paths are never exposed to them.">每个泛域名都绑定一对服务器上的 PEM/KEY 文件。用户创建平台域名时只能选择它和一个单层前缀，证书路径不会暴露给用户。</p>
+                <div id="platform-domain-list" class="platform-domain-list">
+                    {{range .platformDomains}}
+                    <article class="platform-domain-row" data-reference-count="{{.ReferenceCount}}">
+                        <input type="hidden" data-field="id" value="{{.ID}}">
+                        <div class="platform-domain-row__header"><div><strong>{{.Wildcard}}</strong><span class="platform-domain-reference"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="被 {{.ReferenceCount}} 个主机引用" data-i18n-en="Used by {{.ReferenceCount}} host(s)">被 {{.ReferenceCount}} 个主机引用</span></span></div><button type="button" class="btn btn-outline btn-danger platform-domain-remove"{{if gt .ReferenceCount 0}} disabled title="使用中的平台域名不能删除" data-title-zh="使用中的平台域名不能删除" data-title-en="A referenced platform domain cannot be deleted"{{end}} aria-label="删除平台域名" data-aria-label-zh="删除平台域名" data-aria-label-en="Delete platform domain"><i class="fa fa-trash" aria-hidden="true"></i></button></div>
+                        <div class="platform-domain-row__fields">
+                            <label><span data-i18n-zh="泛域名" data-i18n-en="Wildcard">泛域名</span><input class="form-control" type="text" data-field="wildcard" value="{{.Wildcard}}" placeholder="*.example.com"{{if gt .ReferenceCount 0}} readonly{{end}}></label>
+                            <label><span data-i18n-zh="证书路径 (.pem)" data-i18n-en="Certificate path (.pem)">证书路径 (.pem)</span><input class="form-control" type="text" data-field="cert" value="{{.CertFilePath}}" placeholder="/certs/example.com.pem"></label>
+                            <label><span data-i18n-zh="私钥路径 (.key)" data-i18n-en="Key path (.key)">私钥路径 (.key)</span><input class="form-control" type="text" data-field="key" value="{{.KeyFilePath}}" placeholder="/certs/example.com.key"></label>
                         </div>
-
-                        <div class="hr-line-dashed form-workflow-divider"></div>
-                        <div class="form-group form-workflow-actions">
-                            <div class="col-sm-4 col-sm-offset-2">
-                                <button class="btn btn-success" type="button"
-                                        onclick="submitform('global', '{{.web_base_url}}/global/save', $('form').serializeArray())">
-                                    <i class="fa fa-fw fa-lg fa-check-circle"></i> <span langtag="word-save"></span>
-                                </button>
-                            </div>
-                        </div>
-                    </form>
+                        <dl class="platform-domain-health"><div><dt data-i18n-zh="证书状态" data-i18n-en="Certificate status">证书状态</dt><dd class="platform-cert-status">{{.Status}}</dd></div><div><dt data-i18n-zh="到期时间" data-i18n-en="Expires at">到期时间</dt><dd>{{if .ExpiresAt}}{{.ExpiresAt}}{{else}}-{{end}}</dd></div><div><dt data-i18n-zh="剩余天数" data-i18n-en="Days remaining">剩余天数</dt><dd>{{if .Readable}}{{.DaysRemaining}} <span data-i18n-zh="天" data-i18n-en="days">天</span>{{else}}-{{end}}</dd></div></dl>
+                    </article>
+                    {{end}}
                 </div>
-            </article>
-        </div>
-    </div>
+                <button id="add-platform-domain" class="btn btn-outline btn-primary" type="button"><i class="fa fa-plus" aria-hidden="true"></i><span data-i18n-zh="添加泛域名" data-i18n-en="Add wildcard">添加泛域名</span></button>
+                <span class="help-block" data-i18n-zh="被主机引用的泛域名不能删除或更名；更新证书路径会同步关联主机。外部脚本用原子替换证书文件后，新 TLS 连接会自动使用有效的新文件。" data-i18n-en="A referenced wildcard cannot be deleted or renamed; certificate-path changes synchronize its hosts. After an external script atomically replaces certificate files, new TLS connections automatically use a valid new pair.">被主机引用的泛域名不能删除或更名；更新证书路径会同步关联主机。外部脚本用原子替换证书文件后，新 TLS 连接会自动使用有效的新文件。</span>
+            </div></div>
+            <input id="platform-domains-input" type="hidden" name="platform_domains" value="[]">
+            <div class="hr-line-dashed form-workflow-divider"></div>
+            <div class="form-group form-workflow-actions"><div class="col-sm-10"><button class="btn btn-success" type="submit"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存设置" data-i18n-en="Save settings">保存设置</span></button></div></div>
+        </form>
+    </div></section></div></div>
 </section>
 
+<template id="platform-domain-template">
+    <article class="platform-domain-row" data-reference-count="0">
+        <input type="hidden" data-field="id" value="">
+        <div class="platform-domain-row__header"><div><strong data-i18n-zh="新平台泛域名" data-i18n-en="New platform wildcard">新平台泛域名</strong><span class="platform-domain-reference"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="尚未被主机引用" data-i18n-en="Not referenced by any host">尚未被主机引用</span></span></div><button type="button" class="btn btn-outline btn-danger platform-domain-remove" aria-label="删除平台域名" data-aria-label-zh="删除平台域名" data-aria-label-en="Delete platform domain"><i class="fa fa-trash" aria-hidden="true"></i></button></div>
+        <div class="platform-domain-row__fields"><label><span data-i18n-zh="泛域名" data-i18n-en="Wildcard">泛域名</span><input class="form-control" type="text" data-field="wildcard" placeholder="*.example.com"></label><label><span data-i18n-zh="证书路径 (.pem)" data-i18n-en="Certificate path (.pem)">证书路径 (.pem)</span><input class="form-control" type="text" data-field="cert" placeholder="/certs/example.com.pem"></label><label><span data-i18n-zh="私钥路径 (.key)" data-i18n-en="Key path (.key)">私钥路径 (.key)</span><input class="form-control" type="text" data-field="key" placeholder="/certs/example.com.key"></label></div>
+        <dl class="platform-domain-health"><div><dt data-i18n-zh="证书状态" data-i18n-en="Certificate status">证书状态</dt><dd data-i18n-zh="保存后检查" data-i18n-en="Checked after saving">保存后检查</dd></div><div><dt data-i18n-zh="到期时间" data-i18n-en="Expires at">到期时间</dt><dd>-</dd></div><div><dt data-i18n-zh="剩余天数" data-i18n-en="Days remaining">剩余天数</dt><dd>-</dd></div></dl>
+    </article>
+</template>
+
 <script>
-    window.addEventListener('resize', () => {
-        for (var key in charts) {
-            charts[key].resize();
-        }
+$(function () {
+    var form = $('#global-form'), list = document.getElementById('platform-domain-list'), template = document.getElementById('platform-domain-template');
+    function removeRow(button) { var row = button.closest('.platform-domain-row'); if (row && Number(row.getAttribute('data-reference-count') || '0') === 0) row.remove(); }
+    function attachRow(row) { var remove = row.querySelector('.platform-domain-remove'); if (remove) remove.addEventListener('click', function () { removeRow(remove); }); }
+    Array.prototype.forEach.call(list.querySelectorAll('.platform-domain-row'), attachRow);
+    document.getElementById('add-platform-domain').addEventListener('click', function () { var fragment = template.content.cloneNode(true); list.appendChild(fragment); attachRow(list.lastElementChild); if (typeof $('body').setLang === 'function') $('body').setLang('#platform-domain-list'); });
+    form.on('submit', function (event) {
+        event.preventDefault();
+        var domains = [];
+        Array.prototype.forEach.call(list.querySelectorAll('.platform-domain-row'), function (row) {
+            function value(field) { var input = row.querySelector('[data-field="' + field + '"]'); return input ? $.trim(input.value) : ''; }
+            var wildcard = value('wildcard'), cert = value('cert'), key = value('key');
+            if (!wildcard && !cert && !key) return;
+            domains.push({ID: value('id'), Wildcard: wildcard, CertFilePath: cert, KeyFilePath: key});
+        });
+        $('#platform-domains-input').val(JSON.stringify(domains));
+        submitform('global', '{{.web_base_url}}/global/save', form.serializeArray());
     });
+});
 </script>

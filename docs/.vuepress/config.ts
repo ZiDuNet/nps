@@ -45,6 +45,7 @@ const sidebar: SidebarConfig = [
     children: [
       { text: '功能概览', link: '/extend/feature.html' },
       { text: '域名代理与路由', link: '/extend/domain-proxy.html' },
+      { text: '平台域名与证书诊断', link: '/extend/platform-domain.html' },
       { text: '访问控制与配额', link: '/extend/access-control.html' },
       { text: '运行说明', link: '/extend/description.html' },
       { text: 'Web API 鉴权', link: '/extend/api.html' },
@@ -135,6 +136,7 @@ export default defineUserConfig({
         children: [
           { text: '功能概览', link: '/extend/feature.html' },
           { text: '域名代理与路由', link: '/extend/domain-proxy.html' },
+          { text: '平台域名与证书诊断', link: '/extend/platform-domain.html' },
           { text: '访问控制与配额', link: '/extend/access-control.html' },
           { text: '运行说明', link: '/extend/description.html' },
           { text: '配置示例', link: '/extend/example.html' },

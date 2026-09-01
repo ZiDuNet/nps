@@ -1,181 +1,73 @@
 <section class="form-page form-page-host form-page-edit" aria-labelledby="host-form-title">
     <header class="dashboard-page-header form-page-header">
         <div class="form-page-heading">
-            <div class="dashboard-page-kicker" data-i18n-zh="虚拟主机" data-i18n-en="Virtual hosts">虚拟主机</div>
-            <h1 id="host-form-title" langtag="page-hostedit"></h1>
-            <p data-i18n-zh="调整域名路由、证书和后端目标，变更会在保存后立即生效。" data-i18n-en="Adjust domain routing, certificates, and backend targets. Changes take effect when saved.">调整域名路由、证书和后端目标，变更会在保存后立即生效。</p>
+            <div class="dashboard-page-kicker" data-i18n-zh="域名代理" data-i18n-en="Domain proxy">域名代理</div>
+            <h1 id="host-form-title" data-i18n-zh="编辑域名规则" data-i18n-en="Edit domain rule">编辑域名规则</h1>
+            <p data-i18n-zh="调整路由后立即生效；平台证书会由服务端安全托管。" data-i18n-en="Routing changes take effect immediately; platform certificates remain safely managed by the server.">调整路由后立即生效；平台证书会由服务端安全托管。</p>
         </div>
-        <div class="dashboard-page-actions form-page-actions">
-            <a class="btn btn-outline btn-primary form-page-back" href="{{.web_base_url}}/index/hostlist">
-                <i class="fa fa-arrow-left" aria-hidden="true"></i>
-                <span data-i18n-zh="返回列表" data-i18n-en="Back to list">返回列表</span>
-            </a>
-        </div>
+        <div class="dashboard-page-actions form-page-actions"><a class="btn btn-outline btn-primary form-page-back" href="{{.web_base_url}}/index/hostlist"><i class="fa fa-arrow-left" aria-hidden="true"></i><span data-i18n-zh="返回列表" data-i18n-en="Back to list">返回列表</span></a></div>
     </header>
+
     <div class="row form-page-grid">
-    <div class="col-md-12 col-md-auto">
-        <div class="panel ibox float-e-margins form-workflow-card zui-panel">
-            <div class="ibox-content form-workflow-content">
-                <form class="form form-horizontal form-workflow-form zui-form" data-form-workflow="host-edit">
+        <div class="col-md-12">
+            <section class="panel ibox float-e-margins form-workflow-card zui-panel"><div class="ibox-content form-workflow-content">
+                <form id="host-form" class="form form-horizontal form-workflow-form zui-form" data-form-workflow="host-edit">
                     <input type="hidden" name="id" value="{{.h.Id}}">
+                    <div class="form-section-title"><i class="fa fa-sitemap" aria-hidden="true"></i><span data-i18n-zh="归属与域名" data-i18n-en="Ownership and domain">归属与域名</span></div>
 
-                    <div class="form-section-title"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="基础配置" data-i18n-en="Connection">基础配置</span></div>
-                    <div class="form-group">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-clientid"></label>
-                        <div class="col-sm-10">
-                            <input value="{{.h.Client.Id}}" class="form-control" type="text" name="client_id" placeholder="" langtag="word-clientid">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-remark"></label>
-                        <div class="col-sm-10">
-                            <input value="{{.h.Remark}}" class="form-control" type="text" name="remark"
-                                   placeholder="remark" required>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-host"></label>
-                        <div class="col-sm-10">
-                            <input value="{{.h.Host}}" class="form-control" type="text" name="host" placeholder="" langtag="info-suchashost">
-                        </div>
-                    </div>
-                    <div class="form-group" id="scheme">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-scheme"></label>
-                        <div class="col-sm-10">
-                            <select id="scheme_select" class="form-control" name="scheme">
-                                <option {{if eq "all" .h.Scheme}}selected{{end}} value="all" langtag="word-all"></option>
-                                <option {{if eq "http" .h.Scheme}}selected{{end}} value="http" langtag="word-http"></option>
-                                <option {{if eq "https" .h.Scheme}}selected{{end}} value="https" langtag="word-https"></option>
-                            </select>
-                        </div>
+                    <div class="form-group"><label class="col-sm-2 control-label font-bold" for="host-client" data-i18n-zh="所属客户端" data-i18n-en="Client">所属客户端</label><div class="col-sm-10"><select id="host-client" class="form-control" name="client_id" required></select></div></div>
+                    <div class="form-group"><label class="col-sm-2 control-label font-bold" for="host-remark" data-i18n-zh="规则备注" data-i18n-en="Remark">规则备注</label><div class="col-sm-10"><input id="host-remark" class="form-control" type="text" name="remark" value="{{.h.Remark}}" autocomplete="off" required></div></div>
+
+                    <div class="form-group form-group--wide host-domain-source">
+                        <label class="col-sm-2 control-label font-bold" data-i18n-zh="域名来源" data-i18n-en="Domain source">域名来源</label>
+                        <div class="col-sm-10"><div class="host-domain-source__choices" role="radiogroup" aria-label="域名来源" data-aria-label-zh="域名来源" data-aria-label-en="Domain source">
+                            <label class="host-domain-choice{{if not .hostIsPlatform}} is-selected{{end}}"><input type="radio" name="domain_mode" value="custom"{{if not .hostIsPlatform}} checked{{end}}><span><i class="fa fa-globe" aria-hidden="true"></i><strong data-i18n-zh="自定义域名" data-i18n-en="Custom domain">自定义域名</strong><small data-i18n-zh="使用自己的 DNS 和证书" data-i18n-en="Use your own DNS and certificate">使用自己的 DNS 和证书</small></span></label>
+                            <label class="host-domain-choice{{if .hostIsPlatform}} is-selected{{end}}{{if not .platformDomains}} is-disabled{{end}}"><input type="radio" name="domain_mode" value="platform"{{if .hostIsPlatform}} checked{{end}}{{if not .platformDomains}} disabled{{end}}><span><i class="fa fa-cloud" aria-hidden="true"></i><strong data-i18n-zh="平台域名" data-i18n-en="Platform domain">平台域名</strong><small data-i18n-zh="使用管理员托管的泛域名与证书" data-i18n-en="Use an administrator-managed wildcard and certificate">使用管理员托管的泛域名与证书</small></span></label>
+                        </div>{{if not .platformDomains}}<span class="help-block" data-i18n-zh="管理员尚未配置可用的平台泛域名。" data-i18n-en="No platform wildcard domain is configured by the administrator.">管理员尚未配置可用的平台泛域名。</span>{{end}}</div>
                     </div>
 
-                    <div class="form-section-title"><i class="fa fa-certificate" aria-hidden="true"></i><span data-i18n-zh="SSL / HTTPS" data-i18n-en="SSL / HTTPS">SSL / HTTPS</span></div>
-                    <div class="form-group" id="AutoHttps">
-                        <label class="col-sm-2 control-label font-bold" data-i18n-zh="自动 HTTPS（301）" data-i18n-en="Automatic HTTPS (301)">自动 HTTPS（301）</label>
-                        <div class="col-sm-10">
-                            <div class="toggle-field">
-                                <input type="hidden" name="AutoHttps" value="{{if eq true .h.AutoHttps}}1{{else}}0{{end}}">
-                                <label class="toggle-switch"><input type="checkbox" {{if eq true .h.AutoHttps}}checked{{end}}><span class="toggle-slider"></span></label>
-                                <span class="toggle-label" data-toggle-state="{{if eq true .h.AutoHttps}}yes{{else}}no{{end}}">{{if eq true .h.AutoHttps}}是{{else}}否{{end}}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="form-group" id="cert_file">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-httpscert"></label>
-                        <div class="col-sm-10">
-                            <textarea rows="6" class="form-control" type="text" name="cert_file_path" id="pemText"
-                                      placeholder="请将证书文件拖拽或将内容复制粘贴到此处，证书文件格式为：xxxx_example.com.pem。或者配置证书文件路径。"
-                                      data-placeholder-zh="请将证书文件拖拽或将内容复制粘贴到此处，证书文件格式为：xxxx_example.com.pem。或者配置证书文件路径。"
-                                      data-placeholder-en="Drop or paste the certificate content here, or enter the certificate file path.">{{.h.CertFilePath}}</textarea>
-                        </div>
-                    </div>
-                    <div class="form-group" id="key_file">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-httpskey"></label>
-                        <div class="col-sm-10">
-                            <textarea rows="6" class="form-control" type="text" name="key_file_path" id="pemKey"
-                                      placeholder="请将私钥文件拖拽或复制粘贴到此处，证书秘钥格式为：xxxx_example.com.key。或者配置秘钥文件路径。"
-                                      data-placeholder-zh="请将私钥文件拖拽或复制粘贴到此处，证书秘钥格式为：xxxx_example.com.key。或者配置秘钥文件路径。"
-                                      data-placeholder-en="Drop or paste the private key here, or enter the private key file path.">{{.h.KeyFilePath}}</textarea>
-                        </div>
-                    </div>
+                    <div id="custom-domain-group" class="form-group"><label class="col-sm-2 control-label font-bold" for="custom-host" data-i18n-zh="完整域名" data-i18n-en="Full domain">完整域名</label><div class="col-sm-10"><input id="custom-host" class="form-control" type="text" name="host" value="{{.h.Host}}" autocomplete="off" required placeholder="app.example.com"><span class="help-block"><span data-i18n-zh="请将 A/AAAA 或 CNAME 解析到当前面板服务器：" data-i18n-en="Point an A/AAAA or CNAME record to this panel server: ">请将 A/AAAA 或 CNAME 解析到当前面板服务器：</span><code class="custom-domain-server-host">-</code><span data-i18n-zh="。DNS 只解析主机名，不包含面板端口。" data-i18n-en=". DNS uses the hostname only, not the panel port.">。DNS 只解析主机名，不包含面板端口。</span></span></div></div>
+                    <div id="platform-domain-group" class="form-group form-group--wide"{{if not .hostIsPlatform}} style="display:none"{{end}}><label class="col-sm-2 control-label font-bold" data-i18n-zh="平台子域名" data-i18n-en="Platform subdomain">平台子域名</label><div class="col-sm-10"><div class="host-platform-domain-fields"><select id="platform-domain-id" class="form-control" name="platform_domain_id"><option value="" data-i18n-zh="选择泛域名" data-i18n-en="Choose a wildcard">选择泛域名</option>{{range .platformDomains}}<option value="{{.ID}}" data-wildcard="{{.Wildcard}}"{{if eq .ID $.h.PlatformDomainID}} selected{{end}}>{{.Wildcard}}</option>{{end}}</select><input id="platform-prefix" class="form-control" type="text" name="platform_prefix" value="{{.platformPrefix}}" autocomplete="off" aria-describedby="platform-host-status"></div><div id="platform-host-preview" class="host-domain-preview" aria-live="polite"></div><span id="platform-host-status" class="help-block" data-i18n-zh="前缀可修改；保存时服务端会再次原子校验，不允许重复。" data-i18n-en="The prefix is editable. The server checks uniqueness again atomically on save.">前缀可修改；保存时服务端会再次原子校验，不允许重复。</span></div></div>
 
-                    <div class="form-section-title"><i class="fa fa-route" aria-hidden="true"></i><span data-i18n-zh="路由配置" data-i18n-en="Routing">路由配置</span></div>
-                    <div class="form-group">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-urlroute"></label>
-                        <div class="col-sm-10">
-                            <input value="{{.h.Location}}" class="form-control" type="text" name="location" placeholder="" langtag="info-unrestricted">
-                        </div>
-                    </div>
-                {{if eq true .allow_local_proxy}}
-                    <div class="form-group" id="local_proxy">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-proxytolocal"></label>
-                        <div class="col-sm-10">
-                            <div class="toggle-field">
-                                <input type="hidden" name="local_proxy" value="{{if eq true .h.Target.LocalProxy}}1{{else}}0{{end}}">
-                                <label class="toggle-switch"><input type="checkbox" {{if eq true .h.Target.LocalProxy}}checked{{end}}><span class="toggle-slider"></span></label>
-                                <span class="toggle-label" data-toggle-state="{{if eq true .h.Target.LocalProxy}}yes{{else}}no{{end}}">{{if eq true .h.Target.LocalProxy}}是{{else}}否{{end}}</span>
-                            </div>
-                        </div>
-                    </div>
-                {{end}}
-                    <div class="form-group">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-target"></label>
-                        <div class="col-sm-10">
-                            <textarea class="form-control" rows="4" type="text" name="target" placeholder="" langtag="info-suchasiplist">{{.h.Target.TargetStr}}</textarea>
-                            <span class="help-block m-b-none" langtag="info-targethost"></span>
-                        </div>
-                    </div>
+                    <div class="form-section-title"><i class="fa fa-route" aria-hidden="true"></i><span data-i18n-zh="访问与路由" data-i18n-en="Access and routing">访问与路由</span></div>
+                    <div class="form-group"><label class="col-sm-2 control-label font-bold" for="host-scheme" data-i18n-zh="协议" data-i18n-en="Protocol">协议</label><div class="col-sm-10"><select id="host-scheme" class="form-control" name="scheme"><option value="all"{{if eq .h.Scheme "all"}} selected{{end}} data-i18n-zh="HTTP + HTTPS" data-i18n-en="HTTP + HTTPS">HTTP + HTTPS</option><option value="http"{{if eq .h.Scheme "http"}} selected{{end}}>HTTP</option><option value="https"{{if eq .h.Scheme "https"}} selected{{end}}>HTTPS</option></select></div></div>
+                    <div class="form-group"><label class="col-sm-2 control-label font-bold" for="host-location" data-i18n-zh="路径规则" data-i18n-en="Path rule">路径规则</label><div class="col-sm-10"><input id="host-location" class="form-control" type="text" name="location" value="{{.h.Location}}" autocomplete="off" placeholder="/"><span class="help-block" data-i18n-zh="同一域名可用更长的路径规则精确分流。" data-i18n-en="Longer path rules take precedence on the same domain.">同一域名可用更长的路径规则精确分流。</span></div></div>
+                    <div class="form-group" id="auto-https-group"><label class="col-sm-2 control-label font-bold" data-i18n-zh="HTTP 跳转 HTTPS" data-i18n-en="Redirect HTTP to HTTPS">HTTP 跳转 HTTPS</label><div class="col-sm-10"><div class="toggle-field"><input type="hidden" name="AutoHttps" value="{{if .h.AutoHttps}}1{{else}}0{{end}}"><label class="toggle-switch"><input type="checkbox"{{if .h.AutoHttps}} checked{{end}}><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="{{if .h.AutoHttps}}yes{{else}}no{{end}}">{{if .h.AutoHttps}}是{{else}}否{{end}}</span></div></div></div>
+                    {{if eq true .allow_local_proxy}}<div class="form-group"><label class="col-sm-2 control-label font-bold" data-i18n-zh="本地代理" data-i18n-en="Local proxy">本地代理</label><div class="col-sm-10"><div class="toggle-field"><input type="hidden" name="local_proxy" value="{{if .h.Target.LocalProxy}}1{{else}}0{{end}}"><label class="toggle-switch"><input type="checkbox"{{if .h.Target.LocalProxy}} checked{{end}}><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="{{if .h.Target.LocalProxy}}yes{{else}}no{{end}}">{{if .h.Target.LocalProxy}}是{{else}}否{{end}}</span></div></div></div>{{end}}
+                    <div class="form-group form-group--wide"><label class="col-sm-2 control-label font-bold" for="host-target" data-i18n-zh="内网目标" data-i18n-en="Internal target">内网目标</label><div class="col-sm-10"><textarea id="host-target" class="form-control" rows="4" name="target" required>{{.h.Target.TargetStr}}</textarea><span class="help-block" data-i18n-zh="每行一个目标；当前版本按轮询顺序转发。" data-i18n-en="One target per line; this version forwards in round-robin order.">每行一个目标；当前版本按轮询顺序转发。</span></div></div>
+
+                    <div class="form-section-title"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="HTTPS 证书" data-i18n-en="HTTPS certificate">HTTPS 证书</span></div>
+                    <div id="platform-certificate-note" class="form-group form-group--wide"{{if not .hostIsPlatform}} style="display:none"{{end}}><label class="col-sm-2 control-label font-bold" data-i18n-zh="托管证书" data-i18n-en="Managed certificate">托管证书</label><div class="col-sm-10"><div class="host-certificate-lock"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="此平台域名使用管理员配置的证书。证书路径不会暴露给普通用户，也不能修改。" data-i18n-en="This platform domain uses the administrator-managed certificate. Its paths are hidden and cannot be changed by regular users.">此平台域名使用管理员配置的证书。证书路径不会暴露给普通用户，也不能修改。</span></div></div></div>
+                    <div id="custom-certificate-fields" class="form-group form-group--wide"><label class="col-sm-2 control-label font-bold" for="host-cert" data-i18n-zh="证书与私钥" data-i18n-en="Certificate and key">证书与私钥</label><div class="col-sm-10 host-certificate-fields"><textarea id="host-cert" class="form-control" rows="4" name="cert_file_path"{{if .hostIsPlatform}} disabled{{end}} placeholder="/certs/app.example.com.pem 或 PEM 内容">{{if not .hostIsPlatform}}{{.h.CertFilePath}}{{end}}</textarea><textarea id="host-key" class="form-control" rows="4" name="key_file_path"{{if .hostIsPlatform}} disabled{{end}} placeholder="/certs/app.example.com.key 或 PEM 内容">{{if not .hostIsPlatform}}{{.h.KeyFilePath}}{{end}}</textarea><span class="help-block" data-i18n-zh="仅 HTTPS 或双协议规则需要。证书文件与私钥必须成对有效。" data-i18n-en="Required only for HTTPS or dual-protocol rules. The certificate and key must form a valid pair.">仅 HTTPS 或双协议规则需要。证书文件与私钥必须成对有效。</span></div></div>
 
                     <div class="form-section-title"><i class="fa fa-exchange-alt" aria-hidden="true"></i><span data-i18n-zh="请求改写" data-i18n-en="Request rewriting">请求改写</span></div>
-                    <div class="form-group" id="header">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-requestheader"></label>
-                        <div class="col-sm-10">
-                            <textarea class="form-control" rows="4" type="text" name="header" placeholder="Cache-Control: no-cache">{{.h.HeaderChange}}</textarea>
-                            <span class="help-block m-b-none" langtag="info-header"></span>
-                        </div>
-                    </div>
-                    <div class="form-group" id="hostchange">
-                        <label class="col-sm-2 control-label font-bold" langtag="word-requesthost"></label>
-                        <div class="col-sm-10">
-                            <input value="{{.h.HostChange}}" class="form-control" type="text" name="hostchange" placeholder="" langtag="word-requesthost">
-                        </div>
-                    </div>
+                    <div class="form-group form-group--wide"><label class="col-sm-2 control-label font-bold" for="host-headers" data-i18n-zh="附加请求头" data-i18n-en="Additional request headers">附加请求头</label><div class="col-sm-10"><textarea id="host-headers" class="form-control" rows="3" name="header">{{.h.HeaderChange}}</textarea><span class="help-block" data-i18n-zh="每行一个 Name: Value。用于上游需要的固定请求头。" data-i18n-en="One Name: Value pair per line for fixed upstream headers.">每行一个 Name: Value。用于上游需要的固定请求头。</span></div></div>
+                    <div class="form-group"><label class="col-sm-2 control-label font-bold" for="host-hostchange" data-i18n-zh="上游 Host" data-i18n-en="Upstream Host">上游 Host</label><div class="col-sm-10"><input id="host-hostchange" class="form-control" type="text" name="hostchange" value="{{.h.HostChange}}" autocomplete="off" placeholder="留空则保留原 Host"></div></div>
 
                     <div class="hr-line-dashed form-workflow-divider"></div>
-                    <div class="form-group form-workflow-actions">
-                        <div class="col-sm-4 col-sm-offset-2">
-                            <button class="btn btn-success" type="button" onclick="submitform('edit', '{{.web_base_url}}/index/edithost', $('form').serializeArray())">
-                                <i class="fa fa-fw fa-lg fa-save"></i> <span langtag="word-save"></span>
-                            </button>
-                        </div>
-                    </div>
+                    <div class="form-group form-workflow-actions"><div class="col-sm-10"><button class="btn btn-success" type="submit"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存修改" data-i18n-en="Save changes">保存修改</span></button><a class="btn btn-default" href="{{.web_base_url}}/index/hostlist" data-i18n-zh="取消" data-i18n-en="Cancel">取消</a></div></div>
                 </form>
-            </div>
+            </div></section>
         </div>
     </div>
-</div>
 </section>
 
 <script>
-    $(function () {
-        function updateSchemeUI() {
-            var val = $("#scheme_select").val();
-            if (val == "all" || val == "https") {
-                $("#cert_file").show();
-                $("#key_file").show();
-                $("#AutoHttps").show();
-            } else {
-                $("#cert_file").hide();
-                $("#key_file").hide();
-                $("#AutoHttps").hide();
-            }
-        }
-        updateSchemeUI();
-        $("#scheme_select").on("change", updateSchemeUI);
-
-        var pemText = document.getElementById("pemText");
-        var pemKey = document.getElementById("pemKey");
-
-        document.addEventListener("dragover", function(event) { event.preventDefault(); });
-        pemText.addEventListener("drop", function(event) {
-            event.preventDefault();
-            var file = event.dataTransfer.files[0];
-            var reader = new FileReader();
-            reader.onload = function(e) { pemText.value = e.target.result; }
-            reader.readAsText(file);
-        });
-        pemKey.addEventListener("drop", function(event) {
-            event.preventDefault();
-            var file = event.dataTransfer.files[0];
-            var reader = new FileReader();
-            reader.onload = function(e) { pemKey.value = e.target.result; }
-            reader.readAsText(file);
-        });
-
-        // Toggle labels
-        $('.toggle-switch input[type="checkbox"]').on('change', function() {
-            npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked);
-        });
-    })
+$(function () {
+    var form = $('#host-form'), $mode = form.find('input[name="domain_mode"]'), $scheme = $('#host-scheme');
+    var $customGroup = $('#custom-domain-group'), $platformGroup = $('#platform-domain-group'), $platformID = $('#platform-domain-id'), $platformPrefix = $('#platform-prefix'), $preview = $('#platform-host-preview'), $status = $('#platform-host-status'), availabilityTimer;
+    function localized(zh, en) { return typeof npsIsEnglish === 'function' && npsIsEnglish() ? en : zh; }
+    $('.custom-domain-server-host').text(String(window.location.hostname || window.location.host || '-'));
+    function setChoiceState() { $('.host-domain-choice').each(function () { $(this).toggleClass('is-selected', $(this).find('input').is(':checked')); }); }
+    function selectedWildcard() { return String($platformID.find('option:selected').data('wildcard') || ''); }
+    function platformHost() { var suffix = selectedWildcard().replace(/^\*\./, ''), prefix = $.trim($platformPrefix.val()); return prefix && suffix ? prefix + '.' + suffix : ''; }
+    function showAvailability(message, kind) { $status.text(message).removeClass('is-valid is-invalid'); if (kind) $status.addClass(kind); }
+    function checkPlatformAvailability() { window.clearTimeout(availabilityTimer); var host = platformHost(); $preview.text(host || localized('选择泛域名并填写前缀', 'Choose a wildcard and enter a prefix')); if ($mode.filter(':checked').val() !== 'platform') return; var id = $platformID.val(), prefix = $.trim($platformPrefix.val()); if (!id || !prefix) { showAvailability(localized('前缀可修改；保存时服务端会再次原子校验，不允许重复。', 'The server checks uniqueness atomically again when saved.'), ''); return; } availabilityTimer = window.setTimeout(function () { $.ajax({type: 'POST', url: '{{.web_base_url}}/index/platformhostavailable', data: {platform_domain_id: id, platform_prefix: prefix, id: '{{.h.Id}}'}, dataType: 'json'}).done(function (result) { if (result && result.status && result.available) showAvailability(localized('该平台子域名可用。', 'This platform subdomain is available.'), 'is-valid'); else if (result && result.status) showAvailability(localized('该平台子域名已被使用，请更换前缀。', 'This platform subdomain is already in use. Choose another prefix.'), 'is-invalid'); else showAvailability((result && result.msg) || localized('无法校验域名。', 'Unable to validate this domain.'), 'is-invalid'); }).fail(function () { showAvailability(localized('暂时无法校验，保存时仍会由服务端校验。', 'Validation is temporarily unavailable; the server validates again on save.'), ''); }); }, 260); }
+    function updateCertificateFields() { var needsCertificate = $scheme.val() !== 'http', platform = $mode.filter(':checked').val() === 'platform'; $('#auto-https-group').toggle(needsCertificate); $('#platform-certificate-note').toggle(platform); $('#custom-certificate-fields').toggle(needsCertificate && !platform).find('textarea').prop('disabled', !needsCertificate || platform); }
+    function updateDomainMode() { var platform = $mode.filter(':checked').val() === 'platform'; setChoiceState(); $customGroup.toggle(!platform).find('input').prop('disabled', platform).prop('required', !platform); $platformGroup.toggle(platform); $platformID.prop('disabled', !platform); $platformPrefix.prop('disabled', !platform).prop('required', platform); updateCertificateFields(); checkPlatformAvailability(); }
+    function getClientList() { var select = document.getElementById('host-client'); if (!select) return; var selectedID = Number('{{.h.Client.Id}}'); $.ajax({type: 'POST', url: '{{.web_base_url}}/client/list', data: {order: 'asc', offset: 0, limit: 999}, dataType: 'json'}).done(function (data) { select.textContent = ''; (data && Array.isArray(data.rows) ? data.rows : []).forEach(function (client) { var id = Number(client.Id); if (!isFinite(id) || id <= 0) return; var option = document.createElement('option'); option.value = String(id); option.textContent = id + ' · ' + (client.Remark || localized('未命名客户端', 'Unnamed client')); option.selected = id === selectedID; select.appendChild(option); }); }); }
+    form.on('submit', function (event) { event.preventDefault(); submitform('edit', '{{.web_base_url}}/index/edithost', form.serializeArray()); });
+    $mode.on('change', updateDomainMode); $scheme.on('change', updateCertificateFields); $platformID.on('change', checkPlatformAvailability); $platformPrefix.on('input blur', checkPlatformAvailability); form.find('.toggle-switch input[type="checkbox"]').on('change', function () { npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked); });
+    updateDomainMode(); updateCertificateFields(); getClientList();
+});
 </script>

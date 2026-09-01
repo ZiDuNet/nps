@@ -13,7 +13,7 @@ permissions:
   pages: write
   id-token: write
 
-# 并发：同一时刻只允许一次部署，新的提交会取消上一个未完成的运行
+# 并发：同一时刻只允许一次部署，后续提交按顺序发布，避免中途取消已上传的 Pages artifact。
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -34,7 +34,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: docs
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
       - name: Build VuePress site
         working-directory: docs

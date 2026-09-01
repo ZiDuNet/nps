@@ -107,6 +107,10 @@ func (s *BaseController) Prepare() {
 	if httpPort != "80" && showHttpProxyPort {
 		s.Data["http_proxy_port"] = ":" + httpPort
 	}
+	httpsPort := beego.AppConfig.String("https_proxy_port")
+	if httpsPort != "" && httpsPort != "443" {
+		s.Data["https_proxy_port"] = ":" + httpsPort
+	}
 }
 
 // IsAdmin returns the effective privilege for the current request. Signed API

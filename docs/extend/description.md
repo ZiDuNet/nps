@@ -39,6 +39,8 @@ sudo nps reload
 
 `reload` 只适合重新读取认证和管理面板相关配置，例如 `web_username`、`web_password`、`auth_key`、`auth_crypt_key`。监听端口、Bridge、代理协议和正在运行的代理仍应使用 `nps restart`。Windows 修改配置后直接执行 `nps.exe restart`。
 
+证书文件是例外：用于域名 TLS 终结的证书/私钥路径在新的 TLS 连接建立时会重新校验。外部续期脚本以临时文件加 `mv` 替换有效文件后无需重启；如果新文件无效或成对更新的中间状态不匹配，NPS 会继续使用最近一次有效证书。现有 HTTPS 和 WebSocket 连接不会被主动中断，详见[平台域名与证书热更新](platform-domain.md#证书续期与热更新)。
+
 ## 客户端地址与在线状态
 
 客户端列表中的连接地址是 NPS 当前看到的客户端出口地址，不是其内网目标地址。NAT、移动网络、容器和上游代理都会影响这个地址。

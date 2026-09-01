@@ -9,38 +9,38 @@
 }
 
 :root {
-    --nps-canvas: #f4f7fb;
+    --nps-canvas: #f3f6f5;
     --nps-surface: #ffffff;
-    --nps-surface-subtle: #f8fafc;
-    --nps-surface-hover: #eef6ff;
-    --nps-ink: #172033;
-    --nps-muted: #5f6f85;
-    --nps-faint: #8a98aa;
-    --nps-line: #dbe4ef;
-    --nps-line-strong: #c4d1e0;
-    --nps-primary: #1e40af;
-    --nps-primary-hover: #1d4ed8;
-    --nps-primary-soft: #e8efff;
-    --nps-cyan: #087ea4;
-    --nps-cyan-soft: #e2f5fb;
-    --nps-sidebar: #111b2e;
-    --nps-sidebar-ink: #d7e0ef;
-    --nps-sidebar-muted: #8b9ab0;
-    --nps-sidebar-hover: #1a2943;
-    --nps-sidebar-active: #203a6e;
-    --nps-sidebar-line: rgba(210, 225, 250, .13);
+    --nps-surface-subtle: #f7f9f8;
+    --nps-surface-hover: #edf7f5;
+    --nps-ink: #17211f;
+    --nps-muted: #5b6a66;
+    --nps-faint: #83918d;
+    --nps-line: #dce5e1;
+    --nps-line-strong: #c7d5d0;
+    --nps-primary: #0f766e;
+    --nps-primary-hover: #0b625b;
+    --nps-primary-soft: #d9f1ed;
+    --nps-cyan: #087f8c;
+    --nps-cyan-soft: #d9f2f4;
+    --nps-sidebar: #13211e;
+    --nps-sidebar-ink: #d7e7e1;
+    --nps-sidebar-muted: #8fa8a0;
+    --nps-sidebar-hover: #1c332e;
+    --nps-sidebar-active: #164e48;
+    --nps-sidebar-line: rgba(211, 235, 225, .13);
     --nps-success: #16794c;
     --nps-success-soft: #e5f5ec;
     --nps-warning: #a46105;
     --nps-warning-soft: #fff2d8;
     --nps-danger: #b42332;
     --nps-danger-soft: #fde8eb;
-    --nps-info: #1769aa;
-    --nps-info-soft: #e6f1fc;
-    --nps-shadow: 0 12px 30px rgba(27, 52, 84, .08);
-    --nps-shadow-sm: 0 2px 8px rgba(27, 52, 84, .07);
+    --nps-info: #176f88;
+    --nps-info-soft: #e2f3f6;
+    --nps-shadow: 0 12px 30px rgba(27, 52, 46, .08);
+    --nps-shadow-sm: 0 2px 8px rgba(27, 52, 46, .07);
     --nps-radius: 8px;
-    --nps-focus: 0 0 0 3px rgba(59, 130, 246, .2);
+    --nps-focus: 0 0 0 3px rgba(15, 118, 110, .22);
     --c-accent: var(--nps-primary);
     --c-accent-light: var(--nps-primary-soft);
     --c-border: var(--nps-line);
@@ -49,38 +49,50 @@
 }
 
 [data-theme="dark"] {
-    --nps-canvas: #0f1726;
-    --nps-surface: #172235;
-    --nps-surface-subtle: #1b2a40;
-    --nps-surface-hover: #203653;
-    --nps-ink: #edf3fc;
-    --nps-muted: #aab8cb;
-    --nps-faint: #8191a8;
-    --nps-line: #2a3b54;
-    --nps-line-strong: #3b4f6b;
-    --nps-primary: #80a9ff;
-    --nps-primary-hover: #a8c4ff;
-    --nps-primary-soft: #223a67;
-    --nps-cyan: #6bd0e8;
-    --nps-cyan-soft: #173c4a;
-    --nps-sidebar: #0a1220;
-    --nps-sidebar-ink: #dce8f8;
-    --nps-sidebar-muted: #8b9db6;
-    --nps-sidebar-hover: #14243b;
-    --nps-sidebar-active: #1a3158;
-    --nps-sidebar-line: rgba(210, 225, 250, .12);
+    --nps-canvas: #101917;
+    --nps-surface: #16211e;
+    --nps-surface-subtle: #1b2925;
+    --nps-surface-hover: #20362f;
+    --nps-ink: #ecf4f0;
+    --nps-muted: #adbbb6;
+    --nps-faint: #84958f;
+    --nps-line: #2b3e37;
+    --nps-line-strong: #3b514a;
+    --nps-primary: #5bd1c0;
+    --nps-primary-hover: #8ae4d8;
+    --nps-primary-soft: #1d4740;
+    --nps-cyan: #67d4dd;
+    --nps-cyan-soft: #173f42;
+    --nps-sidebar: #0b1512;
+    --nps-sidebar-ink: #d9e9e3;
+    --nps-sidebar-muted: #8da79e;
+    --nps-sidebar-hover: #142923;
+    --nps-sidebar-active: #17453e;
+    --nps-sidebar-line: rgba(211, 235, 225, .12);
     --nps-success: #65d19b;
     --nps-success-soft: #163b2a;
     --nps-warning: #f2bf71;
     --nps-warning-soft: #49351d;
     --nps-danger: #ff9da6;
     --nps-danger-soft: #4b272d;
-    --nps-info: #8dc5f4;
-    --nps-info-soft: #1b3853;
+    --nps-info: #8bd6e5;
+    --nps-info-soft: #183e42;
     --nps-shadow: 0 14px 34px rgba(0, 0, 0, .28);
     --nps-shadow-sm: 0 3px 10px rgba(0, 0, 0, .22);
-    --nps-focus: 0 0 0 3px rgba(128, 169, 255, .24);
+    --nps-focus: 0 0 0 3px rgba(91, 209, 192, .25);
 }
+[data-theme="dark"] body.zui-app ::selection { color: #0a211d; }
+[data-theme="dark"] body.zui-app .btn-primary,
+[data-theme="dark"] body.zui-app .btn.primary,
+[data-theme="dark"] body.zui-app .form-horizontal .btn-success,
+[data-theme="dark"] body.zui-app .login-btn,
+[data-theme="dark"] body.zui-app .btn-success,
+[data-theme="dark"] body.zui-app .btn-warning,
+[data-theme="dark"] body.zui-app .btn-danger,
+[data-theme="dark"] body.zui-app .btn-info,
+[data-theme="dark"] body.zui-app .pagination > .active > a,
+[data-theme="dark"] body.zui-app .pagination > .active > a:hover,
+[data-theme="dark"] body.zui-app .pagination > .active > span { color: #0a211d !important; }
 
 html {
     background: var(--nps-canvas);
@@ -133,21 +145,21 @@ body.zui-app .nps-brand-mark {
     height: 39px;
     align-items: center;
     justify-content: center;
-    color: #c9dcff;
-    background: #1c3563;
-    border: 1px solid #4265a1;
+    color: #d8f4eb;
+    background: #16453e;
+    border: 1px solid #32766b;
     border-radius: var(--nps-radius);
 }
-body.zui-app .nps-brand-mark i { color: #9dbdff !important; font-size: 17px !important; }
+body.zui-app .nps-brand-mark i { color: #95dfd2 !important; font-size: 17px !important; }
 body.zui-app .nps-brand-copy { display: grid; gap: 1px; min-width: 0; }
 body.zui-app .nps-brand-copy strong { color: #f5f8ff; font-size: 18px; font-weight: 750; letter-spacing: .03em; }
 body.zui-app .nps-brand-copy small { color: var(--nps-sidebar-muted); font-size: 11px; line-height: 1.35; }
 body.zui-app .nav-account { display: flex; align-items: center; gap: 9px; margin-top: 16px; color: var(--nps-sidebar-muted); }
-body.zui-app .nav-account > i { width: 17px; color: #8db3ff; font-size: 13px; text-align: center; }
+body.zui-app .nav-account > i { width: 17px; color: #87d5c8; font-size: 13px; text-align: center; }
 body.zui-app .nav-account span { display: grid; gap: 1px; min-width: 0; }
 body.zui-app .nav-account strong { color: var(--nps-sidebar-ink); font-size: 12px; font-weight: 650; }
 body.zui-app .nav-account small { color: var(--nps-sidebar-muted); font-size: 11px; }
-body.zui-app .nav-header .logo-element { padding: 8px 0 !important; color: #9dbdff !important; font-weight: 750; letter-spacing: .08em; }
+body.zui-app .nav-header .logo-element { padding: 8px 0 !important; color: #95dfd2 !important; font-weight: 750; letter-spacing: .08em; }
 body.zui-app #side-menu { padding: 13px 0 24px; }
 body.zui-app #side-menu li a,
 body.zui-app #side-menu .zui-nav-item {
@@ -164,10 +176,10 @@ body.zui-app #side-menu .zui-nav-item {
 }
 body.zui-app #side-menu li a i { width: 21px; margin-right: 10px; color: var(--nps-sidebar-muted) !important; font-size: 15px !important; text-align: center; }
 body.zui-app #side-menu li a:hover { color: #fff !important; background: var(--nps-sidebar-hover) !important; }
-body.zui-app #side-menu li a:hover i { color: #a9c4ff !important; }
+body.zui-app #side-menu li a:hover i { color: #9ce3d7 !important; }
 body.zui-app #side-menu > li.active { background: transparent !important; border-left: 0 !important; }
-body.zui-app #side-menu li.active > a { color: #fff !important; background: var(--nps-sidebar-active) !important; box-shadow: inset 3px 0 #8db3ff; font-weight: 650; }
-body.zui-app #side-menu li.active > a i { color: #a9c4ff !important; }
+body.zui-app #side-menu li.active > a { color: #fff !important; background: var(--nps-sidebar-active) !important; box-shadow: inset 3px 0 #91ddcf; font-weight: 650; }
+body.zui-app #side-menu li.active > a i { color: #9ce3d7 !important; }
 body.zui-app .nav-group-title { margin: 18px 22px 6px; padding: 0 0 7px !important; color: var(--nps-sidebar-muted) !important; border-bottom: 1px solid var(--nps-sidebar-line); font-size: 10px !important; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; pointer-events: none; }
 
 body.zui-app #page-wrapper { min-height: 100vh; margin-left: 256px !important; padding: 74px clamp(16px, 1.2vw, 24px) 42px !important; border: 0 !important; transition: margin-left .18s ease; }
@@ -185,12 +197,12 @@ body.zui-app .white-bg {
     background: rgba(255, 255, 255, .96) !important;
     border: 0 !important;
     border-bottom: 1px solid var(--nps-line) !important;
-    box-shadow: 0 1px 5px rgba(27, 52, 84, .04);
+    box-shadow: 0 1px 5px rgba(27, 52, 46, .04);
     transition: left .18s ease;
 }
 [data-theme="dark"] body.zui-app .navbar-fixed-top,
 [data-theme="dark"] body.zui-app .navbar-static-top,
-[data-theme="dark"] body.zui-app .white-bg { background: rgba(23, 34, 53, .97) !important; }
+[data-theme="dark"] body.zui-app .white-bg { background: rgba(22, 33, 30, .97) !important; }
 body.zui-app .navbar-header { min-height: 60px; }
 body.zui-app .navbar-minimalize { width: 36px; height: 36px; margin: 12px 0 0 17px !important; padding: 0 !important; color: var(--nps-muted) !important; background: var(--nps-surface) !important; border: 1px solid var(--nps-line) !important; border-radius: 6px !important; box-shadow: none !important; }
 body.zui-app .navbar-minimalize:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; border-color: var(--nps-primary-soft) !important; }
@@ -363,6 +375,300 @@ body.zui-app .form-workflow-actions .btn { min-width: 102px; }
 body.zui-app .input-group .form-control { border-right: 0 !important; }
 body.zui-app .input-group-btn .btn { min-width: 41px; height: 39px; color: var(--nps-muted); background: var(--nps-surface) !important; border: 1px solid var(--nps-line-strong) !important; border-left: 0 !important; border-radius: 0 6px 6px 0 !important; }
 
+/* Operational forms use a two-column field grid while keeping legacy Bootstrap markup intact. */
+body.zui-app .form-page-client .form-page-grid,
+body.zui-app .form-page-tunnel .form-page-grid,
+body.zui-app .form-page-user .form-page-grid {
+    --tunnel-field-display: grid;
+}
+body.zui-app .form-page-client .form-workflow-card,
+body.zui-app .form-page-tunnel .form-workflow-card,
+body.zui-app .form-page-user .form-workflow-card {
+    width: min(100%, 1320px);
+    margin-right: auto !important;
+    margin-bottom: 18px !important;
+    margin-left: auto !important;
+}
+body.zui-app .form-page-client .form-workflow-content,
+body.zui-app .form-page-tunnel .form-workflow-content,
+body.zui-app .form-page-user .form-workflow-content {
+    padding: 31px 34px 29px !important;
+}
+body.zui-app .form-page-client .form-workflow-form,
+body.zui-app .form-page-tunnel .form-workflow-form,
+body.zui-app .form-page-user .form-workflow-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 28px;
+    width: 100%;
+    max-width: 1240px;
+    margin: 0 auto;
+}
+body.zui-app .form-page-client .form-workflow-form > .form-section-title,
+body.zui-app .form-page-tunnel .form-workflow-form > .form-section-title,
+body.zui-app .form-page-user .form-workflow-form > .form-section-title,
+body.zui-app .form-page-client .form-workflow-form > .hr-line-dashed,
+body.zui-app .form-page-tunnel .form-workflow-form > .hr-line-dashed,
+body.zui-app .form-page-user .form-workflow-form > .hr-line-dashed,
+body.zui-app .form-page-client .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page-tunnel .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page-user .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page-client .form-workflow-form > .form-group--wide,
+body.zui-app .form-page-tunnel .form-workflow-form > .form-group--wide,
+body.zui-app .form-page-user .form-workflow-form > .form-group--wide {
+    grid-column: 1 / -1;
+}
+body.zui-app .form-page-client .form-workflow-form > .form-group,
+body.zui-app .form-page-tunnel .form-workflow-form > .form-group,
+body.zui-app .form-page-user .form-workflow-form > .form-group {
+    display: grid;
+    grid-template-columns: minmax(92px, 30%) minmax(0, 1fr);
+    align-items: start;
+    column-gap: 13px;
+    min-width: 0;
+    margin: 0 0 20px !important;
+}
+body.zui-app .form-page-client .form-workflow-form > .form-group.is-hidden {
+    display: none !important;
+}
+body.zui-app .form-page-client .form-workflow-form > .form-group > [class*="col-"],
+body.zui-app .form-page-tunnel .form-workflow-form > .form-group > [class*="col-"],
+body.zui-app .form-page-user .form-workflow-form > .form-group > [class*="col-"] {
+    float: none;
+    /* Bootstrap declares fixed column widths with !important. Let grid tracks
+       own the sizing so Chinese labels cannot collapse to one character wide. */
+    width: auto !important;
+    max-width: none !important;
+    flex: none !important;
+    min-width: 0;
+    margin-left: 0 !important;
+    padding-right: 0 !important;
+    padding-left: 0 !important;
+}
+body.zui-app .form-page-client .form-workflow-form > .form-group > label,
+body.zui-app .form-page-tunnel .form-workflow-form > .form-group > label,
+body.zui-app .form-page-user .form-workflow-form > .form-group > label {
+    min-width: 0;
+    padding-top: 8px !important;
+    overflow-wrap: anywhere;
+}
+body.zui-app .form-page-client .form-workflow-form .form-control,
+body.zui-app .form-page-tunnel .form-workflow-form .form-control,
+body.zui-app .form-page-user .form-workflow-form .form-control,
+body.zui-app .form-page-client .form-workflow-form .input-group,
+body.zui-app .form-page-tunnel .form-workflow-form .input-group,
+body.zui-app .form-page-user .form-workflow-form .input-group {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+body.zui-app .form-page-client .form-workflow-form .help-block,
+body.zui-app .form-page-tunnel .form-workflow-form .help-block,
+body.zui-app .form-page-user .form-workflow-form .help-block {
+    overflow-wrap: anywhere;
+}
+body.zui-app .form-page-client .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page-tunnel .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page-user .form-workflow-form > .form-workflow-actions {
+    display: flex !important;
+    align-items: center;
+    min-height: 39px;
+    margin-top: 2px !important;
+    margin-bottom: 0 !important;
+}
+body.zui-app .form-page-client .form-workflow-form > .form-workflow-actions > [class*="col-"],
+body.zui-app .form-page-tunnel .form-workflow-form > .form-workflow-actions > [class*="col-"],
+body.zui-app .form-page-user .form-workflow-form > .form-workflow-actions > [class*="col-"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: auto;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Domain and global settings share the same centered, two-column operation form. */
+body.zui-app .form-page-host .form-workflow-card,
+body.zui-app .form-page-global .form-workflow-card {
+    width: min(100%, 1320px);
+    margin-right: auto !important;
+    margin-bottom: 18px !important;
+    margin-left: auto !important;
+}
+body.zui-app .form-page-host .form-workflow-content,
+body.zui-app .form-page-global .form-workflow-content { padding: 31px 34px 29px !important; }
+body.zui-app .form-page-host .form-workflow-form,
+body.zui-app .form-page-global .form-workflow-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 28px;
+    width: 100%;
+    max-width: 1240px;
+    margin: 0 auto;
+}
+body.zui-app .form-page-host .form-workflow-form > .form-section-title,
+body.zui-app .form-page-global .form-workflow-form > .form-section-title,
+body.zui-app .form-page-host .form-workflow-form > .hr-line-dashed,
+body.zui-app .form-page-global .form-workflow-form > .hr-line-dashed,
+body.zui-app .form-page-host .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page-global .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page-host .form-workflow-form > .form-group--wide,
+body.zui-app .form-page-global .form-workflow-form > .form-group--wide { grid-column: 1 / -1; }
+body.zui-app .form-page-host .form-workflow-form > .form-group,
+body.zui-app .form-page-global .form-workflow-form > .form-group {
+    display: grid;
+    grid-template-columns: minmax(92px, 30%) minmax(0, 1fr);
+    align-items: start;
+    column-gap: 13px;
+    min-width: 0;
+    margin: 0 0 20px !important;
+}
+body.zui-app .form-page-host .form-workflow-form > .form-group > [class*="col-"],
+body.zui-app .form-page-global .form-workflow-form > .form-group > [class*="col-"] {
+    float: none;
+    /* Overrides the legacy Bootstrap width: 16.6667% !important declaration. */
+    width: auto !important;
+    max-width: none !important;
+    flex: none !important;
+    min-width: 0;
+    margin-left: 0 !important;
+    padding-right: 0 !important;
+    padding-left: 0 !important;
+}
+body.zui-app .form-page-host .form-workflow-form > .form-group > label,
+body.zui-app .form-page-global .form-workflow-form > .form-group > label { min-width: 0; padding-top: 8px !important; overflow-wrap: anywhere; }
+body.zui-app .form-page-host .form-workflow-form .form-control,
+body.zui-app .form-page-global .form-workflow-form .form-control { width: 100%; min-width: 0; max-width: 100%; }
+body.zui-app .form-page-host .form-workflow-form .help-block,
+body.zui-app .form-page-global .form-workflow-form .help-block { overflow-wrap: anywhere; }
+body.zui-app .form-page-host .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page-global .form-workflow-form > .form-workflow-actions { display: flex !important; align-items: center; min-height: 39px; margin-top: 2px !important; margin-bottom: 0 !important; }
+body.zui-app .form-page-host .form-workflow-form > .form-workflow-actions > [class*="col-"],
+body.zui-app .form-page-global .form-workflow-form > .form-workflow-actions > [class*="col-"] { display: flex; flex-wrap: wrap; gap: 8px; width: auto; margin: 0 !important; padding: 0 !important; }
+
+body.zui-app .host-domain-source__choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+body.zui-app .host-domain-choice { display: block; min-width: 0; margin: 0; cursor: pointer; }
+body.zui-app .host-domain-choice input { position: absolute; opacity: 0; pointer-events: none; }
+body.zui-app .host-domain-choice > span { display: grid; grid-template-columns: 21px minmax(0, 1fr); column-gap: 9px; min-height: 84px; padding: 14px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 6px; transition: border-color .15s ease, background-color .15s ease; }
+body.zui-app .host-domain-choice i { grid-row: 1 / span 2; padding-top: 2px; color: var(--nps-primary); }
+body.zui-app .host-domain-choice strong { color: var(--nps-ink); font-size: 13px; font-weight: 700; }
+body.zui-app .host-domain-choice small { grid-column: 2; margin-top: 3px; color: var(--nps-muted); font-size: 11px; line-height: 1.45; }
+body.zui-app .host-domain-choice.is-selected > span { background: var(--nps-primary-soft); border-color: var(--nps-primary); box-shadow: inset 3px 0 var(--nps-primary); }
+body.zui-app .host-domain-choice:focus-within > span { border-color: var(--nps-primary); box-shadow: var(--nps-focus); }
+body.zui-app .host-domain-choice.is-disabled { cursor: not-allowed; opacity: .55; }
+body.zui-app .host-platform-domain-fields { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(0, 1.1fr); gap: 10px; }
+body.zui-app .host-domain-preview { min-height: 39px; margin-top: 10px; padding: 9px 11px; color: var(--nps-primary); background: var(--nps-primary-soft); border: 1px solid var(--nps-line); border-radius: 6px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; overflow-wrap: anywhere; }
+body.zui-app #platform-host-status.is-valid { color: var(--nps-success) !important; }
+body.zui-app #platform-host-status.is-invalid { color: var(--nps-danger) !important; }
+body.zui-app .host-certificate-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+body.zui-app .host-certificate-fields .help-block { grid-column: 1 / -1; }
+body.zui-app .host-certificate-lock { display: flex; align-items: flex-start; gap: 9px; padding: 12px 13px; color: var(--nps-muted); background: var(--nps-primary-soft); border: 1px solid var(--nps-line); border-radius: 6px; line-height: 1.55; }
+body.zui-app .host-certificate-lock i { padding-top: 2px; color: var(--nps-primary); }
+
+body.zui-app .platform-domain-list { display: grid; gap: 12px; margin: 12px 0; }
+body.zui-app .platform-domain-row { padding: 15px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 6px; }
+body.zui-app .platform-domain-row__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+body.zui-app .platform-domain-row__header strong { color: var(--nps-ink); font-size: 14px; overflow-wrap: anywhere; }
+body.zui-app .platform-domain-reference { display: inline-flex; align-items: center; gap: 5px; margin-left: 9px; color: var(--nps-muted); font-size: 11px; }
+body.zui-app .platform-domain-row__fields { display: grid; grid-template-columns: 1fr 1.25fr 1.25fr; gap: 10px; }
+body.zui-app .platform-domain-row__fields label { display: grid; gap: 5px; min-width: 0; margin: 0; color: var(--nps-muted); font-size: 11px; font-weight: 650; }
+body.zui-app .platform-domain-health { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 13px 0 0; padding-top: 12px; border-top: 1px solid var(--nps-line); }
+body.zui-app .platform-domain-health div { min-width: 0; }
+body.zui-app .platform-domain-health dt { margin: 0 0 3px; color: var(--nps-faint); font-size: 10px; font-weight: 700; }
+body.zui-app .platform-domain-health dd { margin: 0; color: var(--nps-ink); font-size: 12px; overflow-wrap: anywhere; }
+body.zui-app .platform-cert-status { color: var(--nps-primary) !important; font-weight: 700; }
+
+/* Compact domain table: retain the operational fields without a desktop horizontal scroller. */
+body.zui-app .management-page--host { max-width: 1800px; margin: 0 auto; }
+@media (min-width: 992px) {
+    body.zui-app .management-page--host .fixed-table-body,
+    body.zui-app .management-page--host .fixed-table-header { overflow-x: hidden !important; }
+    body.zui-app .management-page--host .fixed-table-container .table { width: 100% !important; table-layout: fixed; }
+    body.zui-app .management-page--host .fixed-table-container .table th,
+    body.zui-app .management-page--host .fixed-table-container .table td { padding: 11px 9px !important; overflow: hidden; }
+    body.zui-app .management-page--host .fixed-table-container .table td { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+    body.zui-app .management-page--host .host-list__entry { width: 29% !important; }
+    body.zui-app .management-page--host .host-list__remark { width: 12% !important; }
+    body.zui-app .management-page--host .host-list__client { width: 14% !important; }
+    body.zui-app .management-page--host .host-list__target { width: 20% !important; }
+    body.zui-app .management-page--host .host-list__actions { width: 148px !important; overflow: visible !important; }
+}
+body.zui-app .host-entry { display: grid; gap: 7px; min-width: 0; }
+body.zui-app .host-entry__name { display: flex; align-items: center; gap: 6px; color: var(--nps-ink); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+body.zui-app .host-entry__links { display: flex; flex-wrap: wrap; gap: 6px; }
+body.zui-app .host-endpoint { display: inline-flex; align-items: center; gap: 5px; min-height: 23px; padding: 3px 6px; color: var(--nps-primary) !important; background: var(--nps-primary-soft); border-radius: 4px; font-size: 10px; font-weight: 700; }
+body.zui-app .host-endpoint:hover { background: var(--nps-surface-hover); }
+body.zui-app .host-endpoint i { font-size: 9px; }
+body.zui-app .host-platform-badge { flex: 0 0 auto; font-family: inherit; font-size: 10px; }
+body.zui-app .host-client { display: grid; gap: 3px; min-width: 0; }
+body.zui-app .host-client > span { color: var(--nps-ink); overflow-wrap: anywhere; }
+body.zui-app .host-client small { font-size: 11px; font-weight: 650; }
+body.zui-app .host-client .is-online { color: var(--nps-success); }
+body.zui-app .host-client .is-offline { color: var(--nps-faint); }
+body.zui-app .host-target-cell { display: block; min-width: 0; padding: 0; color: var(--nps-muted); background: transparent; border: 0; font-size: 11px; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
+body.zui-app .host-actions { display: inline-flex; flex-wrap: nowrap; justify-content: center; gap: 4px; }
+body.zui-app .host-actions > .btn { width: 34px; min-width: 34px; height: 34px; padding: 0 !important; }
+body.zui-app .host-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; padding: 10px 4px; }
+body.zui-app .host-detail-grid > div { display: grid; gap: 4px; min-width: 0; }
+body.zui-app .host-detail-grid span { color: var(--nps-faint); font-size: 11px; font-weight: 650; }
+body.zui-app .host-detail-grid strong { color: var(--nps-ink); font-size: 12px; overflow-wrap: anywhere; }
+body.zui-app .host-detail-grid code { padding: 7px 9px; color: var(--nps-ink); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+body.zui-app .host-detail-grid__wide { grid-column: 1 / -1; }
+
+body.zui-app .diagnostic-page { max-width: 1180px; margin: 0 auto; }
+body.zui-app .diagnostic-layout { display: grid; grid-template-columns: minmax(300px, .84fr) minmax(0, 1.16fr); gap: 18px; align-items: start; }
+body.zui-app .diagnostic-form-card .ibox-content,
+body.zui-app .diagnostic-result-card .ibox-content { padding: 24px !important; }
+body.zui-app .diagnostic-form { display: grid; gap: 18px; }
+body.zui-app .diagnostic-form__field { display: grid; gap: 6px; }
+body.zui-app .diagnostic-form__field > label { color: var(--nps-ink); font-size: 13px; font-weight: 700; }
+body.zui-app .diagnostic-form__submit { justify-self: start; min-width: 122px; }
+body.zui-app .diagnostic-result-card[hidden] { display: none !important; }
+body.zui-app .diagnostic-result-card__heading { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 17px; border-bottom: 1px solid var(--nps-line); }
+body.zui-app .diagnostic-result-card__icon { display: inline-flex; flex: 0 0 auto; width: 36px; height: 36px; align-items: center; justify-content: center; color: var(--nps-primary); background: var(--nps-primary-soft); border-radius: 6px; }
+body.zui-app .diagnostic-result-card.is-miss .diagnostic-result-card__icon { color: var(--nps-warning); background: var(--nps-warning-soft); }
+body.zui-app .diagnostic-result-card__heading h2 { margin: 0; color: var(--nps-ink); font-size: 16px; font-weight: 750; }
+body.zui-app .diagnostic-result-card__heading p { margin: 4px 0 0; color: var(--nps-muted); font-size: 12px; line-height: 1.55; }
+body.zui-app .diagnostic-rule-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding-top: 18px; }
+body.zui-app .diagnostic-rule-details > div { display: grid; gap: 4px; min-width: 0; }
+body.zui-app .diagnostic-rule-details span { color: var(--nps-faint); font-size: 11px; font-weight: 650; }
+body.zui-app .diagnostic-rule-details strong { color: var(--nps-ink); font-size: 12px; overflow-wrap: anywhere; }
+body.zui-app .diagnostic-rule-details code { padding: 8px 9px; color: var(--nps-ink); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+body.zui-app .diagnostic-rule-details__wide { grid-column: 1 / -1; }
+
+@media (max-width: 1199px) and (min-width: 992px) {
+    body.zui-app .management-page--host .host-list__target { display: none; }
+}
+@media (max-width: 991px) {
+    body.zui-app .form-page-host .form-workflow-form,
+    body.zui-app .form-page-global .form-workflow-form { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 768px) {
+    body.zui-app .form-page-host .form-workflow-card,
+    body.zui-app .form-page-global .form-workflow-card { width: 100%; }
+    body.zui-app .form-page-host .form-workflow-content,
+    body.zui-app .form-page-global .form-workflow-content { padding: 22px 18px 20px !important; }
+    body.zui-app .form-page-host .form-workflow-form > .form-group,
+    body.zui-app .form-page-global .form-workflow-form > .form-group { grid-template-columns: minmax(0, 1fr); row-gap: 6px; margin-bottom: 18px !important; }
+    body.zui-app .form-page-host .form-workflow-form > .form-group > label,
+    body.zui-app .form-page-global .form-workflow-form > .form-group > label { padding-top: 0 !important; }
+    /* Responsive grid layout must not resurrect fields hidden by the host-mode
+       switch. jQuery keeps the state as an inline display:none declaration. */
+    body.zui-app .form-page-host .form-workflow-form > .form-group[style*="display: none"] { display: none !important; }
+    body.zui-app .host-domain-source__choices,
+    body.zui-app .host-platform-domain-fields,
+    body.zui-app .host-certificate-fields,
+    body.zui-app .platform-domain-row__fields,
+    body.zui-app .platform-domain-health,
+    body.zui-app .host-detail-grid { grid-template-columns: minmax(0, 1fr); }
+    body.zui-app .diagnostic-layout,
+    body.zui-app .diagnostic-rule-details { grid-template-columns: minmax(0, 1fr); }
+    body.zui-app .platform-domain-reference { display: flex; margin: 5px 0 0; }
+    body.zui-app .platform-domain-row__header { align-items: flex-start; }
+    body.zui-app .host-detail-grid__wide { grid-column: auto; }
+    body.zui-app .diagnostic-rule-details__wide { grid-column: auto; }
+}
+
 /* Details, helper pages, footer, and error state. */
 body.zui-app .client-detail__section-title { color: var(--nps-primary); border-bottom-color: var(--nps-line); }
 body.zui-app .client-detail__label, body.zui-app .client-detail__command-label { color: var(--nps-muted); }
@@ -412,7 +718,8 @@ body.zui-app .form-page > .row > [class*="col-"] {
     padding-right: 0 !important;
     padding-left: 0 !important;
 }
-body.zui-app .form-page { max-width: 1760px; }
+/* Keep form headers and their 1320px workflow card on the same visual axis. */
+body.zui-app .form-page { width: 100%; max-width: 1320px; margin: 0 auto; }
 
 /* The surrounding auth layout owns the only visible frame. */
 body.auth-body .auth-layout > .auth-panel {
@@ -527,6 +834,9 @@ body.zui-app .client-detail__copy {
     body.zui-app #page-wrapper { margin-left: 220px !important; padding-right: 20px !important; padding-left: 20px !important; }
     body.zui-app .navbar-fixed-top, body.zui-app .navbar-static-top, body.zui-app .white-bg { left: 220px !important; }
     body.zui-app .dashboard-page-header { align-items: flex-start; flex-direction: column; gap: 14px; }
+    body.zui-app .form-page-client .form-workflow-form,
+    body.zui-app .form-page-tunnel .form-workflow-form,
+    body.zui-app .form-page-user .form-workflow-form { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 768px) {
@@ -564,6 +874,22 @@ body.zui-app .client-detail__copy {
     body.zui-app .navbar-fixed-top, body.zui-app .navbar-static-top, body.zui-app .white-bg { left: 0 !important; }
     body.zui-app .navbar-top-links > li:first-child { display: none; }
     body.zui-app .form-workflow-content { padding: 22px 18px 20px !important; }
+    body.zui-app .form-page-client .form-workflow-card,
+    body.zui-app .form-page-tunnel .form-workflow-card,
+    body.zui-app .form-page-user .form-workflow-card { width: 100%; }
+    body.zui-app .form-page-client .form-workflow-content,
+    body.zui-app .form-page-tunnel .form-workflow-content,
+    body.zui-app .form-page-user .form-workflow-content { padding: 22px 18px 20px !important; }
+    body.zui-app .form-page-client .form-workflow-form > .form-group,
+    body.zui-app .form-page-tunnel .form-workflow-form > .form-group,
+    body.zui-app .form-page-user .form-workflow-form > .form-group {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 6px;
+        margin-bottom: 18px !important;
+    }
+    body.zui-app .form-page-client .form-workflow-form > .form-group > label,
+    body.zui-app .form-page-tunnel .form-workflow-form > .form-group > label,
+    body.zui-app .form-page-user .form-workflow-form > .form-group > label { padding-top: 0 !important; }
     body.zui-app .fixed-table-toolbar { padding: 12px !important; }
     body.zui-app .bootstrap-table .fixed-table-toolbar { flex-wrap: wrap; }
     body.zui-app .bootstrap-table .fixed-table-toolbar > .search {
@@ -574,6 +900,39 @@ body.zui-app .client-detail__copy {
     }
     body.zui-app .fixed-table-toolbar .search input { width: 100% !important; }
     body.zui-app .fixed-table-toolbar .columns { margin-top: 0 !important; }
+    /* Phone-sized domain lists use Bootstrap Table's card view. It prevents a
+       long hostname or a row expansion from forcing a hidden X-axis. */
+    body.zui-app .management-page--host .fixed-table-body,
+    body.zui-app .management-page--host .fixed-table-header { overflow-x: hidden !important; }
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table {
+        width: 100% !important;
+        min-width: 0 !important;
+        table-layout: auto;
+    }
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(4),
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(4),
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(5),
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(5),
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(6),
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(6),
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(7),
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(7) { display: none; }
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(1),
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(1) { width: 36px !important; padding-right: 5px !important; padding-left: 5px !important; }
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(2),
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(2) { width: 40px !important; padding-right: 5px !important; padding-left: 5px !important; }
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(8),
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(8) { width: 104px !important; padding-right: 5px !important; padding-left: 5px !important; }
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .host-entry__name { font-size: 11px; }
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .host-actions { gap: 2px; }
+    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .host-actions > .btn { width: 30px; min-width: 30px; height: 30px; }
+    body.zui-app .management-page--host .fixed-table-container.has-card-view .fixed-table-body { overflow: visible !important; }
+    body.zui-app .management-page--host .fixed-table-container.has-card-view .table { width: 100% !important; min-width: 0 !important; }
+    body.zui-app .management-page--host .fixed-table-container.has-card-view .card-view { display: grid; grid-template-columns: minmax(76px, 36%) minmax(0, 1fr); gap: 8px; min-width: 0; }
+    body.zui-app .management-page--host .fixed-table-container.has-card-view .card-view .card-view-title { color: var(--nps-faint); font-size: 11px; font-weight: 700; }
+    body.zui-app .management-page--host .fixed-table-container.has-card-view .card-view .card-view-value { min-width: 0; color: var(--nps-ink); overflow-wrap: anywhere; }
+    body.zui-app .management-page--host .fixed-table-container.has-card-view .host-entry__name { font-size: 12px; }
+    body.zui-app .management-page--host .fixed-table-container.has-card-view .host-actions { justify-content: flex-start; }
     body.zui-app .client-detail__command { grid-template-columns: minmax(0, 1fr) 36px; gap: 6px 8px; }
     body.zui-app .client-detail__command-label { grid-column: 1 / -1; padding-top: 0; }
     body.zui-app .table-responsive { border: 0; }

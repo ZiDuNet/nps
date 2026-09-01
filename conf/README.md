@@ -13,7 +13,7 @@ JSON 文件由管理面板和服务端自动维护，不要手工加入注释、
 - `clients.json`：客户端列表。常用字段：`Id` 客户端编号、`VerifyKey` 验证密钥、`Remark` 备注、`Status` 是否允许连接、`RateLimit` 速率上限（KB/S）、`MaxConn` 最大连接数、`MaxTunnelNum` 最大隧道数、`IpWhite` 是否启用 IP 白名单、`ExpireTime` 到期时间。
 - `tasks.json`：端口隧道列表。常用字段：`Id` 编号、`Port` 公网端口、`ServerIp` 监听 IP、`Mode` 代理模式、`Client.Id` 所属客户端、`Target.TargetStr` 内网目标、`Status` 是否启用、`HealthCheckType` 健康检查类型。
 - `hosts.json`：HTTP/HTTPS 主机列表。常用字段：`Host` 域名、`Scheme` 协议、`Location` URL 路径、`Target.TargetStr` 内网目标、`CertFilePath`/`KeyFilePath` 证书和私钥、`AutoHttps` 是否自动 HTTPS、`HeaderChange` 请求头改写。
-- `global.json`：全局运行数据。`BlackIpList` 是全局 IP 黑名单，`ServerUrl` 是客户端连接服务端时使用的地址。
+- `global.json`：全局运行数据。`BlackIpList` 是全局 IP 黑名单，`ServerUrl` 是客户端连接服务端时使用的地址，`PlatformDomains` 是管理员维护的平台泛域名池；每项包含稳定 ID、`*.example.com` 泛域名和对应证书/私钥路径。已被 Host 引用的平台域名不能删除或改名，证书路径更新会同步关联 Host。
 - `users.json`：面板用户数据，首次启用多用户功能后自动生成。密码字段为敏感数据，请限制文件权限。
 
 服务端保存 JSON 时会使用 `*#*` 作为记录分隔符，这是内部格式，不要删除或替换。

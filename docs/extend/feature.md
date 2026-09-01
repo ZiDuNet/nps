@@ -8,6 +8,7 @@
 | --- | --- |
 | 选择 TCP、UDP、HTTP(S)、SOCKS5、Secret、P2P 或文件访问 | [代理模式](#代理模式)与[隧道模式](../tunnel.md) |
 | 配置域名、泛域名、路径路由、Host/Header、证书或非标准端口 | [域名代理与路由](domain-proxy.md) |
+| 为多用户提供平台子域名、热更新证书或诊断路由命中 | [平台域名、证书热更新与规则诊断](platform-domain.md) |
 | 配置 Basic 认证、白名单、黑名单、端口限制、用户和客户端配额 | [访问控制与配额](access-control.md) |
 | 打开 TLS Bridge、KCP、压缩/加密、多路复用或健康检查 | [服务端增强功能](../server/nps_extend.md)与[NPC 配置文件参考](../client/config-file.md) |
 | 查看真实 IP、流量、带宽、连接状态、日志、pprof 和排查顺序 | [运行说明](description.md) |
@@ -39,6 +40,7 @@
 在 Web 面板「域名」新增 Host 规则，或在 NPC 配置文件中配置 `host` 和 `target_addr`。每条规则可以设置：
 
 - **精确域名与泛域名**：`app.example.com` 或 `*.example.com`。DNS 仍要将相应域名解析到 NPS 公网 IP。
+- **平台泛域名池**：管理员可在全局参数维护多个带证书的 `*.example.com`，用户选择后以唯一前缀创建子域名，平台证书在服务端锁定。DNS、续期和诊断见[平台域名说明](platform-domain.md)。
 - **协议选择**：`http`、`https` 或 `all`。HTTP 与 HTTPS 监听端口由 `http_proxy_port` 和 `https_proxy_port` 决定；非 80/443 端口需要在浏览器 URL 中显式写出。
 - **路径路由**：同一个域名可按 `location` 匹配不同路径，例如 `/api` 和 `/static`。
 - **多目标轮询**：目标地址每行一个，NPS 按顺序轮换，可用于简单负载均衡。需要按存活状态摘除节点时，配合[健康检查](#健康检查)。

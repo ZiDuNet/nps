@@ -91,14 +91,93 @@ func TestHostListTemplateUsesSafeDynamicOutput(t *testing.T) {
 	content := readTemplateForTest(t, "../views/index/hlist.html")
 	for _, marker := range []string{
 		`rel="noopener noreferrer"`,
-		`npsBooleanMarkup(config.Crypt)`,
-		`npsEscapeHtml((row.Target || {}).TargetStr)`,
-		`type=\"button\"`,
+		`npsEscapeHtml((row.Target || {}).TargetStr || '-')`,
+		`type="button"`,
 		`$('body').setLang('#table');`,
+		`PlatformManaged`,
+		`cardView: window.matchMedia && window.matchMedia('(max-width: 768px)').matches`,
 	} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("host list misses safety/accessibility marker: %s", marker)
 		}
+	}
+	for _, forbidden := range []string{"CertFilePath", "KeyFilePath", "WebUserName", "WebPassword"} {
+		if strings.Contains(content, forbidden) {
+			t.Fatalf("host list must not render sensitive host fields: %s", forbidden)
+		}
+	}
+}
+
+func TestHostFormTemplatesRenderPlatformDomainFields(t *testing.T) {
+	platformDomains := []platformDomainOption{{ID: "managed-example", Wildcard: "*.example.com"}}
+	host := map[string]interface{}{
+		"Id":               8,
+		"Host":             "portal.example.com",
+		"PlatformDomainID": "managed-example",
+		"Remark":           "portal",
+		"Location":         "/",
+		"Scheme":           "all",
+		"AutoHttps":        true,
+		"HeaderChange":     "",
+		"HostChange":       "",
+		"CertFilePath":     "/server/private.pem",
+		"KeyFilePath":      "/server/private.key",
+		"Client":           map[string]interface{}{"Id": 3},
+		"Target":           map[string]interface{}{"TargetStr": "127.0.0.1:8080", "LocalProxy": false},
+	}
+	tests := []struct {
+		name string
+		path string
+		data map[string]interface{}
+	}{
+		{
+			name: "create",
+			path: "../views/index/hadd.html",
+			data: map[string]interface{}{
+				"platformDomains":       platformDomains,
+				"platformDefaultPrefix": "abcd1234",
+				"allow_local_proxy":     true,
+				"web_base_url":          "",
+				"client_id":             3,
+			},
+		},
+		{
+			name: "edit platform host",
+			path: "../views/index/hedit.html",
+			data: map[string]interface{}{
+				"platformDomains":   platformDomains,
+				"hostIsPlatform":    true,
+				"platformPrefix":    "portal",
+				"allow_local_proxy": true,
+				"web_base_url":      "",
+				"h":                 host,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tpl := template.Must(template.ParseFiles(tt.path))
+			var rendered bytes.Buffer
+			if err := tpl.Execute(&rendered, tt.data); err != nil {
+				t.Fatalf("execute host form template: %v", err)
+			}
+			content := rendered.String()
+			for _, marker := range []string{
+				"platform_domain_id",
+				"platform_prefix",
+				"platformhostavailable",
+				"custom-domain-server-host",
+				"window.location.hostname",
+			} {
+				if !strings.Contains(content, marker) {
+					t.Fatalf("rendered host form misses platform-domain control %q", marker)
+				}
+			}
+			if tt.name == "edit platform host" && strings.Contains(content, "/server/private.pem") {
+				t.Fatal("managed host edit form must not expose the administrator certificate path")
+			}
+		})
 	}
 }
 
@@ -303,11 +382,7 @@ func TestHostListTemplateEscapesRuntimeJavaScriptValues(t *testing.T) {
 func TestClientSelectorTemplatesUseTextNodes(t *testing.T) {
 	for _, path := range []string{"../views/index/add.html", "../views/index/hadd.html"} {
 		content := readTemplateForTest(t, path)
-		for _, marker := range []string{
-			`document.createElement('option')`,
-			`option.textContent = clientId + '-' + (data.rows[i].Remark || '');`,
-			`option.selected = clientId === selectedClientId;`,
-		} {
+		for _, marker := range []string{`document.createElement('option')`, `option.textContent =`, `option.selected =`} {
 			if !strings.Contains(content, marker) {
 				t.Fatalf("%s must construct client options with DOM text nodes: %s", path, marker)
 			}
@@ -338,7 +413,7 @@ func TestListTemplatesNormalizeClientIDBeforeAjax(t *testing.T) {
 			path: "../views/index/hlist.html",
 			required: []string{
 				`var hostListClientId = Number('{{.client_id}}');`,
-				`"client_id": hostListClientId`,
+				`client_id: hostListClientId`,
 			},
 			forbid: `"client_id": {{if .client_id}}{{.client_id}}{{else}}0{{end}}`,
 		},

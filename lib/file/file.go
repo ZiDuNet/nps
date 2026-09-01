@@ -152,8 +152,52 @@ func (s *JsonDb) LoadGlobalFromJsonFile() {
 		if json.Unmarshal([]byte(v), &post) != nil || post == nil {
 			return
 		}
+		platformDomains, err := normalizePlatformDomains(post.PlatformDomains)
+		if err != nil {
+			// Keep the existing global settings usable when a manually edited
+			// platform-domain section is malformed. Administrators can correct it
+			// in the management UI without a startup failure.
+			logs.Warn("ignore invalid platform domains in %s: %v", s.GlobalFilePath, err)
+			post.PlatformDomains = nil
+		} else {
+			post.PlatformDomains = platformDomains
+		}
 		s.setGlobal(post)
 	})
+}
+
+// ReconcilePlatformHostCertificates makes the global platform-domain record
+// the single source of truth for managed host certificate paths. It repairs a
+// valid but interrupted SaveGlobal persistence sequence on restart: global.json
+// can contain a newer certificate path than hosts.json without leaving NPS
+// serving the obsolete certificate.
+func (s *JsonDb) ReconcilePlatformHostCertificates() bool {
+	global := s.getGlobal()
+	if global == nil || len(global.PlatformDomains) == 0 {
+		return false
+	}
+	domains := make(map[string]PlatformDomain, len(global.PlatformDomains))
+	for _, domain := range global.PlatformDomains {
+		domains[domain.ID] = domain
+	}
+	changed := false
+	s.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.Lock()
+		if domain, usesPlatformDomain := domains[host.PlatformDomainID]; usesPlatformDomain &&
+			platformHostMatches(host.Host, domain.Wildcard) &&
+			(host.CertFilePath != domain.CertFilePath || host.KeyFilePath != domain.KeyFilePath) {
+			host.CertFilePath = domain.CertFilePath
+			host.KeyFilePath = domain.KeyFilePath
+			changed = true
+		}
+		host.Unlock()
+		return true
+	})
+	return changed
 }
 
 func (s *JsonDb) GetClient(id int) (c *Client, err error) {
@@ -212,7 +256,11 @@ func cloneGlobal(global *Glob) *Glob {
 		return nil
 	}
 	global.RLock()
-	copy := &Glob{ServerUrl: global.ServerUrl, BlackIpList: append([]string(nil), global.BlackIpList...)}
+	copy := &Glob{
+		ServerUrl:       global.ServerUrl,
+		BlackIpList:     append([]string(nil), global.BlackIpList...),
+		PlatformDomains: append([]PlatformDomain(nil), global.PlatformDomains...),
+	}
 	global.RUnlock()
 	return copy
 }

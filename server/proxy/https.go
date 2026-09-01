@@ -1,6 +1,11 @@
 package proxy
 
 import (
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/binary"
+	"encoding/hex"
 	"io"
 	"net"
 	"net/http"
@@ -117,21 +122,21 @@ func (https *HttpsServer) Start() error {
 				} else {
 					logs.Debug("通过路径加载证书")
 					if !common.FileExists(certFilePath) || !common.FileExists(keyFilePath) {
-						c.Close()
 						logs.Error("证书或秘钥文件不存在", keyFilePath, certFilePath)
+						https.enqueueCachedCertificate(host.Id, c, rb)
 						return
 					}
 
 					cert, err := common.ReadAllFromFile(certFilePath)
 					if err != nil {
-						c.Close()
 						logs.Error("加载证书失败", err)
+						https.enqueueCachedCertificate(host.Id, c, rb)
 						return
 					}
 					key, err := common.ReadAllFromFile(keyFilePath)
 					if err != nil {
-						c.Close()
 						logs.Error("加载证书秘钥失败", err)
+						https.enqueueCachedCertificate(host.Id, c, rb)
 						return
 					}
 
@@ -236,6 +241,13 @@ func (https *HttpsServer) cert(host *file.Host, c net.Conn, rb []byte, certFileU
 		}
 		return
 	}
+	certKey, err := certificateMaterialKey(certFileUrl, keyFileUrl)
+	if err != nil {
+		logs.Warn("failed to load updated TLS certificate for host id %d, retaining the last valid certificate: %v", host.Id, err)
+		https.enqueueCachedCertificate(host.Id, c, rb)
+		return
+	}
+
 	// Certificate listeners are created lazily from accept goroutines. Serialize
 	// creation/replacement with Close so a connection cannot be queued onto a
 	// listener after the HTTPS server has shut down.
@@ -266,36 +278,104 @@ func (https *HttpsServer) cert(host *file.Host, c net.Conn, rb []byte, certFileU
 
 	logs.Debug("当前 Listener 连接数量", i)
 
-	if cert, ok := https.hostIdCertMap.Load(host.Id); ok {
-		if cert == certFileUrl {
-			// 证书已经存在，直接加载
-			if v, ok := https.httpsListenerMap.Load(certFileUrl); ok {
-				l = v.(*HttpsListener)
-			}
-		} else {
-			// 证书修改过，重新加载证书
-			l = NewHttpsListener(https.listener)
-			https.NewHttps(l, certFileUrl, keyFileUrl)
-			https.hostIdCertMap.Store(host.Id, certFileUrl)
-			https.releaseCertListener(cert)
-			https.httpsListenerMap.Store(certFileUrl, l)
-		}
-	} else {
-		// 第一次加载证书
-		l = NewHttpsListener(https.listener)
-		https.NewHttps(l, certFileUrl, keyFileUrl)
-		https.httpsListenerMap.Store(certFileUrl, l)
-		https.hostIdCertMap.Store(host.Id, certFileUrl)
-	}
+	previousCertKey, hasPreviousCert := https.hostIdCertMap.Load(host.Id)
+	l = https.listenerForCertificateKey(certKey)
 	if l == nil {
-		// The certificate map can outlive a listener after an I/O failure. Rebuild
-		// it instead of dereferencing nil and leaking the accepted connection.
 		l = NewHttpsListener(https.listener)
 		https.NewHttps(l, certFileUrl, keyFileUrl)
-		https.httpsListenerMap.Store(certFileUrl, l)
-		https.hostIdCertMap.Store(host.Id, certFileUrl)
+		https.httpsListenerMap.Store(certKey, l)
 	}
 
+	// Store the new key only after its certificate/key pair has been validated
+	// and its listener has been created. This keeps the previous listener live
+	// when a renewal temporarily writes an incomplete or invalid file.
+	https.hostIdCertMap.Store(host.Id, certKey)
+	if hasPreviousCert && previousCertKey != certKey {
+		https.releaseCertListener(previousCertKey)
+	}
+
+	https.enqueueCertificateListener(l, c, rb)
+}
+
+// certificateMaterialKey validates a complete certificate/private-key pair
+// before it can replace a listener. The key includes both PEM values so a
+// private-key-only update cannot keep serving a listener created with an old
+// key.
+func certificateMaterialKey(certPEM string, keyPEM string) (string, error) {
+	pair, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+	if err != nil {
+		return "", err
+	}
+	if len(pair.Certificate) == 0 {
+		return "", errors.New("TLS certificate has no leaf")
+	}
+	leaf, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	if now.Before(leaf.NotBefore) || now.After(leaf.NotAfter) {
+		return "", errors.New("TLS certificate is not currently valid")
+	}
+	return certificateFingerprint(certPEM, keyPEM), nil
+}
+
+func certificateFingerprint(certPEM string, keyPEM string) string {
+	digest := sha256.New()
+	for _, material := range []string{certPEM, keyPEM} {
+		var length [8]byte
+		binary.BigEndian.PutUint64(length[:], uint64(len(material)))
+		_, _ = digest.Write(length[:])
+		_, _ = digest.Write([]byte(material))
+	}
+	return hex.EncodeToString(digest.Sum(nil))
+}
+
+// enqueueCachedCertificate keeps serving the last known-good certificate when
+// its source files cannot be read or no longer form a valid TLS pair.
+func (https *HttpsServer) enqueueCachedCertificate(hostID int, c net.Conn, rb []byte) bool {
+	if c == nil {
+		return false
+	}
+	https.listenerMu.Lock()
+	defer https.listenerMu.Unlock()
+	if https.closed.Load() {
+		_ = c.Close()
+		return false
+	}
+	certKey, ok := https.hostIdCertMap.Load(hostID)
+	if !ok {
+		_ = c.Close()
+		return false
+	}
+	l := https.listenerForCertificateKey(certKey)
+	if l == nil {
+		_ = c.Close()
+		return false
+	}
+	https.enqueueCertificateListener(l, c, rb)
+	return true
+}
+
+func (https *HttpsServer) listenerForCertificateKey(certKey interface{}) *HttpsListener {
+	v, ok := https.httpsListenerMap.Load(certKey)
+	if !ok {
+		return nil
+	}
+	l, ok := v.(*HttpsListener)
+	if !ok || l == nil || atomic.LoadInt32(&l.closed) != 0 {
+		return nil
+	}
+	return l
+}
+
+func (https *HttpsServer) enqueueCertificateListener(l *HttpsListener, c net.Conn, rb []byte) {
+	if l == nil || c == nil {
+		if c != nil {
+			_ = c.Close()
+		}
+		return
+	}
 	acceptConn := conn.NewConn(c)
 	acceptConn.Rb = rb
 	l.enqueue(acceptConn, c)

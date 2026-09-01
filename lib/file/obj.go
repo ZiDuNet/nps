@@ -302,22 +302,25 @@ type Health struct {
 }
 
 type Host struct {
-	Id           int
-	Host         string //host
-	HeaderChange string //header change
-	HostChange   string //host change
-	Location     string //url router
-	Remark       string //remark
-	Scheme       string //http https all
-	CertFilePath string
-	KeyFilePath  string
-	NoStore      bool
-	IsClose      bool
-	AutoHttps    bool // 自动https
-	Flow         *Flow
-	Client       *Client
-	Target       *Target //目标
-	Health       `json:"-"`
+	Id   int
+	Host string //host
+	// PlatformDomainID identifies a managed wildcard domain. An empty value
+	// keeps historical hosts as user-managed custom domains.
+	PlatformDomainID string
+	HeaderChange     string //header change
+	HostChange       string //host change
+	Location         string //url router
+	Remark           string //remark
+	Scheme           string //http https all
+	CertFilePath     string
+	KeyFilePath      string
+	NoStore          bool
+	IsClose          bool
+	AutoHttps        bool // 自动https
+	Flow             *Flow
+	Client           *Client
+	Target           *Target //目标
+	Health           `json:"-"`
 	sync.RWMutex
 }
 
@@ -358,8 +361,48 @@ func (s *Target) GetRandomTarget() (string, error) {
 	return addr, nil
 }
 
+// PreviewTarget reports the backend that would be selected next without
+// advancing the round-robin cursor. It is used by the management diagnostic
+// view so inspecting a route never changes live request distribution.
+func (s *Target) PreviewTarget() (string, error) {
+	if s == nil {
+		return "", errors.New("all inward-bending targets are offline")
+	}
+	s.RLock()
+	targets := append([]string(nil), s.TargetArr...)
+	targetStr, nextIndex := s.TargetStr, s.nowIndex+1
+	s.RUnlock()
+
+	if len(targets) == 0 {
+		for _, target := range strings.Split(targetStr, "\n") {
+			target = strings.TrimRight(target, "\r")
+			if target != "" {
+				targets = append(targets, target)
+			}
+		}
+	}
+	if len(targets) == 0 {
+		return "", errors.New("all inward-bending targets are offline")
+	}
+	if nextIndex < 0 || nextIndex >= len(targets) {
+		nextIndex = 0
+	}
+	return targets[nextIndex], nil
+}
+
+// PlatformDomain is an administrator-managed wildcard domain available to
+// domain proxy users. ID is stable so changing the certificate paths does not
+// change the relationship with existing hosts.
+type PlatformDomain struct {
+	ID           string
+	Wildcard     string
+	CertFilePath string
+	KeyFilePath  string
+}
+
 type Glob struct {
-	BlackIpList []string
-	ServerUrl   string
+	BlackIpList     []string
+	ServerUrl       string
+	PlatformDomains []PlatformDomain
 	sync.RWMutex
 }

@@ -358,15 +358,18 @@ POST /index/addhost/
 | --- | --- |
 | client_id | 客户端 id |
 | remark | 备注 |
-| host | 域名 |
+| host | 自定义模式下的完整域名；平台模式下由服务端根据前缀生成 |
+| domain_mode | 域名来源：`custom`（默认）或 `platform` |
+| platform_domain_id | 平台泛域名的稳定 ID；`domain_mode=platform` 时必填 |
+| platform_prefix | 平台子域名前缀；`domain_mode=platform` 时必填，保存时全局查重 |
 | scheme | 协议类型：`all`、`http`、`https` |
 | location | URL 路由，留空不限制 |
 | target | 内网目标，格式 `ip:端口` |
 | local_proxy | 是否转发到 nps 服务器本地，`true` / `false` |
 | header | 自定义 request header |
 | hostchange | 修改 request host |
-| key_file_path | HTTPS 证书私钥文本或路径 |
-| cert_file_path | HTTPS 证书文件文本或路径 |
+| key_file_path | 自定义域名的 HTTPS 证书私钥文本或路径；平台模式下忽略并由服务端锁定 |
+| cert_file_path | 自定义域名的 HTTPS 证书文件文本或路径；平台模式下忽略并由服务端锁定 |
 | AutoHttps | 是否自动 HTTPS（仅 scheme 非 `http` 时生效） |
 
 ---
@@ -382,15 +385,18 @@ POST /index/edithost/
 | id | 域名解析 id |
 | client_id | 客户端 id |
 | remark | 备注 |
-| host | 域名 |
+| host | 自定义模式下的完整域名；平台模式下由服务端根据前缀生成 |
+| domain_mode | 域名来源：`custom`（默认）或 `platform` |
+| platform_domain_id | 平台泛域名的稳定 ID；`domain_mode=platform` 时必填 |
+| platform_prefix | 平台子域名前缀；`domain_mode=platform` 时必填，保存时全局查重 |
 | scheme | 协议类型 |
 | location | URL 路由 |
 | target | 内网目标 |
 | local_proxy | 是否转发到 nps 服务器本地 |
 | header | 自定义 request header |
 | hostchange | 修改 request host |
-| key_file_path | HTTPS 证书私钥文本或路径 |
-| cert_file_path | HTTPS 证书文件文本或路径 |
+| key_file_path | 自定义域名的 HTTPS 证书私钥文本或路径；平台模式下忽略并由服务端锁定 |
+| cert_file_path | 自定义域名的 HTTPS 证书文件文本或路径；平台模式下忽略并由服务端锁定 |
 | AutoHttps | 是否自动 HTTPS |
 
 ```
@@ -427,6 +433,41 @@ POST /index/delhost/
 
 ---
 
+### 检查平台子域名是否可用
+
+```
+POST /index/platformhostavailable/
+```
+
+| 参数 | 含义 |
+| --- | --- |
+| platform_domain_id | 管理员配置的平台泛域名 ID |
+| platform_prefix | 待检查的子域名前缀 |
+| id | 编辑已有 Host 时传当前 Host ID；新增时省略 |
+
+成功响应会包含 `available` 和拼接后的 `host`。该接口仅用于表单即时提示；新增和编辑接口仍会在服务端最终校验，不能依赖即时检查避免并发重复。
+
+---
+
+### 域名规则诊断
+
+```
+GET  /index/hostdiagnose/
+POST /index/hostdiagnose/
+```
+
+`GET` 打开管理面板的诊断页；`POST` 返回路由诊断结果，不会向内网目标发起连接。
+
+| 参数 | 含义 |
+| --- | --- |
+| host | 实际收到的 Host，不要包含协议或路径 |
+| path | 请求路径，必须以 `/` 开头；留空按 `/` 处理 |
+| scheme | `http` 或 `https` |
+
+响应 `data` 中的 `matched` 表示是否命中可用规则；命中时 `rule` 包含规则、所属客户端和预览目标，未命中时 `reason` 说明 Host、协议、路径、停用状态或目标配置的原因。普通用户只会得到自己有权访问的规则信息。
+
+---
+
 ## Global 全局设置
 
 ### 查看全局设置
@@ -435,7 +476,7 @@ POST /index/delhost/
 GET /global/index/
 ```
 
-返回全局黑名单 IP 列表和服务端 URL。
+返回全局黑名单 IP 列表、服务端 URL 和管理员维护的平台泛域名状态。全局设置仅管理员可访问。
 
 ---
 
@@ -449,5 +490,6 @@ POST /global/save/
 | --- | --- |
 | globalBlackIpList | 全局黑名单 IP 列表，`\r\n` 分隔 |
 | serverUrl | 服务端访问地址（用于更正显示 IP） |
+| platform_domains | 平台域名数组的 JSON。每项为 `ID`、`Wildcard`（`*.example.com`）、`CertFilePath`、`KeyFilePath`；新增项可省略 `ID`，系统会生成。已被 Host 引用的项不可删除或修改 `Wildcard`，但可更新证书路径。 |
 
 ---

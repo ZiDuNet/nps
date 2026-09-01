@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.3</sub>
+﻿# NPS <sub>v1.1.4</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -27,7 +27,7 @@ NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务
 - 🎨 **Web 管理** — 面向运维的控制台，支持明暗主题、响应式布局、中英文切换、键盘可访问交互和实时流量监控
 - 👥 **用户体系** — 支持一个用户管理多个客户端，支持用户级隧道配额和到期管理
 - 🔒 **安全增强** — 首次启动随机密码、IP 白名单/黑名单、验证码、限速限流
-- 🌐 **域名代理** — 自定义 Header、404 页面、Host 修改、URL 路由、泛解析、自动 HTTPS
+- 🌐 **域名代理** — 自定义 Header、URL 路由、平台泛域名池、规则诊断、自动 HTTPS 与证书热更新
 - 🔐 **TLS 加密** — 客户端与服务端之间 TLS 加密通信
 - 📦 **Docker 部署** — 多平台镜像（amd64/arm/arm64），一键启动
 - 💻 **GUI 客户端** — 基于 Wails 的桌面客户端，支持 Windows/macOS/Linux 桌面环境
@@ -126,7 +126,7 @@ nps/
 │   └── crypt/         # TLS 证书管理
 ├── web/               # Web 管理面板（Beego）
 ├── conf/              # 配置文件 + 数据存储
-├── docs/              # 文档网站（Docsify）
+├── docs/              # 文档网站（VuePress）
 ├── build.sh           # 跨平台构建脚本
 ├── Makefile           # 构建/测试/CI
 └── Dockerfile.*       # Docker 构建
@@ -185,6 +185,7 @@ docker-compose up -d
 - 🔧 [隧道详解](docs/tunnel.md)
 - 🐳 [Docker 部署](docs/docker.md)
 - 🖥️ [GUI 客户端](docs/gui.md)
+- 🌐 [平台泛域名与证书热更新](docs/extend/platform-domain.md)
 - ⬆️ [升级迁移](docs/migrate.md)
 
 ## 更新日志
@@ -193,6 +194,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.4** (2026-09-02) - 平台泛域名池、证书热更新加固、规则诊断和控制台表单改版
 - **v1.1.3** (2026-09-01) - 修复发布流水线、内置更新兼容性和运维控制台布局
 - **v1.1.2** (2026-06-23) - 稳定隧道表单切换、优化 Docker 构建缓存
 - **v1.1.1** (2026-06-15) — 用户管理、多客户端归属、用户级隧道配额

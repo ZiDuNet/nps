@@ -1,6 +1,14 @@
 package controllers
 
 import (
+	"crypto/rand"
+	"errors"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+
+	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/server"
 	"ehang.io/nps/server/tool"
@@ -10,6 +18,172 @@ import (
 
 type IndexController struct {
 	BaseController
+}
+
+// hostListRow is intentionally narrower than file.Host. The management list
+// must never serialize filesystem certificate paths, private keys, or client
+// credentials to the browser.
+type hostListRow struct {
+	Id               int
+	Host             string
+	PlatformDomainID string
+	Remark           string
+	Location         string
+	Scheme           string
+	IsClose          bool
+	AutoHttps        bool
+	PlatformManaged  bool
+	Client           hostListClient
+	Target           hostListTarget
+}
+
+type hostListClient struct {
+	Id        int
+	Remark    string
+	IsConnect bool
+}
+
+type hostListTarget struct {
+	TargetStr  string
+	LocalProxy bool
+}
+
+type platformDomainOption struct {
+	ID       string
+	Wildcard string
+}
+
+type hostDiagnosticResult struct {
+	Host    string              `json:"host"`
+	Path    string              `json:"path"`
+	Scheme  string              `json:"scheme"`
+	Matched bool                `json:"matched"`
+	Reason  string              `json:"reason"`
+	Rule    *hostDiagnosticRule `json:"rule,omitempty"`
+}
+
+type hostDiagnosticRule struct {
+	ID              int    `json:"id"`
+	Host            string `json:"host"`
+	Location        string `json:"location"`
+	Scheme          string `json:"scheme"`
+	Remark          string `json:"remark"`
+	Client          string `json:"client"`
+	Target          string `json:"target"`
+	PlatformManaged bool   `json:"platformManaged"`
+}
+
+func newHostListRows(hosts []*file.Host) []*hostListRow {
+	rows := make([]*hostListRow, 0, len(hosts))
+	for _, host := range hosts {
+		if host == nil {
+			continue
+		}
+		host.RLock()
+		client, target := host.Client, host.Target
+		row := &hostListRow{
+			Id:               host.Id,
+			Host:             host.Host,
+			PlatformDomainID: host.PlatformDomainID,
+			Remark:           host.Remark,
+			Location:         host.Location,
+			Scheme:           host.Scheme,
+			IsClose:          host.IsClose,
+			AutoHttps:        host.AutoHttps,
+			PlatformManaged:  host.PlatformDomainID != "",
+		}
+		host.RUnlock()
+
+		if client != nil {
+			client.RLock()
+			row.Client = hostListClient{Id: client.Id, Remark: client.Remark, IsConnect: client.IsConnect}
+			client.RUnlock()
+		}
+		if target != nil {
+			target.RLock()
+			row.Target = hostListTarget{TargetStr: target.TargetStr, LocalProxy: target.LocalProxy}
+			target.RUnlock()
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func platformDomainOptions() []platformDomainOption {
+	domains := file.GetDb().GetUsablePlatformDomains()
+	options := make([]platformDomainOption, 0, len(domains))
+	for _, domain := range domains {
+		options = append(options, platformDomainOption{ID: domain.ID, Wildcard: domain.Wildcard})
+	}
+	return options
+}
+
+func generatedPlatformPrefix() string {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+	bytes := make([]byte, 8)
+	if _, err := rand.Read(bytes); err != nil {
+		return "npshost1"
+	}
+	for i, value := range bytes {
+		bytes[i] = alphabet[int(value)%len(alphabet)]
+	}
+	return string(bytes)
+}
+
+func (s *IndexController) setHostFormData() {
+	s.Data["platformDomains"] = platformDomainOptions()
+	s.Data["platformDefaultPrefix"] = generatedPlatformPrefix()
+}
+
+func (s *IndexController) canAccessHost(host *file.Host) bool {
+	if host == nil {
+		return false
+	}
+	if s.IsAdmin() {
+		return true
+	}
+	host.RLock()
+	client := host.Client
+	host.RUnlock()
+	if client == nil {
+		return false
+	}
+	client.RLock()
+	clientID := client.Id
+	client.RUnlock()
+	return isAllowedClient(clientID, s.GetAllowedClientIds())
+}
+
+func (s *IndexController) authorizedHost(id int) (*file.Host, error) {
+	host, err := file.GetDb().GetHostById(id)
+	if err != nil {
+		return nil, errors.New("host ID not found")
+	}
+	if !s.canAccessHost(host) {
+		return nil, errors.New("permission denied")
+	}
+	return host, nil
+}
+
+func (s *IndexController) hostDomainFromRequest(excludeHostID int) (string, string, error) {
+	mode := strings.TrimSpace(s.GetString("domain_mode"))
+	if mode != "platform" {
+		return s.getEscapeString("host"), "", nil
+	}
+	platformID := strings.TrimSpace(s.GetString("platform_domain_id"))
+	prefix := strings.TrimSpace(s.GetString("platform_prefix"))
+	host, err := file.GetDb().ResolvePlatformHost(platformID, prefix)
+	if err != nil {
+		return "", "", err
+	}
+	available, err := file.GetDb().IsPlatformHostAvailable(platformID, prefix, excludeHostID)
+	if err != nil {
+		return "", "", err
+	}
+	if !available {
+		return "", "", errors.New("平台域名前缀已被使用")
+	}
+	return host, platformID, nil
 }
 
 func requestedLocalProxy(requested bool) bool {
@@ -388,22 +562,25 @@ func (s *IndexController) HostList() {
 			allowed = s.GetAllowedClientIds()
 		}
 		list, cnt := file.GetDb().GetHostByAllowedClients(start, length, clientId, s.getEscapeString("search"), allowed)
-		s.AjaxTable(list, cnt, cnt, nil)
+		s.AjaxTable(newHostListRows(list), cnt, cnt, nil)
 	}
 }
 
 func (s *IndexController) GetHost() {
-	if s.Ctx.Request.Method == "POST" {
-		data := make(map[string]interface{})
-		if h, err := file.GetDb().GetHostById(s.GetIntNoErr("id")); err != nil {
-			data["code"] = 0
-		} else {
-			data["data"] = h
-			data["code"] = 1
-		}
-		s.Data["json"] = data
-		s.ServeJSON()
+	if !s.RequirePost() {
+		return
 	}
+	data := make(map[string]interface{})
+	if host, err := s.authorizedHost(s.GetIntNoErr("id")); err != nil {
+		data["code"] = 0
+	} else {
+		rows := newHostListRows([]*file.Host{host})
+		data["data"] = rows[0]
+		data["code"] = 1
+	}
+	s.Data["json"] = data
+	s.ServeJSON()
+	s.StopRun()
 }
 
 func (s *IndexController) DelHost() {
@@ -411,6 +588,10 @@ func (s *IndexController) DelHost() {
 		return
 	}
 	id := s.GetIntNoErr("id")
+	if _, err := s.authorizedHost(id); err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
 	if err := file.GetDb().DelHost(id); err != nil {
 		s.AjaxErr("delete error")
 		return
@@ -423,8 +604,8 @@ func (s *IndexController) HostStop() {
 		return
 	}
 	id := s.GetIntNoErr("id")
-	if h, err := file.GetDb().GetHostById(id); err != nil {
-		s.AjaxErr("stop error")
+	if h, err := s.authorizedHost(id); err != nil {
+		s.AjaxErr(err.Error())
 		return
 	} else {
 		h.Lock()
@@ -440,8 +621,8 @@ func (s *IndexController) HostStart() {
 		return
 	}
 	id := s.GetIntNoErr("id")
-	if h, err := file.GetDb().GetHostById(id); err != nil {
-		s.AjaxErr("start error")
+	if h, err := s.authorizedHost(id); err != nil {
+		s.AjaxErr(err.Error())
 		return
 	} else {
 		h.Lock()
@@ -456,33 +637,39 @@ func (s *IndexController) AddHost() {
 	if s.Ctx.Request.Method == "GET" {
 		s.Data["client_id"] = s.getEscapeString("client_id")
 		s.Data["menu"] = "host"
+		s.setHostFormData()
 		s.SetInfo("add host")
 		s.display("index/hadd")
 	} else {
 		if !s.RequirePost() {
 			return
 		}
+		hostName, platformDomainID, err := s.hostDomainFromRequest(0)
+		if err != nil {
+			s.AjaxErr("add fail, " + err.Error())
+			return
+		}
 		id := int(file.GetDb().JsonDb.GetHostId())
 		h := &file.Host{
-			Id:           id,
-			Host:         s.getEscapeString("host"),
-			Target:       &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))},
-			HeaderChange: s.getEscapeString("header"),
-			HostChange:   s.getEscapeString("hostchange"),
-			Remark:       s.getEscapeString("remark"),
-			Location:     s.getEscapeString("location"),
-			Flow:         &file.Flow{},
-			Scheme:       s.getEscapeString("scheme"),
-			KeyFilePath:  s.getEscapeString("key_file_path"),
-			CertFilePath: s.getEscapeString("cert_file_path"),
-			AutoHttps:    s.GetBoolNoErr("AutoHttps"),
+			Id:               id,
+			Host:             hostName,
+			PlatformDomainID: platformDomainID,
+			Target:           &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))},
+			HeaderChange:     s.getEscapeString("header"),
+			HostChange:       s.getEscapeString("hostchange"),
+			Remark:           s.getEscapeString("remark"),
+			Location:         s.getEscapeString("location"),
+			Flow:             &file.Flow{},
+			Scheme:           s.getEscapeString("scheme"),
+			KeyFilePath:      s.getEscapeString("key_file_path"),
+			CertFilePath:     s.getEscapeString("cert_file_path"),
+			AutoHttps:        s.GetBoolNoErr("AutoHttps"),
 		}
 
 		if h.Scheme == "http" {
 			h.AutoHttps = false
 		}
 
-		var err error
 		if h.Client, err = file.GetDb().GetClient(s.GetIntNoErr("client_id")); err != nil {
 			s.AjaxErr("add error the client can not be found")
 			return
@@ -511,23 +698,35 @@ func (s *IndexController) EditHost() {
 	id := s.GetIntNoErr("id")
 	if s.Ctx.Request.Method == "GET" {
 		s.Data["menu"] = "host"
-		if h, err := file.GetDb().GetHostById(id); err != nil {
+		if h, err := s.authorizedHost(id); err != nil {
 			s.error()
 			return
 		} else {
 			s.Data["h"] = h
+			h.RLock()
+			platformDomainID, hostName := h.PlatformDomainID, h.Host
+			h.RUnlock()
+			s.Data["hostIsPlatform"] = platformDomainID != ""
+			if domain, domainErr := file.GetDb().GetPlatformDomain(platformDomainID); domainErr == nil {
+				s.Data["platformPrefix"] = strings.TrimSuffix(hostName, "."+strings.TrimPrefix(domain.Wildcard, "*."))
+			}
 		}
+		s.setHostFormData()
 		s.SetInfo("edit")
 		s.display("index/hedit")
 	} else {
 		if !s.RequirePost() {
 			return
 		}
-		if _, err := file.GetDb().GetHostById(id); err != nil {
-			s.AjaxErr("host ID not found")
+		if _, err := s.authorizedHost(id); err != nil {
+			s.AjaxErr(err.Error())
 			return
 		} else {
-			desiredHost := s.getEscapeString("host")
+			desiredHost, platformDomainID, domainErr := s.hostDomainFromRequest(id)
+			if domainErr != nil {
+				s.AjaxErr("modified error," + domainErr.Error())
+				return
+			}
 			desiredLocation := s.getEscapeString("location")
 			desiredScheme := s.getEscapeString("scheme")
 			desiredClient, clientErr := file.GetDb().GetClient(s.GetIntNoErr("client_id"))
@@ -545,18 +744,19 @@ func (s *IndexController) EditHost() {
 				autoHTTPS = false
 			}
 			replacement := &file.Host{
-				Id:           id,
-				Host:         desiredHost,
-				Client:       desiredClient,
-				Target:       desiredTarget,
-				HeaderChange: s.getEscapeString("header"),
-				HostChange:   s.getEscapeString("hostchange"),
-				Remark:       s.getEscapeString("remark"),
-				Location:     desiredLocation,
-				Scheme:       desiredScheme,
-				KeyFilePath:  s.getEscapeString("key_file_path"),
-				CertFilePath: s.getEscapeString("cert_file_path"),
-				AutoHttps:    autoHTTPS,
+				Id:               id,
+				Host:             desiredHost,
+				PlatformDomainID: platformDomainID,
+				Client:           desiredClient,
+				Target:           desiredTarget,
+				HeaderChange:     s.getEscapeString("header"),
+				HostChange:       s.getEscapeString("hostchange"),
+				Remark:           s.getEscapeString("remark"),
+				Location:         desiredLocation,
+				Scheme:           desiredScheme,
+				KeyFilePath:      s.getEscapeString("key_file_path"),
+				CertFilePath:     s.getEscapeString("cert_file_path"),
+				AutoHttps:        autoHTTPS,
 			}
 			if err := file.GetDb().UpdateHost(replacement); err != nil {
 				s.AjaxErr("modified error," + err.Error())
@@ -565,4 +765,198 @@ func (s *IndexController) EditHost() {
 		}
 		s.AjaxOk("modified success")
 	}
+}
+
+// PlatformHostAvailable provides immediate feedback while a user edits a
+// managed wildcard prefix. NewHost and UpdateHost repeat the validation while
+// holding the data-layer mutation lock, so this endpoint is only a UX aid.
+func (s *IndexController) PlatformHostAvailable() {
+	if !s.RequirePost() {
+		return
+	}
+	platformID := strings.TrimSpace(s.GetString("platform_domain_id"))
+	prefix := strings.TrimSpace(s.GetString("platform_prefix"))
+	host, err := file.GetDb().ResolvePlatformHost(platformID, prefix)
+	if err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
+	available, err := file.GetDb().IsPlatformHostAvailable(platformID, prefix, s.GetIntNoErr("id"))
+	if err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
+	s.Data["json"] = map[string]interface{}{
+		"status":    1,
+		"available": available,
+		"host":      host,
+	}
+	s.ServeJSON()
+	s.StopRun()
+}
+
+func diagnosticHostRuleMatches(host, rule string) bool {
+	host = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	rule = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(rule)), ".")
+	if host == "" || rule == "" {
+		return false
+	}
+	if !strings.Contains(rule, "*") {
+		return host == rule
+	}
+	if !strings.HasPrefix(rule, "*.") || strings.Count(rule, "*") != 1 {
+		return false
+	}
+	suffix := strings.TrimPrefix(rule, "*.")
+	return len(host) > len(suffix)+1 && strings.HasSuffix(host, "."+suffix)
+}
+
+func diagnosticPathMatches(path, location string) bool {
+	if location == "" || location == "/" {
+		return strings.HasPrefix(path, "/")
+	}
+	if !strings.HasPrefix(path, location) {
+		return false
+	}
+	if len(path) == len(location) {
+		return true
+	}
+	next := path[len(location)]
+	return next == '/' || next == '?'
+}
+
+func (s *IndexController) explainHostDiagnosticFailure(host, path, scheme string) string {
+	var allowed map[int]struct{}
+	if !s.IsAdmin() {
+		allowed = s.GetAllowedClientIds()
+	}
+	hosts, _ := file.GetDb().GetHostByAllowedClients(0, 100000, 0, "", allowed)
+	matchedHost, matchedEnabled, matchedScheme, matchedPath := false, false, false, false
+	for _, candidate := range hosts {
+		if candidate == nil || !s.canAccessHost(candidate) {
+			continue
+		}
+		candidate.RLock()
+		rule, location, ruleScheme, isClose, target := candidate.Host, candidate.Location, candidate.Scheme, candidate.IsClose, candidate.Target
+		candidate.RUnlock()
+		if !diagnosticHostRuleMatches(host, rule) {
+			continue
+		}
+		matchedHost = true
+		if isClose {
+			continue
+		}
+		matchedEnabled = true
+		if ruleScheme != "" && ruleScheme != "all" && ruleScheme != scheme {
+			continue
+		}
+		matchedScheme = true
+		if !diagnosticPathMatches(path, location) {
+			continue
+		}
+		matchedPath = true
+		if target == nil {
+			return "匹配规则尚未配置内网目标。"
+		}
+		target.RLock()
+		targetStr := strings.TrimSpace(target.TargetStr)
+		target.RUnlock()
+		if targetStr == "" {
+			return "匹配规则尚未配置内网目标。"
+		}
+	}
+	switch {
+	case !matchedHost:
+		return "没有匹配的域名规则。"
+	case !matchedEnabled:
+		return "匹配到的域名规则均已停用。"
+	case !matchedScheme:
+		return "请求协议与匹配规则的协议不一致。"
+	case !matchedPath:
+		return "请求路径没有匹配到已启用规则的路由。"
+	default:
+		return "规则当前没有可用的内网目标。"
+	}
+}
+
+func (s *IndexController) HostDiagnose() {
+	if s.Ctx.Request.Method == http.MethodGet {
+		s.Data["menu"] = "host"
+		s.SetInfo("host diagnose")
+		s.display("index/hdiagnose")
+		return
+	}
+	if !s.RequirePost() {
+		return
+	}
+
+	host := common.GetIpByAddr(strings.TrimSpace(s.GetString("host")))
+	path := strings.TrimSpace(s.GetString("path"))
+	scheme := strings.ToLower(strings.TrimSpace(s.GetString("scheme")))
+	if host == "" {
+		s.AjaxErr("Host 不能为空")
+		return
+	}
+	if scheme != "http" && scheme != "https" {
+		s.AjaxErr("协议必须是 HTTP 或 HTTPS")
+		return
+	}
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		s.AjaxErr("路径必须以 / 开头")
+		return
+	}
+	parsedPath, err := url.ParseRequestURI(path)
+	if err != nil {
+		s.AjaxErr("路径格式无效")
+		return
+	}
+	request := &http.Request{Host: host, URL: &url.URL{Scheme: scheme, Path: parsedPath.Path, RawQuery: parsedPath.RawQuery}, RequestURI: path}
+	result := hostDiagnosticResult{Host: host, Path: path, Scheme: scheme}
+	matched, matchErr := file.GetDb().GetInfoByHost(host, request)
+	if matchErr != nil || !s.canAccessHost(matched) {
+		result.Reason = s.explainHostDiagnosticFailure(host, path, scheme)
+		s.Data["json"] = map[string]interface{}{"status": 1, "data": result}
+		s.ServeJSON()
+		s.StopRun()
+		return
+	}
+
+	matched.RLock()
+	client, target := matched.Client, matched.Target
+	rule := &hostDiagnosticRule{
+		ID:              matched.Id,
+		Host:            matched.Host,
+		Location:        matched.Location,
+		Scheme:          matched.Scheme,
+		Remark:          matched.Remark,
+		PlatformManaged: matched.PlatformDomainID != "",
+	}
+	matched.RUnlock()
+	if client != nil {
+		client.RLock()
+		clientID, clientRemark := client.Id, strings.TrimSpace(client.Remark)
+		client.RUnlock()
+		rule.Client = "客户端 " + strconv.Itoa(clientID)
+		if clientRemark != "" {
+			rule.Client += " · " + clientRemark
+		}
+	}
+	if target != nil {
+		if selected, targetErr := target.PreviewTarget(); targetErr == nil {
+			rule.Target = selected
+		} else {
+			result.Reason = "规则已命中，但没有可用的内网目标。"
+		}
+	}
+	if rule.Target == "" && result.Reason == "" {
+		result.Reason = "规则已命中，但没有可用的内网目标。"
+	}
+	result.Matched = true
+	result.Rule = rule
+	s.Data["json"] = map[string]interface{}{"status": 1, "data": result}
+	s.ServeJSON()
+	s.StopRun()
 }

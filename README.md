@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.3</sub>
+﻿# NPS <sub>v1.1.4</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -16,7 +16,7 @@ Based on the original nps 0.26.10, with extensive bug fixes, performance and sec
 - 🎨 **Web UI** — Operations-focused console with light/dark theme, responsive layout, Chinese/English localization, keyboard-friendly controls, and real-time traffic monitoring
 - 👥 **User Management** — One user can manage multiple clients, with user-level tunnel quotas and expiration
 - 🔒 **Security** — Random password on first start, IP whitelist/blacklist, CAPTCHA, rate limiting
-- 🌐 **Domain Proxy** — Custom headers, 404 pages, host rewrite, URL routing, wildcard, auto HTTPS
+- 🌐 **Domain Proxy** — Custom headers, URL routing, platform wildcard domain pools, route diagnostics, auto HTTPS and certificate hot reload
 - 🔐 **TLS Encryption** — TLS encrypted communication between client and server
 - 📦 **Docker** — Multi-arch images (amd64/arm/arm64), one-command deployment
 - 💻 **GUI Client** — Wails-based desktop client for Windows/macOS/Linux desktop environments
@@ -115,7 +115,7 @@ nps/
 │   └── crypt/         # TLS certificate management
 ├── web/               # Web panel (Beego)
 ├── conf/              # Config + data storage
-├── docs/              # Documentation site (Docsify)
+├── docs/              # Documentation site (VuePress)
 ├── build.sh           # Cross-platform build script
 ├── Makefile           # Build / test / CI
 └── Dockerfile.*       # Docker builds
@@ -170,6 +170,7 @@ docker-compose up -d
 - 🔧 [Tunnel Details](docs/tunnel.md)
 - 🐳 [Docker Deployment](docs/docker.md)
 - 🖥️ [GUI Client](docs/gui.md)
+- 🌐 [Platform Domains & Certificate Reload](docs/extend/platform-domain.md)
 - ⬆️ [Migration Guide](docs/migrate.md)
 
 ## Changelog
@@ -178,6 +179,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.4** (2026-09-02) - Platform wildcard domain pools, resilient certificate reload, route diagnostics, and console form refresh
 - **v1.1.3** (2026-09-01) - Release pipeline, updater compatibility, and console layout fixes
 - **v1.1.2** (2026-06-23) - Stable tunnel form switching, Docker build cache optimization
 - **v1.1.1** (2026-06-15) — User management, multi-client ownership, user tunnel limits

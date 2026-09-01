@@ -6,6 +6,34 @@ import (
 	"testing"
 )
 
+func TestPreviewTargetDoesNotAdvanceRoundRobin(t *testing.T) {
+	target := &Target{TargetStr: "127.0.0.1:8080\n127.0.0.1:8081"}
+
+	preview, err := target.PreviewTarget()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview != "127.0.0.1:8081" {
+		t.Fatalf("preview = %q, want the next round-robin target", preview)
+	}
+
+	selected, err := target.GetRandomTarget()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected != preview {
+		t.Fatalf("selection after preview = %q, want %q", selected, preview)
+	}
+
+	preview, err = target.PreviewTarget()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview != "127.0.0.1:8080" {
+		t.Fatalf("second preview = %q, want the wrapped round-robin target", preview)
+	}
+}
+
 func TestGetInfoByHostWildcardUsesDNSLabelBoundaries(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	db.Hosts.Store(1, &Host{Id: 1, Host: "*.example.com", Scheme: "http", Location: "/"})

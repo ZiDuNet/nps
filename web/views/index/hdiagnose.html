@@ -1,0 +1,59 @@
+<section class="wrapper wrapper-content diagnostic-page" aria-labelledby="host-diagnose-title">
+    <header class="dashboard-page-header">
+        <div>
+            <div class="dashboard-page-kicker" data-i18n-zh="域名代理" data-i18n-en="Domain proxy">域名代理</div>
+            <h1 id="host-diagnose-title" data-i18n-zh="规则诊断" data-i18n-en="Rule diagnosis">规则诊断</h1>
+            <p data-i18n-zh="输入实际收到的 Host、路径和协议，检查会命中的规则及下一候选内网目标。" data-i18n-en="Enter the received Host, path, and protocol to inspect the matching rule and next internal target.">输入实际收到的 Host、路径和协议，检查会命中的规则及下一候选内网目标。</p>
+        </div>
+        <div class="dashboard-page-actions"><a class="btn btn-outline btn-primary" href="{{.web_base_url}}/index/hostlist"><i class="fa fa-arrow-left" aria-hidden="true"></i><span data-i18n-zh="返回规则列表" data-i18n-en="Back to rules">返回规则列表</span></a></div>
+    </header>
+
+    <div class="diagnostic-layout">
+        <section class="panel ibox zui-panel diagnostic-form-card"><div class="ibox-content">
+            <form id="host-diagnose-form" class="diagnostic-form">
+                <div class="diagnostic-form__field"><label for="diagnostic-host" data-i18n-zh="收到的 Host" data-i18n-en="Received Host">收到的 Host</label><input id="diagnostic-host" class="form-control" type="text" name="host" autocomplete="off" required placeholder="app.example.com"><span class="help-block" data-i18n-zh="只填写域名或 Host:端口，不要包含 http://。" data-i18n-en="Enter only a domain or Host:port, without http://.">只填写域名或 Host:端口，不要包含 http://。</span></div>
+                <div class="diagnostic-form__field"><label for="diagnostic-path" data-i18n-zh="请求路径" data-i18n-en="Request path">请求路径</label><input id="diagnostic-path" class="form-control" type="text" name="path" value="/" autocomplete="off" required placeholder="/"><span class="help-block" data-i18n-zh="包含查询参数时可直接填写，例如 /api?health=1。" data-i18n-en="You can include a query string, for example /api?health=1.">包含查询参数时可直接填写，例如 /api?health=1。</span></div>
+                <div class="diagnostic-form__field"><label for="diagnostic-scheme" data-i18n-zh="入口协议" data-i18n-en="Entry protocol">入口协议</label><select id="diagnostic-scheme" class="form-control" name="scheme"><option value="https">HTTPS</option><option value="http">HTTP</option></select><span class="help-block" data-i18n-zh="这应与请求实际进入 NPS 的协议一致。" data-i18n-en="This must match the protocol by which the request reaches NPS.">这应与请求实际进入 NPS 的协议一致。</span></div>
+                <button class="btn btn-primary diagnostic-form__submit" type="submit"><i class="fa fa-stethoscope" aria-hidden="true"></i><span data-i18n-zh="开始诊断" data-i18n-en="Run diagnosis">开始诊断</span></button>
+            </form>
+        </div></section>
+
+        <section id="diagnostic-result" class="panel ibox zui-panel diagnostic-result-card" hidden aria-live="polite"><div class="ibox-content">
+            <div class="diagnostic-result-card__heading"><span id="diagnostic-result-icon" class="diagnostic-result-card__icon"><i class="fa fa-search" aria-hidden="true"></i></span><div><h2 id="diagnostic-result-title" data-i18n-zh="等待诊断" data-i18n-en="Waiting for diagnosis">等待诊断</h2><p id="diagnostic-result-summary"></p></div></div>
+            <div id="diagnostic-rule-details" class="diagnostic-rule-details" hidden>
+                <div><span data-i18n-zh="命中规则" data-i18n-en="Matched rule">命中规则</span><strong id="diagnostic-rule-host"></strong></div>
+                <div><span data-i18n-zh="规则备注" data-i18n-en="Remark">规则备注</span><strong id="diagnostic-rule-remark"></strong></div>
+                <div><span data-i18n-zh="路径规则" data-i18n-en="Path rule">路径规则</span><strong id="diagnostic-rule-location"></strong></div>
+                <div><span data-i18n-zh="协议" data-i18n-en="Protocol">协议</span><strong id="diagnostic-rule-scheme"></strong></div>
+                <div><span data-i18n-zh="所属客户端" data-i18n-en="Client">所属客户端</span><strong id="diagnostic-rule-client"></strong></div>
+                <div class="diagnostic-rule-details__wide"><span data-i18n-zh="下一候选内网目标" data-i18n-en="Next candidate target">下一候选内网目标</span><code id="diagnostic-rule-target"></code></div>
+            </div>
+        </div></section>
+    </div>
+</section>
+
+<script>
+$(function () {
+    var form = $('#host-diagnose-form'), result = $('#diagnostic-result'), details = $('#diagnostic-rule-details');
+    function local(zh, en) { return typeof npsIsEnglish === 'function' && npsIsEnglish() ? en : zh; }
+    function setText(id, value) { document.getElementById(id).textContent = value || '-'; }
+    function showResult(data) {
+        var matched = Boolean(data && data.matched), rule = data && data.rule ? data.rule : null;
+        result.prop('hidden', false).toggleClass('is-match', matched).toggleClass('is-miss', !matched);
+        $('#diagnostic-result-icon').html(matched ? '<i class="fa fa-check" aria-hidden="true"></i>' : '<i class="fa fa-exclamation-triangle" aria-hidden="true"></i>');
+        $('#diagnostic-result-title').text(matched ? local('已命中规则', 'Rule matched') : local('未命中规则', 'No rule matched'));
+        $('#diagnostic-result-summary').text((data && data.reason) || (matched ? local('规则可处理此请求。', 'The rule can handle this request.') : local('没有可用规则。', 'No usable rule found.')));
+        details.prop('hidden', !matched || !rule);
+        if (!matched || !rule) return;
+        setText('diagnostic-rule-host', rule.host); setText('diagnostic-rule-remark', rule.remark); setText('diagnostic-rule-location', rule.location); setText('diagnostic-rule-scheme', rule.scheme); setText('diagnostic-rule-client', rule.client); setText('diagnostic-rule-target', rule.target || '-');
+    }
+    form.on('submit', function (event) {
+        event.preventDefault();
+        var button = form.find('button[type="submit"]'); button.prop('disabled', true);
+        $.ajax({type: 'POST', url: '{{.web_base_url}}/index/hostdiagnose', data: form.serializeArray(), dataType: 'json'})
+            .done(function (response) { if (response && response.status) showResult(response.data); else { showResult({matched: false, reason: (response && response.msg) || local('诊断请求失败。', 'The diagnostic request failed.')}); } })
+            .fail(function () { showResult({matched: false, reason: local('诊断请求无法完成，请稍后重试。', 'The diagnostic request could not be completed. Try again shortly.')}); })
+            .always(function () { button.prop('disabled', false); });
+    });
+});
+</script>

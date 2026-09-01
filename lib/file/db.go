@@ -2,6 +2,10 @@ package file
 
 import (
 	"crypto/md5"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -33,8 +37,11 @@ func GetDb() *DbUtils {
 		jsonDb.LoadClientFromJsonFile()
 		jsonDb.LoadUserFromJsonFile()
 		jsonDb.LoadTaskFromJsonFile()
-		jsonDb.LoadHostFromJsonFile()
 		jsonDb.LoadGlobalFromJsonFile()
+		jsonDb.LoadHostFromJsonFile()
+		if jsonDb.ReconcilePlatformHostCertificates() {
+			jsonDb.StoreHostToJsonFile()
+		}
 		Db = &DbUtils{JsonDb: jsonDb}
 		if err := Db.MigrateUsersFromClients(); err != nil {
 			// 迁移失败不影响主流程，保留旧客户端登录兼容。
@@ -556,8 +563,56 @@ func (s *DbUtils) UpdateTask(t *Tunnel) error {
 }
 
 func (s *DbUtils) SaveGlobal(t *Glob) error {
+	if t == nil {
+		return errors.New("全局参数无效")
+	}
+	platformDomains, err := normalizePlatformDomains(t.PlatformDomains)
+	if err != nil {
+		return err
+	}
+
+	// Global platform domains and hosts must change as one logical operation:
+	// a concurrent host creation must never observe an old certificate binding.
+	hostMutationMu.Lock()
+	defer hostMutationMu.Unlock()
+	if err := s.validatePlatformDomainReferences(s.JsonDb.getGlobal(), platformDomains); err != nil {
+		return err
+	}
+	if err := s.validatePlatformWildcardConflicts(platformDomains); err != nil {
+		return err
+	}
+	for _, domain := range platformDomains {
+		if err := validatePlatformDomainCertificate(domain); err != nil {
+			return err
+		}
+	}
+	t.PlatformDomains = platformDomains
 	s.JsonDb.setGlobal(t)
+
+	platformByID := make(map[string]PlatformDomain, len(platformDomains))
+	for _, domain := range platformDomains {
+		platformByID[domain.ID] = domain
+	}
+	hostsChanged := false
+	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.Lock()
+		if domain, usesPlatformDomain := platformByID[host.PlatformDomainID]; usesPlatformDomain &&
+			(host.CertFilePath != domain.CertFilePath || host.KeyFilePath != domain.KeyFilePath) {
+			host.CertFilePath = domain.CertFilePath
+			host.KeyFilePath = domain.KeyFilePath
+			hostsChanged = true
+		}
+		host.Unlock()
+		return true
+	})
 	s.JsonDb.StoreGlobalToJsonFile()
+	if hostsChanged {
+		s.JsonDb.StoreHostToJsonFile()
+	}
 	return nil
 }
 
@@ -758,6 +813,245 @@ func (s *DbUtils) IsHostRouteConflict(h *Host) bool {
 	return exists
 }
 
+// GetPlatformDomains returns a defensive copy of the administrator-managed
+// wildcard domains. Callers must use GetPlatformDomain when resolving a host
+// so a stale browser payload cannot select a removed domain.
+func (s *DbUtils) GetPlatformDomains() []PlatformDomain {
+	global := s.GetGlobal()
+	if global == nil {
+		return nil
+	}
+	return append([]PlatformDomain(nil), global.PlatformDomains...)
+}
+
+// GetUsablePlatformDomains omits manually edited or stale entries whose
+// certificate cannot safely serve a platform hostname. The administrator can
+// still see and repair every entry on the global settings page.
+func (s *DbUtils) GetUsablePlatformDomains() []PlatformDomain {
+	domains := s.GetPlatformDomains()
+	usable := make([]PlatformDomain, 0, len(domains))
+	for _, domain := range domains {
+		if err := validatePlatformDomainCertificate(domain); err == nil {
+			usable = append(usable, domain)
+		}
+	}
+	return usable
+}
+
+// GetPlatformDomain returns a managed wildcard domain by its stable ID.
+func (s *DbUtils) GetPlatformDomain(id string) (*PlatformDomain, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, errors.New("平台域名 ID 不能为空")
+	}
+	for _, domain := range s.GetPlatformDomains() {
+		if domain.ID == id {
+			return &domain, nil
+		}
+	}
+	return nil, errors.New("未找到平台域名")
+}
+
+// ResolvePlatformHost builds a host from one DNS-label prefix and one managed
+// wildcard. A platform domain intentionally supports exactly one label so a
+// user cannot escape its namespace with a crafted multi-level value.
+func (s *DbUtils) ResolvePlatformHost(platformDomainID, prefix string) (string, error) {
+	domain, err := s.GetPlatformDomain(platformDomainID)
+	if err != nil {
+		return "", err
+	}
+	prefix, err = normalizePlatformPrefix(prefix)
+	if err != nil {
+		return "", err
+	}
+	return prefix + "." + strings.TrimPrefix(domain.Wildcard, "*."), nil
+}
+
+// IsPlatformHostAvailable reports whether a generated platform hostname is
+// globally unused. Unlike normal host routes, a platform hostname is reserved
+// as a whole: it cannot be shared by another path, scheme, client, or user.
+func (s *DbUtils) IsPlatformHostAvailable(platformDomainID, prefix string, excludeHostID int) (bool, error) {
+	fullHost, err := s.ResolvePlatformHost(platformDomainID, prefix)
+	if err != nil {
+		return false, err
+	}
+	return s.isPlatformHostUnique(fullHost, excludeHostID), nil
+}
+
+func (s *DbUtils) isPlatformHostUnique(fullHost string, excludeHostID int) bool {
+	fullHost = normalizeHostName(fullHost)
+	available := true
+	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.RLock()
+		hostID, hostName := host.Id, host.Host
+		host.RUnlock()
+		if hostID != excludeHostID && normalizeHostName(hostName) == fullHost {
+			available = false
+			return false
+		}
+		return true
+	})
+	return available
+}
+
+// FindPlatformDomainByHost reports the managed domain that contains host.
+// It follows NPS wildcard matching so a custom multi-level hostname cannot
+// bypass a platform namespace. ResolvePlatformHost remains stricter and only
+// creates single-label platform names.
+func (s *DbUtils) FindPlatformDomainByHost(host string) (*PlatformDomain, bool) {
+	host = normalizeHostName(host)
+	for _, domain := range s.GetPlatformDomains() {
+		if hostRuleMatches(host, domain.Wildcard) {
+			return &domain, true
+		}
+	}
+	return nil, false
+}
+
+// IsCustomHostInPlatformDomain lets the UI explain why a custom hostname is
+// reserved for a platform wildcard. The write path enforces the same rule.
+func (s *DbUtils) IsCustomHostInPlatformDomain(host string) bool {
+	_, found := s.FindPlatformDomainByHost(host)
+	return found
+}
+
+// PlatformDomainReferenceCount is used before changing or deleting a managed
+// domain. A domain with references may update certificate paths, but its ID
+// and wildcard name must remain stable.
+func (s *DbUtils) PlatformDomainReferenceCount(id string) int {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return 0
+	}
+	count := 0
+	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.RLock()
+		usesDomain := host.PlatformDomainID == id
+		host.RUnlock()
+		if usesDomain {
+			count++
+		}
+		return true
+	})
+	return count
+}
+
+func (s *DbUtils) IsPlatformDomainInUse(id string) bool {
+	return s.PlatformDomainReferenceCount(id) > 0
+}
+
+func (s *DbUtils) validatePlatformDomainReferences(previous *Glob, next []PlatformDomain) error {
+	if previous == nil {
+		return nil
+	}
+	nextByID := make(map[string]PlatformDomain, len(next))
+	for _, domain := range next {
+		nextByID[domain.ID] = domain
+	}
+	for _, previousDomain := range previous.PlatformDomains {
+		if s.PlatformDomainReferenceCount(previousDomain.ID) == 0 {
+			continue
+		}
+		nextDomain, exists := nextByID[previousDomain.ID]
+		if !exists {
+			return fmt.Errorf("平台域名 %s 正被主机使用，不能删除", previousDomain.Wildcard)
+		}
+		if nextDomain.Wildcard != previousDomain.Wildcard {
+			return fmt.Errorf("平台域名 %s 正被主机使用，不能修改泛域名", previousDomain.Wildcard)
+		}
+	}
+	return nil
+}
+
+// validatePlatformWildcardConflicts prevents a managed wildcard namespace from
+// being added behind an existing wildcard route. Exact legacy hosts are kept
+// compatible: their individual prefixes remain reserved, while unrelated
+// platform prefixes can still be issued. A conflicting wildcard would instead
+// intercept every newly issued platform host for one client or tenant.
+func (s *DbUtils) validatePlatformWildcardConflicts(domains []PlatformDomain) error {
+	if len(domains) == 0 {
+		return nil
+	}
+	var conflict error
+	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.RLock()
+		hostName, platformDomainID := host.Host, host.PlatformDomainID
+		host.RUnlock()
+		hostName = normalizeHostName(hostName)
+		if !strings.HasPrefix(hostName, "*.") || !validHostRule(hostName) {
+			return true
+		}
+		for _, domain := range domains {
+			// Platform-mode hosts are guaranteed to use a single exact hostname
+			// on normal writes. Ignore a legacy/corrupt self-reference here; the
+			// persisted host remains subject to normal route validation.
+			if platformDomainID == domain.ID {
+				continue
+			}
+			if hostRulesOverlap(hostName, domain.Wildcard) {
+				conflict = fmt.Errorf("平台泛域名 %s 与现有泛域名规则 %s 冲突，请先迁移或删除该规则", domain.Wildcard, hostName)
+				return false
+			}
+		}
+		return true
+	})
+	return conflict
+}
+
+func (s *DbUtils) preparePlatformHost(host *Host, previous *Host) error {
+	platformDomainID := strings.TrimSpace(host.PlatformDomainID)
+	if platformDomainID == "" {
+		if domain, withinPlatformDomain := s.FindPlatformDomainByHost(host.Host); withinPlatformDomain {
+			// Existing custom hosts remain compatible when their hostname is not
+			// changed. New records and renamed records must use the platform mode.
+			if previous == nil {
+				return fmt.Errorf("域名 %s 属于平台泛域名，请使用平台域名模式", domain.Wildcard)
+			}
+			previous.RLock()
+			previousPlatformID, previousHost := previous.PlatformDomainID, previous.Host
+			previous.RUnlock()
+			if previousPlatformID != "" || normalizeHostName(previousHost) != normalizeHostName(host.Host) {
+				return fmt.Errorf("域名 %s 属于平台泛域名，请使用平台域名模式", domain.Wildcard)
+			}
+		}
+		return nil
+	}
+
+	domain, err := s.GetPlatformDomain(platformDomainID)
+	if err != nil {
+		return err
+	}
+	if err := validatePlatformDomainCertificate(*domain); err != nil {
+		return err
+	}
+	hostName := normalizeHostName(host.Host)
+	if !platformHostMatches(hostName, domain.Wildcard) {
+		return fmt.Errorf("平台域名主机必须使用 %s 的单层前缀", domain.Wildcard)
+	}
+	if !s.isPlatformHostUnique(hostName, host.Id) {
+		return errors.New("平台域名主机已被使用")
+	}
+	host.PlatformDomainID = domain.ID
+	host.Host = hostName
+	// Certificate paths are server-owned for platform hosts. This also blocks
+	// direct API/NPC payloads from supplying a different certificate.
+	host.CertFilePath = domain.CertFilePath
+	host.KeyFilePath = domain.KeyFilePath
+	return nil
+}
+
 func (s *DbUtils) NewHost(t *Host) error {
 	if t == nil || t.Client == nil || t.Target == nil {
 		return errors.New("主机记录无效")
@@ -771,6 +1065,9 @@ func (s *DbUtils) NewHost(t *Host) error {
 	t.Location = normalizeHostLocation(t.Location)
 	hostMutationMu.Lock()
 	defer hostMutationMu.Unlock()
+	if err := s.preparePlatformHost(t, nil); err != nil {
+		return err
+	}
 	if s.IsHostExist(t) {
 		return errors.New("host has exist")
 	}
@@ -801,6 +1098,9 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	if !ok || !valid || stored == nil {
 		return errors.New("未找到主机")
 	}
+	if err := s.preparePlatformHost(t, stored); err != nil {
+		return err
+	}
 	if s.IsHostExist(t) {
 		return errors.New("host has exist")
 	}
@@ -809,6 +1109,7 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	}
 	stored.Lock()
 	stored.Host = t.Host
+	stored.PlatformDomainID = t.PlatformDomainID
 	stored.Client = t.Client
 	stored.Target = t.Target
 	stored.HeaderChange = t.HeaderChange
@@ -1070,6 +1371,145 @@ func (s *DbUtils) GetHostById(id int) (h *Host, err error) {
 func normalizeHostName(value string) string {
 	value = strings.TrimSpace(strings.ToLower(value))
 	return strings.TrimSuffix(value, ".")
+}
+
+func normalizePlatformDomains(input []PlatformDomain) ([]PlatformDomain, error) {
+	if len(input) == 0 {
+		return nil, nil
+	}
+	domains := make([]PlatformDomain, 0, len(input))
+	byID := make(map[string]struct{}, len(input))
+	for _, inputDomain := range input {
+		domain := PlatformDomain{
+			ID:           strings.TrimSpace(inputDomain.ID),
+			CertFilePath: strings.TrimSpace(inputDomain.CertFilePath),
+			KeyFilePath:  strings.TrimSpace(inputDomain.KeyFilePath),
+		}
+		wildcard, err := normalizePlatformWildcard(inputDomain.Wildcard)
+		if err != nil {
+			return nil, err
+		}
+		if domain.ID == "" {
+			domain.ID, err = deterministicPlatformDomainID(wildcard, byID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if _, exists := byID[domain.ID]; exists {
+			return nil, errors.New("平台域名 ID 重复")
+		}
+		if domain.CertFilePath == "" || domain.KeyFilePath == "" {
+			return nil, fmt.Errorf("平台域名 %s 的证书和私钥路径不能为空", wildcard)
+		}
+		domain.Wildcard = wildcard
+		for _, existing := range domains {
+			if hostRulesOverlap(domain.Wildcard, existing.Wildcard) {
+				return nil, fmt.Errorf("平台泛域名 %s 与 %s 重叠", domain.Wildcard, existing.Wildcard)
+			}
+		}
+		byID[domain.ID] = struct{}{}
+		domains = append(domains, domain)
+	}
+	return domains, nil
+}
+
+// deterministicPlatformDomainID gives manually added legacy entries a stable
+// ID before any Host can reference them. A random ID here would change on
+// every restart until another global save happened, orphaning a Host created
+// in that window.
+func deterministicPlatformDomainID(wildcard string, existing map[string]struct{}) (string, error) {
+	digest := sha256.Sum256([]byte(wildcard))
+	encoded := hex.EncodeToString(digest[:])
+	for length := 16; length <= len(encoded); length += 8 {
+		id := "platform-" + encoded[:length]
+		if _, found := existing[id]; !found {
+			return id, nil
+		}
+	}
+	return "", errors.New("生成平台域名 ID 冲突")
+}
+
+// validatePlatformDomainCertificate keeps a bad certificate path from being
+// issued to a new platform hostname. The same check runs on SaveGlobal and at
+// the data-layer Host write boundary so manually edited JSON cannot bypass it.
+func validatePlatformDomainCertificate(domain PlatformDomain) error {
+	pair, err := tls.LoadX509KeyPair(domain.CertFilePath, domain.KeyFilePath)
+	if err != nil {
+		return fmt.Errorf("平台域名 %s 的证书或私钥不可用: %w", domain.Wildcard, err)
+	}
+	if len(pair.Certificate) == 0 {
+		return fmt.Errorf("平台域名 %s 的证书内容为空", domain.Wildcard)
+	}
+	certificate, err := x509.ParseCertificate(pair.Certificate[0])
+	if err != nil {
+		return fmt.Errorf("平台域名 %s 的证书无法解析: %w", domain.Wildcard, err)
+	}
+	now := time.Now()
+	if now.Before(certificate.NotBefore) || now.After(certificate.NotAfter) {
+		return fmt.Errorf("平台域名 %s 的证书当前未生效或已过期", domain.Wildcard)
+	}
+	probeHost := "probe." + strings.TrimPrefix(domain.Wildcard, "*.")
+	if err := certificate.VerifyHostname(probeHost); err != nil {
+		return fmt.Errorf("平台域名 %s 的证书不覆盖该泛域名", domain.Wildcard)
+	}
+	return nil
+}
+
+func normalizePlatformWildcard(value string) (string, error) {
+	value = normalizeHostName(value)
+	if !strings.HasPrefix(value, "*.") || strings.Count(value, "*") != 1 {
+		return "", errors.New("平台域名必须是 *.example.com 格式")
+	}
+	suffix := strings.TrimPrefix(value, "*.")
+	if !validDNSDomainName(suffix) {
+		return "", fmt.Errorf("平台域名 %s 无效", value)
+	}
+	return "*." + suffix, nil
+}
+
+func normalizePlatformPrefix(value string) (string, error) {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if !validDNSLabel(value) {
+		return "", errors.New("平台域名前缀必须是 1 到 63 位的字母、数字或连字符")
+	}
+	return value, nil
+}
+
+func validDNSDomainName(value string) bool {
+	if len(value) == 0 || len(value) > 253 || !strings.Contains(value, ".") {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if !validDNSLabel(label) {
+			return false
+		}
+	}
+	return true
+}
+
+func validDNSLabel(value string) bool {
+	if len(value) == 0 || len(value) > 63 || value[0] == '-' || value[len(value)-1] == '-' {
+		return false
+	}
+	for _, char := range value {
+		if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func platformHostMatches(host, wildcard string) bool {
+	host, wildcard = normalizeHostName(host), normalizeHostName(wildcard)
+	if !strings.HasPrefix(wildcard, "*.") {
+		return false
+	}
+	suffix := strings.TrimPrefix(wildcard, "*.")
+	if !strings.HasSuffix(host, "."+suffix) {
+		return false
+	}
+	prefix := strings.TrimSuffix(host, "."+suffix)
+	return validDNSLabel(prefix)
 }
 
 func hostRuleMatches(host, rule string) bool {

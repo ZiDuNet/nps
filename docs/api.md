@@ -252,6 +252,8 @@ POST /index/addhost
 | `key_file_path` | 私钥路径 |
 | `AutoHttps` | 是否自动 HTTPS |
 
+平台域名使用 `domain_mode=platform`、`platform_domain_id` 和 `platform_prefix`；此时证书路径由管理员维护的平台泛域名锁定。完整参数、实时查重和规则诊断接口见[Web API 清单](extend/webapi.md#host-域名解析管理)与[平台泛域名说明](extend/platform-domain.md)。
+
 ### 修改、删除、启动、停止 Host
 
 ```http

@@ -1,230 +1,107 @@
-<section class="wrapper wrapper-content animated fadeInRight management-page" aria-labelledby="host-list-title">
+<section class="wrapper wrapper-content animated fadeInRight management-page management-page--host" aria-labelledby="host-list-title">
     <header class="dashboard-page-header management-page-header">
         <div>
-            <div class="dashboard-page-kicker" data-i18n-zh="虚拟主机" data-i18n-en="Virtual hosts">虚拟主机</div>
-            <h1 id="host-list-title" langtag="page-hostlist"></h1>
-            <p data-i18n-zh="将域名、证书和后端目标组合为可管理的站点入口。" data-i18n-en="Combine domains, certificates, and backend targets into managed site entries.">将域名、证书和后端目标组合为可管理的站点入口。</p>
+            <div class="dashboard-page-kicker" data-i18n-zh="域名代理" data-i18n-en="Domain proxy">域名代理</div>
+            <h1 id="host-list-title" data-i18n-zh="域名规则" data-i18n-en="Domain rules">域名规则</h1>
+            <p data-i18n-zh="集中查看访问入口、协议与内网目标；展开行可查看路由摘要。" data-i18n-en="Review public entry points, protocols, and internal targets. Expand a row for routing details.">集中查看访问入口、协议与内网目标；展开行可查看路由摘要。</p>
+        </div>
+        <div class="dashboard-page-actions">
+            <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/index/hostdiagnose"><i class="fa fa-stethoscope" aria-hidden="true"></i><span data-i18n-zh="规则诊断" data-i18n-en="Rule diagnosis">规则诊断</span></a>
         </div>
     </header>
-    <div class="row">
-        <div class="col-lg-12">
-            <section class="panel ibox float-e-margins management-table-card zui-panel">
-                <div class="ibox-content management-table-content">
-                    <div id="toolbar" class="management-table-toolbar">
-                        <a href="{{.web_base_url}}/index/addhost?vkey={{.task_id}}&client_id={{.client_id}}" class="btn btn-primary dim">
-                            <i class="fa fa-fw fa-lg fa-plus"></i> <span langtag="word-add"></span>
-                        </a>
-                        <a href="#" onclick="batchDelete('{{.web_base_url}}/index/delhost');return false;" class="btn btn-danger dim">
-                            <i class="fa fa-fw fa-lg fa-trash"></i> <span langtag="word-batchdelete"></span>
-                        </a>
-                    </div>
-                    <table id="table"></table>
-                </div>
-            </section>
+
+    <div class="row"><div class="col-lg-12"><section class="panel ibox float-e-margins management-table-card zui-panel"><div class="ibox-content management-table-content">
+        <div id="toolbar" class="management-table-toolbar">
+            <a href="{{.web_base_url}}/index/addhost?client_id={{.client_id}}" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i><span data-i18n-zh="新增规则" data-i18n-en="New rule">新增规则</span></a>
+            <button type="button" onclick="batchDelete('{{.web_base_url}}/index/delhost');" class="btn btn-outline btn-danger"><i class="fa fa-trash" aria-hidden="true"></i><span data-i18n-zh="批量删除" data-i18n-en="Delete selected">批量删除</span></button>
         </div>
-    </div>
+        <table id="table"></table>
+    </div></section></div></div>
 </section>
 
 <script>
-    var hostListClientId = Number('{{.client_id}}');
-    if (!isFinite(hostListClientId) || Math.floor(hostListClientId) !== hostListClientId || hostListClientId < 0) {
-        hostListClientId = 0;
-    }
+var hostListClientId = Number('{{.client_id}}');
+if (!isFinite(hostListClientId) || Math.floor(hostListClientId) !== hostListClientId || hostListClientId < 0) hostListClientId = 0;
+var hostHttpPort = '{{.http_proxy_port}}';
+var hostHttpsPort = '{{.https_proxy_port}}';
 
-    /*bootstrap table*/
-    $('#table').bootstrapTable({
-        toolbar: "#toolbar",
-        method: 'post', // 服务器数据的请求方式 get or post
-        url: window.location, // 服务器数据的加载地址
-        queryParams: function (params) {
-            return {
-                "offset": params.offset,
-                "limit": params.limit,
-                "search": params.search,
-                "sort": params.sort,
-                "order": params.order,
-                "client_id": hostListClientId
-            }
-        },
-        search: true,
-        contentType: "application/x-www-form-urlencoded",
-        striped: true, // 设置为true会有隔行变色效果
-        showHeader: true,
-        showColumns: true,
-        showRefresh: true,
-        pagination: true,//分页
-        sidePagination: 'server',//服务器端分页
-        pageNumber: 1,
-        pageList: [5, 10, 20, 50],//分页步进值
-        detailView: true,
-        smartDisplay: true, // 智能显示 pagination 和 cardview 等
-        formatLoadingMessage: function () { return npsTableState('host', true); },
-        formatNoMatches: function () { return npsTableState('host', false); },
-        onExpandRow: function () {
-            $('body').setLang('.detail-view');
-            npsDecorateDetailControls('#table');
-        },
-        onCollapseRow: function () { window.setTimeout(function () { npsDecorateDetailControls('#table'); }, 0); },
-        onPostBody: function (data) {
-            $('body').setLang('#table');
-            npsApplyTableState(this, 'host');
-        },
-        detailFormatter: function (index, row, element) {
-            var flow = row.Flow || {};
-            var client = row.Client || {};
-            var config = client.Cnf || {};
-            return '<b langtag="word-exportflow"></b>: ' + npsEscapeHtml(changeunit(flow.ExportFlow)) + '&emsp;'
-                    + '<b langtag="word-inletflow"></b>: ' + npsEscapeHtml(changeunit(flow.InletFlow)) + '&emsp;'
-                    + '<b langtag="word-crypt"></b>: ' + npsBooleanMarkup(config.Crypt) + '&emsp;'
-                    + '<b langtag="word-compress"></b>: ' + npsBooleanMarkup(config.Compress) + '&emsp;'
-                    + '<b langtag="word-basicusername"></b>: ' + npsEscapeHtml(config.U) + '&emsp;'
-                    + '<b langtag="word-basicpassword"></b>: ' + npsEscapeHtml(config.P) + '&emsp;<br/><br>'
-                    + '<b langtag="word-httpscert"></b>: ' + npsEscapeHtml(row.CertFilePath) + '&emsp;'
-                    + '<b langtag="word-httpskey"></b>: ' + npsEscapeHtml(row.KeyFilePath) + '&emsp;<br/><br>'
-                    + '<b langtag="word-requestheader"></b>: ' + npsEscapeHtml(row.HeaderChange) + '&emsp;<br/><br>'
-                    + '<b langtag="word-requesthost"></b>: ' + npsEscapeHtml(row.HostChange) + '&emsp;'
-        },
-        //表格的列
-        columns: [
-            {
-                checkbox: true,
-                align: 'center',
-                valign: 'middle'
-            },
-            {
-                field: 'Id',//域值
-                title: '<span langtag="word-id"></span>',//标题
-                halign: 'center',
-                sortable: true,
-                visible: true,//false表示不显示
-                escape: true
-            },
-            {
-                field: 'ClientId',//域值
-                title: '<span langtag="word-clientid"></span>',//标题
-                halign: 'center',
-                sortable: true,
-                visible: true,//false表示不显示
-                formatter: function (value, row, index) {
-                    var client = row.Client || {};
-                    return npsEscapeHtml((client.Id == null ? '' : client.Id) + '-' + (client.Remark || ''));
-                }
-            },
-            {
-                field: 'Remark',//域值
-                title: '<span langtag="word-remark"></span>',//标题
-                halign: 'center',
-                sortable: true,
-                visible: true,//false表示不显示
-                escape: true
-            },
-            {
-                field: 'Client.VerifyKey',//域值
-                title: '<span langtag="word-verifykey"></span>',//标题
-                halign: 'center',
-                sortable: true,
-                visible: true,//false表示不显示
-                escape: true
-            },
-            {
-                field: 'Host',//域值
-                title: '<span langtag="word-host"></span>',//标题
-                halign: 'center',
-                sortable: true,
-                visible: true,//false表示不显示
-                formatter: function (value, row, index) {
-                    var hostAddress = String(row.Host || '') + '{{.http_proxy_port}}';
-                    var safeHostAddress = npsEscapeHtml(hostAddress);
-                    return "<a href='http://" + safeHostAddress + "' target='_blank' rel='noopener noreferrer'>" + safeHostAddress + "</a>"
-                }
-            },
-            {
-                field: 'Scheme',//域值
-                title: '<span langtag="word-scheme"></span>',//标题
-                halign: 'center',
-                sortable: true,
-                visible: true,//false表示不显示
-                formatter: function (value, row, index) {
-                    var scheme = String(value || '').replace(/[^A-Za-z0-9_-]/g, '');
-                    return '<span langtag="word-' + scheme + '"></span>'
-                }
-            },
-            {
-                field: 'Target',//域值
-                title: '<span langtag="word-target"></span>',//标题
-                halign: 'center',
-                sortable: true,
-                visible: true,//false表示不显示
-                formatter: function (value, row, index) {
-                    return npsEscapeHtml((row.Target || {}).TargetStr);
-                }
-            },
-            {
-                field: 'Location',//域值
-                title: '<span langtag="word-location"></span>',//标题
-                halign: 'center',
-                sortable: true,
-                visible: true,//false表示不显示
-                escape: true
-            },
-            {
-                field: 'IsClose',//域值
-                title: '<span langtag="word-status"></span>',//内容
-                align: 'center',
-                halign: 'center',
-                sortable: true,
-                visible: true,//false表示不显示
-                formatter: function (value, row, index) {
-                    if (!value) {
-                        return '<span class="badge badge-primary" langtag="word-open"></span>'
-                    } else {
-                        return '<span class="badge badge-badge" langtag="word-close"></span>'
-                    }
-                }
-            },
-            {
-                field: 'IsConnect',//域值
-                title: '<span langtag="word-clientstatus"></span>',//内容
-                align: 'center',
-                halign: 'center',
-                sortable: true,
-                visible: true,//false表示不显示
-                formatter: function (value, row, index) {
-                    var hosturl = ((row.Scheme == 'http' ) ? 'http://' : 'https://') + (row.Host || '') + (row.Location || '');
-                    hosturl = npsEscapeHtml(hosturl);
-                    if (row.Client && row.Client.IsConnect) {
-                        return '<a href="' + hosturl + '" target="_blank" rel="noopener noreferrer"><span class="badge badge-primary" langtag="word-online"></span></a>'
-                    } else {
-                        return '<span class="badge badge-badge" langtag="word-offline"></span>'
-                    }
-                }
-            },
-            {
-                field: 'option',//域值
-                title: '<span langtag="word-option"></span>',//内容
-                align: 'center',
-                halign: 'center',
-                visible: true,//false表示不显示
-                formatter: function (value, row, index) {
-                    var hostId = Number(row.Id);
-                    if (!isFinite(hostId) || Math.floor(hostId) !== hostId || hostId <= 0) return '';
-                    var btn_group = '<div class="btn-group">'
+function hostSchemeLabel(scheme) {
+    if (scheme === 'http') return 'HTTP';
+    if (scheme === 'https') return 'HTTPS';
+    return 'HTTP + HTTPS';
+}
 
-                    if (!row.IsClose) {
-                        btn_group += "<button type=\"button\" onclick=\"submitform('stop', '{{.web_base_url}}/index/hoststop', {'id':" + hostId
-                        btn_group += '})" class="btn btn-outline btn-warning" data-title-zh="停止主机" data-title-en="Stop host" data-aria-label-zh="停止主机" data-aria-label-en="Stop host"><i class="fa fa-pause" aria-hidden="true"></i></button>'
-                    } else {
-                        btn_group += "<button type=\"button\" onclick=\"submitform('start', '{{.web_base_url}}/index/hoststart', {\'id\':" + hostId
-                        btn_group += '})" class="btn btn-outline btn-primary" data-title-zh="启动主机" data-title-en="Start host" data-aria-label-zh="启动主机" data-aria-label-en="Start host"><i class="fa fa-play" aria-hidden="true"></i></button>'
-                    }
+function hostPublicURL(host, port, scheme, location) {
+    var safeHost = String(host || '').trim();
+    if (!safeHost) return '';
+    var safePath = String(location || '/');
+    if (safePath.charAt(0) !== '/') safePath = '/' + safePath;
+    return scheme + '://' + safeHost + String(port || '') + safePath;
+}
 
-                    btn_group += "<button type=\"button\" onclick=\"submitform('delete', '{{.web_base_url}}/index/delhost', {'id':" + hostId
-                    btn_group += '})" class="btn btn-outline btn-danger" data-title-zh="删除主机" data-title-en="Delete host" data-aria-label-zh="删除主机" data-aria-label-en="Delete host"><i class="fa fa-trash" aria-hidden="true"></i></button>'
-                    btn_group += '<a href="{{.web_base_url}}/index/edithost?id=' + hostId
-                    btn_group += '" class="btn btn-outline btn-success" data-title-zh="编辑主机" data-title-en="Edit host" data-aria-label-zh="编辑主机" data-aria-label-en="Edit host"><i class="fa fa-edit" aria-hidden="true"></i></a></div>'
-                    return btn_group
-                }
-            }
-        ]
-    });
+function hostEndpointLink(label, url) {
+    if (!url) return '';
+    var safeURL = npsEscapeHtml(url);
+    return '<a class="host-endpoint" href="' + safeURL + '" target="_blank" rel="noopener noreferrer"><span>' + label + '</span><i class="fa fa-external-link" aria-hidden="true"></i></a>';
+}
+
+$('#table').bootstrapTable({
+    toolbar: '#toolbar', method: 'post', url: window.location,
+    queryParams: function (params) { return {offset: params.offset, limit: params.limit, search: params.search, client_id: hostListClientId}; },
+    search: true, contentType: 'application/x-www-form-urlencoded', striped: true, showHeader: true, showColumns: false, showRefresh: true,
+    pagination: true, sidePagination: 'server', pageNumber: 1, pageList: [10, 20, 50], detailView: true, smartDisplay: true,
+    // A dense card record is clearer than a compressed multi-column grid on phones.
+    cardView: window.matchMedia && window.matchMedia('(max-width: 768px)').matches,
+    formatLoadingMessage: function () { return npsTableState('host', true); },
+    formatNoMatches: function () { return npsTableState('host', false); },
+    onExpandRow: function () { $('body').setLang('.detail-view'); },
+    onPostBody: function () { $('body').setLang('#table'); npsApplyTableState(this, 'host'); },
+    detailFormatter: function (index, row) {
+        var target = (row.Target || {}).TargetStr || '';
+        var source = row.PlatformManaged ? (npsIsEnglish() ? 'Platform domain / managed certificate' : '平台域名 / 托管证书') : (npsIsEnglish() ? 'Custom domain / self-managed certificate' : '自定义域名 / 自管证书');
+        var redirect = row.AutoHttps ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
+        var localProxy = (row.Target || {}).LocalProxy ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
+        var client = row.Client || {}, clientName = client.Id ? String(client.Id) + ' · ' + String(client.Remark || '-') : '-';
+        var clientState = client.IsConnect ? (npsIsEnglish() ? 'Online' : '在线') : (npsIsEnglish() ? 'Offline' : '离线');
+        var ruleState = row.IsClose ? (npsIsEnglish() ? 'Disabled' : '已停用') : (npsIsEnglish() ? 'Active' : '运行中');
+        return '<div class="host-detail-grid">'
+            + '<div><span>' + (npsIsEnglish() ? 'Domain source' : '域名来源') + '</span><strong>' + npsEscapeHtml(source) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Rule status' : '规则状态') + '</span><strong>' + npsEscapeHtml(ruleState) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Client' : '客户端') + '</span><strong>' + npsEscapeHtml(clientName + ' / ' + clientState) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Remark' : '备注') + '</span><strong>' + npsEscapeHtml(row.Remark || '-') + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Protocol' : '协议') + '</span><strong>' + npsEscapeHtml(hostSchemeLabel(row.Scheme)) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Path rule' : '路径规则') + '</span><strong>' + npsEscapeHtml(row.Location || '/') + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'HTTP to HTTPS' : 'HTTP 跳转 HTTPS') + '</span><strong>' + npsEscapeHtml(redirect) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Local proxy' : '本地代理') + '</span><strong>' + npsEscapeHtml(localProxy) + '</strong></div>'
+            + '<div class="host-detail-grid__wide"><span>' + (npsIsEnglish() ? 'Internal target' : '内网目标') + '</span><code>' + npsEscapeHtml(target || '-') + '</code></div>'
+            + '</div>';
+    },
+    columns: [
+        {checkbox: true, align: 'center', valign: 'middle'},
+        {field: 'Host', title: '<span data-i18n-zh="访问入口" data-i18n-en="Public entry">访问入口</span>', class: 'host-list__entry', formatter: function (value, row) {
+            var scheme = String(row.Scheme || 'all'); var links = '';
+            if (scheme === 'all' || scheme === 'http') links += hostEndpointLink('HTTP', hostPublicURL(row.Host, hostHttpPort, 'http', row.Location));
+            if (scheme === 'all' || scheme === 'https') links += hostEndpointLink('HTTPS', hostPublicURL(row.Host, hostHttpsPort, 'https', row.Location));
+            var managed = row.PlatformManaged ? '<span class="badge badge-primary host-platform-badge">' + (npsIsEnglish() ? 'Platform' : '平台') + '</span>' : '';
+            return '<div class="host-entry"><div class="host-entry__name">' + npsEscapeHtml(row.Host || '-') + managed + '</div><div class="host-entry__links">' + links + '</div></div>';
+        }},
+        {field: 'Remark', title: '<span data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', class: 'host-list__remark', formatter: function (value) { return npsEscapeHtml(value || '-'); }},
+        {field: 'Client', title: '<span data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>', class: 'host-list__client', formatter: function (value, row) {
+            var client = row.Client || {}, name = client.Id ? String(client.Id) + ' · ' + String(client.Remark || '-') : '-';
+            var state = client.IsConnect ? (npsIsEnglish() ? 'Online' : '在线') : (npsIsEnglish() ? 'Offline' : '离线');
+            return '<div class="host-client"><span>' + npsEscapeHtml(name) + '</span><small class="' + (client.IsConnect ? 'is-online' : 'is-offline') + '">' + state + '</small></div>';
+        }},
+        {field: 'Target', title: '<span data-i18n-zh="内网目标" data-i18n-en="Internal target">内网目标</span>', class: 'host-list__target', formatter: function (value, row) { return '<code class="host-target-cell">' + npsEscapeHtml((row.Target || {}).TargetStr || '-') + '</code>'; }},
+        {field: 'IsClose', title: '<span data-i18n-zh="状态" data-i18n-en="Status">状态</span>', align: 'center', formatter: function (value) { return value ? '<span class="badge badge-warning" data-i18n-zh="已停用" data-i18n-en="Disabled">已停用</span>' : '<span class="badge badge-success" data-i18n-zh="运行中" data-i18n-en="Active">运行中</span>'; }},
+        {field: 'option', title: '<span data-i18n-zh="操作" data-i18n-en="Actions">操作</span>', align: 'center', class: 'host-list__actions', formatter: function (value, row) {
+            var id = Number(row.Id); if (!isFinite(id) || Math.floor(id) !== id || id <= 0) return '';
+            var button = '<div class="btn-group host-actions">';
+            if (row.IsClose) button += '<button type="button" onclick="submitform(\'start\', \'{{.web_base_url}}/index/hoststart\', {id:' + id + '})" class="btn btn-outline btn-primary" title="' + (npsIsEnglish() ? 'Enable rule' : '启用规则') + '" aria-label="' + (npsIsEnglish() ? 'Enable rule' : '启用规则') + '"><i class="fa fa-play" aria-hidden="true"></i></button>';
+            else button += '<button type="button" onclick="submitform(\'stop\', \'{{.web_base_url}}/index/hoststop\', {id:' + id + '})" class="btn btn-outline btn-warning" title="' + (npsIsEnglish() ? 'Disable rule' : '停用规则') + '" aria-label="' + (npsIsEnglish() ? 'Disable rule' : '停用规则') + '"><i class="fa fa-pause" aria-hidden="true"></i></button>';
+            button += '<a href="{{.web_base_url}}/index/edithost?id=' + id + '" class="btn btn-outline btn-success" title="' + (npsIsEnglish() ? 'Edit rule' : '编辑规则') + '" aria-label="' + (npsIsEnglish() ? 'Edit rule' : '编辑规则') + '"><i class="fa fa-edit" aria-hidden="true"></i></a>';
+            button += '<button type="button" onclick="submitform(\'delete\', \'{{.web_base_url}}/index/delhost\', {id:' + id + '})" class="btn btn-outline btn-danger" title="' + (npsIsEnglish() ? 'Delete rule' : '删除规则') + '" aria-label="' + (npsIsEnglish() ? 'Delete rule' : '删除规则') + '"><i class="fa fa-trash" aria-hidden="true"></i></button></div>';
+            return button;
+        }}
+    ]
+});
 </script>
