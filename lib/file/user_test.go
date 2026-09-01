@@ -1,6 +1,11 @@
 package file
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"ehang.io/nps/lib/common"
+)
 
 func TestMigrateUsersFromClientsGroupsSameLegacyCredentials(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
@@ -94,6 +99,116 @@ func TestUserTunnelLimitCountsClientsTunnelsAndHosts(t *testing.T) {
 	user.MaxTunnelNum = 3
 	if utils.IsUserTunnelLimitReached(user.Id) {
 		t.Fatal("expected user tunnel limit not to be reached")
+	}
+}
+
+func TestIsUserActiveSnapshotsState(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	active := &User{Id: 1, Status: true}
+	expired := &User{Id: 2, Status: true, ExpireTime: time.Now().Add(-time.Minute).Format("2006-01-02 15:04:05")}
+	disabled := &User{Id: 3, Status: false}
+	malformed := &User{Id: 4, Status: true, ExpireTime: "not-a-date"}
+	for _, user := range []*User{active, expired, disabled, malformed} {
+		db.Users.Store(user.Id, user)
+	}
+	utils := &DbUtils{JsonDb: db}
+	if !utils.IsUserActive(active.Id) {
+		t.Fatal("active user without expiry should be active")
+	}
+	if utils.IsUserActive(expired.Id) {
+		t.Fatal("expired user should not be active")
+	}
+	if utils.IsUserActive(disabled.Id) {
+		t.Fatal("disabled user should not be active")
+	}
+	if utils.IsUserActive(malformed.Id) {
+		t.Fatal("malformed expiry must fail closed")
+	}
+}
+
+func TestGetIdByVerifyKeyRejectsExpiredOwningUser(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	user := &User{
+		Id:         7,
+		Status:     true,
+		ExpireTime: time.Now().Add(-time.Minute).Format("2006-01-02 15:04:05"),
+	}
+	client := &Client{Id: 11, UserId: user.Id, VerifyKey: "client-secret", Status: true}
+	disabledUser := &User{Id: 8, Status: false}
+	disabledClient := &Client{Id: 12, UserId: disabledUser.Id, VerifyKey: "disabled-secret", Status: true}
+	db.Users.Store(user.Id, user)
+	db.Clients.Store(client.Id, client)
+	db.Users.Store(disabledUser.Id, disabledUser)
+	db.Clients.Store(disabledClient.Id, disabledClient)
+	utils := &DbUtils{JsonDb: db}
+	if _, err := utils.GetIdByVerifyKey(common.Getverifyval(client.VerifyKey), "192.0.2.10:1234"); err == nil {
+		t.Fatal("expired user's client must not authenticate to the bridge")
+	}
+	if _, err := utils.GetIdByVerifyKey(common.Getverifyval(disabledClient.VerifyKey), "192.0.2.11:1234"); err == nil {
+		t.Fatal("disabled user's client must not authenticate to the bridge")
+	}
+
+	user.Lock()
+	user.ExpireTime = ""
+	user.Unlock()
+	id, err := utils.GetIdByVerifyKey(common.Getverifyval(client.VerifyKey), "192.0.2.10:1234")
+	if err != nil || id != client.Id {
+		t.Fatalf("active user's client should authenticate, id=%d err=%v", id, err)
+	}
+	client.RLock()
+	addr := client.Addr
+	client.RUnlock()
+	if addr != "192.0.2.10" {
+		t.Fatalf("client address was not normalized under lock: %q", addr)
+	}
+}
+
+func TestIsClientActiveRequiresActiveOwner(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	active := &User{Id: 1, Status: true}
+	disabled := &User{Id: 2, Status: false}
+	db.Users.Store(active.Id, active)
+	db.Users.Store(disabled.Id, disabled)
+	utils := &DbUtils{JsonDb: db}
+
+	if !utils.IsClientActive(&Client{Status: true}) {
+		t.Fatal("unowned enabled client should remain active")
+	}
+	if !utils.IsClientActive(&Client{Status: true, UserId: active.Id}) {
+		t.Fatal("client owned by active user should remain active")
+	}
+	if utils.IsClientActive(&Client{Status: true, UserId: disabled.Id}) {
+		t.Fatal("client owned by disabled user must be inactive")
+	}
+	if utils.IsClientActive(&Client{Status: true, UserId: 999}) {
+		t.Fatal("client with missing owner must fail closed")
+	}
+}
+
+func TestDelUserDisablesOwnedClients(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	user := &User{Id: 5, UserName: "removed", Password: "secret", Status: true}
+	owned := &Client{Id: 10, UserId: user.Id, Status: true, IsConnect: true}
+	other := &Client{Id: 11, UserId: 6, Status: true}
+	db.Users.Store(user.Id, user)
+	db.Clients.Store(owned.Id, owned)
+	db.Clients.Store(other.Id, other)
+	utils := &DbUtils{JsonDb: db}
+
+	if err := utils.DelUser(user.Id); err != nil {
+		t.Fatal(err)
+	}
+	owned.RLock()
+	ownedUserID, ownedStatus, ownedConnected := owned.UserId, owned.Status, owned.IsConnect
+	owned.RUnlock()
+	if ownedUserID != 0 || ownedStatus || ownedConnected {
+		t.Fatalf("deleted user's client was not disabled: user=%d status=%v connected=%v", ownedUserID, ownedStatus, ownedConnected)
+	}
+	other.RLock()
+	otherStatus := other.Status
+	other.RUnlock()
+	if !otherStatus {
+		t.Fatal("deleting one user disabled an unrelated client")
 	}
 }
 

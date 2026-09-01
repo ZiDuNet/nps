@@ -337,6 +337,10 @@
                 <span>启用 TLS</span>
               </label>
             </div>
+            <div v-if="manualForm.tls" class="form-group">
+              <label class="form-label">服务端证书指纹</label>
+              <input v-model="manualForm.tlsFingerprint" type="text" class="input" placeholder="SHA-256 fingerprint（可选）" />
+            </div>
             <div v-if="manualFormError" class="form-error">
               {{ manualFormError }}
             </div>
@@ -413,7 +417,8 @@ export default {
       name: '',
       addr: '',
       key: '',
-      tls: false
+      tls: false,
+      tlsFingerprint: ''
     })
     const manualFormError = ref('')
 
@@ -837,7 +842,8 @@ export default {
         name: '',
         addr: '',
         key: '',
-        tls: false
+        tls: false,
+        tlsFingerprint: ''
       }
       manualFormError.value = ''
       showManualDialog.value = true
@@ -853,7 +859,7 @@ export default {
       manualFormError.value = ''
 
       // 验证必填字段
-      const { name, addr, key, tls } = manualForm.value
+      const { name, addr, key, tls, tlsFingerprint } = manualForm.value
 
       if (!addr || !addr.trim()) {
         manualFormError.value = '请输入连接地址'
@@ -879,7 +885,8 @@ export default {
           name: name.trim(),
           addr: addr.trim(),
           key: key.trim(),
-          tls: tls
+          tls: tls,
+          tlsFingerprint: tlsFingerprint.trim()
         }
 
         // 调用 AddShortcut API，传递 JSON 字符串

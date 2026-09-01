@@ -20,8 +20,9 @@ type DbUtils struct {
 }
 
 var (
-	Db   *DbUtils
-	once sync.Once
+	Db             *DbUtils
+	once           sync.Once
+	hostMutationMu sync.Mutex
 )
 
 // init csv from file
@@ -41,12 +42,14 @@ func GetDb() *DbUtils {
 	return Db
 }
 
-func GetMapKeys(m sync.Map, isSort bool, sortKey, order string) (keys []int) {
+func GetMapKeys(m *sync.Map, isSort bool, sortKey, order string) (keys []int) {
 	if sortKey != "" && isSort {
 		return sortClientByKey(m, sortKey, order)
 	}
 	m.Range(func(key, value interface{}) bool {
-		keys = append(keys, key.(int))
+		if id, ok := key.(int); ok {
+			keys = append(keys, id)
+		}
 		return true
 	})
 	sort.Ints(keys)
@@ -56,17 +59,24 @@ func GetMapKeys(m sync.Map, isSort bool, sortKey, order string) (keys []int) {
 func (s *DbUtils) GetClientList(start, length int, search, sort, order string, clientId int) ([]*Client, int) {
 	list := make([]*Client, 0)
 	var cnt int
-	keys := GetMapKeys(s.JsonDb.Clients, true, sort, order)
+	keys := GetMapKeys(&s.JsonDb.Clients, true, sort, order)
 	for _, key := range keys {
 		if value, ok := s.JsonDb.Clients.Load(key); ok {
-			v := value.(*Client)
-			if v.NoDisplay {
+			v, valid := value.(*Client)
+			if !valid || v == nil {
 				continue
 			}
-			if clientId != 0 && clientId != v.Id {
+			v.RLock()
+			noDisplay, candidateID := v.NoDisplay, v.Id
+			verifyKey, remark := v.VerifyKey, v.Remark
+			v.RUnlock()
+			if noDisplay {
 				continue
 			}
-			if search != "" && !(v.Id == common.GetIntNoErrByStr(search) || strings.Contains(v.VerifyKey, search) || strings.Contains(v.Remark, search)) {
+			if clientId != 0 && clientId != candidateID {
+				continue
+			}
+			if search != "" && !(candidateID == common.GetIntNoErrByStr(search) || strings.Contains(verifyKey, search) || strings.Contains(remark, search)) {
 				continue
 			}
 			cnt++
@@ -84,8 +94,14 @@ func (s *DbUtils) GetUserList(start, length int, search string) ([]*User, int) {
 	list := make([]*User, 0)
 	all := make([]*User, 0)
 	s.JsonDb.Users.Range(func(key, value interface{}) bool {
-		v := value.(*User)
-		if search != "" && !(v.Id == common.GetIntNoErrByStr(search) || strings.Contains(v.UserName, search) || strings.Contains(v.Remark, search)) {
+		v, ok := value.(*User)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		userID, userName, remark := v.Id, v.UserName, v.Remark
+		v.RUnlock()
+		if search != "" && !(userID == common.GetIntNoErrByStr(search) || strings.Contains(userName, search) || strings.Contains(remark, search)) {
 			return true
 		}
 		all = append(all, v)
@@ -106,6 +122,9 @@ func (s *DbUtils) GetUserList(start, length int, search string) ([]*User, int) {
 }
 
 func (s *DbUtils) NewUser(u *User) error {
+	if u == nil {
+		return errors.New("用户记录无效")
+	}
 	if u.UserName == "" {
 		return errors.New("username can not be empty")
 	}
@@ -128,6 +147,9 @@ func (s *DbUtils) NewUser(u *User) error {
 }
 
 func (s *DbUtils) UpdateUser(u *User) error {
+	if u == nil {
+		return errors.New("用户记录无效")
+	}
 	if u.UserName == "" {
 		return errors.New("username can not be empty")
 	}
@@ -143,11 +165,29 @@ func (s *DbUtils) UpdateUser(u *User) error {
 }
 
 func (s *DbUtils) DelUser(id int) error {
+	if id <= 0 {
+		return errors.New("用户 ID 无效")
+	}
+	if user, err := s.GetUser(id); err == nil && user != nil {
+		user.Lock()
+		user.Status = false
+		user.Unlock()
+	}
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
-		c := value.(*Client)
+		c, ok := value.(*Client)
+		if !ok || c == nil {
+			return true
+		}
+		c.Lock()
 		if c.UserId == id {
 			c.UserId = 0
+			// Do not leave an orphaned client usable after its owner is deleted.
+			// The controller revokes live sessions before this method is called;
+			// keeping the client disabled also protects direct DbUtils callers.
+			c.Status = false
+			c.IsConnect = false
 		}
+		c.Unlock()
 		return true
 	})
 	s.JsonDb.Users.Delete(id)
@@ -158,7 +198,10 @@ func (s *DbUtils) DelUser(id int) error {
 
 func (s *DbUtils) GetUser(id int) (*User, error) {
 	if v, ok := s.JsonDb.Users.Load(id); ok {
-		return v.(*User), nil
+		if user, ok := v.(*User); ok && user != nil {
+			return user, nil
+		}
+		return nil, errors.New("用户记录无效")
 	}
 	return nil, errors.New("未找到用户")
 }
@@ -166,8 +209,14 @@ func (s *DbUtils) GetUser(id int) (*User, error) {
 func (s *DbUtils) GetUserByName(username string) (*User, error) {
 	var user *User
 	s.JsonDb.Users.Range(func(key, value interface{}) bool {
-		v := value.(*User)
-		if v.UserName == username {
+		v, ok := value.(*User)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		userName := v.UserName
+		v.RUnlock()
+		if userName == username {
 			user = v
 			return false
 		}
@@ -182,8 +231,14 @@ func (s *DbUtils) GetUserByName(username string) (*User, error) {
 func (s *DbUtils) VerifyUserLoginName(username string, id int) bool {
 	res := true
 	s.JsonDb.Users.Range(func(key, value interface{}) bool {
-		v := value.(*User)
-		if v.UserName == username && v.Id != id {
+		v, ok := value.(*User)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		userName, userID := v.UserName, v.Id
+		v.RUnlock()
+		if userName == username && userID != id {
 			res = false
 			return false
 		}
@@ -199,31 +254,43 @@ func (s *DbUtils) MigrateUsersFromClients() error {
 	}
 	byName := make(map[string]credential)
 	s.JsonDb.Users.Range(func(key, value interface{}) bool {
-		u := value.(*User)
-		byName[u.UserName] = credential{userId: u.Id, password: u.Password}
+		u, ok := value.(*User)
+		if !ok || u == nil {
+			return true
+		}
+		u.RLock()
+		userName, userID, password := u.UserName, u.Id, u.Password
+		u.RUnlock()
+		byName[userName] = credential{userId: userID, password: password}
 		return true
 	})
 
 	changedUsers := false
 	changedClients := false
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
-		c := value.(*Client)
-		if c.UserId != 0 || c.WebUserName == "" || c.WebPassword == "" {
+		c, ok := value.(*Client)
+		if !ok || c == nil {
 			return true
 		}
-		name := c.WebUserName
+		c.RLock()
+		clientUserID, webUserName, webPassword, remark, clientID := c.UserId, c.WebUserName, c.WebPassword, c.Remark, c.Id
+		c.RUnlock()
+		if clientUserID != 0 || webUserName == "" || webPassword == "" {
+			return true
+		}
+		name := webUserName
 		cred, ok := byName[name]
-		if ok && cred.password != c.WebPassword {
-			name = fmt.Sprintf("%s_%d", c.WebUserName, c.Id)
+		if ok && cred.password != webPassword {
+			name = fmt.Sprintf("%s_%d", webUserName, clientID)
 			ok = false
 		}
 		if !ok {
 			u := &User{
 				Id:         int(s.JsonDb.GetUserId()),
 				UserName:   name,
-				Password:   c.WebPassword,
+				Password:   webPassword,
 				Status:     true,
-				Remark:     c.Remark,
+				Remark:     remark,
 				CreateTime: time.Now().Format("2006-01-02 15:04:05"),
 			}
 			s.JsonDb.Users.Store(u.Id, u)
@@ -231,7 +298,9 @@ func (s *DbUtils) MigrateUsersFromClients() error {
 			byName[name] = cred
 			changedUsers = true
 		}
+		c.Lock()
 		c.UserId = cred.userId
+		c.Unlock()
 		changedClients = true
 		return true
 	})
@@ -247,9 +316,15 @@ func (s *DbUtils) MigrateUsersFromClients() error {
 func (s *DbUtils) UserClientIds(userId int) map[int]struct{} {
 	ids := make(map[int]struct{})
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
-		c := value.(*Client)
-		if c.UserId == userId {
-			ids[c.Id] = struct{}{}
+		c, ok := value.(*Client)
+		if !ok || c == nil {
+			return true
+		}
+		c.RLock()
+		clientUserID, clientID := c.UserId, c.Id
+		c.RUnlock()
+		if clientUserID == userId {
+			ids[clientID] = struct{}{}
 		}
 		return true
 	})
@@ -258,37 +333,89 @@ func (s *DbUtils) UserClientIds(userId int) map[int]struct{} {
 
 func (s *DbUtils) IsClientBelongToUser(clientId, userId int) bool {
 	c, err := s.GetClient(clientId)
-	return err == nil && c.UserId == userId
+	if err != nil || c == nil {
+		return false
+	}
+	c.RLock()
+	belongs := c.UserId == userId
+	c.RUnlock()
+	return belongs
 }
 
 func (s *DbUtils) IsUserActive(userId int) bool {
 	user, err := s.GetUser(userId)
-	if err != nil || !user.Status {
+	if err != nil || user == nil {
 		return false
 	}
-	if user.ExpireTime == "" {
+	// User status and expiration are changed by the Web controller and the
+	// periodic expiry worker. Snapshot both fields under the model lock so an
+	// authentication request never observes a torn state.
+	user.RLock()
+	status, expireTime := user.Status, strings.TrimSpace(user.ExpireTime)
+	user.RUnlock()
+	if !status {
+		return false
+	}
+	if expireTime == "" {
 		return true
 	}
-	t, err := time.ParseInLocation("2006-01-02 15:04:05", user.ExpireTime, time.Local)
-	return err != nil || time.Now().Before(t)
+	t, err := time.ParseInLocation("2006-01-02 15:04:05", expireTime, time.Local)
+	// A malformed expiry is safer to treat as expired than to let it bypass the
+	// bridge authentication check.
+	return err == nil && time.Now().Before(t)
+}
+
+// IsClientActive applies both the client's own status and the status of its
+// owning user. A client with a missing owner is treated as inactive when it
+// still carries a non-zero UserId, which fails closed after user deletion or
+// malformed persistence data.
+func (s *DbUtils) IsClientActive(client *Client) bool {
+	if client == nil {
+		return false
+	}
+	client.RLock()
+	status, userID := client.Status, client.UserId
+	client.RUnlock()
+	if !status {
+		return false
+	}
+	return userID == 0 || s.IsUserActive(userID)
 }
 
 func (s *DbUtils) GetUserTunnelNum(userId int) int {
 	clientIds := s.UserClientIds(userId)
 	num := 0
 	s.JsonDb.Tasks.Range(func(key, value interface{}) bool {
-		t := value.(*Tunnel)
-		if t.Client != nil {
-			if _, ok := clientIds[t.Client.Id]; ok {
+		t, ok := value.(*Tunnel)
+		if !ok || t == nil {
+			return true
+		}
+		t.RLock()
+		client := t.Client
+		t.RUnlock()
+		if client != nil {
+			client.RLock()
+			clientID := client.Id
+			client.RUnlock()
+			if _, ok := clientIds[clientID]; ok {
 				num++
 			}
 		}
 		return true
 	})
 	s.JsonDb.Hosts.Range(func(key, value interface{}) bool {
-		h := value.(*Host)
-		if h.Client != nil {
-			if _, ok := clientIds[h.Client.Id]; ok {
+		h, ok := value.(*Host)
+		if !ok || h == nil {
+			return true
+		}
+		h.RLock()
+		client := h.Client
+		h.RUnlock()
+		if client != nil {
+			client.RLock()
+			clientID := client.Id
+			client.RUnlock()
+			if _, ok := clientIds[clientID]; ok {
 				num++
 			}
 		}
@@ -299,23 +426,41 @@ func (s *DbUtils) GetUserTunnelNum(userId int) int {
 
 func (s *DbUtils) IsUserTunnelLimitReached(userId int) bool {
 	user, err := s.GetUser(userId)
-	if err != nil || user.MaxTunnelNum == 0 {
+	if err != nil || user == nil {
 		return false
 	}
-	return s.GetUserTunnelNum(userId) >= user.MaxTunnelNum
+	user.RLock()
+	maxTunnelNum := user.MaxTunnelNum
+	user.RUnlock()
+	return maxTunnelNum > 0 && s.GetUserTunnelNum(userId) >= maxTunnelNum
 }
 
 func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error) {
 	var exist bool
+	normalizedAddr := common.GetIpByAddr(addr)
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
-		v := value.(*Client)
-		if common.Getverifyval(v.VerifyKey) == vKey && v.Status {
-			v.Addr = common.GetIpByAddr(addr)
-			id = v.Id
-			exist = true
-			return false
+		v, ok := value.(*Client)
+		if !ok || v == nil {
+			return true
 		}
-		return true
+		v.RLock()
+		verifyKey, status, userID, clientID := v.VerifyKey, v.Status, v.UserId, v.Id
+		v.RUnlock()
+		if common.Getverifyval(verifyKey) != vKey || !status {
+			return true
+		}
+		// A user expiry stops and removes current resources, but the NPC can
+		// otherwise reconnect immediately and recreate its config-backed tunnels.
+		// Check the owning user at the bridge authentication boundary as well.
+		if userID != 0 && !s.IsUserActive(userID) {
+			return true
+		}
+		v.Lock()
+		v.Addr = normalizedAddr
+		v.Unlock()
+		id = clientID
+		exist = true
+		return false
 	})
 	if exist {
 		return
@@ -324,9 +469,18 @@ func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error)
 }
 
 func (s *DbUtils) NewTask(t *Tunnel) (err error) {
+	if t == nil || t.Client == nil || t.Target == nil {
+		return errors.New("隧道记录无效")
+	}
 	s.JsonDb.Tasks.Range(func(key, value interface{}) bool {
-		v := value.(*Tunnel)
-		if (v.Mode == "secret" || v.Mode == "p2p") && v.Password == t.Password && t.Password != "" {
+		v, ok := value.(*Tunnel)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		mode, password := v.Mode, v.Password
+		v.RUnlock()
+		if (mode == "secret" || mode == "p2p") && password == t.Password && t.Password != "" {
 			err = errors.New(fmt.Sprintf("secret mode keys %s must be unique", t.Password))
 			return false
 		}
@@ -342,13 +496,16 @@ func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 }
 
 func (s *DbUtils) UpdateTask(t *Tunnel) error {
+	if t == nil || t.Client == nil || t.Target == nil {
+		return errors.New("隧道记录无效")
+	}
 	s.JsonDb.Tasks.Store(t.Id, t)
 	s.JsonDb.StoreTasksToJsonFile()
 	return nil
 }
 
 func (s *DbUtils) SaveGlobal(t *Glob) error {
-	s.JsonDb.Global = t
+	s.JsonDb.setGlobal(t)
 	s.JsonDb.StoreGlobalToJsonFile()
 	return nil
 }
@@ -362,8 +519,15 @@ func (s *DbUtils) DelTask(id int) error {
 // md5 password
 func (s *DbUtils) GetTaskByMd5Password(p string) (t *Tunnel) {
 	s.JsonDb.Tasks.Range(func(key, value interface{}) bool {
-		if crypt.Md5(value.(*Tunnel).Password) == p {
-			t = value.(*Tunnel)
+		task, ok := value.(*Tunnel)
+		if !ok || task == nil {
+			return true
+		}
+		task.RLock()
+		password := task.Password
+		task.RUnlock()
+		if password != "" && crypt.Md5(password) == p {
+			t = task
 			return false
 		}
 		return true
@@ -373,24 +537,40 @@ func (s *DbUtils) GetTaskByMd5Password(p string) (t *Tunnel) {
 
 func (s *DbUtils) GetTask(id int) (t *Tunnel, err error) {
 	if v, ok := s.JsonDb.Tasks.Load(id); ok {
-		t = v.(*Tunnel)
-		return
+		if t, ok = v.(*Tunnel); ok && t != nil {
+			return t, nil
+		}
+		return nil, errors.New("隧道记录无效")
 	}
 	err = errors.New("not found")
 	return
 }
 
 func (s *DbUtils) DelHost(id int) error {
+	hostMutationMu.Lock()
+	defer hostMutationMu.Unlock()
 	s.JsonDb.Hosts.Delete(id)
 	s.JsonDb.StoreHostToJsonFile()
 	return nil
 }
 
 func (s *DbUtils) IsHostExist(h *Host) bool {
+	if h == nil {
+		return false
+	}
+	h.RLock()
+	hostID, hostName, location, scheme := h.Id, h.Host, h.Location, h.Scheme
+	h.RUnlock()
 	var exist bool
 	s.JsonDb.Hosts.Range(func(key, value interface{}) bool {
-		v := value.(*Host)
-		if v.Id != h.Id && v.Host == h.Host && h.Location == v.Location && (v.Scheme == "all" || v.Scheme == h.Scheme) {
+		v, ok := value.(*Host)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		candidateID, candidateHost, candidateLocation, candidateScheme, candidateClient := v.Id, v.Host, v.Location, v.Scheme, v.Client
+		v.RUnlock()
+		if candidateClient != nil && candidateID != hostID && candidateHost == hostName && location == candidateLocation && (candidateScheme == "all" || candidateScheme == scheme) {
 			exist = true
 			return false
 		}
@@ -399,15 +579,199 @@ func (s *DbUtils) IsHostExist(h *Host) bool {
 	return exist
 }
 
+type hostOwnerKey struct {
+	userID   int
+	clientID int
+}
+
+func hostOwner(client *Client) hostOwnerKey {
+	if client == nil {
+		return hostOwnerKey{}
+	}
+	client.RLock()
+	owner := hostOwnerKey{userID: client.UserId, clientID: client.Id}
+	client.RUnlock()
+	return owner
+}
+
+func sameHostOwner(a, b *Client) bool {
+	aOwner, bOwner := hostOwner(a), hostOwner(b)
+	if aOwner.userID > 0 || bOwner.userID > 0 {
+		return aOwner.userID > 0 && aOwner.userID == bOwner.userID
+	}
+	return aOwner.clientID > 0 && aOwner.clientID == bOwner.clientID
+}
+
+func normalizeHostLocation(location string) string {
+	location = strings.TrimSpace(location)
+	if location == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(location, "/") {
+		location = "/" + location
+	}
+	for len(location) > 1 && strings.HasSuffix(location, "/") {
+		location = strings.TrimSuffix(location, "/")
+	}
+	return location
+}
+
+func hostLocationsOverlap(a, b string) bool {
+	a, b = normalizeHostLocation(a), normalizeHostLocation(b)
+	if a == "/" || b == "/" || a == b {
+		return true
+	}
+	if strings.HasPrefix(a, b) {
+		return len(a) > len(b) && a[len(b)] == '/'
+	}
+	if strings.HasPrefix(b, a) {
+		return len(b) > len(a) && b[len(a)] == '/'
+	}
+	return false
+}
+
+func validHostRule(rule string) bool {
+	rule = normalizeHostName(rule)
+	if rule == "" {
+		return false
+	}
+	return !strings.Contains(rule, "*") || (strings.HasPrefix(rule, "*.") && strings.Count(rule, "*") == 1 && strings.TrimPrefix(rule, "*.") != "")
+}
+
+func hostRulesOverlap(a, b string) bool {
+	a, b = normalizeHostName(a), normalizeHostName(b)
+	if !validHostRule(a) || !validHostRule(b) {
+		return false
+	}
+	aWildcard, bWildcard := strings.HasPrefix(a, "*."), strings.HasPrefix(b, "*.")
+	if !aWildcard && !bWildcard {
+		return a == b
+	}
+	if aWildcard && !bWildcard {
+		return hostRuleMatches(b, a)
+	}
+	if !aWildcard && bWildcard {
+		return hostRuleMatches(a, b)
+	}
+	aSuffix := strings.TrimPrefix(a, "*.")
+	bSuffix := strings.TrimPrefix(b, "*.")
+	return aSuffix == bSuffix || strings.HasSuffix(aSuffix, "."+bSuffix) || strings.HasSuffix(bSuffix, "."+aSuffix)
+}
+
+// IsHostRouteConflict rejects overlapping host/path rules owned by different
+// users (or by different unowned clients). Deterministic route selection alone
+// is not an isolation boundary: a more specific rule must not let one tenant
+// shadow another tenant's traffic.
+func (s *DbUtils) IsHostRouteConflict(h *Host) bool {
+	if h == nil || h.Client == nil {
+		return false
+	}
+	h.RLock()
+	hostID, hostName, location, scheme, client := h.Id, h.Host, h.Location, h.Scheme, h.Client
+	h.RUnlock()
+	if !validHostRule(hostName) {
+		return false
+	}
+	owner := hostOwner(client)
+	if owner.userID == 0 && owner.clientID == 0 {
+		return true
+	}
+	scheme = strings.ToLower(strings.TrimSpace(scheme))
+	if scheme == "" {
+		scheme = "all"
+	}
+	exists := false
+	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		candidate, ok := value.(*Host)
+		if !ok || candidate == nil {
+			return true
+		}
+		candidate.RLock()
+		candidateID, candidateHost, candidateLocation, candidateScheme, candidateClient := candidate.Id, candidate.Host, candidate.Location, candidate.Scheme, candidate.Client
+		candidate.RUnlock()
+		if candidateID == hostID || candidateClient == nil || sameHostOwner(client, candidateClient) {
+			return true
+		}
+		schemeA, schemeB := scheme, strings.ToLower(strings.TrimSpace(candidateScheme))
+		if schemeB == "" {
+			// An empty scheme is treated as the historical default of all.
+			schemeB = "all"
+		}
+		schemesOverlap := schemeA == "all" || schemeB == "all" || schemeA == schemeB
+		if schemesOverlap && hostRulesOverlap(hostName, candidateHost) && hostLocationsOverlap(location, candidateLocation) {
+			exists = true
+			return false
+		}
+		return true
+	})
+	return exists
+}
+
 func (s *DbUtils) NewHost(t *Host) error {
+	if t == nil || t.Client == nil || t.Target == nil {
+		return errors.New("主机记录无效")
+	}
+	if !validHostRule(t.Host) {
+		return errors.New("主机域名无效")
+	}
 	if t.Location == "" {
 		t.Location = "/"
+	}
+	t.Location = normalizeHostLocation(t.Location)
+	hostMutationMu.Lock()
+	defer hostMutationMu.Unlock()
+	if s.IsHostExist(t) {
+		return errors.New("host has exist")
+	}
+	if s.IsHostRouteConflict(t) {
+		return errors.New("host route overlaps another tenant")
+	}
+	t.Flow = new(Flow)
+	s.JsonDb.Hosts.Store(t.Id, t)
+	s.JsonDb.StoreHostToJsonFile()
+	return nil
+}
+
+// UpdateHost validates a replacement route and applies it while holding the
+// same mutation lock used by NewHost. Runtime workers can continue using the
+// existing object, while concurrent edits cannot race the conflict check.
+func (s *DbUtils) UpdateHost(t *Host) error {
+	if t == nil || t.Client == nil || t.Target == nil {
+		return errors.New("主机记录无效")
+	}
+	if !validHostRule(t.Host) {
+		return errors.New("主机域名无效")
+	}
+	t.Location = normalizeHostLocation(t.Location)
+	hostMutationMu.Lock()
+	defer hostMutationMu.Unlock()
+	storedValue, ok := s.JsonDb.Hosts.Load(t.Id)
+	stored, valid := storedValue.(*Host)
+	if !ok || !valid || stored == nil {
+		return errors.New("未找到主机")
 	}
 	if s.IsHostExist(t) {
 		return errors.New("host has exist")
 	}
-	t.Flow = new(Flow)
-	s.JsonDb.Hosts.Store(t.Id, t)
+	if s.IsHostRouteConflict(t) {
+		return errors.New("host route overlaps another tenant")
+	}
+	stored.Lock()
+	stored.Host = t.Host
+	stored.Client = t.Client
+	stored.Target = t.Target
+	stored.HeaderChange = t.HeaderChange
+	stored.HostChange = t.HostChange
+	stored.Remark = t.Remark
+	stored.Location = t.Location
+	stored.Scheme = t.Scheme
+	stored.KeyFilePath = t.KeyFilePath
+	stored.CertFilePath = t.CertFilePath
+	stored.AutoHttps = t.AutoHttps
+	if stored.Flow == nil {
+		stored.Flow = new(Flow)
+	}
+	stored.Unlock()
 	s.JsonDb.StoreHostToJsonFile()
 	return nil
 }
@@ -419,19 +783,32 @@ func (s *DbUtils) GetHost(start, length int, id int, search string) ([]*Host, in
 func (s *DbUtils) GetHostByAllowedClients(start, length int, id int, search string, allowedClientIds map[int]struct{}) ([]*Host, int) {
 	list := make([]*Host, 0)
 	var cnt int
-	keys := GetMapKeys(s.JsonDb.Hosts, false, "", "")
+	keys := GetMapKeys(&s.JsonDb.Hosts, false, "", "")
 	for _, key := range keys {
 		if value, ok := s.JsonDb.Hosts.Load(key); ok {
-			v := value.(*Host)
+			v, valid := value.(*Host)
+			if !valid || v == nil {
+				continue
+			}
+			v.RLock()
+			client := v.Client
+			hostID, hostName, remark := v.Id, v.Host, v.Remark
+			v.RUnlock()
+			if client == nil {
+				continue
+			}
+			client.RLock()
+			clientID, verifyKey := client.Id, client.VerifyKey
+			client.RUnlock()
 			if allowedClientIds != nil {
-				if _, ok := allowedClientIds[v.Client.Id]; !ok {
+				if _, ok := allowedClientIds[clientID]; !ok {
 					continue
 				}
 			}
-			if search != "" && !(v.Id == common.GetIntNoErrByStr(search) || strings.Contains(v.Host, search) || strings.Contains(v.Remark, search) || strings.Contains(v.Client.VerifyKey, search)) {
+			if search != "" && !(hostID == common.GetIntNoErrByStr(search) || strings.Contains(hostName, search) || strings.Contains(remark, search) || strings.Contains(verifyKey, search)) {
 				continue
 			}
-			if id == 0 || v.Client.Id == id {
+			if id == 0 || clientID == id {
 				cnt++
 				if start--; start < 0 {
 					if length--; length >= 0 {
@@ -445,24 +822,31 @@ func (s *DbUtils) GetHostByAllowedClients(start, length int, id int, search stri
 }
 
 func (s *DbUtils) DelClient(id int) error {
+	if old, ok := s.JsonDb.Clients.Load(id); ok {
+		if client, valid := old.(*Client); valid && client != nil {
+			client.RLock()
+			clientRate := client.Rate
+			client.RUnlock()
+			if clientRate != nil {
+				clientRate.Stop()
+			}
+		}
+	}
 	s.JsonDb.Clients.Delete(id)
 	s.JsonDb.StoreClientsToJsonFile()
 	return nil
 }
 
 func (s *DbUtils) NewClient(c *Client) error {
+	if c == nil {
+		return errors.New("客户端记录无效")
+	}
 	var isNotSet bool
 reset:
 	if c.VerifyKey == "" || isNotSet {
 		isNotSet = true
 		c.VerifyKey = crypt.GetVkey()
 	}
-	if c.RateLimit == 0 {
-		c.Rate = rate.NewRate((2 << 23) * 1024)
-	} else if c.Rate == nil {
-		c.Rate = rate.NewRate(int64(c.RateLimit * 1024))
-	}
-	c.Rate.Start()
 	if !s.VerifyVkey(c.VerifyKey, c.Id) {
 		if isNotSet {
 			goto reset
@@ -475,6 +859,12 @@ reset:
 	if c.Flow == nil {
 		c.Flow = new(Flow)
 	}
+	if c.RateLimit == 0 {
+		c.Rate = rate.NewRate((2 << 23) * 1024)
+	} else if c.Rate == nil {
+		c.Rate = rate.NewRate(int64(c.RateLimit * 1024))
+	}
+	c.Rate.Start()
 	s.JsonDb.Clients.Store(c.Id, c)
 	s.JsonDb.StoreClientsToJsonFile()
 	return nil
@@ -483,8 +873,14 @@ reset:
 func (s *DbUtils) VerifyVkey(vkey string, id int) (res bool) {
 	res = true
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
-		v := value.(*Client)
-		if v.VerifyKey == vkey && v.Id != id {
+		v, ok := value.(*Client)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		verifyKey, clientID := v.VerifyKey, v.Id
+		v.RUnlock()
+		if verifyKey == vkey && clientID != id {
 			res = false
 			return false
 		}
@@ -496,8 +892,14 @@ func (s *DbUtils) VerifyVkey(vkey string, id int) (res bool) {
 func (s *DbUtils) VerifyUserName(username string, id int) (res bool) {
 	res = true
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
-		v := value.(*Client)
-		if v.WebUserName == username && v.Id != id {
+		v, ok := value.(*Client)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		webUserName, clientID := v.WebUserName, v.Id
+		v.RUnlock()
+		if webUserName == username && clientID != id {
 			res = false
 			return false
 		}
@@ -507,11 +909,18 @@ func (s *DbUtils) VerifyUserName(username string, id int) (res bool) {
 }
 
 func (s *DbUtils) UpdateClient(t *Client) error {
+	if t == nil {
+		return errors.New("客户端记录无效")
+	}
 	// 先 Stop 旧的 Rate，防止内存泄漏
 	if old, ok := s.JsonDb.Clients.Load(t.Id); ok {
-		oldClient := old.(*Client)
-		if oldClient.Rate != nil {
-			oldClient.Rate.Stop()
+		if oldClient, valid := old.(*Client); valid && oldClient != nil {
+			oldClient.RLock()
+			oldRate := oldClient.Rate
+			oldClient.RUnlock()
+			if oldRate != nil {
+				oldRate.Stop()
+			}
 		}
 	}
 	s.JsonDb.Clients.Store(t.Id, t)
@@ -524,32 +933,43 @@ func (s *DbUtils) UpdateClient(t *Client) error {
 
 func (s *DbUtils) IsPubClient(id int) bool {
 	client, err := s.GetClient(id)
-	if err == nil {
-		return client.NoDisplay
+	if err != nil || client == nil {
+		return false
 	}
-	return false
+	client.RLock()
+	noDisplay := client.NoDisplay
+	client.RUnlock()
+	return noDisplay
 }
 
 func (s *DbUtils) GetClient(id int) (c *Client, err error) {
 	if v, ok := s.JsonDb.Clients.Load(id); ok {
-		c = v.(*Client)
-		return
+		if c, ok = v.(*Client); ok && c != nil {
+			return c, nil
+		}
+		return nil, errors.New("客户端记录无效")
 	}
 	err = errors.New("未找到客户端")
 	return
 }
 
 func (s *DbUtils) GetGlobal() (c *Glob) {
-	return s.JsonDb.Global
+	return s.JsonDb.getGlobal()
 }
 
 func (s *DbUtils) GetClientIdByVkey(vkey string) (id int, err error) {
 	var exist bool
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
-		v := value.(*Client)
-		if crypt.Md5(v.VerifyKey) == vkey {
+		v, ok := value.(*Client)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		verifyKey, clientID := v.VerifyKey, v.Id
+		v.RUnlock()
+		if crypt.Md5(verifyKey) == vkey {
 			exist = true
-			id = v.Id
+			id = clientID
 			return false
 		}
 		return true
@@ -564,8 +984,14 @@ func (s *DbUtils) GetClientIdByVkey(vkey string) (id int, err error) {
 func (s *DbUtils) GetClientByVkey(vkey string) (c *Client, err error) {
 	var exist bool
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
-		v := value.(*Client)
-		if fmt.Sprintf("%x", md5.Sum([]byte(v.VerifyKey))) == vkey {
+		v, ok := value.(*Client)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		verifyKey := v.VerifyKey
+		v.RUnlock()
+		if fmt.Sprintf("%x", md5.Sum([]byte(verifyKey))) == vkey {
 			exist = true
 			c = v
 			return false
@@ -581,55 +1007,138 @@ func (s *DbUtils) GetClientByVkey(vkey string) (c *Client, err error) {
 
 func (s *DbUtils) GetHostById(id int) (h *Host, err error) {
 	if v, ok := s.JsonDb.Hosts.Load(id); ok {
-		h = v.(*Host)
-		return
+		if h, ok = v.(*Host); ok && h != nil {
+			return h, nil
+		}
+		return nil, errors.New("主机记录无效")
 	}
 	err = errors.New("The host could not be parsed")
 	return
 }
 
+func normalizeHostName(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	return strings.TrimSuffix(value, ".")
+}
+
+func hostRuleMatches(host, rule string) bool {
+	host = normalizeHostName(host)
+	rule = normalizeHostName(rule)
+	if host == "" || rule == "" {
+		return false
+	}
+	if !strings.Contains(rule, "*") {
+		return host == rule
+	}
+	// Only a leading wildcard label is valid. Requiring a dot before the
+	// suffix prevents both suffix lookalikes and the bare apex from matching.
+	if !strings.HasPrefix(rule, "*.") || strings.Count(rule, "*") != 1 {
+		return false
+	}
+	suffix := strings.TrimPrefix(rule, "*.")
+	return suffix != "" && len(host) > len(suffix)+1 && strings.HasSuffix(host, "."+suffix)
+}
+
+func hostRuleSpecificity(rule string) (exact bool, suffixLength int) {
+	rule = normalizeHostName(rule)
+	if rule == "" {
+		return false, 0
+	}
+	if strings.HasPrefix(rule, "*.") && strings.Count(rule, "*") == 1 {
+		return false, len(strings.TrimPrefix(rule, "*."))
+	}
+	if !strings.Contains(rule, "*") {
+		return true, len(rule)
+	}
+	return false, 0
+}
+
+func hostPathMatches(requestURI, location string) bool {
+	if location == "" || location == "/" {
+		return strings.HasPrefix(requestURI, "/")
+	}
+	if !strings.HasPrefix(requestURI, location) {
+		return false
+	}
+	if len(requestURI) == len(location) {
+		return true
+	}
+	next := requestURI[len(location)]
+	return next == '/' || next == '?'
+}
+
 // get key by host from x
 func (s *DbUtils) GetInfoByHost(host string, r *http.Request) (h *Host, err error) {
-	var hosts []*Host
+	if r == nil || r.URL == nil {
+		return nil, errors.New("invalid host request")
+	}
+	requestURI := r.RequestURI
+	if requestURI == "" {
+		requestURI = r.URL.RequestURI()
+		if requestURI == "" {
+			requestURI = "/"
+		}
+	}
+	type hostMatch struct {
+		host             *Host
+		location, rule   string
+		exact            bool
+		suffixLength, id int
+	}
+	var hosts []hostMatch
+	longestLocation := ""
+	bestExact, bestSuffixLength, bestID := false, -1, int(^uint(0)>>1)
 	//Handling Ported Access
 	host = common.GetIpByAddr(host)
 	s.JsonDb.Hosts.Range(func(key, value interface{}) bool {
-		v := value.(*Host)
-		if v.IsClose {
+		v, ok := value.(*Host)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		isClose, scheme, hostName := v.IsClose, v.Scheme, v.Host
+		v.RUnlock()
+		if isClose {
 			return true
 		}
 		//Remove http(s) http(s)://a.proxy.com
 		//*.proxy.com *.a.proxy.com  Do some pan-parsing
-		if v.Scheme != "all" && v.Scheme != r.URL.Scheme {
+		if scheme != "all" && scheme != r.URL.Scheme {
 			return true
 		}
-		tmpHost := v.Host
-		if strings.Contains(tmpHost, "*") {
-			tmpHost = strings.Replace(tmpHost, "*", "", -1)
-			if strings.Contains(host, tmpHost) {
-				hosts = append(hosts, v)
+		if hostRuleMatches(host, hostName) {
+			v.RLock()
+			location, hostID := v.Location, v.Id
+			v.RUnlock()
+			if location == "" {
+				location = "/"
 			}
-		} else if v.Host == host {
-			hosts = append(hosts, v)
+			if !strings.HasPrefix(location, "/") {
+				location = "/" + location
+			}
+			exact, suffixLength := hostRuleSpecificity(hostName)
+			hosts = append(hosts, hostMatch{host: v, location: location, rule: hostName, exact: exact, suffixLength: suffixLength, id: hostID})
 		}
 		return true
 	})
 
-	for _, v := range hosts {
-		//If not set, default matches all
-		if v.Location == "" {
-			v.Location = "/"
-		}
+	for _, match := range hosts {
+		v, location := match.host, match.location
+		betterHost := match.exact && !bestExact || match.exact == bestExact && match.suffixLength > bestSuffixLength || match.exact == bestExact && match.suffixLength == bestSuffixLength && len(location) > len(longestLocation) || match.exact == bestExact && match.suffixLength == bestSuffixLength && len(location) == len(longestLocation) && match.id < bestID
 		// "*" means SNI-based HTTPS lookup where actual URI is unknown, skip location filter
-		if r.RequestURI == "*" {
-			if h == nil || (len(v.Location) > len(h.Location)) {
+		if requestURI == "*" {
+			if h == nil || betterHost {
 				h = v
+				longestLocation = location
+				bestExact, bestSuffixLength, bestID = match.exact, match.suffixLength, match.id
 			}
 			continue
 		}
-		if strings.Index(r.RequestURI, v.Location) == 0 {
-			if h == nil || (len(v.Location) > len(h.Location)) {
+		if hostPathMatches(requestURI, location) {
+			if h == nil || betterHost {
 				h = v
+				longestLocation = location
+				bestExact, bestSuffixLength, bestID = match.exact, match.suffixLength, match.id
 			}
 		}
 	}

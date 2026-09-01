@@ -1,3 +1,8 @@
+//go:build sdk
+
+// The SDK is built as a standalone c-shared artifact (see build.sh). Keep it
+// out of the CLI package's default build so both entry points can coexist in
+// `go test ./...` without duplicate main functions.
 package main
 
 import (
@@ -23,7 +28,7 @@ func StartClientByVerifyKey(serverAddr, verifyKey, connType, proxyUrl *C.char) i
 
 //export GetClientStatus
 func GetClientStatus() int {
-	return client.NowStatus
+	return int(client.NowStatus.Load())
 }
 
 //export CloseClient

@@ -26,6 +26,15 @@ TLS Bridge：
 ./npc -server=<服务器IP>:8025 -vkey=<VerifyKey> -tls_enable=true
 ```
 
+TLS 客户端默认校验证书。NPS 首次启动会在日志中打印服务端证书的 SHA-256 指纹；服务端使用自签名证书时，建议固定该指纹：
+
+```bash
+./npc -server=<服务器IP>:8025 -vkey=<VerifyKey> \
+  -tls_enable=true -tls_fingerprint=<SHA-256指纹>
+```
+
+也可以通过 `-tls_ca_file=<CA文件>` 使用 CA 链校验，并按需设置 `-tls_server_name=<证书名称>`。`-tls_insecure_skip_verify=true` 仅用于兼容旧部署，生产环境不要启用。
+
 一个进程可连接多个客户端配置：
 
 ```bash
@@ -58,6 +67,10 @@ npc.exe -server=<服务器IP>:8024 -vkey=<VerifyKey>
 | `-config` | 配置文件路径 | 默认配置路径 |
 | `-type` | 与服务端连接类型，`tcp` 或 `kcp` | `tcp` |
 | `-tls_enable` | 启用 TLS Bridge | `false` |
+| `-tls_ca_file` | TLS CA 证书文件 | 空 |
+| `-tls_server_name` | TLS SNI/证书名称 | 服务端地址 |
+| `-tls_fingerprint` | 服务端证书 SHA-256 指纹 | 空 |
+| `-tls_insecure_skip_verify` | 显式关闭 TLS 证书校验（不推荐） | `false` |
 | `-proxy` | 通过 SOCKS5 代理连接服务端 | 空 |
 | `-disconnect_timeout` | 心跳超时倍数，单位为 5 秒 | `60` |
 | `-log` | 日志输出方式，`stdout` 或 `file` | `stdout` |
@@ -112,6 +125,10 @@ server_port=9001
 | `crypt` | 加密 Bridge 数据，需与服务端/客户端配置保持一致 | `false` |
 | `server_addr` | 服务端地址；兼容上游别名 `server` | 空 |
 | `conn_type` | 连接类型；兼容上游别名 `tp` | `tcp` |
+| `tls_ca_file` | 服务端 CA 证书文件 | 空 |
+| `tls_server_name` | TLS SNI/证书名称 | 服务端地址 |
+| `tls_fingerprint` | 服务端证书 SHA-256 指纹 | 空 |
+| `tls_insecure_skip_verify` | 显式关闭证书校验，仅兼容旧部署 | `false` |
 
 ## 交互式菜单
 
@@ -136,7 +153,7 @@ server_port=9001
 快捷启动命令由 Web 面板生成，内容是 Base64。当前 GUI 使用的格式为：
 
 ```text
-nps:<名称>|<服务端地址:端口>|<VerifyKey>|<是否TLS>
+nps:<名称>|<服务端地址:端口>|<VerifyKey>|<是否TLS>[|<TLS证书指纹>]
 ```
 
 命令行 `npc` 同时兼容旧格式，解析后会转成：

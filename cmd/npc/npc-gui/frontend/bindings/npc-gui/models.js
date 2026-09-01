@@ -149,6 +149,14 @@ export class ShortClient {
              */
             this["tls"] = false;
         }
+        if (!("tlsFingerprint" in $$source)) {
+            /**
+             * 服务端证书 SHA-256 指纹
+             * @member
+             * @type {string}
+             */
+            this["tlsFingerprint"] = "";
+        }
         if (!("running" in $$source)) {
             /**
              * 兼容旧版本，实际用Status

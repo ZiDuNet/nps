@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"time"
 
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
@@ -47,13 +48,105 @@ const (
 	authFailure     = uint8(1)
 )
 
+var socks5HandshakeTimeout = 10 * time.Second
+
 type Sock5ModeServer struct {
 	BaseServer
-	listener net.Listener
+	listener   net.Listener
+	listenerMu sync.RWMutex
+	closed     bool
+}
+
+type socksTaskSnapshot struct {
+	bridgeTask   *file.Tunnel
+	client       *file.Client
+	clientConfig file.Config
+	clientFlow   *file.Flow
+	taskFlow     *file.Flow
+	localProxy   bool
+	serverIP     string
+	multiAccount map[string]string
+}
+
+func (s *Sock5ModeServer) snapshotTask() (socksTaskSnapshot, error) {
+	var snapshot socksTaskSnapshot
+	if s == nil || s.task == nil || s.bridge == nil {
+		return snapshot, errors.New("socks5 server is not configured")
+	}
+	s.task.RLock()
+	snapshot.client = s.task.Client
+	snapshot.taskFlow = s.task.Flow
+	snapshot.serverIP = s.task.ServerIp
+	snapshot.bridgeTask = &file.Tunnel{Mode: s.task.Mode}
+	target := s.task.Target
+	if s.task.MultiAccount != nil {
+		snapshot.multiAccount = make(map[string]string, len(s.task.MultiAccount.AccountMap))
+		for username, password := range s.task.MultiAccount.AccountMap {
+			snapshot.multiAccount[username] = password
+		}
+	}
+	s.task.RUnlock()
+	if target != nil {
+		target.RLock()
+		snapshot.localProxy = target.LocalProxy
+		target.RUnlock()
+	}
+	if snapshot.client == nil {
+		return socksTaskSnapshot{}, errors.New("socks5 task client is not configured")
+	}
+	snapshot.client.RLock()
+	if snapshot.client.Cnf == nil {
+		snapshot.client.RUnlock()
+		return socksTaskSnapshot{}, errors.New("socks5 task client is not configured")
+	}
+	snapshot.clientConfig = *snapshot.client.Cnf
+	snapshot.clientFlow = snapshot.client.Flow
+	snapshot.client.RUnlock()
+	if snapshot.serverIP == "" {
+		snapshot.serverIP = "0.0.0.0"
+	}
+	return snapshot, nil
+}
+
+// reserveClientForRequest performs the checks that must happen before a
+// SOCKS request can allocate an NPC stream.  Unlike regular SOCKS CONNECT,
+// UDP ASSOCIATE does not go through DealClient, so keeping this at the
+// protocol boundary prevents it from bypassing client IP policy or quotas.
+func (s *Sock5ModeServer) reserveClientForRequest(c net.Conn) (*file.Client, error) {
+	snapshot, err := s.snapshotTask()
+	if err != nil {
+		return nil, err
+	}
+	return s.reserveClientForSnapshot(c, snapshot)
+}
+
+func (s *Sock5ModeServer) reserveClientForSnapshot(c net.Conn, snapshot socksTaskSnapshot) (*file.Client, error) {
+	if c == nil || c.RemoteAddr() == nil {
+		return nil, errors.New("socks5 connection has no remote address")
+	}
+
+	client := snapshot.client
+	remoteAddr := c.RemoteAddr().String()
+	if IsGlobalBlackIp(remoteAddr) || isClientBlackBlocked(client, remoteAddr) || isIPWhiteBlocked(client, remoteAddr) {
+		return nil, errors.New("socks5 client IP is not authorized")
+	}
+	if err := s.CheckFlowAndConnNum(client); err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 // req
 func (s *Sock5ModeServer) handleRequest(c net.Conn) {
+	snapshot, err := s.snapshotTask()
+	if err != nil {
+		_ = c.Close()
+		return
+	}
+	s.handleRequestWithSnapshot(c, snapshot)
+}
+
+func (s *Sock5ModeServer) handleRequestWithSnapshot(c net.Conn, snapshot socksTaskSnapshot) {
 	/*
 		The SOCKS request is formed as follows:
 		+----+-----+-------+------+----------+----------+
@@ -71,14 +164,19 @@ func (s *Sock5ModeServer) handleRequest(c net.Conn) {
 		c.Close()
 		return
 	}
+	if header[0] != 5 || header[2] != 0 {
+		logs.Warn("invalid socks5 request header from %s", c.RemoteAddr())
+		_ = c.Close()
+		return
+	}
 
 	switch header[1] {
 	case connectMethod:
-		s.handleConnect(c)
+		s.doConnectWithSnapshot(c, connectMethod, snapshot)
 	case bindMethod:
 		s.handleBind(c)
 	case associateMethod:
-		s.handleUDP(c)
+		s.handleUDPWithSnapshot(c, snapshot)
 	default:
 		s.sendReply(c, commandNotSupported)
 		c.Close()
@@ -115,6 +213,27 @@ func (s *Sock5ModeServer) sendReply(c net.Conn, rep uint8) {
 
 // do conn
 func (s *Sock5ModeServer) doConnect(c net.Conn, command uint8) {
+	snapshot, err := s.snapshotTask()
+	if err != nil {
+		_ = c.Close()
+		return
+	}
+	s.doConnectWithSnapshot(c, command, snapshot)
+}
+
+func (s *Sock5ModeServer) doConnectWithSnapshot(c net.Conn, command uint8, snapshot socksTaskSnapshot) {
+	if c == nil {
+		return
+	}
+	defer c.Close()
+
+	client, err := s.reserveClientForSnapshot(c, snapshot)
+	if err != nil {
+		logs.Warn("reject socks5 request from %s: %s", c.RemoteAddr(), err)
+		return
+	}
+	defer client.AddConn()
+
 	addrType := make([]byte, 1)
 	if _, err := io.ReadFull(c, addrType); err != nil {
 		return
@@ -152,6 +271,9 @@ func (s *Sock5ModeServer) doConnect(c net.Conn, command uint8) {
 	if err := binary.Read(c, binary.BigEndian, &port); err != nil {
 		return
 	}
+	if err := c.SetReadDeadline(time.Time{}); err != nil {
+		return
+	}
 	// connect to host
 	addr := net.JoinHostPort(host, strconv.Itoa(int(port)))
 	var ltype string
@@ -160,21 +282,28 @@ func (s *Sock5ModeServer) doConnect(c net.Conn, command uint8) {
 	} else {
 		ltype = common.CONN_TCP
 	}
-	s.DealClient(conn.NewConn(c), s.task.Client, addr, nil, ltype, func() {
+	s.DealClient(conn.NewConn(c), client, addr, nil, ltype, func() {
 		s.sendReply(c, succeeded)
-	}, s.task.Flow, s.task.Target.LocalProxy, nil, nil)
+	}, snapshot.taskFlow, snapshot.localProxy, nil, nil)
 	return
 }
 
 // conn
 func (s *Sock5ModeServer) handleConnect(c net.Conn) {
-	s.doConnect(c, connectMethod)
+	snapshot, err := s.snapshotTask()
+	if err != nil {
+		_ = c.Close()
+		return
+	}
+	s.doConnectWithSnapshot(c, connectMethod, snapshot)
 }
 
 // passive mode
 func (s *Sock5ModeServer) handleBind(c net.Conn) {
+	s.sendReply(c, commandNotSupported)
+	c.Close()
 }
-func (s *Sock5ModeServer) sendUdpReply(writeConn net.Conn, c net.Conn, rep uint8, serverIp string) {
+func (s *Sock5ModeServer) sendUdpReply(writeConn net.Conn, c net.Conn, rep uint8, serverIp string) error {
 	reply := []byte{
 		5,
 		rep,
@@ -196,12 +325,39 @@ func (s *Sock5ModeServer) sendUdpReply(writeConn net.Conn, c net.Conn, rep uint8
 	portBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(portBytes, uint16(nPort))
 	reply = append(reply, portBytes...)
-	writeConn.Write(reply)
-
+	n, err := writeConn.Write(reply)
+	if err != nil {
+		return err
+	}
+	if n != len(reply) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 func (s *Sock5ModeServer) handleUDP(c net.Conn) {
+	snapshot, err := s.snapshotTask()
+	if err != nil {
+		_ = c.Close()
+		return
+	}
+	s.handleUDPWithSnapshot(c, snapshot)
+}
+
+func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSnapshot) {
+	if c == nil {
+		return
+	}
 	defer c.Close()
+
+	client, err := s.reserveClientForSnapshot(c, snapshot)
+	if err != nil {
+		logs.Warn("reject socks5 UDP associate from %s: %s", c.RemoteAddr(), err)
+		return
+	}
+	defer client.AddConn()
+	clientConfig := snapshot.clientConfig
+
 	addrType := make([]byte, 1)
 	if _, err := io.ReadFull(c, addrType); err != nil {
 		return
@@ -239,8 +395,11 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 	if err := binary.Read(c, binary.BigEndian, &port); err != nil {
 		return
 	}
+	if err := c.SetReadDeadline(time.Time{}); err != nil {
+		return
+	}
 	logs.Warn(host, strconv.Itoa(int(port)))
-	replyAddr, err := net.ResolveUDPAddr("udp", s.task.ServerIp+":0")
+	replyAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(snapshot.serverIP, "0"))
 	if err != nil {
 		logs.Error("build local reply addr error", err)
 		return
@@ -251,14 +410,33 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 		logs.Error("listen local reply udp port error")
 		return
 	}
-	// reply the local addr
-	s.sendUdpReply(c, reply, succeeded, common.GetServerIpByClientIp(c.RemoteAddr().(*net.TCPAddr).IP))
 	defer reply.Close()
 	// new a tunnel to client
-	link := conn.NewLink("udp5", "", s.task.Client.Cnf.Crypt, s.task.Client.Cnf.Compress, c.RemoteAddr().String(), false, "")
-	target, err := s.bridge.SendLinkInfo(s.task.Client.Id, link, s.task)
+	link := conn.NewLink("udp5", "", clientConfig.Crypt, clientConfig.Compress, c.RemoteAddr().String(), false, "")
+	target, err := s.bridge.SendLinkInfo(client.Id, link, snapshot.bridgeTask)
 	if err != nil {
-		logs.Warn("get connection from client id %d  error %s", s.task.Client.Id, err.Error())
+		if target != nil {
+			_ = target.Close()
+		}
+		logs.Warn("get connection from client id %d  error %s", client.Id, err.Error())
+		return
+	}
+	if target == nil {
+		logs.Warn("get nil connection from client id %d", client.Id)
+		return
+	}
+	defer target.Close()
+
+	// A SOCKS success reply means the bridge is already available.  Sending it
+	// earlier leaves clients with a seemingly valid UDP relay that cannot carry
+	// traffic when the client is offline.
+	remoteTCPAddr, _ := c.RemoteAddr().(*net.TCPAddr)
+	serverIP := "0.0.0.0"
+	if remoteTCPAddr != nil {
+		serverIP = common.GetServerIpByClientIp(remoteTCPAddr.IP)
+	}
+	if err := s.sendUdpReply(c, reply, succeeded, serverIP); err != nil {
+		logs.Warn("send SOCKS5 UDP associate reply to %s: %s", c.RemoteAddr(), err)
 		return
 	}
 
@@ -295,7 +473,11 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 		defer c.Close()
 		for {
 			if err := binary.Read(target, binary.LittleEndian, &l); err != nil || l >= common.PoolSizeUdp || l <= 0 {
-				logs.Warn("read len bytes error", err.Error())
+				if err != nil {
+					logs.Warn("read len bytes error", err.Error())
+				} else {
+					logs.Warn("invalid UDP packet length %d", l)
+				}
 				return
 			}
 			if err := binary.Read(target, binary.LittleEndian, b[:l]); err != nil {
@@ -317,7 +499,6 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 
 	b := common.BufPoolUdp.Get().([]byte)
 	defer common.BufPoolUdp.Put(b)
-	defer target.Close()
 	for {
 		_, err := io.ReadFull(c, b)
 		if err != nil {
@@ -329,6 +510,22 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 
 // new conn
 func (s *Sock5ModeServer) handleConn(c net.Conn) {
+	if c == nil || s == nil {
+		if c != nil {
+			_ = c.Close()
+		}
+		return
+	}
+	if err := c.SetReadDeadline(time.Now().Add(socks5HandshakeTimeout)); err != nil {
+		_ = c.Close()
+		return
+	}
+	taskSnapshot, snapshotErr := s.snapshotTask()
+	if snapshotErr != nil {
+		_ = c.Close()
+		return
+	}
+	clientConfig := taskSnapshot.clientConfig
 	buf := make([]byte, 2)
 	if _, err := io.ReadFull(c, buf); err != nil {
 		logs.Warn("negotiation err", err)
@@ -354,8 +551,7 @@ func (s *Sock5ModeServer) handleConn(c net.Conn) {
 		c.Close()
 		return
 	}
-	needAuth := (s.task.Client.Cnf.U != "" && s.task.Client.Cnf.P != "") ||
-		(s.task.MultiAccount != nil && len(s.task.MultiAccount.AccountMap) > 0)
+	needAuth := (clientConfig.U != "" && clientConfig.P != "") || len(taskSnapshot.multiAccount) > 0
 	if needAuth {
 		offered := false
 		for _, method := range methods {
@@ -373,7 +569,7 @@ func (s *Sock5ModeServer) handleConn(c net.Conn) {
 			c.Close()
 			return
 		}
-		if err := s.Auth(c); err != nil {
+		if err := s.authWithSnapshot(c, taskSnapshot); err != nil {
 			c.Close()
 			logs.Warn("Validation failed:", err)
 			return
@@ -384,11 +580,25 @@ func (s *Sock5ModeServer) handleConn(c net.Conn) {
 			return
 		}
 	}
-	s.handleRequest(c)
+	s.handleRequestWithSnapshot(c, taskSnapshot)
 }
 
 // socks5 auth
 func (s *Sock5ModeServer) Auth(c net.Conn) error {
+	if c == nil || s == nil {
+		return errors.New("socks5 task client is not configured")
+	}
+	taskSnapshot, snapshotErr := s.snapshotTask()
+	if snapshotErr != nil {
+		return snapshotErr
+	}
+	return s.authWithSnapshot(c, taskSnapshot)
+}
+
+func (s *Sock5ModeServer) authWithSnapshot(c net.Conn, taskSnapshot socksTaskSnapshot) error {
+	if err := c.SetReadDeadline(time.Now().Add(socks5HandshakeTimeout)); err != nil {
+		return err
+	}
 	header := []byte{0, 0}
 	if _, err := io.ReadAtLeast(c, header, 2); err != nil {
 		return err
@@ -411,20 +621,20 @@ func (s *Sock5ModeServer) Auth(c net.Conn) error {
 	}
 
 	var U, P string
-	if s.task.MultiAccount != nil {
+	if len(taskSnapshot.multiAccount) > 0 {
 		// enable multi user auth
 		U = string(user)
 		if len(U) == 0 {
 			return errors.New("验证不通过")
 		}
 		var ok bool
-		P, ok = s.task.MultiAccount.AccountMap[U]
+		P, ok = taskSnapshot.multiAccount[U]
 		if !ok {
 			return errors.New("验证不通过")
 		}
 	} else {
-		U = s.task.Client.Cnf.U
-		P = s.task.Client.Cnf.P
+		U = taskSnapshot.clientConfig.U
+		P = taskSnapshot.clientConfig.P
 	}
 
 	if string(user) == U && string(pass) == P {
@@ -442,16 +652,48 @@ func (s *Sock5ModeServer) Auth(c net.Conn) error {
 
 // start
 func (s *Sock5ModeServer) Start() error {
-	return conn.NewTcpListenerAndProcess(s.task.ServerIp+":"+strconv.Itoa(s.task.Port), func(c net.Conn) {
-		if err := s.CheckFlowAndConnNum(s.task.Client); err != nil {
-			logs.Warn("client id %d, task id %d, error %s, when socks5 connection", s.task.Client.Id, s.task.Id, err.Error())
-			c.Close()
+	taskSnapshot, err := s.snapshotTask()
+	if err != nil {
+		return err
+	}
+	s.listenerMu.RLock()
+	closed := s.closed
+	s.listenerMu.RUnlock()
+	if closed {
+		return net.ErrClosed
+	}
+	s.task.RLock()
+	port := s.task.Port
+	s.task.RUnlock()
+	listener, err := net.Listen("tcp", net.JoinHostPort(taskSnapshot.serverIP, strconv.Itoa(port)))
+	if err != nil {
+		return err
+	}
+	s.listenerMu.Lock()
+	if s.closed {
+		s.listenerMu.Unlock()
+		_ = listener.Close()
+		return net.ErrClosed
+	}
+	s.listener = listener
+	s.listenerMu.Unlock()
+	conn.Accept(listener, func(c net.Conn) {
+		// SOCKS consumes a slot when a CONNECT/UDP ASSOCIATE request is accepted,
+		// not when a TCP handshake arrives. Reserving it here as well would count
+		// every request twice and make MaxConn=1 unusable.
+		currentSnapshot, snapshotErr := s.snapshotTask()
+		if snapshotErr != nil {
+			_ = c.Close()
 			return
 		}
-		logs.Trace("New socks5 connection,client %d,remote address %s", s.task.Client.Id, c.RemoteAddr())
+		client := currentSnapshot.client
+		client.RLock()
+		clientID := client.Id
+		client.RUnlock()
+		logs.Trace("New socks5 connection,client %d,remote address %s", clientID, c.RemoteAddr())
 		s.handleConn(c)
-		s.task.Client.AddConn()
-	}, &s.listener)
+	})
+	return nil
 }
 
 // new
@@ -464,5 +706,16 @@ func NewSock5ModeServer(bridge NetBridge, task *file.Tunnel) *Sock5ModeServer {
 
 // close
 func (s *Sock5ModeServer) Close() error {
-	return s.listener.Close()
+	if s == nil {
+		return nil
+	}
+	s.listenerMu.Lock()
+	s.closed = true
+	listener := s.listener
+	s.listener = nil
+	s.listenerMu.Unlock()
+	if listener == nil {
+		return nil
+	}
+	return listener.Close()
 }

@@ -76,7 +76,7 @@ web_base_url=/nps
 如需关闭http代理可在配置文件中将http_proxy_port设置为空，如需关闭https代理可在配置文件中将https_proxy_port设置为空。
 
 ## 流量数据持久化
-服务端支持将流量数据持久化，默认情况下是关闭的，如果有需求可以设置`nps.conf`中的`flow_store_interval`参数，单位为分钟
+服务端默认每 1 分钟持久化一次流量数据。将 `nps.conf` 中的 `flow_store_interval` 设为空或 `0` 可关闭定时持久化；单位为分钟。
 
 **注意：** nps不会持久化通过公钥连接的客户端
 ## 系统信息显示

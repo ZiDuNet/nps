@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"net"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -17,8 +18,8 @@ type conn struct {
 	connStatusOkCh   chan struct{}
 	connStatusFailCh chan struct{}
 	connId           int32
-	isClose          bool
-	closingFlag      bool // closing conn flag
+	isClose          atomic.Bool
+	closingFlag      atomic.Bool // closing conn flag
 	receiveWindow    *receiveWindow
 	sendWindow       *sendWindow
 	once             sync.Once
@@ -26,8 +27,11 @@ type conn struct {
 
 func NewConn(connId int32, mux *Mux) *conn {
 	c := &conn{
-		connStatusOkCh:   make(chan struct{}),
-		connStatusFailCh: make(chan struct{}),
+		// A response can arrive after NewConn timed out or the caller closed the
+		// stream. Buffering a single terminal status keeps the mux reader from
+		// blocking forever on a stale connection.
+		connStatusOkCh:   make(chan struct{}, 1),
+		connStatusFailCh: make(chan struct{}, 1),
 		connId:           connId,
 		receiveWindow:    new(receiveWindow),
 		sendWindow:       new(sendWindow),
@@ -39,7 +43,7 @@ func NewConn(connId int32, mux *Mux) *conn {
 }
 
 func (s *conn) Read(buf []byte) (n int, err error) {
-	if s.isClose || buf == nil {
+	if s.isClose.Load() || buf == nil {
 		return 0, errors.New("the conn has closed")
 	}
 	if len(buf) == 0 {
@@ -51,10 +55,10 @@ func (s *conn) Read(buf []byte) (n int, err error) {
 }
 
 func (s *conn) Write(buf []byte) (n int, err error) {
-	if s.isClose {
+	if s.isClose.Load() {
 		return 0, errors.New("the conn has closed")
 	}
-	if s.closingFlag {
+	if s.closingFlag.Load() {
 		return 0, errors.New("io: write on closed conn")
 	}
 	if len(buf) == 0 {
@@ -70,7 +74,7 @@ func (s *conn) Close() (err error) {
 }
 
 func (s *conn) closeProcess() {
-	s.isClose = true
+	s.isClose.Store(true)
 	s.receiveWindow.mux.connMap.Delete(s.connId)
 	if !s.receiveWindow.mux.IsClose() {
 		// if server or user close the conn while reading, will Get a io.EOF
@@ -114,7 +118,7 @@ type window struct {
 	// wait   maxSize  useless  done
 	// wait zero means false, one means true
 	off       uint32
-	closeOp   bool
+	closeOp   atomic.Bool
 	closeOpCh chan struct{}
 	mux       *Mux
 }
@@ -146,24 +150,25 @@ func (Self *window) pack(maxSize, done uint32, wait bool) uint64 {
 }
 
 func (Self *window) New() {
-	Self.closeOpCh = make(chan struct{}, 2)
+	Self.closeOpCh = make(chan struct{})
 }
 
 func (Self *window) CloseWindow() {
-	if !Self.closeOp {
-		Self.closeOp = true
-		Self.closeOpCh <- struct{}{}
-		Self.closeOpCh <- struct{}{}
+	if Self.closeOp.CompareAndSwap(false, true) {
+		close(Self.closeOpCh)
 	}
 }
 
 type receiveWindow struct {
 	window
-	bufQueue *receiveWindowQueue
-	element  *listElement
-	count    int8
-	bw       *writeBandwidth
-	once     sync.Once
+	bufQueue    *receiveWindowQueue
+	element     *listElement
+	count       int8
+	bw          *writeBandwidth
+	once        sync.Once
+	inputClosed atomic.Bool
+	readMu      sync.Mutex
+	writeMu     sync.Mutex
 	// receive window send the current max size and read size to send window
 	// means done size actually store the size receive window has read
 }
@@ -258,8 +263,13 @@ func (Self *receiveWindow) calcSize() {
 }
 
 func (Self *receiveWindow) Write(buf []byte, l uint16, part bool, id int32) (err error) {
-	if Self.closeOp {
+	Self.writeMu.Lock()
+	defer Self.writeMu.Unlock()
+	if Self.closeOp.Load() || Self.inputClosed.Load() {
 		return errors.New("conn.receiveWindow: write on closed window")
+	}
+	if l == 0 {
+		return errors.New("conn.receiveWindow: zero-length data frame")
 	}
 	element, err := newListElement(buf, l, part)
 	if err != nil {
@@ -298,7 +308,16 @@ start:
 }
 
 func (Self *receiveWindow) Read(p []byte, id int32) (n int, err error) {
-	if Self.closeOp {
+	Self.readMu.Lock()
+	defer func() {
+		Self.readMu.Unlock()
+		if errors.Is(err, io.EOF) {
+			// readFromQueue can return after Stop while still owning the read
+			// state; close and drain only after releasing readMu.
+			Self.CloseWindow()
+		}
+	}()
+	if Self.closeOp.Load() {
 		return 0, io.EOF // receive close signal, returns eof
 	}
 	Self.bw.StartRead()
@@ -311,11 +330,14 @@ func (Self *receiveWindow) readFromQueue(p []byte, id int32) (n int, err error) 
 	pOff := 0
 	l := 0
 copyData:
-	if Self.off == uint32(Self.element.L) {
+	if Self.element == nil || Self.off == uint32(Self.element.L) {
 		// on the first Read method invoked, Self.off and Self.element.l
 		// both zero value
-		listEle.Put(Self.element)
-		if Self.closeOp {
+		if Self.element != nil {
+			listEle.Put(Self.element)
+			Self.element = nil
+		}
+		if Self.closeOp.Load() {
 			return 0, io.EOF
 		}
 		Self.element, err = Self.bufQueue.Pop()
@@ -324,8 +346,7 @@ copyData:
 		// timer start on timeout parameter is set up
 		Self.off = 0
 		if err != nil {
-			Self.CloseWindow() // also close the window, to avoid read twice
-			return             // queue receive stop or time out, break the loop and return
+			return // queue receive stop or time out, break the loop and return
 		}
 	}
 	l = copy(p[pOff:], Self.element.Buf[Self.off:Self.element.L])
@@ -335,6 +356,7 @@ copyData:
 	l = 0
 	if Self.off == uint32(Self.element.L) {
 		windowBuff.Put(Self.element.Buf)
+		Self.element.Buf = nil
 		Self.sendStatus(id, Self.element.L)
 		// check the window full status
 	}
@@ -391,22 +413,34 @@ func (Self *receiveWindow) SetTimeOut(t time.Time) {
 
 func (Self *receiveWindow) Stop() {
 	// queue has no more data to push, so unblock pop method
+	Self.writeMu.Lock()
+	Self.inputClosed.Store(true)
 	Self.once.Do(Self.bufQueue.Stop)
+	Self.writeMu.Unlock()
 }
 
 func (Self *receiveWindow) CloseWindow() {
 	Self.window.CloseWindow()
 	Self.Stop()
+	// Stop wakes a blocked Read. Acquire locks in read-then-write order so a
+	// reader returning EOF can perform its idempotent close callback without
+	// deadlocking against a concurrent closer waiting for that reader.
+	Self.readMu.Lock()
+	Self.writeMu.Lock()
 	Self.release()
+	Self.writeMu.Unlock()
+	Self.readMu.Unlock()
 }
 
 func (Self *receiveWindow) release() {
-	//if Self.element != nil {
-	//	if Self.element.Buf != nil {
-	//		common.WindowBuff.Put(Self.element.Buf)
-	//	}
-	//	common.ListElementPool.Put(Self.element)
-	//}
+	if Self.element != nil {
+		if Self.element.Buf != nil {
+			windowBuff.Put(Self.element.Buf)
+			Self.element.Buf = nil
+		}
+		listEle.Put(Self.element)
+		Self.element = nil
+	}
 	for {
 		ele := Self.bufQueue.TryPop()
 		if ele == nil {
@@ -421,16 +455,21 @@ func (Self *receiveWindow) release() {
 
 type sendWindow struct {
 	window
-	buf       []byte
-	setSizeCh chan struct{}
-	timeout   time.Time
+	buf        []byte
+	setSizeCh  chan struct{}
+	timeout    time.Time
+	writeMu    sync.Mutex
+	deadlineMu sync.RWMutex
 	// send window receive the receive window max size and read size
 	// done size store the size send window has send, send and read will be totally equal
 	// so send minus read, send window can get the current window size remaining
 }
 
 func (Self *sendWindow) New(mux *Mux) {
-	Self.setSizeCh = make(chan struct{})
+	// Coalesce window updates when the writer is between state transition and
+	// receive. A one-slot buffer prevents a non-blocking notifier from losing
+	// the only wake-up while keeping the mux reader independent of a dead peer.
+	Self.setSizeCh = make(chan struct{}, 1)
 	Self.maxSizeDone = Self.pack(maximumSegmentSize*30, 0, false)
 	Self.mux = mux
 	Self.window.New()
@@ -451,14 +490,7 @@ func (Self *sendWindow) remainingSize(maxSize, send uint32) uint32 {
 }
 
 func (Self *sendWindow) SetSize(currentMaxSizeDone uint64) (closed bool) {
-	// set the window size from receive window
-	defer func() {
-		if recover() != nil {
-			closed = true
-		}
-	}()
-	if Self.closeOp {
-		close(Self.setSizeCh)
+	if Self.closeOp.Load() {
 		return true
 	}
 	var maxsize, send uint32
@@ -467,6 +499,9 @@ func (Self *sendWindow) SetSize(currentMaxSizeDone uint64) (closed bool) {
 	for {
 		ptrs := atomic.LoadUint64(&Self.maxSizeDone)
 		maxsize, send, wait = Self.unpack(ptrs)
+		// Recompute the desired wait state after every failed CAS. A concurrent
+		// writer may have changed it since the previous iteration.
+		newWait = false
 		if read > send {
 			log.Println("window read > send: max size:", currentMaxSize, "read:", read, "send", send)
 			return
@@ -496,11 +531,22 @@ func (Self *sendWindow) SetSize(currentMaxSizeDone uint64) (closed bool) {
 }
 
 func (Self *sendWindow) allow() {
+	// Keep only the newest wake-up. A write deadline can leave an old token
+	// buffered; dropping the old token before publishing prevents a later ACK
+	// from being lost while the writer is transitioning back to wait state.
+	select {
+	case <-Self.setSizeCh:
+	default:
+	}
 	select {
 	case Self.setSizeCh <- struct{}{}:
 		return
 	case <-Self.closeOpCh:
-		close(Self.setSizeCh)
+		return
+	default:
+		// The writer may have returned after a deadline. An acknowledgement is
+		// still reflected in maxSizeDone above, but must never stall mux's only
+		// frame reader waiting for a no-longer-active receiver.
 		return
 	}
 }
@@ -526,7 +572,7 @@ func (Self *sendWindow) sent(sentSize uint32) {
 func (Self *sendWindow) WriteTo() (p []byte, sendSize uint32, part bool, err error) {
 	// returns buf segments, return only one segments, need a loop outside
 	// until err = io.EOF
-	if Self.closeOp {
+	if Self.closeOp.Load() {
 		return nil, 0, false, errors.New("conn.writeWindow: window closed")
 	}
 	if Self.off >= uint32(len(Self.buf)) {
@@ -578,8 +624,8 @@ start:
 }
 
 func (Self *sendWindow) waitReceiveWindow() (err error) {
-	t := Self.timeout.Sub(time.Now())
-	if t < 0 { // not set the timeout, wait for it as long as connection close
+	deadline := Self.getTimeOut()
+	if deadline.IsZero() {
 		select {
 		case _, ok := <-Self.setSizeCh:
 			if !ok {
@@ -589,6 +635,10 @@ func (Self *sendWindow) waitReceiveWindow() (err error) {
 		case <-Self.closeOpCh:
 			return errors.New("conn.writeWindow: window closed")
 		}
+	}
+	t := time.Until(deadline)
+	if t <= 0 {
+		return os.ErrDeadlineExceeded
 	}
 	timer := time.NewTimer(t)
 	defer timer.Stop()
@@ -600,13 +650,21 @@ func (Self *sendWindow) waitReceiveWindow() (err error) {
 		}
 		return nil
 	case <-timer.C:
-		return errors.New("conn.writeWindow: write to time out")
+		return os.ErrDeadlineExceeded
 	case <-Self.closeOpCh:
 		return errors.New("conn.writeWindow: window closed")
 	}
 }
 
 func (Self *sendWindow) WriteFull(buf []byte, id int32) (n int, err error) {
+	Self.writeMu.Lock()
+	defer Self.writeMu.Unlock()
+	defer func() {
+		// The mux packager copies each segment before this method returns; do not
+		// retain the caller's potentially large buffer on an idle connection.
+		Self.buf = nil
+		Self.off = 0
+	}()
 	Self.SetSendBuf(buf) // set the buf to send window
 	var bufSeg []byte
 	var part bool
@@ -622,13 +680,19 @@ func (Self *sendWindow) WriteFull(buf []byte, id int32) (n int, err error) {
 		if err != nil {
 			break
 		}
+		if part {
+			if !Self.mux.sendInfo(muxNewMsgPart, id, bufSeg) {
+				err = errors.New("mux has closed")
+				break
+			}
+		} else {
+			if !Self.mux.sendInfo(muxNewMsg, id, bufSeg) {
+				err = errors.New("mux has closed")
+				break
+			}
+		}
 		n += int(l)
 		l = 0
-		if part {
-			Self.mux.sendInfo(muxNewMsgPart, id, bufSeg)
-		} else {
-			Self.mux.sendInfo(muxNewMsg, id, bufSeg)
-		}
 		// send to other side, not send nil data to other side
 	}
 	return
@@ -636,7 +700,15 @@ func (Self *sendWindow) WriteFull(buf []byte, id int32) (n int, err error) {
 
 func (Self *sendWindow) SetTimeOut(t time.Time) {
 	// waiting for receive a receive window size
+	Self.deadlineMu.Lock()
 	Self.timeout = t
+	Self.deadlineMu.Unlock()
+}
+
+func (Self *sendWindow) getTimeOut() time.Time {
+	Self.deadlineMu.RLock()
+	defer Self.deadlineMu.RUnlock()
+	return Self.timeout
 }
 
 type writeBandwidth struct {

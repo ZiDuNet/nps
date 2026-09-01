@@ -1,11 +1,18 @@
 package goroutine
 
 import (
+	"bytes"
+	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
+	"net/http"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -14,6 +21,109 @@ import (
 	"github.com/astaxie/beego/logs"
 	"github.com/panjf2000/ants/v2"
 )
+
+const maxAuthIPRequestSize = 8 << 10
+
+var errAuthIPHandled = errors.New("ip whitelist request handled")
+
+// parseAuthIPRequest recognizes the allowlist challenge endpoint without
+// trusting query-string credentials. It returns false until the complete form
+// body is available, allowing a TCP read boundary to fall anywhere in the
+// request.
+func parseAuthIPRequest(data []byte) (pass string, ok bool) {
+	pass, isAuthRequest, complete := inspectAuthIPRequest(data)
+	return pass, isAuthRequest && complete
+}
+
+// inspectAuthIPRequest reports whether data is (or could still become) the
+// POST /authIp form, and whether its full body has arrived. Credentials in the
+// query string are deliberately ignored.
+func inspectAuthIPRequest(data []byte) (pass string, isAuthRequest, complete bool) {
+	const requestPrefix = "POST /authIp"
+	lineEnd := bytes.IndexByte(data, '\n')
+	if lineEnd < 0 {
+		trimmed := bytes.TrimSpace(data)
+		if len(trimmed) <= len(requestPrefix) && bytes.Equal(trimmed, []byte(requestPrefix[:len(trimmed)])) {
+			return "", true, false
+		}
+		return "", false, true
+	}
+
+	parts := strings.Fields(string(bytes.TrimSpace(data[:lineEnd])))
+	if len(parts) < 2 || parts[0] != http.MethodPost {
+		return "", false, true
+	}
+	u, err := url.Parse(parts[1])
+	if err != nil || u.Path != "/authIp" {
+		return "", false, true
+	}
+
+	headerEnd := bytes.Index(data, []byte("\r\n\r\n"))
+	if headerEnd < 0 {
+		return "", true, false
+	}
+
+	var contentLength int64
+	for _, line := range strings.Split(string(data[lineEnd+1:headerEnd]), "\n") {
+		key, value, found := strings.Cut(strings.TrimSpace(line), ":")
+		if !found {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(key), "Content-Length") {
+			contentLength, err = strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+			if err != nil || contentLength < 0 || contentLength > maxAuthIPRequestSize {
+				return "", true, true
+			}
+			break
+		}
+		if strings.EqualFold(strings.TrimSpace(key), "Transfer-Encoding") {
+			return "", true, true
+		}
+	}
+	bodyStart := headerEnd + 4
+	if int64(len(data)-bodyStart) < contentLength {
+		return "", true, false
+	}
+	values, err := url.ParseQuery(string(data[bodyStart : bodyStart+int(contentLength)]))
+	if err != nil {
+		return "", true, true
+	}
+	return values.Get("pass"), true, true
+}
+
+func authClientSnapshot(client *file.Client) (enabled bool, pass, vkey string, allowlist []string) {
+	client.RLock()
+	defer client.RUnlock()
+	enabled = client.IpWhite
+	pass = client.IpWhitePass
+	vkey = client.VerifyKey
+	allowlist = append([]string(nil), client.IpWhiteList...)
+	return
+}
+
+func authPasswordMatches(stored, supplied string) bool {
+	return subtle.ConstantTimeCompare([]byte(html.UnescapeString(stored)), []byte(supplied)) == 1
+}
+
+func addAuthIP(client *file.Client, ip string) {
+	client.Lock()
+	defer client.Unlock()
+	for _, existing := range client.IpWhiteList {
+		if existing == ip {
+			return
+		}
+	}
+	client.IpWhiteList = append(client.IpWhiteList, ip)
+}
+
+func writeAuthResponse(src io.Reader, dst io.Writer, response string) {
+	if connSrc, ok := src.(net.Conn); ok {
+		_, _ = connSrc.Write([]byte(response))
+		_ = connSrc.Close()
+		return
+	}
+	_, _ = dst.Write([]byte(response))
+}
 
 type connGroup struct {
 	src    io.ReadWriteCloser
@@ -51,70 +161,90 @@ func newConnGroup(dst, src io.ReadWriteCloser, wg *sync.WaitGroup, n *int64, flo
 func CopyBuffer(dst io.Writer, src io.Reader, flow *file.Flow, task *file.Tunnel, host *file.Host, remote string) (err error) {
 	buf := common.CopyBuff.Get()
 	defer common.CopyBuff.Put(buf)
+	var taskClient *file.Client
+	var taskFlow *file.Flow
+	if task != nil {
+		task.RLock()
+		taskClient, taskFlow = task.Client, task.Flow
+		task.RUnlock()
+	}
+	var hostClient *file.Client
+	var hostFlow *file.Flow
+	if host != nil {
+		host.RLock()
+		hostClient, hostFlow = host.Client, host.Flow
+		host.RUnlock()
+	}
+	var authRequest []byte
+	authInspectionDone := false
 	for {
 		if len(buf) <= 0 {
 			break
 		}
 		nr, er := src.Read(buf)
 
-		if task != nil && task.Client != nil {
-			if task.Client.IpWhite && task.Client.IpWhitePass != "" {
-
-				if common.IsAuthIp(remote, task.Client.VerifyKey, task.Client.IpWhiteList) {
+		_, inbound := src.(net.Conn)
+		if inbound && !authInspectionDone && taskClient != nil {
+			enabled, whitePass, verifyKey, allowlist := authClientSnapshot(taskClient)
+			if enabled && whitePass != "" {
+				if common.IsAuthIp(remote, verifyKey, allowlist) {
 					ip := common.GetIpByAddr(remote)
 					var jsonBytes []byte
-
-					errorContent, _ := common.ReadAllFromFile(filepath.Join(common.GetRunPath(), "web", "static", "page", "auth.html"))
-					authHtml := string(errorContent)
-					authHtml = strings.ReplaceAll(authHtml, "${ip}", ip)
-
-					fullRequest := string(buf[0:nr])
-					// 获取HTTP请求的第一行
-					lines := strings.Split(fullRequest, "\r\n")
-					if len(lines) == 0 {
-						lines = strings.Split(fullRequest, "\n")
+					authRequest = append(authRequest, buf[:nr]...)
+					pass, isAuthRequest, complete := inspectAuthIPRequest(authRequest)
+					if len(authRequest) > maxAuthIPRequestSize {
+						// Bound buffering for ordinary or malformed requests. A request
+						// that is already identified as /authIp must be rejected rather
+						// than forwarded to the protected target.
+						if isAuthRequest {
+							complete = true
+						}
+					} else if !isAuthRequest {
+						complete = true
+					} else if !complete {
+						if er == nil {
+							continue
+						}
+						// A truncated challenge request cannot be forwarded.
+						isAuthRequest = false
+						complete = true
 					}
-					firstLine := lines[0]
 
 					// 优先处理客户端直接访问的 POST /authIp 请求，直接响应给客户端，不经隧道转发
-					if strings.HasPrefix(firstLine, "POST /authIp") {
-						pass := ""
-						parts := strings.Split(firstLine, " ")
-						if len(parts) > 1 {
-							path := parts[1]
-							if strings.Contains(path, "/authIp?pass=") {
-								pass = strings.ReplaceAll(path, "/authIp?pass=", "")
-							}
-						}
-						if pass == task.Client.IpWhitePass {
-							task.Client.IpWhiteList = append(task.Client.IpWhiteList, ip)
-							file.GetDb().UpdateClient(task.Client)
-							logs.Info("客户端IP白名单认证授权成功:client_id [%d] ip [%s]", task.Client.Id, ip)
+					if isAuthRequest && complete {
+						authInspectionDone = true
+						authRequest = nil
+						if pass != "" && authPasswordMatches(whitePass, pass) {
+							addAuthIP(taskClient, ip)
+							file.GetDb().JsonDb.StoreClientsToJsonFile()
+							taskClient.RLock()
+							clientID := taskClient.Id
+							taskClient.RUnlock()
+							logs.Info("客户端IP白名单认证授权成功:client_id [%d] ip [%s]", clientID, ip)
 							jsonBytes, err = json.Marshal(map[string]interface{}{"success": true, "message": "授权成功"})
 						} else {
-							logs.Error("客户端IP白名单认证授权密码错误:client_id [%d] ip [%s]", task.Client.Id, ip)
+							taskClient.RLock()
+							clientID := taskClient.Id
+							taskClient.RUnlock()
+							logs.Error("客户端IP白名单认证授权密码错误:client_id [%d] ip [%s]", clientID, ip)
 							jsonBytes, err = json.Marshal(map[string]interface{}{"success": false, "message": "密码错误"})
 						}
 						response := fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(jsonBytes), jsonBytes)
-						// 如果 src 是真实的客户端连接（net.Conn），直接写回客户端并关闭连接，避免走隧道转发
-						if connSrc, ok := src.(net.Conn); ok {
-							connSrc.Write([]byte(response))
-							connSrc.Close()
-						} else {
-							dst.Write([]byte(response))
-						}
-						return
+						writeAuthResponse(src, dst, response)
+						return errAuthIPHandled
 					}
 
-					// 非授权IP，返回授权页面（同样优先返回给客户端）
+					// Every other first packet from a blocked address is rejected. In
+					// particular, do not mark inspection complete and forward binary
+					// protocols to the protected target.
+					authInspectionDone = true
+					authRequest = nil
+					errorContent, _ := common.ReadAllFromFile(filepath.Join(common.GetRunPath(), "web", "static", "page", "auth.html"))
+					authHtml := string(errorContent)
+					authHtml = strings.ReplaceAll(authHtml, "${ip}", html.EscapeString(ip))
 					response := fmt.Sprintf("HTTP/1.1 401 Unauthorized\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(authHtml), authHtml)
-					if connSrc, ok := src.(net.Conn); ok {
-						connSrc.Write([]byte(response))
-						connSrc.Close()
-					} else {
-						dst.Write([]byte(response))
-					}
-					return
+					writeAuthResponse(src, dst, response)
+					return errAuthIPHandled
 				}
 			}
 		}
@@ -128,20 +258,25 @@ func CopyBuffer(dst io.Writer, src io.Reader, flow *file.Flow, task *file.Tunnel
 					// <<20 = 1024 * 1024
 					if flow.Exceeded() {
 						clientID := 0
-						if task != nil && task.Client != nil {
-							clientID = task.Client.Id
-						} else if host != nil && host.Client != nil {
-							clientID = host.Client.Id
+						if taskClient != nil {
+							taskClient.RLock()
+							clientID = taskClient.Id
+							taskClient.RUnlock()
+						} else if hostClient != nil {
+							hostClient.RLock()
+							clientID = hostClient.Id
+							hostClient.RUnlock()
 						}
 						logs.Error("客户端[%d]流量已经超出", clientID)
+						err = errors.New("traffic exceeded")
 						break
 					}
 				}
-				if task != nil && task.Flow != nil && flow != task.Flow {
-					task.Flow.Add(int64(nw), int64(nw))
+				if taskFlow != nil && flow != taskFlow {
+					taskFlow.Add(int64(nw), int64(nw))
 				}
-				if host != nil && host.Flow != nil && flow != host.Flow {
-					host.Flow.Add(int64(nw), int64(nw))
+				if hostFlow != nil && flow != hostFlow {
+					hostFlow.Add(int64(nw), int64(nw))
 				}
 
 			}

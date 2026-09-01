@@ -2,6 +2,7 @@ package conn
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"net"
 	"testing"
@@ -73,5 +74,40 @@ func TestGetHostReturnsBufferedBytesWhenReadReturnsBytesAndError(t *testing.T) {
 	}
 	if !bytes.Equal(rb, payload) {
 		t.Fatalf("expected buffered payload %q, got %q", payload, rb)
+	}
+}
+
+func TestGetLinkInfoRejectsMalformedJSON(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := NewConn(serverConn).GetLinkInfo()
+		done <- err
+	}()
+	if err := binary.Write(clientConn, binary.LittleEndian, int32(3)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := clientConn.Write([]byte("bad")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("malformed JSON was accepted")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("GetLinkInfo did not return")
+	}
+}
+
+func TestGetShortContentRejectsInvalidLength(t *testing.T) {
+	if _, err := NewConn(nil).GetShortContent(-1); err == nil {
+		t.Fatal("negative content length was accepted")
+	}
+	if _, err := NewConn(nil).GetShortContent((64 << 10) + 1); err == nil {
+		t.Fatal("oversized content length was accepted")
 	}
 }

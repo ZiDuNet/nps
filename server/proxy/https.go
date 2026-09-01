@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"ehang.io/nps/lib/cache"
 	"ehang.io/nps/lib/common"
@@ -23,7 +24,19 @@ type HttpsServer struct {
 	listener         net.Listener
 	httpsListenerMap sync.Map
 	hostIdCertMap    sync.Map
+	listenerMu       sync.Mutex
+	closeOnce        sync.Once
+	closed           atomic.Bool
+	closeErr         error
 }
+
+var httpsHandshakeTimeout = 10 * time.Second
+
+const (
+	tlsRecordHeaderSize = 5
+	maxTLSRecordSize    = 16384
+	maxClientHelloSize  = 1 << 20
+)
 
 func NewHttpsServer(l net.Listener, bridge NetBridge, useCache bool, cacheLen int) *HttpsServer {
 	https := &HttpsServer{listener: l}
@@ -37,9 +50,36 @@ func NewHttpsServer(l net.Listener, bridge NetBridge, useCache bool, cacheLen in
 
 // start https server
 func (https *HttpsServer) Start() error {
+	if https.listener == nil {
+		return errors.New("https listener is nil")
+	}
+	if https.closed.Load() {
+		return errors.New("https server has closed")
+	}
 
 	conn.Accept(https.listener, func(c net.Conn) {
-		serverName, rb := GetServerNameFromClientHello(c)
+		if c == nil {
+			return
+		}
+		if https.closed.Load() {
+			_ = c.Close()
+			return
+		}
+		// A client can otherwise hold an accepted socket indefinitely by
+		// sending only a partial TLS ClientHello. The deadline is cleared only
+		// after a complete, valid record has been parsed below.
+		_ = c.SetReadDeadline(time.Now().Add(httpsHandshakeTimeout))
+		serverName, rb, parseErr := getServerNameFromClientHello(c)
+		if parseErr != nil {
+			_ = c.Close()
+			logs.Debug("invalid or incomplete TLS ClientHello from %s: %v", c.RemoteAddr(), parseErr)
+			return
+		}
+		_ = c.SetReadDeadline(time.Time{})
+		if https.closed.Load() {
+			_ = c.Close()
+			return
+		}
 		if serverName == "" {
 			serverName = getFallbackServerName()
 			logs.Debug("https fallback server name result, remote addr %s, server name %q", c.RemoteAddr().String(), serverName)
@@ -50,31 +90,45 @@ func (https *HttpsServer) Start() error {
 			logs.Debug("https host lookup failed, server name %q, remote addr %s, error %v", serverName, c.RemoteAddr().String(), err)
 			return
 		} else {
-			if host.CertFilePath == "" || host.KeyFilePath == "" {
+			hostClient, _, _, ok := snapshotHostProxyParts(host)
+			if !ok {
+				logs.Warn("reject malformed HTTPS host %q", serverName)
+				_ = c.Close()
+				return
+			}
+			host.RLock()
+			certFilePath, keyFilePath := host.CertFilePath, host.KeyFilePath
+			host.RUnlock()
+			if IsGlobalBlackIp(c.RemoteAddr().String()) || isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) {
+				logs.Warn("https connection rejected by IP allowlist, host %s, remote addr %s", serverName, c.RemoteAddr().String())
+				_ = c.Close()
+				return
+			}
+			if certFilePath == "" || keyFilePath == "" {
 				logs.Debug("加载客户端本地证书")
 				https.handleHttps2(c, serverName, rb, r)
 			} else {
 				logs.Debug("使用上传证书")
 
 				// 判断是路径还是证书，-----BEGIN 开头的为证书
-				if strings.Contains(host.CertFilePath, "-----BEGIN") || strings.Contains(host.KeyFilePath, "-----BEGIN") {
+				if strings.Contains(certFilePath, "-----BEGIN") || strings.Contains(keyFilePath, "-----BEGIN") {
 					logs.Debug("通过上传文件加载证书")
-					https.cert(host, c, rb, host.CertFilePath, host.KeyFilePath)
+					https.cert(host, c, rb, certFilePath, keyFilePath)
 				} else {
 					logs.Debug("通过路径加载证书")
-					if !common.FileExists(host.CertFilePath) || !common.FileExists(host.KeyFilePath) {
+					if !common.FileExists(certFilePath) || !common.FileExists(keyFilePath) {
 						c.Close()
-						logs.Error("证书或秘钥文件不存在", host.KeyFilePath, host.CertFilePath)
+						logs.Error("证书或秘钥文件不存在", keyFilePath, certFilePath)
 						return
 					}
 
-					cert, err := common.ReadAllFromFile(host.CertFilePath)
+					cert, err := common.ReadAllFromFile(certFilePath)
 					if err != nil {
 						c.Close()
 						logs.Error("加载证书失败", err)
 						return
 					}
-					key, err := common.ReadAllFromFile(host.KeyFilePath)
+					key, err := common.ReadAllFromFile(keyFilePath)
 					if err != nil {
 						c.Close()
 						logs.Error("加载证书秘钥失败", err)
@@ -176,6 +230,21 @@ func getFallbackServerName() string {
 }
 
 func (https *HttpsServer) cert(host *file.Host, c net.Conn, rb []byte, certFileUrl string, keyFileUrl string) {
+	if host == nil || c == nil {
+		if c != nil {
+			_ = c.Close()
+		}
+		return
+	}
+	// Certificate listeners are created lazily from accept goroutines. Serialize
+	// creation/replacement with Close so a connection cannot be queued onto a
+	// listener after the HTTPS server has shut down.
+	https.listenerMu.Lock()
+	defer https.listenerMu.Unlock()
+	if https.closed.Load() {
+		_ = c.Close()
+		return
+	}
 	var l *HttpsListener
 	i := 0
 	https.hostIdCertMap.Range(func(key, value interface{}) bool {
@@ -187,15 +256,9 @@ func (https *HttpsServer) cert(host *file.Host, c net.Conn, rb []byte, certFileU
 			if err != nil {
 				// 说明这个host已经不存了，需要释放Listener
 				logs.Error(err)
-				if oldL, ok := https.httpsListenerMap.Load(value); ok {
-					err := oldL.(*HttpsListener).Close()
-					if err != nil {
-						logs.Error(err)
-					}
-					https.httpsListenerMap.Delete(value)
-					https.hostIdCertMap.Delete(key)
-					logs.Debug("Listener 已释放")
-				}
+				https.hostIdCertMap.Delete(key)
+				https.releaseCertListener(value)
+				logs.Debug("Listener 已释放")
 			}
 		}
 		return true
@@ -213,15 +276,9 @@ func (https *HttpsServer) cert(host *file.Host, c net.Conn, rb []byte, certFileU
 			// 证书修改过，重新加载证书
 			l = NewHttpsListener(https.listener)
 			https.NewHttps(l, certFileUrl, keyFileUrl)
-			if oldL, ok := https.httpsListenerMap.Load(cert); ok {
-				err := oldL.(*HttpsListener).Close()
-				if err != nil {
-					logs.Error(err)
-				}
-				https.httpsListenerMap.Delete(cert)
-			}
-			https.httpsListenerMap.Store(certFileUrl, l)
 			https.hostIdCertMap.Store(host.Id, certFileUrl)
+			https.releaseCertListener(cert)
+			https.httpsListenerMap.Store(certFileUrl, l)
 		}
 	} else {
 		// 第一次加载证书
@@ -230,19 +287,56 @@ func (https *HttpsServer) cert(host *file.Host, c net.Conn, rb []byte, certFileU
 		https.httpsListenerMap.Store(certFileUrl, l)
 		https.hostIdCertMap.Store(host.Id, certFileUrl)
 	}
+	if l == nil {
+		// The certificate map can outlive a listener after an I/O failure. Rebuild
+		// it instead of dereferencing nil and leaking the accepted connection.
+		l = NewHttpsListener(https.listener)
+		https.NewHttps(l, certFileUrl, keyFileUrl)
+		https.httpsListenerMap.Store(certFileUrl, l)
+		https.hostIdCertMap.Store(host.Id, certFileUrl)
+	}
 
 	acceptConn := conn.NewConn(c)
 	acceptConn.Rb = rb
-	select {
-	case l.acceptConn <- acceptConn:
-	default:
-		logs.Warn("https acceptConn channel full, dropping connection")
-		c.Close()
+	l.enqueue(acceptConn, c)
+}
+
+// releaseCertListener closes a certificate listener only when no remaining
+// host entry references its certificate key. Multiple virtual hosts may share
+// one certificate and therefore one HttpsListener.
+func (https *HttpsServer) releaseCertListener(certKey interface{}) {
+	if certKey == nil {
+		return
+	}
+	referenced := false
+	https.hostIdCertMap.Range(func(_, value interface{}) bool {
+		if value == certKey {
+			referenced = true
+			return false
+		}
+		return true
+	})
+	if referenced {
+		return
+	}
+	if oldL, ok := https.httpsListenerMap.Load(certKey); ok {
+		if listener, ok := oldL.(*HttpsListener); ok && listener != nil {
+			if err := listener.Close(); err != nil {
+				logs.Error(err)
+			}
+		}
+		https.httpsListenerMap.Delete(certKey)
 	}
 }
 
 // handle the https which is just proxy to other client
 func (https *HttpsServer) handleHttps2(c net.Conn, hostName string, rb []byte, r *http.Request) {
+	if c == nil || r == nil {
+		if c != nil {
+			_ = c.Close()
+		}
+		return
+	}
 	var targetAddr string
 	var host *file.Host
 	var err error
@@ -251,28 +345,77 @@ func (https *HttpsServer) handleHttps2(c net.Conn, hostName string, rb []byte, r
 		logs.Debug("the url %s can't be parsed!", hostName)
 		return
 	}
-	if err := https.CheckFlowAndConnNum(host.Client); err != nil {
-		logs.Debug("client id %d, host id %d, error %s, when https connection", host.Client.Id, host.Id, err.Error())
+	hostClient, hostTarget, _, validHost := snapshotHostProxyParts(host)
+	if !validHost {
+		logs.Warn("reject malformed HTTPS host %q", hostName)
+		_ = c.Close()
+		return
+	}
+	clientConfig, configOK := snapshotClientConfig(hostClient)
+	if !configOK {
+		_ = c.Close()
+		return
+	}
+	if IsGlobalBlackIp(c.RemoteAddr().String()) || isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) {
+		logs.Warn("https connection rejected by IP allowlist, host %s, remote addr %s", hostName, c.RemoteAddr().String())
+		_ = c.Close()
+		return
+	}
+	if err := https.CheckFlowAndConnNum(hostClient); err != nil {
+		hostClient.RLock()
+		clientID := hostClient.Id
+		hostClient.RUnlock()
+		logs.Debug("client id %d, host id %d, error %s, when https connection", clientID, host.Id, err.Error())
 		c.Close()
 		return
 	}
-	defer host.Client.AddConn()
-	if err = https.auth(r, conn.NewConn(c), host.Client.Cnf.U, host.Client.Cnf.P); err != nil {
+	defer hostClient.AddConn()
+	if err = https.auth(r, conn.NewConn(c), clientConfig.U, clientConfig.P); err != nil {
 		logs.Warn("auth error", err, r.RemoteAddr)
 		return
 	}
-	if targetAddr, err = host.Target.GetRandomTarget(); err != nil {
+	if targetAddr, err = hostTarget.GetRandomTarget(); err != nil {
 		logs.Warn(err.Error())
 		c.Close()
 		return
 	}
-	logs.Info("new https connection,clientId %d,host %s,remote address %s", host.Client.Id, r.Host, c.RemoteAddr().String())
-	https.DealClient(conn.NewConn(c), host.Client, targetAddr, rb, common.CONN_TCP, nil, host.Client.Flow, host.Target.LocalProxy, nil, host)
+	hostClient.RLock()
+	clientID := hostClient.Id
+	hostClient.RUnlock()
+	hostTarget.RLock()
+	localProxy := hostTarget.LocalProxy
+	hostTarget.RUnlock()
+	logs.Info("new https connection,clientId %d,host %s,remote address %s", clientID, r.Host, c.RemoteAddr().String())
+	https.DealClient(conn.NewConn(c), hostClient, targetAddr, rb, common.CONN_TCP, nil, nil, localProxy, nil, host)
 }
 
 // close
 func (https *HttpsServer) Close() error {
-	return https.listener.Close()
+	https.closeOnce.Do(func() {
+		https.listenerMu.Lock()
+		https.closed.Store(true)
+		listeners := make([]*HttpsListener, 0)
+		https.httpsListenerMap.Range(func(_, value interface{}) bool {
+			if listener, ok := value.(*HttpsListener); ok && listener != nil {
+				listeners = append(listeners, listener)
+			}
+			return true
+		})
+		parent := https.listener
+		https.listenerMu.Unlock()
+
+		for _, listener := range listeners {
+			if err := listener.Close(); err != nil && https.closeErr == nil {
+				https.closeErr = err
+			}
+		}
+		if parent != nil {
+			if err := parent.Close(); err != nil && https.closeErr == nil {
+				https.closeErr = err
+			}
+		}
+	})
+	return https.closeErr
 }
 
 // new https server by cert and key file
@@ -286,7 +429,16 @@ func (https *HttpsServer) NewHttps(l net.Listener, certFile string, keyFile stri
 
 // handle the https which is just proxy to other client
 func (https *HttpsServer) handleHttps(c net.Conn) {
-	hostName, rb := GetServerNameFromClientHello(c)
+	if c == nil {
+		return
+	}
+	_ = c.SetReadDeadline(time.Now().Add(httpsHandshakeTimeout))
+	hostName, rb, parseErr := getServerNameFromClientHello(c)
+	if parseErr != nil {
+		_ = c.Close()
+		return
+	}
+	_ = c.SetReadDeadline(time.Time{})
 	var targetAddr string
 	r := buildHttpsRequest(hostName)
 	var host *file.Host
@@ -296,34 +448,79 @@ func (https *HttpsServer) handleHttps(c net.Conn) {
 		logs.Notice("the url %s can't be parsed!", hostName)
 		return
 	}
-	if err := https.CheckFlowAndConnNum(host.Client); err != nil {
-		logs.Warn("client id %d, host id %d, error %s, when https connection", host.Client.Id, host.Id, err.Error())
+	hostClient, hostTarget, _, validHost := snapshotHostProxyParts(host)
+	if !validHost {
+		logs.Warn("reject malformed HTTPS host %q", hostName)
+		_ = c.Close()
+		return
+	}
+	clientConfig, configOK := snapshotClientConfig(hostClient)
+	if !configOK {
+		_ = c.Close()
+		return
+	}
+	if IsGlobalBlackIp(c.RemoteAddr().String()) || isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) {
+		logs.Warn("https connection rejected by IP allowlist, host %s, remote addr %s", hostName, c.RemoteAddr().String())
+		_ = c.Close()
+		return
+	}
+	if err := https.CheckFlowAndConnNum(hostClient); err != nil {
+		hostClient.RLock()
+		clientID := hostClient.Id
+		hostClient.RUnlock()
+		logs.Warn("client id %d, host id %d, error %s, when https connection", clientID, host.Id, err.Error())
 		c.Close()
 		return
 	}
-	defer host.Client.AddConn()
-	if err = https.auth(r, conn.NewConn(c), host.Client.Cnf.U, host.Client.Cnf.P); err != nil {
+	defer hostClient.AddConn()
+	if err = https.auth(r, conn.NewConn(c), clientConfig.U, clientConfig.P); err != nil {
 		logs.Warn("auth error", err, r.RemoteAddr)
 		return
 	}
-	if targetAddr, err = host.Target.GetRandomTarget(); err != nil {
+	if targetAddr, err = hostTarget.GetRandomTarget(); err != nil {
 		logs.Warn(err.Error())
 		c.Close()
 		return
 	}
-	logs.Trace("new https connection,clientId %d,host %s,remote address %s", host.Client.Id, r.Host, c.RemoteAddr().String())
-	https.DealClient(conn.NewConn(c), host.Client, targetAddr, rb, common.CONN_TCP, nil, host.Client.Flow, host.Target.LocalProxy, nil, host)
+	hostClient.RLock()
+	clientID := hostClient.Id
+	hostClient.RUnlock()
+	hostTarget.RLock()
+	localProxy := hostTarget.LocalProxy
+	hostTarget.RUnlock()
+	logs.Trace("new https connection,clientId %d,host %s,remote address %s", clientID, r.Host, c.RemoteAddr().String())
+	https.DealClient(conn.NewConn(c), hostClient, targetAddr, rb, common.CONN_TCP, nil, nil, localProxy, nil, host)
 }
 
 type HttpsListener struct {
 	acceptConn     chan *conn.Conn
 	parentListener net.Listener
 	closed         int32
+	closeCh        chan struct{}
+	closeOnce      sync.Once
+	mu             sync.RWMutex
 }
 
 // https listener
 func NewHttpsListener(l net.Listener) *HttpsListener {
-	return &HttpsListener{parentListener: l, acceptConn: make(chan *conn.Conn, 1024)}
+	return &HttpsListener{parentListener: l, acceptConn: make(chan *conn.Conn, 1024), closeCh: make(chan struct{})}
+}
+
+func (httpsListener *HttpsListener) enqueue(httpsConn *conn.Conn, raw net.Conn) {
+	httpsListener.mu.RLock()
+	defer httpsListener.mu.RUnlock()
+	if atomic.LoadInt32(&httpsListener.closed) == 1 {
+		_ = raw.Close()
+		return
+	}
+	select {
+	case httpsListener.acceptConn <- httpsConn:
+	case <-httpsListener.closeCh:
+		_ = raw.Close()
+	default:
+		logs.Warn("https acceptConn channel full, dropping connection")
+		_ = raw.Close()
+	}
 }
 
 // accept
@@ -331,51 +528,113 @@ func (httpsListener *HttpsListener) Accept() (net.Conn, error) {
 	if atomic.LoadInt32(&httpsListener.closed) == 1 {
 		return nil, errors.New("listener closed")
 	}
-	httpsConn := <-httpsListener.acceptConn
-	if httpsConn == nil {
-		return nil, errors.New("get connection error")
+	select {
+	case <-httpsListener.closeCh:
+		return nil, net.ErrClosed
+	case httpsConn := <-httpsListener.acceptConn:
+		if httpsConn == nil {
+			return nil, net.ErrClosed
+		}
+		// A close and a queued connection can become ready at the same time;
+		// prefer the close semantics and do not hand a stale socket to Serve.
+		select {
+		case <-httpsListener.closeCh:
+			_ = httpsConn.Close()
+			return nil, net.ErrClosed
+		default:
+		}
+		return httpsConn, nil
 	}
-	return httpsConn, nil
 }
 
 // close
 func (httpsListener *HttpsListener) Close() error {
-	atomic.StoreInt32(&httpsListener.closed, 1)
+	httpsListener.closeOnce.Do(func() {
+		httpsListener.mu.Lock()
+		defer httpsListener.mu.Unlock()
+		atomic.StoreInt32(&httpsListener.closed, 1)
+		close(httpsListener.closeCh)
+		for {
+			select {
+			case pending := <-httpsListener.acceptConn:
+				if pending != nil {
+					_ = pending.Close()
+				}
+			default:
+				return
+			}
+		}
+	})
 	return nil
 }
 
 // addr
 func (httpsListener *HttpsListener) Addr() net.Addr {
+	if httpsListener.parentListener == nil {
+		return nil
+	}
 	return httpsListener.parentListener.Addr()
 }
 
-// get server name from connection by read full client hello bytes
+// GetServerNameFromClientHello keeps the historical two-value API for callers
+// that only need best-effort inspection. Active listeners use the internal
+// helper below so incomplete or malformed records cannot be treated as a
+// ClientHello without SNI.
 func GetServerNameFromClientHello(c net.Conn) (string, []byte) {
-	header := make([]byte, 5)
-	headerN, err := io.ReadFull(c, header)
-	if err != nil {
-		return "", header[:headerN]
-	}
-	if header[0] != 0x16 {
-		return "", header
-	}
-	recordLen := int(header[3])<<8 | int(header[4])
-	if recordLen <= 0 || recordLen > 16384 {
-		return "", header
-	}
+	serverName, rb, _ := getServerNameFromClientHello(c)
+	return serverName, rb
+}
 
-	body := make([]byte, recordLen)
-	bodyN, err := io.ReadFull(c, body)
-	if err != nil {
-		return "", append(header, body[:bodyN]...)
+// getServerNameFromClientHello reads all records needed for one complete
+// ClientHello. TLS permits a handshake message to span multiple records, so
+// parsing only the first record would reject otherwise valid clients.
+func getServerNameFromClientHello(c net.Conn) (string, []byte, error) {
+	if c == nil {
+		return "", nil, errors.New("TLS ClientHello connection is nil")
 	}
-
-	rawBytes := append(header, body...)
+	rawBytes := make([]byte, 0, tlsRecordHeaderSize+1024)
+	handshake := make([]byte, 0, 1024)
+	expectedLen := 0
+	for expectedLen == 0 || len(handshake) < expectedLen {
+		header := make([]byte, tlsRecordHeaderSize)
+		headerN, err := io.ReadFull(c, header)
+		rawBytes = append(rawBytes, header[:headerN]...)
+		if err != nil {
+			return "", rawBytes, err
+		}
+		if header[0] != 0x16 {
+			return "", rawBytes, errors.New("invalid TLS record type")
+		}
+		recordLen := int(header[3])<<8 | int(header[4])
+		if recordLen <= 0 || recordLen > maxTLSRecordSize {
+			return "", rawBytes, errors.New("invalid TLS record length")
+		}
+		body := make([]byte, recordLen)
+		bodyN, err := io.ReadFull(c, body)
+		rawBytes = append(rawBytes, body[:bodyN]...)
+		if err != nil {
+			return "", rawBytes, err
+		}
+		if len(handshake)+len(body) > maxClientHelloSize {
+			return "", rawBytes, errors.New("TLS ClientHello is too large")
+		}
+		handshake = append(handshake, body...)
+		if expectedLen == 0 && len(handshake) >= 4 {
+			if handshake[0] != 1 {
+				return "", rawBytes, errors.New("first TLS handshake is not ClientHello")
+			}
+			helloLen := int(handshake[1])<<16 | int(handshake[2])<<8 | int(handshake[3])
+			expectedLen = 4 + helloLen
+			if helloLen == 0 || expectedLen > maxClientHelloSize {
+				return "", rawBytes, errors.New("invalid TLS ClientHello length")
+			}
+		}
+	}
 	clientHello := new(crypt.ClientHelloMsg)
-	if !clientHello.Unmarshal(body) {
-		return "", rawBytes
+	if !clientHello.Unmarshal(handshake[:expectedLen]) {
+		return "", rawBytes, errors.New("invalid TLS ClientHello")
 	}
-	return clientHello.GetServerName(), rawBytes
+	return clientHello.GetServerName(), rawBytes, nil
 }
 
 // build https request for SNI-based host lookup.

@@ -32,7 +32,7 @@
 
 当前 Bridge 控制连接支持 `tcp` 和 `kcp` 两种类型；`tls_enable=true` 时会额外监听 TLS Bridge 端口。HTTP Host 代理可以转发业务层 WebSocket，但这不等同于 WebSocket Bridge 传输。
 
-以下能力目前不属于 NPS 已支持的 Bridge 功能：QUIC、WebSocket Bridge、mTLS/证书双向校验、配置热重载、环境变量占位符和 PROXY Protocol v2。部署或选型时请以本仓库的配置表和版本日志为准，不要直接套用其他项目的配置项。
+以下能力目前不属于 NPS 已支持的 Bridge 功能：QUIC、WebSocket Bridge、mTLS/证书双向校验、完整配置热重载、环境变量占位符和 PROXY Protocol v2。Linux/macOS 上的 `nps reload` 仅重新读取认证与管理面板相关配置，监听和运行中的代理仍需重启。部署或选型时请以本仓库的配置表和版本日志为准，不要直接套用其他项目的配置项。
 
 ## 用户和权限
 

@@ -11,14 +11,18 @@ import (
 )
 
 type CommonConfig struct {
-	Server           string
-	VKey             string
-	Tp               string //bridgeType kcp or tcp
-	AutoReconnection bool
-	TlsEnable        bool
-	ProxyUrl         string
-	Client           *file.Client
-	DisconnectTime   int
+	Server                string
+	VKey                  string
+	Tp                    string //bridgeType kcp or tcp
+	AutoReconnection      bool
+	TlsEnable             bool
+	TLSCAFile             string
+	TLSServerName         string
+	TLSFingerprint        string
+	TLSInsecureSkipVerify bool
+	ProxyUrl              string
+	Client                *file.Client
+	DisconnectTime        int
 }
 
 type LocalServer struct {
@@ -166,6 +170,14 @@ func dealCommon(s string) *CommonConfig {
 			c.DisconnectTime = common.GetIntNoErrByStr(item[1])
 		case "tls_enable":
 			c.TlsEnable = common.GetBoolByStr(item[1])
+		case "tls_ca_file":
+			c.TLSCAFile = strings.TrimSpace(item[1])
+		case "tls_server_name":
+			c.TLSServerName = strings.TrimSpace(item[1])
+		case "tls_fingerprint":
+			c.TLSFingerprint = strings.TrimSpace(item[1])
+		case "tls_insecure_skip_verify":
+			c.TLSInsecureSkipVerify = common.GetBoolByStr(item[1])
 		}
 	}
 	return c

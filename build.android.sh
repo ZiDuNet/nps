@@ -46,7 +46,7 @@ rm -rf vendor
 #rm -rf ~/.cache/*
 echo "vendor success"
 cd gui/npc
-fyne package -appID org.nps.client -os android -icon ../../docs/logo.png
+fyne package -appID org.nps.client -os android --tags fyne -icon ../../docs/logo.png
 apk="$(ls -1 *.apk 2>/dev/null | head -n 1)"
 if [ -z "$apk" ]; then
   echo "No apk produced"

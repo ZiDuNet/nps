@@ -2,12 +2,7 @@ package proxy
 
 import (
 	"context"
-	"ehang.io/nps/lib/common"
-	"ehang.io/nps/lib/conn"
-	"ehang.io/nps/lib/file"
-	"ehang.io/nps/lib/goroutine"
 	"errors"
-	"github.com/astaxie/beego/logs"
 	"io"
 	"net"
 	"net/http"
@@ -15,6 +10,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/conn"
+	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/goroutine"
+	"ehang.io/nps/lib/rate"
+	"github.com/astaxie/beego/logs"
 )
 
 type HTTPError struct {
@@ -27,6 +29,35 @@ type HttpReverseProxy struct {
 	server                *httpServer
 	responseHeaderTimeout time.Duration
 }
+
+// reverseProxyState is captured before handing a request to the transport.
+// Host/client settings can be edited from the console while a request is in
+// flight, so transport callbacks must not reread the mutable model objects.
+type reverseProxyState struct {
+	req        *http.Request
+	host       *file.Host
+	targetAddr string
+	client     *file.Client
+	clientID   int
+	clientRate *rate.Rate
+	clientFlow *file.Flow
+	config     file.Config
+	localProxy bool
+}
+
+type reverseProxyContextKey struct{}
+
+func stateFromContext(ctx context.Context) (*reverseProxyState, error) {
+	if ctx == nil {
+		return nil, errors.New("reverse proxy context is nil")
+	}
+	state, ok := ctx.Value(reverseProxyContextKey{}).(*reverseProxyState)
+	if !ok || state == nil || state.req == nil || state.host == nil || state.client == nil || state.targetAddr == "" {
+		return nil, errors.New("reverse proxy request state is incomplete")
+	}
+	return state, nil
+}
+
 type flowConn struct {
 	io.ReadWriteCloser
 	fakeAddr net.Addr
@@ -43,54 +74,90 @@ func (rp *HttpReverseProxy) reserveClientConnection(client *file.Client) error {
 	if rp.server != nil {
 		return rp.server.CheckFlowAndConnNum(client)
 	}
-	if client.Flow != nil && client.Flow.Exceeded() {
-		return errors.New("Traffic exceeded")
-	}
-	if !client.GetConn() {
-		return errors.New("Connections exceed the current client limit")
-	}
-	return nil
+	return checkClientConnection(client)
 }
 
 func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	if rw == nil || req == nil {
+		return
+	}
 	var (
-		host       *file.Host
-		targetAddr string
-		err        error
+		host *file.Host
+		err  error
 	)
 	if host, err = file.GetDb().GetInfoByHost(req.Host, req); err != nil {
 		rw.WriteHeader(http.StatusNotFound)
 		rw.Write([]byte(req.Host + " not found"))
 		return
 	}
-	if host.Client == nil || host.Client.Cnf == nil || host.Target == nil {
+	client, target, _, validHost := snapshotHostProxyParts(host)
+	if !validHost {
 		rw.WriteHeader(http.StatusBadGateway)
 		rw.Write([]byte("502 Bad Gateway"))
 		return
 	}
-	if host.Client.Cnf.U != "" && host.Client.Cnf.P != "" && !common.CheckAuth(req, host.Client.Cnf.U, host.Client.Cnf.P) {
+	config, ok := snapshotClientConfig(client)
+	if !ok {
+		rw.WriteHeader(http.StatusBadGateway)
+		rw.Write([]byte("502 Bad Gateway"))
+		return
+	}
+	client.RLock()
+	clientID, clientRate, clientFlow := client.Id, client.Rate, client.Flow
+	client.RUnlock()
+	target.RLock()
+	localProxy := target.LocalProxy
+	target.RUnlock()
+	remoteAddr := req.RemoteAddr
+	if IsGlobalBlackIp(remoteAddr) || isClientBlackBlocked(client, remoteAddr) {
+		http.Error(rw, "IP address is blocked", http.StatusForbidden)
+		return
+	}
+	if config.U != "" && config.P != "" && !common.CheckAuth(req, config.U, config.P) {
 		rw.WriteHeader(http.StatusUnauthorized)
 		rw.Write([]byte("Unauthorized"))
 		return
 	}
-	if targetAddr, err = host.Target.GetRandomTarget(); err != nil {
+	if isIPWhiteBlocked(client, req.RemoteAddr) {
+		// A WebSocket upgrade has no useful HTML challenge response. Reject it
+		// before reserving a client slot or opening the remote tunnel.
+		http.Error(rw, "IP address is not authorized", http.StatusForbidden)
+		return
+	}
+	targetAddr, err := target.GetRandomTarget()
+	if err != nil {
 		rw.WriteHeader(http.StatusBadGateway)
 		rw.Write([]byte("502 Bad Gateway"))
 		return
 	}
-	if err := rp.reserveClientConnection(host.Client); err != nil {
-		logs.Warn("client id %d, host id %d, error %s, when websocket connection", host.Client.Id, host.Id, err.Error())
+	if err := rp.reserveClientConnection(client); err != nil {
+		host.RLock()
+		hostID := host.Id
+		host.RUnlock()
+		logs.Warn("client id %d, host id %d, error %s, when websocket connection", clientID, hostID, err.Error())
 		http.Error(rw, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 		return
 	}
+	defer client.AddConn()
 
-	req = req.WithContext(context.WithValue(req.Context(), "host", host))
-	req = req.WithContext(context.WithValue(req.Context(), "target", targetAddr))
-	req = req.WithContext(context.WithValue(req.Context(), "req", req))
+	state := &reverseProxyState{
+		req:        req,
+		host:       host,
+		targetAddr: targetAddr,
+		client:     client,
+		clientID:   clientID,
+		clientRate: clientRate,
+		clientFlow: clientFlow,
+		config:     config,
+		localProxy: localProxy,
+	}
+	req = req.WithContext(context.WithValue(req.Context(), reverseProxyContextKey{}, state))
 
+	if rp.proxy == nil {
+		http.Error(rw, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
+		return
+	}
 	rp.proxy.ServeHTTP(rw, req, host)
-
-	defer host.Client.AddConn()
 }
 
 func (c *flowConn) Read(p []byte) (n int, err error) {
@@ -105,6 +172,9 @@ func (c *flowConn) Write(p []byte) (n int, err error) {
 
 func (c *flowConn) Close() error {
 	//c.once.Do(func() { c.host.Flow.Add(c.flowIn, c.flowOut) })
+	if c == nil || c.ReadWriteCloser == nil {
+		return nil
+	}
 	return c.ReadWriteCloser.Close()
 }
 
@@ -133,29 +203,24 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 			ResponseHeaderTimeout: rp.responseHeaderTimeout,
 			DisableKeepAlives:     true,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				var (
-					host       *file.Host
-					target     net.Conn
-					err        error
-					connClient io.ReadWriteCloser
-					targetAddr string
-					lk         *conn.Link
-				)
-
-				r := ctx.Value("req").(*http.Request)
-				host = ctx.Value("host").(*file.Host)
-				targetAddr = ctx.Value("target").(string)
-
-				lk = conn.NewLink("http", targetAddr, host.Client.Cnf.Crypt, host.Client.Cnf.Compress, r.RemoteAddr, host.Target.LocalProxy, "")
-				if target, err = s.bridge.SendLinkInfo(host.Client.Id, lk, nil); err != nil {
+				state, stateErr := stateFromContext(ctx)
+				if stateErr != nil || s == nil || s.bridge == nil {
+					return nil, NewHTTPError(http.StatusBadGateway, "proxy request state is unavailable")
+				}
+				lk := conn.NewLink("http", state.targetAddr, state.config.Crypt, state.config.Compress, state.req.RemoteAddr, state.localProxy, "")
+				target, err := s.bridge.SendLinkInfo(state.clientID, lk, nil)
+				if err != nil {
 					logs.Notice("connect to target %s error %s", lk.Host, err)
 					return nil, NewHTTPError(http.StatusBadGateway, "Cannot connect to the server")
 				}
-				connClient = conn.GetConn(target, lk.Crypt, lk.Compress, host.Client.Rate, true)
+				if target == nil {
+					return nil, NewHTTPError(http.StatusBadGateway, "server returned an empty connection")
+				}
+				connClient := conn.GetConn(target, lk.Crypt, lk.Compress, state.clientRate, true)
 				return &flowConn{
 					ReadWriteCloser: connClient,
 					fakeAddr:        local,
-					host:            host,
+					host:            state.host,
 				}, nil
 			},
 		},
@@ -165,28 +230,24 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 		},
 	})
 	proxy.WebSocketDialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		var (
-			host       *file.Host
-			target     net.Conn
-			err        error
-			connClient io.ReadWriteCloser
-			targetAddr string
-			lk         *conn.Link
-		)
-		r := ctx.Value("req").(*http.Request)
-		host = ctx.Value("host").(*file.Host)
-		targetAddr = ctx.Value("target").(string)
-
-		lk = conn.NewLink("tcp", targetAddr, host.Client.Cnf.Crypt, host.Client.Cnf.Compress, r.RemoteAddr, host.Target.LocalProxy, "")
-		if target, err = s.bridge.SendLinkInfo(host.Client.Id, lk, nil); err != nil {
+		state, stateErr := stateFromContext(ctx)
+		if stateErr != nil || s == nil || s.bridge == nil {
+			return nil, NewHTTPError(http.StatusBadGateway, "proxy request state is unavailable")
+		}
+		lk := conn.NewLink("tcp", state.targetAddr, state.config.Crypt, state.config.Compress, state.req.RemoteAddr, state.localProxy, "")
+		target, err := s.bridge.SendLinkInfo(state.clientID, lk, nil)
+		if err != nil {
 			logs.Notice("connect to target %s error %s", lk.Host, err)
 			return nil, NewHTTPError(http.StatusBadGateway, "Cannot connect to the target")
 		}
-		connClient = conn.GetConn(target, lk.Crypt, lk.Compress, host.Client.Rate, true)
+		if target == nil {
+			return nil, NewHTTPError(http.StatusBadGateway, "server returned an empty connection")
+		}
+		connClient := conn.GetConn(target, lk.Crypt, lk.Compress, state.clientRate, true)
 		return &flowConn{
 			ReadWriteCloser: connClient,
 			fakeAddr:        local,
-			host:            host,
+			host:            state.host,
 		}, nil
 	}
 	rp.proxy = proxy
@@ -242,9 +303,14 @@ func (p *ReverseProxy) errHandler(rw http.ResponseWriter, r *http.Request, e err
 }
 
 func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request, host *file.Host) {
+	if p == nil || p.ReverseProxy == nil || rw == nil || req == nil {
+		return
+	}
 	if IsWebsocketRequest(req) {
 		p.serveWebSocket(rw, req, host)
+		return
 	}
+	http.Error(rw, "websocket upgrade required", http.StatusBadRequest)
 }
 
 func (p *ReverseProxy) serveWebSocket(rw http.ResponseWriter, req *http.Request, host *file.Host) {
@@ -254,7 +320,11 @@ func (p *ReverseProxy) serveWebSocket(rw http.ResponseWriter, req *http.Request,
 	}
 	targetConn, err := p.WebSocketDialContext(req.Context(), "tcp", "")
 	if err != nil {
-		rw.WriteHeader(501)
+		p.errHandler(rw, req, err)
+		return
+	}
+	if targetConn == nil {
+		p.errHandler(rw, req, NewHTTPError(http.StatusBadGateway, "empty target connection"))
 		return
 	}
 	defer targetConn.Close()
@@ -273,18 +343,45 @@ func (p *ReverseProxy) serveWebSocket(rw http.ResponseWriter, req *http.Request,
 	}
 	defer conn.Close()
 
-	req.Write(targetConn)
+	if err := req.Write(targetConn); err != nil {
+		return
+	}
 
-	Join(conn, targetConn, host)
+	flow := (*file.Flow)(nil)
+	if state, stateErr := stateFromContext(req.Context()); stateErr == nil {
+		flow = state.clientFlow
+	}
+	joinWithFlow(conn, targetConn, flow)
 }
 
 func Join(c1 io.ReadWriteCloser, c2 io.ReadWriteCloser, host *file.Host) (inCount int64, outCount int64) {
+	if c1 == nil || c2 == nil {
+		return
+	}
+	var flow *file.Flow
+	if host != nil {
+		host.RLock()
+		client := host.Client
+		host.RUnlock()
+		if client != nil {
+			client.RLock()
+			flow = client.Flow
+			client.RUnlock()
+		}
+	}
+	return joinWithFlow(c1, c2, flow)
+}
+
+func joinWithFlow(c1 io.ReadWriteCloser, c2 io.ReadWriteCloser, flow *file.Flow) (inCount int64, outCount int64) {
+	if c1 == nil || c2 == nil {
+		return
+	}
 	var wait sync.WaitGroup
 	pipe := func(to io.ReadWriteCloser, from io.ReadWriteCloser, count *int64) {
 		defer to.Close()
 		defer from.Close()
 		defer wait.Done()
-		goroutine.CopyBuffer(to, from, host.Client.Flow, nil, host, "")
+		goroutine.CopyBuffer(to, from, flow, nil, nil, "")
 		//*count, _ = io.Copy(to, from)
 	}
 

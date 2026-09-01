@@ -1,6 +1,10 @@
 package conn
 
-import "time"
+import (
+	"time"
+
+	cryptlib "ehang.io/nps/lib/crypt"
+)
 
 type Secret struct {
 	Password string
@@ -22,7 +26,11 @@ type Link struct {
 	LocalProxy   bool
 	RemoteAddr   string
 	ProtoVersion string
-	Option       Options
+	// TLSFingerprint is supplied by the server on links that use the optional
+	// inner TLS layer. The client received the value over the authenticated
+	// bridge and can pin the same certificate for defense in depth.
+	TLSFingerprint string
+	Option         Options
 }
 
 type Option func(*Options)
@@ -33,18 +41,19 @@ type Options struct {
 
 var defaultTimeOut = time.Second * 5
 
-func NewLink(connType string, host string, crypt bool, compress bool, remoteAddr string, localProxy bool, protoVersion string, opts ...Option) *Link {
+func NewLink(connType string, host string, cryptEnabled bool, compress bool, remoteAddr string, localProxy bool, protoVersion string, opts ...Option) *Link {
 	options := newOptions(opts...)
 
 	return &Link{
-		RemoteAddr:   remoteAddr,
-		ConnType:     connType,
-		Host:         host,
-		Crypt:        crypt,
-		Compress:     compress,
-		LocalProxy:   localProxy,
-		ProtoVersion: protoVersion,
-		Option:       options,
+		RemoteAddr:     remoteAddr,
+		ConnType:       connType,
+		Host:           host,
+		Crypt:          cryptEnabled,
+		Compress:       compress,
+		LocalProxy:     localProxy,
+		ProtoVersion:   protoVersion,
+		TLSFingerprint: cryptlib.GetCertFingerprint(),
+		Option:         options,
 	}
 }
 

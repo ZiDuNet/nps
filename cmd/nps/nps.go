@@ -135,7 +135,10 @@ func main() {
 	s, err := service.New(prg, svcConfig)
 	if err != nil {
 		logs.Error(err, "service function disabled")
-		run()
+		if runErr := run(); runErr != nil {
+			logs.Error("NPS startup failed: ", runErr)
+			return
+		}
 		// run without service
 		wg := sync.WaitGroup{}
 		wg.Add(1)
@@ -206,7 +209,10 @@ func main() {
 		}
 	}
 
-	_ = s.Run()
+	if err := s.Run(); err != nil {
+		logs.Error("NPS service failed: ", err)
+		os.Exit(1)
+	}
 }
 
 func printSlogan() {
@@ -370,33 +376,38 @@ func installNps() {
 }
 
 type nps struct {
-	exit chan struct{}
+	exit     chan struct{}
+	stopOnce sync.Once
 }
 
 func (p *nps) Start(s service.Service) error {
 	_, _ = s.Status()
-	go p.run()
-	return nil
+	// run performs all required listener binds before returning, so reporting
+	// an error here lets the service manager mark a failed startup correctly.
+	return run()
 }
 func (p *nps) Stop(s service.Service) error {
 	_, _ = s.Status()
-	close(p.exit)
+	p.stopOnce.Do(func() { close(p.exit) })
 	if service.Interactive() {
 		os.Exit(0)
 	}
 	return nil
 }
 
-func (p *nps) run() error {
+func (p *nps) run() (runErr error) {
 	defer func() {
 		if err := recover(); err != nil {
 			const size = 64 << 10
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
 			logs.Warning("nps: panic serving %v: %v\n%s", err, string(buf))
+			runErr = fmt.Errorf("nps startup panic: %v", err)
 		}
 	}()
-	run()
+	if err := run(); err != nil {
+		return err
+	}
 	select {
 	case <-p.exit:
 		logs.Warning("stop...")
@@ -404,15 +415,14 @@ func (p *nps) run() error {
 	return nil
 }
 
-func run() {
+func run() error {
 	routers.Init()
 	task := &file.Tunnel{
 		Mode: "webServer",
 	}
 	bridgePort, err := beego.AppConfig.Int("bridge_port")
 	if err != nil {
-		logs.Error("Getting bridge_port error", err)
-		os.Exit(0)
+		return fmt.Errorf("get bridge_port: %w", err)
 	}
 
 	logs.Info("日志路径：" + *npsLogPath)
@@ -421,6 +431,9 @@ func run() {
 	connection.InitConnectionService()
 	//crypt.InitTls(filepath.Join(common.GetRunPath(), "conf", "server.pem"), filepath.Join(common.GetRunPath(), "conf", "server.key"))
 	crypt.InitTls()
+	if fingerprint := crypt.GetCertFingerprint(); fingerprint != "" {
+		logs.Info("TLS Bridge certificate SHA-256 fingerprint: %s", fingerprint)
+	}
 	tool.InitAllowPort()
 	tool.StartSystemInfo()
 	common.ReportInstall("nps")
@@ -428,7 +441,10 @@ func run() {
 	if err != nil {
 		timeout = 60
 	}
-	go server.StartNewServer(bridgePort, task, beego.AppConfig.String("bridge_type"), timeout)
+	if err := server.StartNewServer(bridgePort, task, beego.AppConfig.String("bridge_type"), timeout); err != nil {
+		return fmt.Errorf("start NPS server: %w", err)
+	}
+	return nil
 }
 
 func initConfig(confDir string) {
@@ -615,8 +631,8 @@ web_username=admin
 web_password=CHANGE_ME
 # 管理面板监听端口
 web_port = 8081
-# 管理面板监听 IP，0.0.0.0 表示允许外部访问
-web_ip=0.0.0.0
+# 管理面板监听 IP；新安装默认仅本机访问。远程访问应通过 HTTPS 反向代理，或显式配置受控管理网段。
+web_ip=127.0.0.1
 # 管理面板 URL 前缀；反向代理到子路径时填写，例如 /nps
 web_base_url=
 # 是否为管理面板启用 HTTPS
@@ -689,7 +705,7 @@ http_cache_length=100
 ###########################################################################
 # 连接保活与 TLS
 ###########################################################################
-# 客户端断线超时时间，单位为秒
+# 未收到 mux 心跳回包的最大次数；每次检查间隔为 5 秒
 disconnect_timeout=60
 # 是否在管理面板登录时启用验证码
 open_captcha=false

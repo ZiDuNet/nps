@@ -6,10 +6,10 @@ import (
 	"sync"
 )
 
-func sortClientByKey(m sync.Map, sortField, order string) []int {
+func sortClientByKey(m *sync.Map, sortField, order string) []int {
 	clients := make([]*Client, 0)
 	m.Range(func(key, value interface{}) bool {
-		if c, ok := value.(*Client); ok {
+		if c, ok := value.(*Client); ok && c != nil {
 			clients = append(clients, c)
 		}
 		return true
@@ -17,9 +17,114 @@ func sortClientByKey(m sync.Map, sortField, order string) []int {
 	SortClients(clients, sortField, order)
 	keys := make([]int, 0, len(clients))
 	for _, c := range clients {
-		keys = append(keys, c.Id)
+		keys = append(keys, snapshotClient(c).id)
 	}
 	return keys
+}
+
+type clientSortSnapshot struct {
+	id                                          int
+	inlet, export, nowRate                      int64
+	remark, version, verifyKey, addr, localAddr string
+	status, isConnect                           bool
+}
+
+func snapshotClient(client *Client) clientSortSnapshot {
+	if client == nil {
+		return clientSortSnapshot{}
+	}
+	client.RLock()
+	flow, limiter := client.Flow, client.Rate
+	snapshot := clientSortSnapshot{
+		id:        client.Id,
+		remark:    client.Remark,
+		version:   client.Version,
+		verifyKey: client.VerifyKey,
+		addr:      client.Addr,
+		localAddr: client.LocalAddr,
+		status:    client.Status,
+		isConnect: client.IsConnect,
+	}
+	client.RUnlock()
+	if flow != nil {
+		snapshot.inlet, snapshot.export, _ = flow.Snapshot()
+	}
+	if limiter != nil {
+		snapshot.nowRate = limiter.CurrentRate()
+	}
+	return snapshot
+}
+
+type tunnelSortSnapshot struct {
+	id, clientID, port                        int
+	remark, verifyKey, mode, target, password string
+	status, runStatus, clientConnect          bool
+}
+
+func snapshotTunnel(tunnel *Tunnel) tunnelSortSnapshot {
+	if tunnel == nil {
+		return tunnelSortSnapshot{}
+	}
+	tunnel.RLock()
+	client, target := tunnel.Client, tunnel.Target
+	snapshot := tunnelSortSnapshot{
+		id:        tunnel.Id,
+		port:      tunnel.Port,
+		remark:    tunnel.Remark,
+		mode:      tunnel.Mode,
+		password:  tunnel.Password,
+		status:    tunnel.Status,
+		runStatus: tunnel.RunStatus,
+	}
+	tunnel.RUnlock()
+	if client != nil {
+		clientSnapshot := snapshotClient(client)
+		snapshot.clientID = clientSnapshot.id
+		snapshot.verifyKey = clientSnapshot.verifyKey
+		snapshot.clientConnect = clientSnapshot.isConnect
+	}
+	if target != nil {
+		target.RLock()
+		snapshot.target = target.TargetStr
+		target.RUnlock()
+	}
+	return snapshot
+}
+
+type hostSortSnapshot struct {
+	id, clientID             int
+	remark, verifyKey, host  string
+	scheme, target, location string
+	isClose, clientConnect   bool
+}
+
+func snapshotHost(host *Host) hostSortSnapshot {
+	if host == nil {
+		return hostSortSnapshot{}
+	}
+	host.RLock()
+	client, target := host.Client, host.Target
+	snapshot := hostSortSnapshot{
+		id:       host.Id,
+		remark:   host.Remark,
+		host:     host.Host,
+		scheme:   host.Scheme,
+		location: host.Location,
+		isClose:  host.IsClose,
+	}
+	host.RUnlock()
+	if client != nil {
+		clientSnapshot := snapshotClient(client)
+		snapshot.clientID = clientSnapshot.id
+		snapshot.verifyKey = clientSnapshot.verifyKey
+		snapshot.clientConnect = clientSnapshot.isConnect
+	}
+	if target != nil {
+		target.RLock()
+		snapshot.target = target.TargetStr
+		target.RUnlock()
+	}
+	return snapshot
 }
 
 func lessBool(a, b bool, asc bool) bool {
@@ -55,198 +160,131 @@ func lessString(a, b string, asc bool) bool {
 
 // SortClients sorts clients in-place by the given field (bootstrap-table sort name).
 func SortClients(list []*Client, sortField, order string) {
+	snapshots := make(map[*Client]clientSortSnapshot, len(list))
+	for _, client := range list {
+		snapshots[client] = snapshotClient(client)
+	}
 	if sortField == "" || len(list) < 2 {
 		if sortField == "" && len(list) > 1 {
-			sort.SliceStable(list, func(i, j int) bool { return list[i].Id < list[j].Id })
+			sort.SliceStable(list, func(i, j int) bool { return snapshots[list[i]].id < snapshots[list[j]].id })
 		}
 		return
 	}
 	asc := order != "desc"
 	sort.SliceStable(list, func(i, j int) bool {
-		a, b := list[i], list[j]
+		a, b := snapshots[list[i]], snapshots[list[j]]
 		switch sortField {
 		case "Id":
-			return lessInt(a.Id, b.Id, asc)
+			return lessInt(a.id, b.id, asc)
 		case "Remark":
-			return lessString(a.Remark, b.Remark, asc)
+			return lessString(a.remark, b.remark, asc)
 		case "Version":
-			return lessString(a.Version, b.Version, asc)
+			return lessString(a.version, b.version, asc)
 		case "VerifyKey":
-			return lessString(a.VerifyKey, b.VerifyKey, asc)
+			return lessString(a.verifyKey, b.verifyKey, asc)
 		case "Addr":
-			return lessString(a.Addr, b.Addr, asc)
+			return lessString(a.addr, b.addr, asc)
 		case "LocalAddr":
-			return lessString(a.LocalAddr, b.LocalAddr, asc)
+			return lessString(a.localAddr, b.localAddr, asc)
 		case "InletFlow":
-			return lessInt64(flowInlet(a), flowInlet(b), asc)
+			return lessInt64(a.inlet, b.inlet, asc)
 		case "ExportFlow":
-			return lessInt64(flowExport(a), flowExport(b), asc)
+			return lessInt64(a.export, b.export, asc)
 		case "NowRate":
-			return lessInt64(nowRate(a), nowRate(b), asc)
+			return lessInt64(a.nowRate, b.nowRate, asc)
 		case "Status":
-			return lessBool(a.Status, b.Status, asc)
+			return lessBool(a.status, b.status, asc)
 		case "IsConnect":
-			return lessBool(a.IsConnect, b.IsConnect, asc)
+			return lessBool(a.isConnect, b.isConnect, asc)
 		default:
-			return lessInt(a.Id, b.Id, true)
+			return lessInt(a.id, b.id, true)
 		}
 	})
-}
-
-func flowInlet(c *Client) int64 {
-	if c == nil || c.Flow == nil {
-		return 0
-	}
-	inlet, _, _ := c.Flow.Snapshot()
-	return inlet
-}
-
-func flowExport(c *Client) int64 {
-	if c == nil || c.Flow == nil {
-		return 0
-	}
-	_, export, _ := c.Flow.Snapshot()
-	return export
-}
-
-func nowRate(c *Client) int64 {
-	if c == nil || c.Rate == nil {
-		return 0
-	}
-	return c.Rate.NowRate
 }
 
 // SortTunnels sorts tunnels in-place by the given field.
 func SortTunnels(list []*Tunnel, sortField, order string) {
+	snapshots := make(map[*Tunnel]tunnelSortSnapshot, len(list))
+	for _, tunnel := range list {
+		snapshots[tunnel] = snapshotTunnel(tunnel)
+	}
 	if sortField == "" || len(list) < 2 {
 		if sortField == "" && len(list) > 1 {
-			sort.SliceStable(list, func(i, j int) bool { return list[i].Id < list[j].Id })
+			sort.SliceStable(list, func(i, j int) bool { return snapshots[list[i]].id < snapshots[list[j]].id })
 		}
 		return
 	}
 	asc := order != "desc"
 	sort.SliceStable(list, func(i, j int) bool {
-		a, b := list[i], list[j]
+		a, b := snapshots[list[i]], snapshots[list[j]]
 		switch sortField {
 		case "Id":
-			return lessInt(a.Id, b.Id, asc)
+			return lessInt(a.id, b.id, asc)
 		case "ClientId":
-			return lessInt(clientIdOfTunnel(a), clientIdOfTunnel(b), asc)
+			return lessInt(a.clientID, b.clientID, asc)
 		case "Remark":
-			return lessString(a.Remark, b.Remark, asc)
+			return lessString(a.remark, b.remark, asc)
 		case "Client.VerifyKey", "VerifyKey":
-			return lessString(clientVkeyOfTunnel(a), clientVkeyOfTunnel(b), asc)
+			return lessString(a.verifyKey, b.verifyKey, asc)
 		case "Mode":
-			return lessString(a.Mode, b.Mode, asc)
+			return lessString(a.mode, b.mode, asc)
 		case "Port":
-			return lessInt(a.Port, b.Port, asc)
+			return lessInt(a.port, b.port, asc)
 		case "Target":
-			return lessString(targetStrOfTunnel(a), targetStrOfTunnel(b), asc)
+			return lessString(a.target, b.target, asc)
 		case "Password":
-			return lessString(a.Password, b.Password, asc)
+			return lessString(a.password, b.password, asc)
 		case "Status":
-			return lessBool(a.Status, b.Status, asc)
+			return lessBool(a.status, b.status, asc)
 		case "RunStatus":
-			return lessBool(a.RunStatus, b.RunStatus, asc)
+			return lessBool(a.runStatus, b.runStatus, asc)
 		case "IsConnect", "Client.IsConnect":
-			return lessBool(clientConnectOfTunnel(a), clientConnectOfTunnel(b), asc)
+			return lessBool(a.clientConnect, b.clientConnect, asc)
 		default:
-			return lessInt(a.Id, b.Id, true)
+			return lessInt(a.id, b.id, true)
 		}
 	})
-}
-
-func clientIdOfTunnel(t *Tunnel) int {
-	if t == nil || t.Client == nil {
-		return 0
-	}
-	return t.Client.Id
-}
-
-func clientVkeyOfTunnel(t *Tunnel) string {
-	if t == nil || t.Client == nil {
-		return ""
-	}
-	return t.Client.VerifyKey
-}
-
-func clientConnectOfTunnel(t *Tunnel) bool {
-	if t == nil || t.Client == nil {
-		return false
-	}
-	return t.Client.IsConnect
-}
-
-func targetStrOfTunnel(t *Tunnel) string {
-	if t == nil || t.Target == nil {
-		return ""
-	}
-	return t.Target.TargetStr
 }
 
 // SortHosts sorts hosts in-place by the given field.
 func SortHosts(list []*Host, sortField, order string) {
+	snapshots := make(map[*Host]hostSortSnapshot, len(list))
+	for _, host := range list {
+		snapshots[host] = snapshotHost(host)
+	}
 	if sortField == "" || len(list) < 2 {
 		if sortField == "" && len(list) > 1 {
-			sort.SliceStable(list, func(i, j int) bool { return list[i].Id < list[j].Id })
+			sort.SliceStable(list, func(i, j int) bool { return snapshots[list[i]].id < snapshots[list[j]].id })
 		}
 		return
 	}
 	asc := order != "desc"
 	sort.SliceStable(list, func(i, j int) bool {
-		a, b := list[i], list[j]
+		a, b := snapshots[list[i]], snapshots[list[j]]
 		switch sortField {
 		case "Id":
-			return lessInt(a.Id, b.Id, asc)
+			return lessInt(a.id, b.id, asc)
 		case "ClientId":
-			return lessInt(clientIdOfHost(a), clientIdOfHost(b), asc)
+			return lessInt(a.clientID, b.clientID, asc)
 		case "Remark":
-			return lessString(a.Remark, b.Remark, asc)
+			return lessString(a.remark, b.remark, asc)
 		case "Client.VerifyKey", "VerifyKey":
-			return lessString(clientVkeyOfHost(a), clientVkeyOfHost(b), asc)
+			return lessString(a.verifyKey, b.verifyKey, asc)
 		case "Host":
-			return lessString(a.Host, b.Host, asc)
+			return lessString(a.host, b.host, asc)
 		case "Scheme":
-			return lessString(a.Scheme, b.Scheme, asc)
+			return lessString(a.scheme, b.scheme, asc)
 		case "Target":
-			return lessString(targetStrOfHost(a), targetStrOfHost(b), asc)
+			return lessString(a.target, b.target, asc)
 		case "Location":
-			return lessString(a.Location, b.Location, asc)
+			return lessString(a.location, b.location, asc)
 		case "IsClose", "Status":
 			// IsClose: false=open, true=closed — sort by open status for "Status" display
-			return lessBool(a.IsClose, b.IsClose, asc)
+			return lessBool(a.isClose, b.isClose, asc)
 		case "IsConnect", "Client.IsConnect":
-			return lessBool(clientConnectOfHost(a), clientConnectOfHost(b), asc)
+			return lessBool(a.clientConnect, b.clientConnect, asc)
 		default:
-			return lessInt(a.Id, b.Id, true)
+			return lessInt(a.id, b.id, true)
 		}
 	})
-}
-
-func clientIdOfHost(h *Host) int {
-	if h == nil || h.Client == nil {
-		return 0
-	}
-	return h.Client.Id
-}
-
-func clientVkeyOfHost(h *Host) string {
-	if h == nil || h.Client == nil {
-		return ""
-	}
-	return h.Client.VerifyKey
-}
-
-func clientConnectOfHost(h *Host) bool {
-	if h == nil || h.Client == nil {
-		return false
-	}
-	return h.Client.IsConnect
-}
-
-func targetStrOfHost(h *Host) string {
-	if h == nil || h.Target == nil {
-		return ""
-	}
-	return h.Target.TargetStr
 }

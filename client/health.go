@@ -1,102 +1,147 @@
 package client
 
 import (
-	"container/heap"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
-	"ehang.io/nps/lib/sheap"
 	"github.com/astaxie/beego/logs"
 	"github.com/pkg/errors"
 )
 
-var isStart bool
-var serverConn *conn.Conn
+type healthReporter struct {
+	conn *conn.Conn
+	mu   sync.Mutex
+}
 
-func heathCheck(healths []*file.Health, c *conn.Conn) bool {
-	serverConn = c
-	if isStart {
-		for _, v := range healths {
-			v.HealthMap = make(map[string]int)
-		}
-		return true
+func (r *healthReporter) send(info, status string) error {
+	if r == nil || r.conn == nil {
+		return errors.New("health connection is nil")
 	}
-	isStart = true
-	h := &sheap.IntHeap{}
-	for _, v := range healths {
-		if v.HealthMaxFail > 0 && v.HealthCheckTimeout > 0 && v.HealthCheckInterval > 0 {
-			v.HealthNextTime = time.Now().Add(time.Duration(v.HealthCheckInterval) * time.Second)
-			heap.Push(h, v.HealthNextTime.Unix())
-			v.HealthMap = make(map[string]int)
-		}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, err := r.conn.SendHealthInfo(info, status)
+	return err
+}
+
+func heathCheck(healths []*file.Health, c *conn.Conn, stop ...<-chan struct{}) bool {
+	if c == nil || len(healths) == 0 {
+		return false
 	}
-	go session(healths, h)
+	validHealths := make([]*file.Health, 0, len(healths))
+	now := time.Now()
+	for _, health := range healths {
+		if health == nil {
+			continue
+		}
+		health.Lock()
+		if health.HealthMaxFail > 0 && health.HealthCheckTimeout > 0 && health.HealthCheckInterval > 0 {
+			health.HealthNextTime = now.Add(time.Duration(health.HealthCheckInterval) * time.Second)
+			health.HealthMap = make(map[string]int)
+			validHealths = append(validHealths, health)
+		}
+		health.Unlock()
+	}
+	if len(validHealths) == 0 {
+		return false
+	}
+	var stopCh <-chan struct{}
+	if len(stop) > 0 {
+		stopCh = stop[0]
+	}
+	go session(validHealths, &healthReporter{conn: c}, stopCh)
 	return true
 }
 
-func session(healths []*file.Health, h *sheap.IntHeap) {
+func session(healths []*file.Health, reporter *healthReporter, stop <-chan struct{}) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
-		if h.Len() == 0 {
-			logs.Error("health check error")
-			break
-		}
-		rs := heap.Pop(h).(int64) - time.Now().Unix()
-		if rs <= 0 {
-			continue
-		}
-		timer := time.NewTimer(time.Duration(rs) * time.Second)
 		select {
-		case <-timer.C:
-			for _, v := range healths {
-				if v.HealthNextTime.Before(time.Now()) {
-					v.HealthNextTime = time.Now().Add(time.Duration(v.HealthCheckInterval) * time.Second)
-					//check
-					go check(v)
-					//reset time
-					heap.Push(h, v.HealthNextTime.Unix())
+		case <-ticker.C:
+			now := time.Now()
+			for _, health := range healths {
+				if health == nil {
+					continue
+				}
+				health.Lock()
+				due := !health.HealthNextTime.After(now)
+				if due {
+					health.HealthNextTime = now.Add(time.Duration(health.HealthCheckInterval) * time.Second)
+				}
+				health.Unlock()
+				if due {
+					go check(health, reporter)
 				}
 			}
+		case <-stop:
+			return
 		}
 	}
 }
 
-// work when just one port and many target
-func check(t *file.Health) {
-	arr := strings.Split(t.HealthCheckTarget, ",")
-	var err error
-	var rs *http.Response
-	for _, v := range arr {
-		if t.HealthCheckType == "tcp" {
+// check performs one health pass. The reporter serializes writes because a
+// client may have multiple health targets running concurrently.
+func check(health *file.Health, reporter *healthReporter) {
+	if health == nil || reporter == nil {
+		return
+	}
+	arr := strings.Split(health.HealthCheckTarget, ",")
+	var healthTimeout, maxFail int
+	var healthType, healthURL string
+	health.Lock()
+	healthTimeout = health.HealthCheckTimeout
+	maxFail = health.HealthMaxFail
+	healthType = health.HealthCheckType
+	healthURL = health.HttpHealthUrl
+	if health.HealthMap == nil {
+		health.HealthMap = make(map[string]int)
+	}
+	health.Unlock()
+
+	for _, target := range arr {
+		var checkErr error
+		if healthType == "tcp" {
 			var c net.Conn
-			c, err = net.DialTimeout("tcp", v, time.Duration(t.HealthCheckTimeout)*time.Second)
-			if err == nil {
-				c.Close()
+			c, checkErr = net.DialTimeout("tcp", target, time.Duration(healthTimeout)*time.Second)
+			if checkErr == nil {
+				_ = c.Close()
 			}
 		} else {
-			client := &http.Client{}
-			client.Timeout = time.Duration(t.HealthCheckTimeout) * time.Second
-			rs, err = client.Get("http://" + v + t.HttpHealthUrl)
-			if err == nil && rs.StatusCode != 200 {
-				err = errors.New("status code is not match")
+			client := &http.Client{Timeout: time.Duration(healthTimeout) * time.Second}
+			response, err := client.Get("http://" + target + healthURL)
+			checkErr = err
+			if response != nil {
+				if response.Body != nil {
+					_ = response.Body.Close()
+				}
+				if checkErr == nil && response.StatusCode != http.StatusOK {
+					checkErr = errors.New("status code is not match")
+				}
 			}
 		}
-		t.Lock()
-		if err != nil {
-			t.HealthMap[v] += 1
-		} else if t.HealthMap[v] >= t.HealthMaxFail {
-			//send recovery add
-			serverConn.SendHealthInfo(v, "1")
-			t.HealthMap[v] = 0
-		}
 
-		if t.HealthMap[v] > 0 && t.HealthMap[v]%t.HealthMaxFail == 0 {
-			//send fail remove
-			serverConn.SendHealthInfo(v, "0")
+		var sendStatus string
+		health.Lock()
+		if checkErr != nil && maxFail > 0 {
+			health.HealthMap[target]++
+		} else if checkErr == nil && health.HealthMap[target] >= maxFail {
+			// A previously failed target has recovered.
+			sendStatus = "1"
+			health.HealthMap[target] = 0
 		}
-		t.Unlock()
+		if checkErr != nil && maxFail > 0 && health.HealthMap[target] > 0 && health.HealthMap[target]%maxFail == 0 {
+			sendStatus = "0"
+		}
+		health.Unlock()
+		if sendStatus != "" {
+			if err := reporter.send(target, sendStatus); err != nil {
+				logs.Debug("send health status failed for %s: %v", target, err)
+			}
+		}
 	}
 }

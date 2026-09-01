@@ -220,8 +220,8 @@ var npsFieldHints = {
     web_username: ['客户端 Web 服务使用的认证用户名。', 'Authentication username for the client Web service.'],
     web_password: ['客户端 Web 服务使用的认证密码。', 'Authentication password for the client Web service.'],
     ipwhitepass: ['启用 IP 白名单时使用的访问口令。', 'Access password used when IP allowlist is enabled.'],
-    ipwhitelist: ['每行填写一个允许访问的 IP 或网段。', 'Enter one allowed IP or CIDR range per line.'],
-    blackiplist: ['每行填写一个禁止访问的 IP 或网段。', 'Enter one blocked IP or CIDR range per line.'],
+    ipwhitelist: ['每行填写一个允许访问的精确 IP。', 'Enter one exact allowed IP per line.'],
+    blackiplist: ['每行填写一个禁止访问的精确 IP。', 'Enter one exact blocked IP per line.'],
     expire_time: ['到期后配置将不可用；留空表示永不过期。', 'The configuration expires at this time; blank means no expiry.'],
     type: ['选择此隧道要使用的代理协议。', 'Select the proxy protocol for this tunnel.'],
     client_id: ['选择承载此隧道的客户端。', 'Select the client that will carry this tunnel.'],
@@ -239,7 +239,7 @@ var npsFieldHints = {
     location: ['可选的 URL 路径前缀，用于请求路由。', 'Optional URL path prefix used for request routing.'],
     header: ['每行填写一个需要改写或追加的请求头。', 'Enter one request header to rewrite or append per line.'],
     hostchange: ['转发请求时替换目标 Host 请求头。', 'Replace the Host header sent to the target.'],
-    globalBlackIpList: ['全局禁止访问的 IP 或网段，每行一条。', 'Globally blocked IPs or CIDR ranges, one per line.'],
+    globalBlackIpList: ['全局禁止访问的精确 IP，每行一条。', 'Globally blocked exact IPs, one per line.'],
     serverUrl: ['客户端连接服务端时使用的地址。', 'The address clients use to connect to the server.']
 };
 
@@ -472,6 +472,21 @@ $(function () {
     });
 });
 
+// A referrer can be supplied by an external page. Only return to a URL that
+// belongs to this console; otherwise a successful form submission becomes an
+// open redirect.
+function npsSafeReturnUrl(referrer) {
+    var fallback = (window.nps && window.nps.web_base_url ? window.nps.web_base_url + '/' : '/');
+    if (!referrer || !window.location.origin) return fallback;
+    try {
+        var target = new URL(referrer, window.location.origin);
+        if (target.origin === window.location.origin) return target.href;
+    } catch (error) {
+        // Ignore malformed referrers and use the console root.
+    }
+    return fallback;
+}
+
 function submitform(action, url, postdata) {
     postsubmit = false;
     switch (action) {
@@ -499,7 +514,7 @@ function submitform(action, url, postdata) {
                         if (postsubmit) {
 							document.location.reload();
 						}else{
-                            window.location.href = document.referrer || (window.nps && window.nps.web_base_url ? window.nps.web_base_url + '/' : '/');
+                            window.location.href = npsSafeReturnUrl(document.referrer);
                         }
                     }
                 },

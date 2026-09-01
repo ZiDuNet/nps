@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"html"
 	"math"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +23,14 @@ type BaseController struct {
 	beego.Controller
 	controllerName string
 	actionName     string
+	apiAuthorized  bool
 }
+
+const (
+	sessionPrincipalKey    = "authPrincipal"
+	sessionPrincipalUser   = "user"
+	sessionPrincipalClient = "client"
+)
 
 // 初始化参数
 func (s *BaseController) Prepare() {
@@ -45,24 +53,36 @@ func (s *BaseController) Prepare() {
 	apiAuthorized := configKey != "" && md5Key != "" &&
 		(math.Abs(float64(timeNowUnix-int64(timestamp))) <= 20) &&
 		subtle.ConstantTimeCompare([]byte(expectedKey), []byte(md5Key)) == 1
-	if apiAuthorized {
-		s.SetSession("isAdmin", true)
-		s.Data["isAdmin"] = true
-	} else if !sessionBool(s.GetSession("auth")) {
-		// A redirect does not stop Beego from invoking the action. Return here so
-		// an unauthenticated request cannot continue with an elevated default.
+	// API credentials authorize this request only. Persisting this flag in a
+	// browser session turns a short-lived signed API call into a lasting admin
+	// login, which is both surprising and unsafe.
+	s.apiAuthorized = apiAuthorized
+	if !apiAuthorized && !sessionBool(s.GetSession("auth")) {
+		// A redirect does not stop Beego from invoking the action by itself, so
+		// StopRun is required before returning from Prepare.
 		s.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
 		s.StopRun()
 		return
 	}
 	isAdminSession := s.GetSession("isAdmin")
-	isAdmin := sessionBool(isAdminSession)
-	if _, ok := isAdminSession.(bool); !ok {
-		// Keep downstream controllers compatible with their historical bool
-		// assertions even when a session store returns a string or nil.
-		s.SetSession("isAdmin", isAdmin)
+	isAdmin := s.IsAdmin()
+	if !apiAuthorized {
+		if _, ok := isAdminSession.(bool); !ok {
+			// Keep downstream controllers compatible with their historical bool
+			// assertions even when a session store returns a string or nil.
+			s.SetSession("isAdmin", isAdmin)
+		}
 	}
 	if !isAdmin {
+		// A non-admin session must still map to an active principal on every
+		// request. User/client status or ownership can change after login, so a
+		// cached session alone is not sufficient authorization.
+		if !s.hasActiveNonAdminPrincipal() {
+			clearAuthenticationSession(s.DelSession)
+			s.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
+			s.StopRun()
+			return
+		}
 		s.Data["isAdmin"] = false
 		s.Data["username"] = s.GetSession("username")
 		if s.controllerName == "user" || s.controllerName == "global" {
@@ -87,6 +107,118 @@ func (s *BaseController) Prepare() {
 	if httpPort != "80" && showHttpProxyPort {
 		s.Data["http_proxy_port"] = ":" + httpPort
 	}
+}
+
+// IsAdmin returns the effective privilege for the current request. Signed API
+// authentication is deliberately request-scoped; browser session elevation is
+// kept separate from it.
+func (s *BaseController) IsAdmin() bool {
+	return isAdminAuthorized(s.apiAuthorized, s.GetSession("isAdmin"))
+}
+
+func isAdminAuthorized(apiAuthorized bool, sessionValue interface{}) bool {
+	return apiAuthorized || sessionBool(sessionValue)
+}
+
+func (s *BaseController) hasActiveNonAdminPrincipal() bool {
+	principal, _ := s.GetSession(sessionPrincipalKey).(string)
+	userID, _ := sessionInt(s.GetSession("userId"))
+	clientID, _ := sessionInt(s.GetSession("clientId"))
+
+	userActive := userID > 0 && file.GetDb().IsUserActive(userID)
+	clientActive := false
+	if clientID > 0 {
+		if client, err := file.GetDb().GetClient(clientID); err == nil {
+			client.RLock()
+			clientActive = client.Status && !client.NoDisplay
+			clientUserID := client.UserId
+			client.RUnlock()
+			if clientActive && clientUserID != 0 {
+				clientActive = file.GetDb().IsUserActive(clientUserID)
+			}
+		}
+	}
+	return activeNonAdminPrincipal(principal, userID, clientID, userActive, clientActive)
+}
+
+func activeNonAdminPrincipal(principal string, userID, clientID int, userActive, clientActive bool) bool {
+	switch principal {
+	case sessionPrincipalUser:
+		return userID > 0 && userActive
+	case sessionPrincipalClient:
+		return clientID > 0 && clientActive
+	default:
+		// Sessions created before the principal marker existed are deliberately
+		// invalidated. They can contain stale user/client identifiers from a
+		// previous login and cannot be attributed safely.
+		return false
+	}
+}
+
+func clearAuthenticationSession(deleteSession func(interface{})) {
+	for _, key := range []string{
+		"auth",
+		"isAdmin",
+		"clientId",
+		"clientIds",
+		"userId",
+		"username",
+		sessionPrincipalKey,
+	} {
+		deleteSession(key)
+	}
+}
+
+// RequirePost guards state-changing management actions. The browser console
+// uses same-origin POST requests, while signed API calls remain usable without
+// an Origin header. Requiring both properties for session-backed calls blocks
+// form-based CSRF as well as accidental GET mutations.
+func (s *BaseController) RequirePost() bool {
+	if s.Ctx.Request.Method != http.MethodPost {
+		s.rejectRequest(http.StatusMethodNotAllowed, "method not allowed")
+		return false
+	}
+	if !s.apiAuthorized && !isSameOriginRequest(s.Ctx.Request) {
+		s.rejectRequest(http.StatusForbidden, "invalid request origin")
+		return false
+	}
+	return true
+}
+
+// RequireAdmin protects operations that alter the client ownership boundary.
+// Hiding their buttons in the UI is not authorization; signed API requests
+// continue to pass through IsAdmin's request-scoped credential check.
+func (s *BaseController) RequireAdmin() bool {
+	if s.IsAdmin() {
+		return true
+	}
+	s.rejectRequest(http.StatusForbidden, "permission denied")
+	return false
+}
+
+func (s *BaseController) rejectRequest(status int, message string) {
+	s.Ctx.Output.SetStatus(status)
+	s.Data["json"] = ajax(message, 0)
+	s.ServeJSON()
+}
+
+func isSameOriginRequest(request *http.Request) bool {
+	origin := strings.TrimSpace(request.Header.Get("Origin"))
+	if origin == "" || request.Host == "" {
+		return false
+	}
+	expected := requestScheme(request) + "://" + request.Host
+	return strings.EqualFold(origin, expected)
+}
+
+func requestScheme(request *http.Request) string {
+	if forwarded := strings.TrimSpace(strings.Split(request.Header.Get("X-Forwarded-Proto"), ",")[0]); forwarded == "http" || forwarded == "https" {
+		return forwarded
+	}
+	if request.TLS != nil {
+		return "https"
+	}
+	return "http"
 }
 
 // sessionBool accepts the values produced by Beego's session backends. Some
@@ -126,6 +258,33 @@ func sessionBool(value interface{}) bool {
 		return typed != 0
 	default:
 		return false
+	}
+}
+
+func sessionInt(value interface{}) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case int8:
+		return int(typed), true
+	case int16:
+		return int(typed), true
+	case int32:
+		return int(typed), true
+	case int64:
+		return int(typed), true
+	case uint:
+		return int(typed), true
+	case uint8:
+		return int(typed), true
+	case uint16:
+		return int(typed), true
+	case uint32:
+		return int(typed), true
+	case uint64:
+		return int(typed), true
+	default:
+		return 0, false
 	}
 }
 
@@ -301,14 +460,32 @@ func (s *BaseController) CheckUserAuth() {
 			belong := false
 			if strings.Contains(s.actionName, "h") {
 				if v, ok := file.GetDb().JsonDb.Hosts.Load(id); ok {
-					if isAllowedClient(v.(*file.Host).Client.Id, allowedClientIds) {
-						belong = true
+					host, valid := v.(*file.Host)
+					if valid && host != nil {
+						host.RLock()
+						client := host.Client
+						host.RUnlock()
+						if client != nil {
+							client.RLock()
+							clientID := client.Id
+							client.RUnlock()
+							belong = isAllowedClient(clientID, allowedClientIds)
+						}
 					}
 				}
 			} else {
 				if v, ok := file.GetDb().JsonDb.Tasks.Load(id); ok {
-					if isAllowedClient(v.(*file.Tunnel).Client.Id, allowedClientIds) {
-						belong = true
+					task, valid := v.(*file.Tunnel)
+					if valid && task != nil {
+						task.RLock()
+						client := task.Client
+						task.RUnlock()
+						if client != nil {
+							client.RLock()
+							clientID := client.Id
+							client.RUnlock()
+							belong = isAllowedClient(clientID, allowedClientIds)
+						}
 					}
 				}
 			}
@@ -320,16 +497,29 @@ func (s *BaseController) CheckUserAuth() {
 }
 
 func (s *BaseController) GetAllowedClientIds() map[int]struct{} {
-	if ids, ok := s.GetSession("clientIds").(map[int]struct{}); ok {
-		return ids
+	principal, _ := s.GetSession(sessionPrincipalKey).(string)
+	userID, _ := sessionInt(s.GetSession("userId"))
+	clientID, _ := sessionInt(s.GetSession("clientId"))
+	legacyIDs, _ := s.GetSession("clientIds").(map[int]struct{})
+	return allowedClientIDsForPrincipal(principal, userID, clientID, legacyIDs, file.GetDb().UserClientIds)
+}
+
+// allowedClientIDsForPrincipal reads a user's membership from the database on
+// every request. This makes reassignment and revocation effective immediately
+// rather than when the next session is created.
+func allowedClientIDsForPrincipal(principal string, userID, clientID int, legacyIDs map[int]struct{}, loadUserClientIDs func(int) map[int]struct{}) map[int]struct{} {
+	switch principal {
+	case sessionPrincipalUser:
+		if userID > 0 {
+			return loadUserClientIDs(userID)
+		}
+	case sessionPrincipalClient:
+		if clientID > 0 {
+			return map[int]struct{}{clientID: {}}
+		}
 	}
-	if id, ok := s.GetSession("clientId").(int); ok {
-		return map[int]struct{}{id: {}}
-	}
-	if userId, ok := s.GetSession("userId").(int); ok {
-		ids := file.GetDb().UserClientIds(userId)
-		s.SetSession("clientIds", ids)
-		return ids
+	if legacyIDs != nil {
+		return legacyIDs
 	}
 	return map[int]struct{}{}
 }

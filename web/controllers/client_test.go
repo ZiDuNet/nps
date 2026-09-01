@@ -14,9 +14,16 @@ import (
 func TestClientListRowsExposeUserName(t *testing.T) {
 	rows := newClientListRows([]*file.Client{
 		{
-			Id:       1,
-			UserId:   10,
-			UserName: "alice",
+			Id:          1,
+			UserId:      10,
+			UserName:    "alice",
+			VerifyKey:   "client-vkey",
+			WebPassword: "web-secret",
+			IpWhitePass: "allowlist-secret",
+			Cnf: &file.Config{
+				U: "basic-user",
+				P: "basic-secret",
+			},
 		},
 	})
 
@@ -28,6 +35,11 @@ func TestClientListRowsExposeUserName(t *testing.T) {
 	got := string(b)
 	if !strings.Contains(got, `"UserName":"alice"`) {
 		t.Fatalf("expected client list row to expose UserName, got %s", got)
+	}
+	for _, secret := range []string{"web-secret", "allowlist-secret", "basic-user", "basic-secret"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("client list row must not expose credential %q: %s", secret, got)
+		}
 	}
 }
 
@@ -77,7 +89,6 @@ func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
 	for _, marker := range []string{
 		`$('body').setLang('#table');`,
 		`npsBooleanMarkup(!!row.ConfigConnAllow)`,
-		`text(row.WebPassword`,
 		`npsApplyTableState(this, 'client')`,
 		`type="button"`,
 		`data-title-en="Disable client"`,
@@ -86,6 +97,11 @@ func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
 	} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("client list misses safety/accessibility marker: %s", marker)
+		}
+	}
+	for _, credentialField := range []string{"row.WebPassword", "row.IpWhitePass", "config.U", "config.P"} {
+		if strings.Contains(content, credentialField) {
+			t.Fatalf("client list must not render credential field: %s", credentialField)
 		}
 	}
 }

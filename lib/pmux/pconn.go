@@ -2,6 +2,7 @@ package pmux
 
 import (
 	"net"
+	"sync"
 	"time"
 )
 
@@ -10,6 +11,7 @@ type PortConn struct {
 	rs       []byte
 	readMore bool
 	start    int
+	readMu   sync.Mutex
 }
 
 func newPortConn(conn net.Conn, rs []byte, readMore bool) *PortConn {
@@ -21,22 +23,16 @@ func newPortConn(conn net.Conn, rs []byte, readMore bool) *PortConn {
 }
 
 func (pConn *PortConn) Read(b []byte) (n int, err error) {
-	if len(b) < len(pConn.rs)-pConn.start {
-		defer func() {
-			pConn.start = pConn.start + len(b)
-		}()
-		return copy(b, pConn.rs), nil
-	}
+	pConn.readMu.Lock()
+	defer pConn.readMu.Unlock()
 	if pConn.start < len(pConn.rs) {
-		defer func() {
-			pConn.start = len(pConn.rs)
-		}()
 		n = copy(b, pConn.rs[pConn.start:])
-		if !pConn.readMore {
+		pConn.start += n
+		if n == len(b) || !pConn.readMore {
 			return
 		}
 	}
-	var n2 = 0
+	var n2 int
 	n2, err = pConn.Conn.Read(b[n:])
 	n = n + n2
 	return

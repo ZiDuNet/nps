@@ -131,7 +131,9 @@ func (s *Client) AddConn() {
 }
 
 func (s *Client) GetConn() bool {
+	s.RLock()
 	maxConn := int64(s.MaxConn)
+	s.RUnlock()
 	if maxConn <= 0 {
 		s.CutConn()
 		return true
@@ -148,9 +150,30 @@ func (s *Client) GetConn() bool {
 }
 
 func (s *Client) HasTunnel(t *Tunnel) (exist bool) {
+	if s == nil || t == nil {
+		return false
+	}
+	s.RLock()
+	clientID := s.Id
+	s.RUnlock()
+	t.RLock()
+	targetPort := t.Port
+	t.RUnlock()
 	GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
-		v := value.(*Tunnel)
-		if v.Client.Id == s.Id && v.Port == t.Port && t.Port != 0 {
+		v, ok := value.(*Tunnel)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		client, port := v.Client, v.Port
+		v.RUnlock()
+		if client == nil || targetPort == 0 {
+			return true
+		}
+		client.RLock()
+		candidateID := client.Id
+		client.RUnlock()
+		if candidateID == clientID && port == targetPort {
 			exist = true
 			return false
 		}
@@ -160,17 +183,47 @@ func (s *Client) HasTunnel(t *Tunnel) (exist bool) {
 }
 
 func (s *Client) GetTunnelNum() (num int) {
+	if s == nil {
+		return 0
+	}
+	s.RLock()
+	clientID := s.Id
+	s.RUnlock()
 	GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
-		v := value.(*Tunnel)
-		if v.Client.Id == s.Id {
+		v, ok := value.(*Tunnel)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		client := v.Client
+		v.RUnlock()
+		if client == nil {
+			return true
+		}
+		client.RLock()
+		candidateID := client.Id
+		client.RUnlock()
+		if candidateID == clientID {
 			num++
 		}
 		return true
 	})
 
 	GetDb().JsonDb.Hosts.Range(func(key, value interface{}) bool {
-		v := value.(*Host)
-		if v.Client.Id == s.Id {
+		v, ok := value.(*Host)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		client := v.Client
+		v.RUnlock()
+		if client == nil {
+			return true
+		}
+		client.RLock()
+		candidateID := client.Id
+		client.RUnlock()
+		if candidateID == clientID {
 			num++
 		}
 		return true
@@ -179,10 +232,31 @@ func (s *Client) GetTunnelNum() (num int) {
 }
 
 func (s *Client) HasHost(h *Host) bool {
+	if s == nil || h == nil {
+		return false
+	}
+	s.RLock()
+	clientID := s.Id
+	s.RUnlock()
+	h.RLock()
+	hostName, location := h.Host, h.Location
+	h.RUnlock()
 	var has bool
 	GetDb().JsonDb.Hosts.Range(func(key, value interface{}) bool {
-		v := value.(*Host)
-		if v.Client.Id == s.Id && v.Host == h.Host && h.Location == v.Location {
+		v, ok := value.(*Host)
+		if !ok || v == nil {
+			return true
+		}
+		v.RLock()
+		client, candidateHost, candidateLocation := v.Client, v.Host, v.Location
+		v.RUnlock()
+		if client == nil {
+			return true
+		}
+		client.RLock()
+		candidateID := client.Id
+		client.RUnlock()
+		if candidateID == clientID && candidateHost == hostName && location == candidateLocation {
 			has = true
 			return false
 		}

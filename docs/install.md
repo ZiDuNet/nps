@@ -48,12 +48,14 @@ services:
     image: wushuo98/nps:latest
     container_name: nps
     restart: unless-stopped
+    environment:
+      NPS_WEB_IP: 0.0.0.0
     ports:
       - "80:80"
       - "443:443"
       - "8024:8024"
       - "8025:8025"
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - ./conf:/conf
 EOF
@@ -70,12 +72,12 @@ docker logs nps --tail=50
 - `auth_key`
 - `auth_crypt_key`
 
-如果挂载目录中已有发布包模板，启动时只会轮换已知的 `CHANGE_ME` 或历史弱默认值；显式设置的自定义值和留空的可选鉴权项不会被覆盖。生产环境建议将 `web_ip` 限制为管理网段、启用 `web_open_ssl`，并只开放实际使用的端口。
+如果挂载目录中已有发布包模板，启动时只会轮换已知的 `CHANGE_ME` 或历史弱默认值；显式设置的自定义值和留空的可选鉴权项不会被覆盖。新配置默认 `web_ip=127.0.0.1`。Docker 示例通过 `NPS_WEB_IP=0.0.0.0` 绑定容器内网卡，但宿主机仍只发布回环端口；生产环境应使用 HTTPS 反向代理或受控管理网段，并只开放实际使用的端口。
 
 浏览器访问：
 
 ```text
-http://<服务器IP>:8081
+http://127.0.0.1:8081
 ```
 
 如果你把 `web_port` 改成其他端口，Compose 里的端口映射也要一起改。

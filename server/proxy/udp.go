@@ -114,10 +114,26 @@ func (u *udpSession) closeTarget() {
 
 type UdpModeServer struct {
 	BaseServer
-	addrMap   sync.Map
-	listener  *net.UDPConn
-	closeOnce sync.Once
-	closeCh   chan struct{}
+	addrMap    sync.Map
+	listenerMu sync.RWMutex
+	listener   *net.UDPConn
+	closeOnce  sync.Once
+	closeCh    chan struct{}
+	closed     bool
+}
+
+type udpTaskSnapshot struct {
+	bridgeTask   *file.Tunnel
+	client       *file.Client
+	clientID     int
+	clientConfig file.Config
+	clientFlow   *file.Flow
+	taskFlow     *file.Flow
+	targetStr    string
+	localProxy   bool
+	serverIP     string
+	port         int
+	taskID       int
 }
 
 func NewUdpModeServer(bridge *bridge.Bridge, task *file.Tunnel) *UdpModeServer {
@@ -128,20 +144,73 @@ func NewUdpModeServer(bridge *bridge.Bridge, task *file.Tunnel) *UdpModeServer {
 	return s
 }
 
+func (s *UdpModeServer) snapshotTask() (udpTaskSnapshot, error) {
+	var snapshot udpTaskSnapshot
+	if s == nil || s.task == nil || s.bridge == nil {
+		return snapshot, errors.New("udp server is not configured")
+	}
+	s.task.RLock()
+	snapshot.bridgeTask = &file.Tunnel{Mode: s.task.Mode}
+	snapshot.client = s.task.Client
+	snapshot.taskFlow = s.task.Flow
+	snapshot.serverIP = s.task.ServerIp
+	snapshot.port = s.task.Port
+	snapshot.taskID = s.task.Id
+	target := s.task.Target
+	s.task.RUnlock()
+	if snapshot.client == nil || target == nil {
+		return udpTaskSnapshot{}, errors.New("udp task client or target is not configured")
+	}
+	snapshot.client.RLock()
+	if snapshot.client.Cnf == nil {
+		snapshot.client.RUnlock()
+		return udpTaskSnapshot{}, errors.New("udp task client configuration is not configured")
+	}
+	snapshot.clientConfig = *snapshot.client.Cnf
+	snapshot.clientID = snapshot.client.Id
+	snapshot.clientFlow = snapshot.client.Flow
+	snapshot.client.RUnlock()
+	target.RLock()
+	snapshot.targetStr = target.TargetStr
+	snapshot.localProxy = target.LocalProxy
+	target.RUnlock()
+	if strings.TrimSpace(snapshot.serverIP) == "" {
+		snapshot.serverIP = "0.0.0.0"
+	}
+	if snapshot.port <= 0 || strings.TrimSpace(snapshot.targetStr) == "" {
+		return udpTaskSnapshot{}, errors.New("udp task port or target is not configured")
+	}
+	return snapshot, nil
+}
+
 // Start 启动 UDP 监听，主循环只负责快速收包并分发，不做任何耗时操作。
 func (s *UdpModeServer) Start() error {
-	var err error
-	if s.task.ServerIp == "" {
-		s.task.ServerIp = "0.0.0.0"
-	}
-	s.listener, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(s.task.ServerIp), Port: s.task.Port})
+	snapshot, err := s.snapshotTask()
 	if err != nil {
 		return err
 	}
+	s.listenerMu.RLock()
+	closed := s.closed
+	s.listenerMu.RUnlock()
+	if closed {
+		return net.ErrClosed
+	}
+	listener, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(snapshot.serverIP), Port: snapshot.port})
+	if err != nil {
+		return err
+	}
+	s.listenerMu.Lock()
+	if s.closed {
+		s.listenerMu.Unlock()
+		_ = listener.Close()
+		return net.ErrClosed
+	}
+	s.listener = listener
+	s.listenerMu.Unlock()
 	go s.sweeper()
 	for {
 		buf := common.BufPoolUdp.Get().([]byte)
-		n, addr, err := s.listener.ReadFromUDP(buf)
+		n, addr, err := listener.ReadFromUDP(buf)
 		if err != nil {
 			common.BufPoolUdp.Put(buf)
 			if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection") {
@@ -154,7 +223,13 @@ func (s *UdpModeServer) Start() error {
 			common.BufPoolUdp.Put(buf)
 			continue
 		}
-		if common.IsBlackIp(addr.String(), s.task.Client.VerifyKey, s.task.Client.BlackIpList) {
+		if isIPWhiteBlocked(snapshot.client, addr.String()) {
+			// UDP has no HTTP challenge channel; unauthorized datagrams are
+			// dropped before a mux stream or connection quota is allocated.
+			common.BufPoolUdp.Put(buf)
+			continue
+		}
+		if isClientBlackBlocked(snapshot.client, addr.String()) {
 			common.BufPoolUdp.Put(buf)
 			continue
 		}
@@ -166,6 +241,15 @@ func (s *UdpModeServer) Start() error {
 
 // process 处理单个 UDP 包。函数持有 buf 的所有权，所有路径必须归还。
 func (s *UdpModeServer) process(addr *net.UDPAddr, buf []byte, n int) {
+	// ReadFromUDP may have completed just before Close shut down the listener.
+	// Do not create a new bridge session after the server has begun closing.
+	select {
+	case <-s.closeCh:
+		common.BufPoolUdp.Put(buf)
+		return
+	default:
+	}
+
 	key := addr.String()
 	data := buf[:n]
 
@@ -212,14 +296,21 @@ func (s *UdpModeServer) dispatch(key string, sess *udpSession, data []byte, n in
 		return
 	}
 	sess.touch()
-	s.task.Client.Flow.Add(int64(n), int64(n))
-	s.task.Flow.Add(int64(n), int64(n))
+	if snapshot, err := s.snapshotTask(); err == nil {
+		if snapshot.clientFlow != nil {
+			snapshot.clientFlow.Add(int64(n), int64(n))
+		}
+		if snapshot.taskFlow != nil {
+			snapshot.taskFlow.Add(int64(n), int64(n))
+		}
+	}
 }
 
 // runSession 由占位赢家执行：建立到 npc 的 stream、发送首包、运行下行读循环。
 // buf 由本函数负责归还。
 func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSession, buf []byte, n int) {
 	data := buf[:n]
+	snapshot, snapshotErr := s.snapshotTask()
 
 	// 失败时统一清理：关 ready 通道唤醒所有输家、删占位、归还 buf。
 	failBuild := func(err error) {
@@ -228,23 +319,49 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 		s.deleteSession(key, sess)
 		common.BufPoolUdp.Put(buf)
 	}
+	if snapshotErr != nil {
+		failBuild(snapshotErr)
+		return
+	}
 
-	if err := s.CheckFlowAndConnNum(s.task.Client); err != nil {
-		logs.Warn("client id %d, task id %d,error %s, when udp connection", s.task.Client.Id, s.task.Id, err.Error())
+	if err := s.CheckFlowAndConnNum(snapshot.client); err != nil {
+		logs.Warn("client id %d, task id %d,error %s, when udp connection", snapshot.clientID, snapshot.taskID, err.Error())
 		failBuild(err)
 		return
 	}
 	// 只有赢家消耗 NowConn 配额，函数返回时释放。
-	defer s.task.Client.AddConn()
+	defer snapshot.client.AddConn()
 
-	link := conn.NewLink(common.CONN_UDP, s.task.Target.TargetStr, s.task.Client.Cnf.Crypt, s.task.Client.Cnf.Compress, addr.String(), s.task.Target.LocalProxy, "")
-	clientConn, err := s.bridge.SendLinkInfo(s.task.Client.Id, link, s.task)
+	link := conn.NewLink(common.CONN_UDP, snapshot.targetStr, snapshot.clientConfig.Crypt, snapshot.clientConfig.Compress, addr.String(), snapshot.localProxy, "")
+	type linkResult struct {
+		target net.Conn
+		err    error
+	}
+	resultCh := make(chan linkResult, 1)
+	go func() {
+		clientConn, err := s.bridge.SendLinkInfo(snapshot.clientID, link, snapshot.bridgeTask)
+		select {
+		case resultCh <- linkResult{target: clientConn, err: err}:
+		case <-s.closeCh:
+			if clientConn != nil {
+				_ = clientConn.Close()
+			}
+		}
+	}()
+	var result linkResult
+	select {
+	case result = <-resultCh:
+	case <-s.closeCh:
+		failBuild(errors.New("udp server is closed"))
+		return
+	}
+	clientConn, err := result.target, result.err
 	if err != nil {
 		failBuild(err)
 		return
 	}
 
-	target := conn.GetConn(clientConn, s.task.Client.Cnf.Crypt, s.task.Client.Cnf.Compress, nil, true)
+	target := conn.GetConn(clientConn, snapshot.clientConfig.Crypt, snapshot.clientConfig.Compress, nil, true)
 	if !sess.installTarget(target) {
 		close(sess.ready)
 		common.BufPoolUdp.Put(buf)
@@ -255,7 +372,7 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 
 	defer s.removeSession(key, sess)
 
-	logs.Trace("New udp connection,client %d,remote address %s", s.task.Client.Id, addr)
+	logs.Trace("New udp connection,client %d,remote address %s", snapshot.clientID, addr)
 
 	if _, err := sess.write(data); err != nil {
 		logs.Warn(err)
@@ -263,8 +380,12 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 		return
 	}
 	common.BufPoolUdp.Put(buf)
-	s.task.Client.Flow.Add(int64(n), int64(n))
-	s.task.Flow.Add(int64(n), int64(n))
+	if snapshot.clientFlow != nil {
+		snapshot.clientFlow.Add(int64(n), int64(n))
+	}
+	if snapshot.taskFlow != nil {
+		snapshot.taskFlow.Add(int64(n), int64(n))
+	}
 
 	// 下行读循环
 	rbuf := common.BufPoolUdp.Get().([]byte)
@@ -280,12 +401,22 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 			return
 		}
 		sess.touch()
-		if _, err := s.listener.WriteTo(rbuf[:rn], addr); err != nil {
+		s.listenerMu.RLock()
+		listener := s.listener
+		s.listenerMu.RUnlock()
+		if listener == nil {
+			return
+		}
+		if _, err := listener.WriteTo(rbuf[:rn], addr); err != nil {
 			logs.Warn(err)
 			return
 		}
-		s.task.Client.Flow.Add(int64(rn), int64(rn))
-		s.task.Flow.Add(int64(rn), int64(rn))
+		if snapshot.clientFlow != nil {
+			snapshot.clientFlow.Add(int64(rn), int64(rn))
+		}
+		if snapshot.taskFlow != nil {
+			snapshot.taskFlow.Add(int64(rn), int64(rn))
+		}
 	}
 }
 
@@ -297,9 +428,9 @@ func (s *UdpModeServer) removeSession(key string, sess *udpSession) {
 }
 
 func (s *UdpModeServer) deleteSession(key string, sess *udpSession) {
-	if v, ok := s.addrMap.Load(key); ok && v.(*udpSession) == sess {
-		s.addrMap.Delete(key)
-	}
+	// Load followed by Delete is racy: a newer session can replace the entry
+	// between those operations and then be removed by the stale cleanup.
+	s.addrMap.CompareAndDelete(key, sess)
 }
 
 // sweeper 周期性扫描 addrMap，把空闲超过 udpSessionIdleTimeout 的会话清掉。
@@ -334,12 +465,17 @@ func (s *UdpModeServer) Close() error {
 	s.closeOnce.Do(func() {
 		close(s.closeCh)
 	})
+	s.listenerMu.Lock()
+	s.closed = true
+	listener := s.listener
+	s.listener = nil
+	s.listenerMu.Unlock()
 	s.addrMap.Range(func(k, v interface{}) bool {
 		s.removeSession(k.(string), v.(*udpSession))
 		return true
 	})
-	if s.listener == nil {
+	if listener == nil {
 		return nil
 	}
-	return s.listener.Close()
+	return listener.Close()
 }

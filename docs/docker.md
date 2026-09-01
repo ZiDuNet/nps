@@ -18,12 +18,14 @@ services:
     image: wushuo98/nps:latest
     container_name: nps
     restart: unless-stopped
+    environment:
+      NPS_WEB_IP: 0.0.0.0
     ports:
       - "80:80"
       - "443:443"
       - "8024:8024"
       - "8025:8025"
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - ./conf:/conf
 ```
@@ -35,13 +37,13 @@ docker compose up -d
 docker logs nps --tail=50
 ```
 
-首次启动会在日志中输出管理员账号 `admin` 和随机管理员密码。Web 面板默认地址：
+首次启动会在日志中输出管理员账号 `admin` 和随机管理员密码。容器内面板通过 `NPS_WEB_IP` 绑定，宿主机仅回环发布；请在宿主机本地访问或通过 HTTPS 反向代理转发：
 
 ```text
-http://<服务器IP>:8081
+http://127.0.0.1:8081
 ```
 
-注意：源码默认 `web_port = 8081`。如果你把 `conf/nps.conf` 改成 `8080`，Compose 也要改成 `"8080:8080"`。
+注意：源码默认 `web_ip = 127.0.0.1`、`web_port = 8081`。Docker 示例通过 `NPS_WEB_IP=0.0.0.0` 让容器内的反向代理可达，但仍只把宿主机端口发布到回环地址。如果你把 `web_port` 改成 `8080`，Compose 也要改成 `"127.0.0.1:8080:8080"`。
 
 ## NPC 客户端
 

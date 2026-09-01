@@ -96,7 +96,7 @@ docker run -d \
 
    ![配置截图](/image/bt/bt2.png)
 
-> **注意**：NPS 默认占用的端口为 `80`、`443`，如被占用请修改 `nps.conf` 中的 `http_proxy_port` 和 `https_proxy_port`。Web 管理默认端口 `8081`，启动后访问 `http://<IP>:8081`。
+> **注意**：NPS 默认占用的端口为 `80`、`443`，如被占用请修改 `nps.conf` 中的 `http_proxy_port` 和 `https_proxy_port`。Web 管理默认端口 `8081`，新配置默认仅本机访问 `http://127.0.0.1:8081`；远程访问请使用 HTTPS 反向代理或受控管理网段。
 
 ### 安装 NPS 客户端
 

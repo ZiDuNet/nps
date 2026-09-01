@@ -37,12 +37,13 @@ nps start
 docker run -d --name nps \
   -p 80:80 -p 443:443 \
   -p 8024:8024 -p 8025:8025 \
-  -p 8081:8081 \
+  -p 127.0.0.1:8081:8081 \
+  -e NPS_WEB_IP=0.0.0.0 \
   -v /opt/nps/conf:/conf \
   wushuo98/nps
 ```
 
-After starting, visit `http://<server-ip>:8081` to access the web panel. The username is `admin`, and a random password is printed in the terminal on first launch. Known `CHANGE_ME` and historical weak template values are rotated automatically; explicit custom or empty values are preserved (except the historical shared `public_vkey=123`, which is disabled).
+New installations bind the panel to loopback. For the Docker example above, open `http://127.0.0.1:8081` on the host or put an HTTPS reverse proxy in front of the loopback port. The username is `admin`, and a random password is printed in the terminal on first launch. Known `CHANGE_ME` and historical weak template values are rotated automatically; explicit custom or empty values are preserved (except the historical shared `public_vkey=123`, which is disabled).
 
 <details>
 <summary>📋 Port Reference</summary>
@@ -69,6 +70,10 @@ After starting, visit `http://<server-ip>:8081` to access the web panel. The use
 # TLS mode
 ./npc -server=<IP>:8025 -vkey=<key> -tls_enable=true
 
+# Pin the self-signed server certificate (fingerprint is printed by nps)
+./npc -server=<IP>:8025 -vkey=<key> -tls_enable=true \
+  -tls_fingerprint=<SHA-256 fingerprint>
+
 # Docker
 docker run -d --name npc \
   wushuo98/npc -server=<IP>:8024 -vkey=<key>
@@ -77,6 +82,7 @@ docker run -d --name npc \
 > 💡 **Recommended**: Delete the `conf` folder under the npc directory to use config-free mode. All settings are managed via the server's web panel.
 
 The Bridge transport currently supports TCP and KCP; TLS is exposed on the separate TLS Bridge port. QUIC and WebSocket Bridge transports are not supported yet.
+TLS clients verify certificates by default. Use `-tls_ca_file` and `-tls_server_name` for a CA-backed certificate; do not enable `-tls_insecure_skip_verify=true` in production.
 
 ## Tunnel Modes
 

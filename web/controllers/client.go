@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"ehang.io/nps/lib/common"
@@ -16,8 +17,39 @@ type ClientController struct {
 }
 
 type clientListRow struct {
-	*file.Client
-	UserName string
+	Id              int
+	UserName        string
+	VerifyKey       string
+	Addr            string
+	LocalAddr       string
+	Remark          string
+	Status          bool
+	IsConnect       bool
+	RateLimit       int
+	Flow            clientListFlow
+	Rate            clientListRate
+	NoStore         bool
+	MaxConn         int
+	NowConn         int32
+	ConfigConnAllow bool
+	MaxTunnelNum    int
+	Version         string
+	BlackIpList     []string
+	CreateTime      string
+	LastOnlineTime  string
+	IpWhite         bool
+	IpWhiteList     []string
+	ExpireTime      string
+}
+
+type clientListFlow struct {
+	ExportFlow int64
+	InletFlow  int64
+	FlowLimit  int64
+}
+
+type clientListRate struct {
+	NowRate int64
 }
 
 func newClientListRows(clients []*file.Client) []*clientListRow {
@@ -26,10 +58,35 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 		if client == nil {
 			continue
 		}
-		rows = append(rows, &clientListRow{
-			Client:   client,
-			UserName: client.UserName,
-		})
+		client.RLock()
+		flow, clientRate := client.Flow, client.Rate
+		row := &clientListRow{
+			Id:              client.Id,
+			UserName:        client.UserName,
+			VerifyKey:       client.VerifyKey,
+			Addr:            client.Addr,
+			LocalAddr:       client.LocalAddr,
+			Remark:          client.Remark,
+			Status:          client.Status,
+			IsConnect:       client.IsConnect,
+			RateLimit:       client.RateLimit,
+			NoStore:         client.NoStore,
+			MaxConn:         client.MaxConn,
+			NowConn:         atomic.LoadInt32(&client.NowConn),
+			ConfigConnAllow: client.ConfigConnAllow,
+			MaxTunnelNum:    client.MaxTunnelNum,
+			Version:         client.Version,
+			BlackIpList:     append([]string(nil), client.BlackIpList...),
+			CreateTime:      client.CreateTime,
+			LastOnlineTime:  client.LastOnlineTime,
+			IpWhite:         client.IpWhite,
+			IpWhiteList:     append([]string(nil), client.IpWhiteList...),
+			ExpireTime:      client.ExpireTime,
+		}
+		client.RUnlock()
+		row.Flow.InletFlow, row.Flow.ExportFlow, row.Flow.FlowLimit = flow.Snapshot()
+		row.Rate.NowRate = clientRate.CurrentRate()
+		rows = append(rows, row)
 	}
 	return rows
 }
@@ -44,7 +101,7 @@ func (s *ClientController) List() {
 	start, length := s.GetAjaxParams()
 	clientId := 0
 	list, cnt := server.GetClientList(start, length, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"), clientId)
-	if !s.GetSession("isAdmin").(bool) {
+	if !s.IsAdmin() {
 		list = server.FilterClientsByAllowedIds(list, s.GetAllowedClientIds())
 		cnt = len(list)
 	}
@@ -64,6 +121,9 @@ func (s *ClientController) Add() {
 		s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
 		s.display()
 	} else {
+		if !s.RequirePost() {
+			return
+		}
 		id := int(file.GetDb().JsonDb.GetClientId())
 		t := &file.Client{
 			VerifyKey: s.getEscapeString("vkey"),
@@ -103,18 +163,28 @@ func (s *ClientController) Add() {
 	}
 }
 func (s *ClientController) GetClient() {
-	if s.Ctx.Request.Method == "POST" {
-		id := s.GetIntNoErr("id")
-		data := make(map[string]interface{})
-		if c, err := file.GetDb().GetClient(id); err != nil {
-			data["code"] = 0
-		} else {
-			data["code"] = 1
-			data["data"] = c
-		}
-		s.Data["json"] = data
-		s.ServeJSON()
+	if !s.RequirePost() {
+		return
 	}
+	id := s.GetIntNoErr("id")
+	data := make(map[string]interface{})
+	if c, err := file.GetDb().GetClient(id); err != nil {
+		data["code"] = 0
+	} else {
+		data["code"] = 1
+		// Never serialize the mutable Client model directly here. It contains
+		// WebPassword, IpWhitePass and basic-auth credentials. The list DTO is
+		// deliberately limited to fields that are safe for an authenticated
+		// management response and is also consistent with /client/list.
+		rows := newClientListRows([]*file.Client{c})
+		if len(rows) == 1 {
+			data["data"] = rows[0]
+		} else {
+			data["code"] = 0
+		}
+	}
+	s.Data["json"] = data
+	s.ServeJSON()
 }
 
 // 修改客户端
@@ -124,6 +194,7 @@ func (s *ClientController) Edit() {
 		s.Data["menu"] = "client"
 		if c, err := file.GetDb().GetClient(id); err != nil {
 			s.error()
+			return
 		} else {
 			s.Data["c"] = c
 			s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
@@ -133,16 +204,44 @@ func (s *ClientController) Edit() {
 		s.SetInfo("edit client")
 		s.display()
 	} else {
+		if !s.RequirePost() {
+			return
+		}
 		if c, err := file.GetDb().GetClient(id); err != nil {
 			s.error()
 			s.AjaxErr("client ID not found")
 			return
 		} else {
-			if s.GetSession("isAdmin").(bool) {
+			if s.IsAdmin() {
 				if !file.GetDb().VerifyVkey(s.getEscapeString("vkey"), c.Id) {
 					s.AjaxErr("Vkey duplicate, please reset")
 					return
 				}
+			}
+			isAdmin := s.IsAdmin()
+			remark := s.getEscapeString("remark")
+			username := s.getEscapeString("web_username")
+			password := s.getEscapeString("web_password")
+			cnfUser := s.getEscapeString("u")
+			cnfPassword := s.getEscapeString("p")
+			compress := common.GetBoolByStr(s.getEscapeString("compress"))
+			cryptEnabled := s.GetBoolNoErr("crypt")
+			configConnAllow := s.GetBoolNoErr("config_conn_allow")
+			ipWhite := s.GetBoolNoErr("ipwhite")
+			ipWhitePass := s.getEscapeString("ipwhitepass")
+			ipWhiteList := RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n"))
+			blackIPList := RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n"))
+			expireTime := normalizeExpireTime(s.getEscapeString("expire_time"))
+			b, err := beego.AppConfig.Bool("allow_user_change_username")
+			oldRate := (*rate.Rate)(nil)
+			c.Lock()
+			if c.Cnf == nil {
+				c.Cnf = &file.Config{}
+			}
+			if c.Flow == nil {
+				c.Flow = &file.Flow{}
+			}
+			if isAdmin {
 				c.VerifyKey = s.getEscapeString("vkey")
 				c.UserId = s.GetIntNoErr("user_id")
 				c.Flow.SetLimit(int64(s.GetIntNoErr("flow_limit")))
@@ -150,33 +249,33 @@ func (s *ClientController) Edit() {
 				c.MaxConn = s.GetIntNoErr("max_conn")
 				c.MaxTunnelNum = s.GetIntNoErr("max_tunnel")
 			}
-			c.Remark = s.getEscapeString("remark")
-			c.Cnf.U = s.getEscapeString("u")
-			c.Cnf.P = s.getEscapeString("p")
-			c.Cnf.Compress = common.GetBoolByStr(s.getEscapeString("compress"))
-			c.Cnf.Crypt = s.GetBoolNoErr("crypt")
-			b, err := beego.AppConfig.Bool("allow_user_change_username")
-			if s.GetSession("isAdmin").(bool) || (err == nil && b) {
-				c.WebUserName = s.getEscapeString("web_username")
+			c.Remark = remark
+			c.Cnf.U = cnfUser
+			c.Cnf.P = cnfPassword
+			c.Cnf.Compress = compress
+			c.Cnf.Crypt = cryptEnabled
+			if isAdmin || (err == nil && b) {
+				c.WebUserName = username
 			}
-			c.WebPassword = s.getEscapeString("web_password")
-			c.ConfigConnAllow = s.GetBoolNoErr("config_conn_allow")
-			c.IpWhite = s.GetBoolNoErr("ipwhite")
-			c.IpWhitePass = s.getEscapeString("ipwhitepass")
-			c.IpWhiteList = RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n"))
-			if c.Rate != nil {
-				c.Rate.Stop()
-			}
+			c.WebPassword = password
+			c.ConfigConnAllow = configConnAllow
+			c.IpWhite = ipWhite
+			c.IpWhitePass = ipWhitePass
+			c.IpWhiteList = ipWhiteList
+			c.BlackIpList = blackIPList
+			c.ExpireTime = expireTime
+			oldRate = c.Rate
 			if c.RateLimit > 0 {
-				c.Rate = rate.NewRate(int64(c.RateLimit * 1024))
-				c.Rate.Start()
+				c.Rate = rate.NewRate(int64(c.RateLimit) * 1024)
 			} else {
-				c.Rate = rate.NewRate((2 << 23) * 1024)
-				c.Rate.Start()
+				c.Rate = rate.NewRate(int64(2<<23) * 1024)
 			}
-
-			c.BlackIpList = RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n"))
-			c.ExpireTime = normalizeExpireTime(s.getEscapeString("expire_time"))
+			newRate := c.Rate
+			c.Unlock()
+			if oldRate != nil {
+				oldRate.Stop()
+			}
+			newRate.Start()
 			file.GetDb().JsonDb.StoreClientsToJsonFile()
 		}
 		s.AjaxOk("save success")
@@ -239,19 +338,36 @@ func normalizeExpireTime(s string) string {
 
 // 更改状态
 func (s *ClientController) ChangeStatus() {
+	if !s.RequirePost() {
+		return
+	}
+	if !s.RequireAdmin() {
+		return
+	}
 	id := s.GetIntNoErr("id")
 	if client, err := file.GetDb().GetClient(id); err == nil {
-		client.Status = s.GetBoolNoErr("status")
-		if client.Status == false {
+		status := s.GetBoolNoErr("status")
+		client.Lock()
+		client.Status = status
+		client.Unlock()
+		file.GetDb().JsonDb.StoreClientsToJsonFile()
+		if !status {
 			server.DelClientConnect(client.Id)
 		}
 		s.AjaxOk("modified success")
+		return
 	}
 	s.AjaxErr("modified fail")
 }
 
 // 删除客户端
 func (s *ClientController) Del() {
+	if !s.RequirePost() {
+		return
+	}
+	if !s.RequireAdmin() {
+		return
+	}
 	id := s.GetIntNoErr("id")
 	if err := file.GetDb().DelClient(id); err != nil {
 		s.AjaxErr("delete error")

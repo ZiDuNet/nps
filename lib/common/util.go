@@ -112,13 +112,16 @@ func ChangeHostAndHeader(r *http.Request, host string, header string, addr strin
 	if header != "" {
 		h := strings.Split(header, "\n")
 		for _, v := range h {
-			hd := strings.Split(v, ":")
+			hd := strings.SplitN(v, ":", 2)
 			if len(hd) == 2 {
-				r.Header.Set(hd[0], hd[1])
+				name, value := strings.TrimSpace(hd[0]), strings.TrimSpace(hd[1])
+				if name != "" && !strings.ContainsAny(name, "\r\n") && !strings.ContainsAny(value, "\r\n") {
+					r.Header.Set(name, value)
+				}
 			}
 		}
 	}
-	addr = strings.Split(addr, ":")[0]
+	addr = GetIpByAddr(addr)
 	if prior, ok := r.Header["X-Forwarded-For"]; ok {
 		addr = strings.Join(prior, ", ") + ", " + addr
 	}
@@ -251,7 +254,7 @@ func IsPort(p string) bool {
 	if err != nil {
 		return false
 	}
-	if pi > 65536 || pi < 1 {
+	if pi > 65535 || pi < 1 {
 		return false
 	}
 	return true
@@ -267,29 +270,46 @@ func FormatAddress(s string) string {
 
 // get address from the complete address
 func GetIpByAddr(addr string) string {
-	// 如果是 IPv6 地址，可能的格式为[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:8080或[2001:0db8:85a3:0000:0000:8a2e:0370:7334]
-	// IPv4 地址，可能的格式为192.168.1.1:80或192.168.1.1
-	// 截取地址
-	if strings.Contains(addr, "[") {
-		addr = strings.Split(addr, "[")[1]
-		addr = strings.Split(addr, "]")[0]
-	} else {
-		addr = strings.Split(addr, ":")[0]
+	addr = strings.TrimSpace(addr)
+	// SplitHostPort handles bracketed IPv6 and the usual host:port form.
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	if strings.HasPrefix(addr, "[") && strings.HasSuffix(addr, "]") {
+		addr = strings.TrimSuffix(strings.TrimPrefix(addr, "["), "]")
+	}
+	// A bare IPv6 address contains colons and must not be truncated at the
+	// first one. Validate it before applying the legacy host:port fallback.
+	if net.ParseIP(addr) != nil {
+		return addr
+	}
+	if i := strings.LastIndexByte(addr, ':'); i > 0 {
+		if _, err := strconv.Atoi(addr[i+1:]); err == nil && net.ParseIP(addr[:i]) != nil {
+			return addr[:i]
+		}
+	}
+	if i := strings.IndexByte(addr, ':'); i >= 0 {
+		return addr[:i]
 	}
 	return addr
 }
 
 // get port from the complete address
 func GetPortByAddr(addr string) int {
-	arr := strings.Split(addr, ":")
-	if len(arr) < 2 {
-		return 0
+	addr = strings.TrimSpace(addr)
+	if _, port, err := net.SplitHostPort(addr); err == nil {
+		p, _ := strconv.Atoi(port)
+		return p
 	}
-	p, err := strconv.Atoi(arr[1])
-	if err != nil {
-		return 0
+	// Keep compatibility with the legacy unbracketed IPv4 form while avoiding
+	// interpreting a bare IPv6 address as a port-bearing address.
+	if strings.Count(addr, ":") == 1 {
+		if i := strings.LastIndexByte(addr, ':'); i >= 0 {
+			p, _ := strconv.Atoi(addr[i+1:])
+			return p
+		}
 	}
-	return p
+	return 0
 }
 
 func in(target string, str_array []string) bool {
@@ -434,7 +454,7 @@ func BytesToNum(b []byte) int {
 }
 
 // get the length of the sync map
-func GeSynctMapLen(m sync.Map) int {
+func GeSynctMapLen(m *sync.Map) int {
 	var c int
 	m.Range(func(key, value interface{}) bool {
 		c++

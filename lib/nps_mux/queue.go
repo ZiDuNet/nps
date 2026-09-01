@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -16,7 +17,7 @@ type priorityQueue struct {
 	middleChain  *bufChain
 	lowestChain  *bufChain
 	starving     uint8
-	stop         bool
+	stop         atomic.Bool
 	cond         *sync.Cond
 }
 
@@ -32,9 +33,22 @@ func (Self *priorityQueue) New() {
 }
 
 func (Self *priorityQueue) Push(packager *muxPackager) {
-	Self.push(packager)
-	Self.cond.Broadcast()
-	return
+	Self.cond.L.Lock()
+	stopped := Self.stop.Load()
+	if !stopped {
+		Self.push(packager)
+		// The predicate update and notification must be protected by cond.L.
+		// Otherwise a consumer can observe an empty queue immediately before
+		// Wait and miss this broadcast permanently.
+		Self.cond.Broadcast()
+	}
+	Self.cond.L.Unlock()
+	if stopped {
+		// Close may race with a producer that already allocated a package.
+		// Return it here rather than leaving its pooled buffers live forever.
+		releaseMuxPack(packager)
+		return
+	}
 }
 
 func (Self *priorityQueue) push(packager *muxPackager) {
@@ -54,36 +68,30 @@ func (Self *priorityQueue) push(packager *muxPackager) {
 const maxStarving uint8 = 8
 
 func (Self *priorityQueue) Pop() (packager *muxPackager) {
-	var iter bool
+	Self.cond.L.Lock()
+	defer Self.cond.L.Unlock()
 	for {
-		packager = Self.TryPop()
+		packager = Self.tryPopLocked()
 		if packager != nil {
 			return
 		}
-		if Self.stop {
-			return
-		}
-		if iter {
-			break
-			// trying to pop twice
-		}
-		iter = true
-		runtime.Gosched()
-	}
-	Self.cond.L.Lock()
-	defer Self.cond.L.Unlock()
-	for packager = Self.TryPop(); packager == nil; {
-		if Self.stop {
+		if Self.stop.Load() {
 			return
 		}
 		Self.cond.Wait()
-		// wait for it with no more iter
-		packager = Self.TryPop()
 	}
-	return
 }
 
 func (Self *priorityQueue) TryPop() (packager *muxPackager) {
+	Self.cond.L.Lock()
+	defer Self.cond.L.Unlock()
+	return Self.tryPopLocked()
+}
+
+// tryPopLocked consumes a package while Self.cond.L is held. bufChain is derived
+// from sync.Pool's single-producer queue, while sendInfo has multiple
+// producers and shutdown may inspect the queue concurrently.
+func (Self *priorityQueue) tryPopLocked() (packager *muxPackager) {
 	ptr, ok := Self.highestChain.popTail()
 	if ok {
 		packager = (*muxPackager)(ptr)
@@ -118,15 +126,16 @@ func (Self *priorityQueue) TryPop() (packager *muxPackager) {
 }
 
 func (Self *priorityQueue) Stop() {
-	Self.stop = true
+	Self.cond.L.Lock()
+	Self.stop.Store(true)
 	Self.cond.Broadcast()
+	Self.cond.L.Unlock()
 }
 
 type connQueue struct {
-	chain    *bufChain
-	starving uint8
-	stop     bool
-	cond     *sync.Cond
+	chain *bufChain
+	stop  atomic.Bool
+	cond  *sync.Cond
 }
 
 func (Self *connQueue) New() {
@@ -137,42 +146,40 @@ func (Self *connQueue) New() {
 }
 
 func (Self *connQueue) Push(connection *conn) {
-	Self.chain.pushHead(unsafe.Pointer(connection))
-	Self.cond.Broadcast()
-	return
+	Self.cond.L.Lock()
+	stopped := Self.stop.Load()
+	if !stopped {
+		Self.chain.pushHead(unsafe.Pointer(connection))
+		Self.cond.Broadcast()
+	}
+	Self.cond.L.Unlock()
+	if stopped {
+		_ = connection.Close()
+	}
 }
 
 func (Self *connQueue) Pop() (connection *conn) {
-	var iter bool
+	Self.cond.L.Lock()
+	defer Self.cond.L.Unlock()
 	for {
-		connection = Self.TryPop()
+		connection = Self.tryPopLocked()
 		if connection != nil {
 			return
 		}
-		if Self.stop {
-			return
-		}
-		if iter {
-			break
-			// trying to pop twice
-		}
-		iter = true
-		runtime.Gosched()
-	}
-	Self.cond.L.Lock()
-	defer Self.cond.L.Unlock()
-	for connection = Self.TryPop(); connection == nil; {
-		if Self.stop {
+		if Self.stop.Load() {
 			return
 		}
 		Self.cond.Wait()
-		// wait for it with no more iter
-		connection = Self.TryPop()
 	}
-	return
 }
 
 func (Self *connQueue) TryPop() (connection *conn) {
+	Self.cond.L.Lock()
+	defer Self.cond.L.Unlock()
+	return Self.tryPopLocked()
+}
+
+func (Self *connQueue) tryPopLocked() (connection *conn) {
 	ptr, ok := Self.chain.popTail()
 	if ok {
 		connection = (*conn)(ptr)
@@ -182,8 +189,10 @@ func (Self *connQueue) TryPop() (connection *conn) {
 }
 
 func (Self *connQueue) Stop() {
-	Self.stop = true
+	Self.cond.L.Lock()
+	Self.stop.Store(true)
 	Self.cond.Broadcast()
+	Self.cond.L.Unlock()
 }
 
 type listElement struct {
@@ -211,79 +220,107 @@ func newListElement(buf []byte, l uint16, part bool) (element *listElement, err 
 }
 
 type receiveWindowQueue struct {
-	lengthWait uint64
-	chain      *bufChain
-	stopOp     chan struct{}
-	readOp     chan struct{}
-	// https://golang.org/pkg/sync/atomic/#pkg-note-BUG
-	// On non-Linux ARM, the 64-bit functions use instructions unavailable before the ARMv6k core.
-	// On ARM, x86-32, and 32-bit MIPS, it is the caller's responsibility
-	// to arrange for 64-bit alignment of 64-bit words accessed atomically.
-	// The first word in a variable or in an allocated struct, array, or slice can be relied upon to be 64-bit aligned.
-
-	// if there are implicit struct, careful the first word
-	timeout time.Time
+	mu        sync.Mutex
+	length    uint32
+	chain     *bufChain
+	stopOp    chan struct{}
+	stopOnce  sync.Once
+	stopped   atomic.Bool
+	readOp    chan struct{}
+	timeoutMu sync.RWMutex
+	timeout   time.Time
 }
 
 func newReceiveWindowQueue() *receiveWindowQueue {
 	queue := receiveWindowQueue{
 		chain:  new(bufChain),
-		stopOp: make(chan struct{}, 2),
-		readOp: make(chan struct{}),
+		stopOp: make(chan struct{}),
+		// A single coalesced notification closes the check-then-wait gap:
+		// a producer can publish data before a consumer enters waitPush.
+		readOp: make(chan struct{}, 1),
 	}
 	queue.chain.new(64)
 	return &queue
 }
 
 func (Self *receiveWindowQueue) Push(element *listElement) {
-	var length, wait uint32
-	for {
-		ptrs := atomic.LoadUint64(&Self.lengthWait)
-		length, wait = Self.chain.head.unpack(ptrs)
-		length += uint32(element.L)
-		if atomic.CompareAndSwapUint64(&Self.lengthWait, ptrs, Self.chain.head.pack(length, 0)) {
-			break
-		}
-		// another goroutine change the length or into wait, make sure
+	if element == nil {
+		return
+	}
+	Self.mu.Lock()
+	if Self.stopped.Load() {
+		Self.mu.Unlock()
+		// receiveWindow normally serializes Stop and Write. Keep the queue
+		// safe for callers that race them as well, without retaining a buffer
+		// that can never be consumed.
+		discardListElement(element)
+		return
 	}
 	Self.chain.pushHead(unsafe.Pointer(element))
-	if wait == 1 {
-		Self.allowPop()
-	}
+	Self.length += uint32(element.L)
+	Self.mu.Unlock()
+	Self.allowPop()
 	return
 }
 
 func (Self *receiveWindowQueue) Pop() (element *listElement, err error) {
-	var length uint32
-startPop:
-	ptrs := atomic.LoadUint64(&Self.lengthWait)
-	length, _ = Self.chain.head.unpack(ptrs)
-	if length == 0 {
-		if !atomic.CompareAndSwapUint64(&Self.lengthWait, ptrs, Self.chain.head.pack(0, 1)) {
-			goto startPop // another goroutine is pushing
-		}
-		err = Self.waitPush()
-		// there is no more data in queue, wait for it
-		if err != nil {
-			return
-		}
-		goto startPop // wait finish, trying to Get the New status
-	}
-	// length is not zero, so try to pop
 	for {
-		element = Self.TryPop()
+		Self.mu.Lock()
+		element = Self.popLocked()
+		stopped := Self.stopped.Load()
+		if element == nil && !stopped {
+			// Any token left from a previously consumed element is stale. Drain
+			// it while holding the predicate lock; a producer cannot publish
+			// between this drain and the subsequent wait setup.
+			Self.drainNotificationsLocked()
+		}
+		Self.mu.Unlock()
 		if element != nil {
 			return
 		}
-		runtime.Gosched() // another goroutine is still pushing
+		if stopped {
+			return nil, io.EOF
+		}
+
+		err = Self.waitPush()
+		if err == nil {
+			continue
+		}
+		// A notification and a deadline may become ready together. Recheck
+		// the predicate before returning the timeout, otherwise data published
+		// at the deadline would be stranded until a later read.
+		Self.mu.Lock()
+		stopped = Self.stopped.Load()
+		if !stopped {
+			element = Self.popLocked()
+		}
+		Self.mu.Unlock()
+		if element != nil {
+			return element, nil
+		}
+		if stopped {
+			return nil, io.EOF
+		}
+		return nil, err
 	}
 }
 
 func (Self *receiveWindowQueue) TryPop() (element *listElement) {
+	Self.mu.Lock()
+	defer Self.mu.Unlock()
+	return Self.popLocked()
+}
+
+func (Self *receiveWindowQueue) popLocked() (element *listElement) {
 	ptr, ok := Self.chain.popTail()
 	if ok {
 		element = (*listElement)(ptr)
-		atomic.AddUint64(&Self.lengthWait, ^(uint64(element.L)<<dequeueBits - 1))
+		if Self.length >= uint32(element.L) {
+			Self.length -= uint32(element.L)
+		} else {
+			// Keep Len bounded even if a malformed element enters the queue.
+			Self.length = 0
+		}
 		return
 	}
 	return nil
@@ -295,13 +332,27 @@ func (Self *receiveWindowQueue) allowPop() (closed bool) {
 		return false
 	case <-Self.stopOp:
 		return true
+	default:
+		// Notifications are coalesced. A consumer always checks the queue
+		// predicate after waking, so a full channel means no signal is needed.
+		return false
+	}
+}
+
+func (Self *receiveWindowQueue) drainNotificationsLocked() {
+	for {
+		select {
+		case <-Self.readOp:
+		default:
+			return
+		}
 	}
 }
 
 func (Self *receiveWindowQueue) waitPush() (err error) {
-	t := Self.timeout.Sub(time.Now())
-	if t <= 0 {
-		// not Set the timeout, so wait for it without timeout, just like a tcp connection
+	deadline := Self.getTimeOut()
+	if deadline.IsZero() {
+		// No deadline: wait until a producer or Stop, like a TCP connection.
 		select {
 		case <-Self.readOp:
 			return nil
@@ -309,6 +360,10 @@ func (Self *receiveWindowQueue) waitPush() (err error) {
 			err = io.EOF
 			return
 		}
+	}
+	t := time.Until(deadline)
+	if t <= 0 {
+		return os.ErrDeadlineExceeded
 	}
 	timer := time.NewTimer(t)
 	defer timer.Stop()
@@ -319,25 +374,52 @@ func (Self *receiveWindowQueue) waitPush() (err error) {
 		err = io.EOF
 		return
 	case <-timer.C:
-		err = errors.New("mux.queue: read time out")
+		err = os.ErrDeadlineExceeded
 		return
 	}
 }
 
 func (Self *receiveWindowQueue) Len() (n uint32) {
-	ptrs := atomic.LoadUint64(&Self.lengthWait)
-	n, _ = Self.chain.head.unpack(ptrs)
-	// just for unpack method use
-	return
+	Self.mu.Lock()
+	n = Self.length
+	Self.mu.Unlock()
+	return n
 }
 
 func (Self *receiveWindowQueue) Stop() {
-	Self.stopOp <- struct{}{}
-	Self.stopOp <- struct{}{}
+	Self.stopOnce.Do(func() {
+		Self.mu.Lock()
+		Self.stopped.Store(true)
+		close(Self.stopOp)
+		Self.mu.Unlock()
+	})
 }
 
 func (Self *receiveWindowQueue) SetTimeOut(t time.Time) {
+	Self.timeoutMu.Lock()
 	Self.timeout = t
+	Self.timeoutMu.Unlock()
+}
+
+func (Self *receiveWindowQueue) getTimeOut() time.Time {
+	Self.timeoutMu.RLock()
+	defer Self.timeoutMu.RUnlock()
+	return Self.timeout
+}
+
+func discardListElement(element *listElement) {
+	if element == nil {
+		return
+	}
+	if element.Buf != nil {
+		// Buffers created by receiveWindow are pool-sized. Tests and callers
+		// may provide smaller buffers, which cannot be returned to that pool.
+		if cap(element.Buf) >= poolSizeWindow {
+			windowBuff.Put(element.Buf)
+		}
+		element.Buf = nil
+	}
+	listEle.Put(element)
 }
 
 // https://golang.org/src/sync/poolqueue.go
@@ -420,8 +502,10 @@ func (d *bufDequeue) pushHead(val unsafe.Pointer) bool {
 			atomic.StoreUint32(&d.starving, 1)
 		}
 	}
-	// The head slot is free, so we own it.
-	*slot = val
+	// Publish the value atomically. Consumers may observe the slot as soon as
+	// headTail advances, so a plain pointer write is a data race on weakly
+	// ordered architectures (and under the race detector).
+	atomic.StorePointer(slot, val)
 	return true
 }
 

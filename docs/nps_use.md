@@ -2,19 +2,16 @@
 
 ## Web 管理
 
-访问 `公网IP:Web端口`（默认 8081）。首次启动时管理员账号为 `admin`，终端会打印随机生成的管理员密码。
+新安装默认访问 `127.0.0.1:8081`。如需远程管理，请使用 HTTPS 反向代理或将 `web_ip` 限制为受控管理网段并开启 `web_open_ssl`。首次启动时管理员账号为 `admin`，终端会打印随机生成的管理员密码。
 
 ## 配置重载
 
 ```bash
 # Linux/macOS
 sudo nps reload
-
-# Windows
-nps.exe reload
 ```
 
-`reload` 会重新加载认证和管理面板配置，例如 `auth_key`、`auth_crypt_key`、`web_username`、`web_password`。监听端口、Bridge、代理和隧道配置由启动时初始化，修改这些项目后请执行 `nps restart`；生产环境变更前建议先备份 `conf` 目录。
+`reload` 仅在 Linux/macOS 上可用，会重新加载认证和管理面板配置，例如 `auth_key`、`auth_crypt_key`、`web_username`、`web_password`。Windows 以及监听端口、Bridge、代理和隧道配置变更请执行 `nps restart`；生产环境变更前建议先备份 `conf` 目录。
 
 ## 停止与重启
 

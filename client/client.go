@@ -3,11 +3,14 @@ package client
 import (
 	"bufio"
 	"bytes"
+	"errors"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ehang.io/nps/lib/nps_mux"
@@ -26,22 +29,38 @@ type TRPClient struct {
 	svrAddr        string
 	bridgeConnType string
 	proxyUrl       string
+	tlsEnable      bool
+	tlsOptions     TLSOptions
 	vKey           string
 	p2pAddr        map[string]string
 	tunnel         *nps_mux.Mux
 	signal         *conn.Conn
-	ticker         *time.Ticker
 	cnf            *config.Config
 	disconnectTime int
 	once           sync.Once
+	stateMu        sync.RWMutex
+	closed         atomic.Bool
 	closeCh        chan struct{}   // closed when client is shutting down; stops ping
 	logger         *logs.BeeLogger // 每个客户端独立的 logger
 }
 
 // new client
 func NewRPClient(svraddr string, vKey string, bridgeConnType string, proxyUrl string, cnf *config.Config, disconnectTime int) *TRPClient {
+	return NewRPClientWithTLS(svraddr, vKey, bridgeConnType, proxyUrl, cnf, disconnectTime, GetTlsEnable())
+}
+
+// NewRPClientWithTLS creates a client with an instance-scoped TLS preference.
+// NewRPClient remains as a compatibility wrapper for callers that use the
+// legacy process-wide SetTlsEnable API.
+func NewRPClientWithTLS(svraddr string, vKey string, bridgeConnType string, proxyUrl string, cnf *config.Config, disconnectTime int, tlsEnable bool, tlsOptions ...TLSOptions) *TRPClient {
+	options := TLSOptions{}
+	if len(tlsOptions) > 0 {
+		options = tlsOptions[0]
+	}
 	return &TRPClient{
 		svrAddr:        svraddr,
+		tlsEnable:      tlsEnable,
+		tlsOptions:     options,
 		p2pAddr:        make(map[string]string, 0),
 		vKey:           vKey,
 		bridgeConnType: bridgeConnType,
@@ -94,51 +113,160 @@ func (s *TRPClient) logTrace(format string, v ...interface{}) {
 
 // IsConnected 返回客户端是否已成功连接到服务器
 func (s *TRPClient) IsConnected() bool {
-	return s.signal != nil
+	s.stateMu.RLock()
+	connected := s.signal != nil && !s.closed.Load()
+	s.stateMu.RUnlock()
+	return connected
 }
 
-var NowStatus int
-var CloseClient bool
+func (s *TRPClient) currentSignal() *conn.Conn {
+	s.stateMu.RLock()
+	signal := s.signal
+	s.stateMu.RUnlock()
+	return signal
+}
+
+func (s *TRPClient) currentTunnel() *nps_mux.Mux {
+	s.stateMu.RLock()
+	tunnel := s.tunnel
+	s.stateMu.RUnlock()
+	return tunnel
+}
+
+func (s *TRPClient) installSignal(signal *conn.Conn) bool {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if s.closed.Load() {
+		return false
+	}
+	s.signal = signal
+	return true
+}
+
+func (s *TRPClient) installTunnel(tunnel *nps_mux.Mux) (old *nps_mux.Mux, installed bool) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if s.closed.Load() {
+		return nil, false
+	}
+	old = s.tunnel
+	s.tunnel = tunnel
+	return old, true
+}
+
+func (s *TRPClient) detach(expectedSignal *conn.Conn, expectedTunnel *nps_mux.Mux) (signal *conn.Conn, tunnel *nps_mux.Mux, detached bool) {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+	if expectedSignal != nil && s.signal != expectedSignal {
+		return nil, nil, false
+	}
+	if expectedTunnel != nil && s.tunnel != expectedTunnel {
+		return nil, nil, false
+	}
+	signal, tunnel = s.signal, s.tunnel
+	s.signal, s.tunnel = nil, nil
+	return signal, tunnel, true
+}
+
+func (s *TRPClient) closeDetached(signal *conn.Conn, tunnel *nps_mux.Mux) {
+	s.once.Do(func() {
+		s.closed.Store(true)
+		CloseClient.Store(true)
+		NowStatus.Store(0)
+		if s.closeCh == nil {
+			s.closeCh = make(chan struct{})
+		}
+		select {
+		case <-s.closeCh:
+		default:
+			close(s.closeCh)
+		}
+	})
+	// Resource closes are idempotent and intentionally happen outside the
+	// once callback. This covers a race where a stale reader detaches its
+	// resources just after another caller wins the once guard.
+	if tunnel != nil {
+		_ = tunnel.Close()
+	}
+	if signal != nil {
+		_ = signal.Close()
+	}
+}
+
+var NowStatus atomic.Int32
+var CloseClient atomic.Bool
 
 // start
 func (s *TRPClient) Start() {
-	CloseClient = false
-retry:
-	if CloseClient {
+	if s.closed.Load() {
 		return
 	}
-	NowStatus = 0
-	c, err := NewConn(s.bridgeConnType, s.vKey, s.svrAddr, common.WORK_MAIN, s.proxyUrl)
+retry:
+	// The lifecycle belongs to this client instance. CloseClient is kept as a
+	// legacy SDK status flag, but must not let one GUI client stop another.
+	if s.closed.Load() {
+		return
+	}
+	NowStatus.Store(0)
+	c, err := NewConnWithTLS(s.bridgeConnType, s.vKey, s.svrAddr, common.WORK_MAIN, s.proxyUrl, s.tlsEnable, s.tlsOptions)
 	if err != nil {
 		s.logError("The connection server failed and will be reconnected in five seconds, error", err.Error())
-		time.Sleep(time.Second * 5)
+		if !s.waitReconnect() {
+			return
+		}
 		goto retry
 	}
 	if c == nil {
 		s.logError("Error data from server, and will be reconnected in five seconds")
-		time.Sleep(time.Second * 5)
+		if !s.waitReconnect() {
+			return
+		}
 		goto retry
+	}
+	if s.closed.Load() {
+		_ = c.Close()
+		return
 	}
 	s.logInfo("Successful connection with server %s", s.svrAddr)
 	//monitor the connection
 	go s.ping()
-	s.signal = c
+	if !s.installSignal(c) {
+		_ = c.Close()
+		return
+	}
 	//start a channel connection
 	go s.newChan()
 	//start health check if the it's open
 	if s.cnf != nil && len(s.cnf.Healths) > 0 {
-		go heathCheck(s.cnf.Healths, s.signal)
+		go heathCheck(s.cnf.Healths, c, s.closeCh)
 	}
-	NowStatus = 1
+	NowStatus.Store(1)
 	//msg connection, eg udp
 	s.handleMain()
 }
 
+// waitReconnect makes shutdown responsive while preserving the reconnect
+// backoff used by the command-line client.
+func (s *TRPClient) waitReconnect() bool {
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-s.closeCh:
+		return false
+	}
+}
+
 // handle main connection
 func (s *TRPClient) handleMain() {
+	signal := s.currentSignal()
+	if signal == nil {
+		return
+	}
 mainLoop:
 	for {
-		flags, err := s.signal.ReadFlag()
+		flags, err := signal.ReadFlag()
 		if err != nil {
 			s.logError("Accept server data error %s, end this service", err.Error())
 			break
@@ -147,18 +275,18 @@ mainLoop:
 		case common.REPORT_LOCAL_IP:
 			// Newer servers request the client's private/LAN addresses. Older
 			// servers never send this flag, so this is protocol-compatible.
-			localIPs := common.GetLocalIPs(s.signal.Conn)
-			if err := s.signal.WriteLenContent([]byte(localIPs)); err != nil {
+			localIPs := common.GetLocalIPs(signal.Conn)
+			if err := signal.WriteLenContent([]byte(localIPs)); err != nil {
 				s.logWarn("report local address failed: %s", err.Error())
 			} else {
 				s.logTrace("reported local addr: %s", localIPs)
 			}
 		case common.NEW_UDP_CONN:
 			//read server udp addr and password
-			if lAddr, err := s.signal.GetShortLenContent(); err != nil {
+			if lAddr, err := signal.GetShortLenContent(); err != nil {
 				s.logWarn(err.Error())
 				break mainLoop
-			} else if pwd, err := s.signal.GetShortLenContent(); err == nil {
+			} else if pwd, err := signal.GetShortLenContent(); err == nil {
 				var localAddr string
 				//The local port remains unchanged for a certain period of time
 				if v, ok := s.p2pAddr[crypt.Md5(string(pwd)+strconv.Itoa(int(time.Now().Unix()/100)))]; !ok {
@@ -175,7 +303,11 @@ mainLoop:
 			}
 		}
 	}
-	s.Close()
+	// Only the connection that this loop owns may tear down the client. A
+	// reconnect can install a newer signal while the old reader is unwinding.
+	if detachedSignal, detachedTunnel, ok := s.detach(signal, nil); ok {
+		s.closeDetached(detachedSignal, detachedTunnel)
+	}
 }
 
 func (s *TRPClient) newUdpConn(localAddr, rAddr string, md5Password string) {
@@ -188,49 +320,73 @@ func (s *TRPClient) newUdpConn(localAddr, rAddr string, md5Password string) {
 	}
 	l, err := kcp.ServeConn(nil, 150, 3, localConn)
 	if err != nil {
+		_ = localConn.Close()
 		s.logError(err.Error())
 		return
 	}
+	defer l.Close()
 	s.logTrace("start local p2p udp listen, local address %s", localConn.LocalAddr().String())
 	for {
 		udpTunnel, err := l.AcceptKCP()
 		if err != nil {
 			s.logError(err.Error())
-			l.Close()
 			return
 		}
-		if udpTunnel.RemoteAddr().String() == string(remoteAddress) {
-			conn.SetUdpSession(udpTunnel)
-			s.logTrace("successful connection with client ,address %s", udpTunnel.RemoteAddr().String())
-			//read link info from remote
-			conn.Accept(nps_mux.NewMux(udpTunnel, s.bridgeConnType, s.disconnectTime), func(c net.Conn) {
-				go s.handleChan(c)
-			})
-			l.Close()
-			break
+		if !matchesP2PRemote(udpTunnel, remoteAddress) {
+			continue
 		}
+		conn.SetUdpSession(udpTunnel)
+		s.logTrace("successful connection with client ,address %s", udpTunnel.RemoteAddr().String())
+		//read link info from remote
+		conn.Accept(nps_mux.NewMux(udpTunnel, s.bridgeConnType, s.disconnectTime), func(c net.Conn) {
+			go s.handleChan(c)
+		})
+		return
 	}
+}
+
+// matchesP2PRemote keeps the temporary KCP listener from accumulating
+// unauthenticated sessions while it waits for the peer selected by the P2P
+// handshake. The listener owns the underlying packet socket; an unmatched
+// session must be closed individually rather than left in its session map.
+func matchesP2PRemote(session net.Conn, expectedRemote string) bool {
+	if session == nil {
+		return false
+	}
+	remote := session.RemoteAddr()
+	if remote == nil || remote.String() != expectedRemote {
+		_ = session.Close()
+		return false
+	}
+	return true
 }
 
 // pmux tunnel
 func (s *TRPClient) newChan() {
-	tunnel, err := NewConn(s.bridgeConnType, s.vKey, s.svrAddr, common.WORK_CHAN, s.proxyUrl)
+	tunnel, err := NewConnWithTLS(s.bridgeConnType, s.vKey, s.svrAddr, common.WORK_CHAN, s.proxyUrl, s.tlsEnable, s.tlsOptions)
 	if err != nil {
 		s.logError("connect to %s error: %v, client will reconnect", s.svrAddr, err)
 		s.Close()
 		return
 	}
 	newMux := nps_mux.NewMux(tunnel.Conn, s.bridgeConnType, s.disconnectTime)
-	// 关闭旧的 tunnel
-	if s.tunnel != nil {
-		s.tunnel.Close()
+	// Install the new mux atomically, then close the previous one outside the
+	// state lock. If the client was closed while dialing, discard the new mux.
+	oldTunnel, installed := s.installTunnel(newMux)
+	if !installed {
+		_ = newMux.Close()
+		return
 	}
-	s.tunnel = newMux
+	if oldTunnel != nil {
+		_ = oldTunnel.Close()
+	}
 	for {
-		src, err := s.tunnel.Accept()
+		src, err := newMux.Accept()
 		if err != nil {
 			s.logWarn(err.Error())
-			s.Close()
+			if detachedSignal, detachedTunnel, ok := s.detach(nil, newMux); ok {
+				s.closeDetached(detachedSignal, detachedTunnel)
+			}
 			break
 		}
 		go s.handleChan(src)
@@ -252,32 +408,62 @@ func (s *TRPClient) handleChan(src net.Conn) {
 			s.logWarn("connect to %s error %s", lk.Host, err.Error())
 			src.Close()
 		} else {
-			srcConn := conn.GetConn(src, lk.Crypt, lk.Compress, nil, false)
+			srcConn := conn.GetConn(src, lk.Crypt, lk.Compress, nil, false, lk.TLSFingerprint)
+			var targetCloseOnce sync.Once
+			targetWriteClosed := false
+			forwardedRequest := false
+			closeTarget := func() {
+				targetCloseOnce.Do(func() {
+					_ = targetConn.Close()
+				})
+			}
 			go func() {
+				// Keep the response path full-duplex: this goroutine is the sole
+				// reader of targetConn while the request loop reads srcConn.
 				common.CopyBuffer(srcConn, targetConn)
-				srcConn.Close()
-				targetConn.Close()
+				// It is also the sole owner of srcConn's final close, so a
+				// compressed writer cannot be closed while CopyBuffer is writing.
+				_ = srcConn.Close()
+				closeTarget()
 			}()
+			// Keep one reader for the full stream: replacing it per request can
+			// lose bytes already prefetched from a pipelined client connection.
+			reader := bufio.NewReader(srcConn)
 			for {
-				if r, err := http.ReadRequest(bufio.NewReader(srcConn)); err != nil {
-					srcConn.Close()
-					targetConn.Close()
-					break
-				} else {
-					remoteAddr := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
-					if len(remoteAddr) == 0 {
-						remoteAddr = r.RemoteAddr
+				r, err := http.ReadRequest(reader)
+				if err != nil {
+					if errors.Is(err, io.EOF) && forwardedRequest {
+						if halfCloser, ok := targetConn.(interface{ CloseWrite() error }); ok {
+							targetWriteClosed = halfCloser.CloseWrite() == nil
+						}
 					}
-					s.logTrace("http request, method %s, host %s, url %s, remote address %s", r.Method, r.Host, r.URL.Path, remoteAddr)
-					r.Write(targetConn)
+					if !targetWriteClosed {
+						closeTarget()
+					}
+					break
 				}
+				remoteAddr := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
+				if len(remoteAddr) == 0 {
+					remoteAddr = r.RemoteAddr
+				}
+				s.logTrace("http request, method %s, host %s, url %s, remote address %s", r.Method, r.Host, r.URL.Path, remoteAddr)
+				if err := r.Write(targetConn); err != nil {
+					s.logTrace("forward http request error: %v", err)
+					closeTarget()
+					break
+				}
+				forwardedRequest = true
+			}
+			if !targetWriteClosed {
+				closeTarget()
 			}
 		}
 		return
 	}
 	if lk.ConnType == "udp5" {
 		s.logTrace("new %s connection with the goal of %s, remote address:%s", lk.ConnType, lk.Host, lk.RemoteAddr)
-		s.handleUdp(src)
+		s.handleUdp(conn.GetConn(src, lk.Crypt, lk.Compress, nil, false, lk.TLSFingerprint))
+		return
 	}
 	//connect to target if conn type is tcp or udp
 	if targetConn, err := net.DialTimeout(lk.ConnType, lk.Host, lk.Option.Timeout); err != nil {
@@ -289,11 +475,10 @@ func (s *TRPClient) handleChan(src net.Conn) {
 		if lk.ProtoVersion == "V1" || lk.ProtoVersion == "V2" {
 			var addr = targetConn.RemoteAddr()
 			if lk.RemoteAddr != "" {
-				s := strings.Split(lk.RemoteAddr, ":")[1]
-				port, _ := strconv.Atoi(s)
-				addr = &net.TCPAddr{
-					IP:   net.ParseIP(strings.Split(lk.RemoteAddr, ":")[0]),
-					Port: port,
+				if parsed, parseErr := net.ResolveTCPAddr("tcp", lk.RemoteAddr); parseErr == nil {
+					addr = parsed
+				} else {
+					s.logWarn("invalid remote address %q for PROXY header: %v", lk.RemoteAddr, parseErr)
 				}
 			}
 
@@ -326,11 +511,11 @@ func (s *TRPClient) handleChan(src net.Conn) {
 			}
 		}
 
-		conn.CopyWaitGroup(src, targetConn, lk.Crypt, lk.Compress, nil, nil, false, nil, nil, nil)
+		conn.CopyWaitGroup(src, targetConn, lk.Crypt, lk.Compress, nil, nil, false, nil, nil, nil, lk.TLSFingerprint)
 	}
 }
 
-func (s *TRPClient) handleUdp(serverConn net.Conn) {
+func (s *TRPClient) handleUdp(serverConn io.ReadWriteCloser) {
 	// bind a local udp port
 	local, err := net.ListenUDP("udp", nil)
 	defer serverConn.Close()
@@ -393,12 +578,13 @@ func (s *TRPClient) handleUdp(serverConn net.Conn) {
 
 // Whether the monitor channel is closed
 func (s *TRPClient) ping() {
-	s.ticker = time.NewTicker(time.Second * 5)
-	defer s.ticker.Stop()
+	ticker := time.NewTicker(time.Second * 5)
+	defer ticker.Stop()
 	for {
 		select {
-		case <-s.ticker.C:
-			if s.tunnel != nil && s.tunnel.IsClose() {
+		case <-ticker.C:
+			tunnel := s.currentTunnel()
+			if tunnel != nil && tunnel.IsClose() {
 				s.Close()
 				return
 			}
@@ -409,24 +595,16 @@ func (s *TRPClient) ping() {
 }
 
 func (s *TRPClient) Close() {
-	s.once.Do(s.closing)
+	signal, tunnel, detached := s.detach(nil, nil)
+	if !detached {
+		return
+	}
+	s.closeDetached(signal, tunnel)
 }
 
 func (s *TRPClient) closing() {
-	CloseClient = true
-	NowStatus = 0
-	select {
-	case <-s.closeCh:
-	default:
-		close(s.closeCh)
-	}
-	if s.tunnel != nil {
-		_ = s.tunnel.Close()
-	}
-	if s.signal != nil {
-		_ = s.signal.Close()
-	}
-	if s.ticker != nil {
-		s.ticker.Stop()
-	}
+	// Kept for source compatibility with older internal callers. Close now
+	// detaches resources before entering the once-guarded cleanup path.
+	signal, tunnel, _ := s.detach(nil, nil)
+	s.closeDetached(signal, tunnel)
 }

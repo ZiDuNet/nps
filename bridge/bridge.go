@@ -2,13 +2,11 @@ package bridge
 
 import (
 	"crypto/tls"
-	_ "crypto/tls"
 	"ehang.io/nps/lib/nps_mux"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,6 +35,16 @@ type Client struct {
 	retryTime atomic.Int32 // it will be add 1 when ping not ok until to 3 will close the client
 }
 
+// clientSessionSnapshot identifies the exact resources observed by the ping
+// loop. A client entry can be updated in place when a connection reconnects,
+// so checking only the client id is not sufficient before deleting it.
+type clientSessionSnapshot struct {
+	client *Client
+	signal *conn.Conn
+	tunnel *nps_mux.Mux
+	file   *nps_mux.Mux
+}
+
 func NewClient(t, f *nps_mux.Mux, s *conn.Conn, vs string) *Client {
 	return &Client{
 		signal:  s,
@@ -46,9 +54,44 @@ func NewClient(t, f *nps_mux.Mux, s *conn.Conn, vs string) *Client {
 	}
 }
 
+func bridgeClient(value interface{}) (*Client, bool) {
+	client, ok := value.(*Client)
+	return client, ok && client != nil
+}
+
+func sanitizePublicClient(client *file.Client) error {
+	if client == nil {
+		return errors.New("客户端记录无效")
+	}
+	// Public onboarding may provide credentials and display fields, but the
+	// server owns identity and ownership fields.
+	client.Lock()
+	client.Id = 0
+	client.UserId = 0
+	client.NoStore = true
+	client.NoDisplay = false
+	client.Status = true
+	client.Unlock()
+	return nil
+}
+
+// VersionSnapshot returns the negotiated client version without racing the
+// handshake path that updates it during reconnects.
+func (c *Client) VersionSnapshot() string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	version := c.Version
+	c.mu.Unlock()
+	return version
+}
+
 type Bridge struct {
 	TunnelPort     int //通信隧道端口
 	Client         sync.Map
+	clientsMu      sync.Mutex
+	configMu       sync.Mutex
 	Register       sync.Map
 	tunnelType     string //bridge type kcp or tcp
 	OpenTask       chan *file.Tunnel
@@ -56,11 +99,27 @@ type Bridge struct {
 	CloseClient    chan int
 	SecretChan     chan *conn.Secret
 	ipVerify       bool
-	runList        sync.Map //map[int]interface{}
+	runList        *sync.Map //map[int]interface{}
 	disconnectTime int
 }
 
-func NewTunnel(tunnelPort int, tunnelType string, ipVerify bool, runList sync.Map, disconnectTime int) *Bridge {
+func clientTunnelQuotaError(client *file.Client) error {
+	if client == nil {
+		return errors.New("客户端记录无效")
+	}
+	client.RLock()
+	maxTunnelNum, userID := client.MaxTunnelNum, client.UserId
+	client.RUnlock()
+	if maxTunnelNum > 0 && client.GetTunnelNum() >= maxTunnelNum {
+		return errors.New("客户端隧道数量已达到限制")
+	}
+	if userID > 0 && file.GetDb().IsUserTunnelLimitReached(userID) {
+		return errors.New("用户隧道数量已达到限制")
+	}
+	return nil
+}
+
+func NewTunnel(tunnelPort int, tunnelType string, ipVerify bool, runList *sync.Map, disconnectTime int) *Bridge {
 	return &Bridge{
 		TunnelPort:     tunnelPort,
 		tunnelType:     tunnelType,
@@ -75,45 +134,59 @@ func NewTunnel(tunnelPort int, tunnelType string, ipVerify bool, runList sync.Ma
 }
 
 func (s *Bridge) StartTunnel() error {
-	go s.ping()
 	if s.tunnelType == "kcp" {
 		logs.Info("server start, the bridge type is %s, the bridge port is %d", s.tunnelType, s.TunnelPort)
-		return conn.NewKcpListenerAndProcess(beego.AppConfig.String("bridge_ip")+":"+beego.AppConfig.String("bridge_port"), func(c net.Conn) {
-			s.cliProcess(conn.NewConn(c))
-		})
-	} else {
-
+		kcpListener, err := conn.NewKcpListener(net.JoinHostPort(strings.TrimSpace(beego.AppConfig.String("bridge_ip")), beego.AppConfig.String("bridge_port")))
+		if err != nil {
+			return err
+		}
 		go func() {
-			listener, err := connection.GetBridgeListener(s.tunnelType)
-			if err != nil {
-				logs.Error(err)
-				os.Exit(0)
-				return
-			}
-			conn.Accept(listener, func(c net.Conn) {
-				s.cliProcess(conn.NewConn(c))
-			})
-		}()
-
-		// tls
-		if ServerTlsEnable {
-			go func() {
-				// 监听TLS 端口
-				tlsBridgePort := beego.AppConfig.DefaultInt("tls_bridge_port", 8025)
-
-				logs.Info("tls server start, the bridge type is %s, the tls bridge port is %d", "tcp", tlsBridgePort)
-				tlsListener, tlsErr := net.ListenTCP("tcp", &net.TCPAddr{net.ParseIP(beego.AppConfig.String("bridge_ip")), tlsBridgePort, ""})
-				if tlsErr != nil {
-					logs.Error(tlsErr)
-					os.Exit(0)
+			defer kcpListener.Close()
+			for {
+				c, acceptErr := kcpListener.AcceptKCP()
+				if acceptErr != nil {
+					if c != nil {
+						_ = c.Close()
+					}
+					logs.Warn(acceptErr)
 					return
 				}
-				conn.Accept(tlsListener, func(c net.Conn) {
-					s.cliProcess(conn.NewConn(tls.Server(c, &tls.Config{Certificates: []tls.Certificate{crypt.GetCert()}})))
-				})
-			}()
-		}
+				if c == nil {
+					logs.Warn("kcp listener returned a nil connection")
+					return
+				}
+				conn.SetUdpSession(c)
+				go s.cliProcess(conn.NewConn(c))
+			}
+		}()
+		go s.ping()
+		return nil
 	}
+
+	listener, err := connection.GetBridgeListener(s.tunnelType)
+	if err != nil {
+		return err
+	}
+
+	// Bind the optional TLS listener before returning so startup failures are
+	// reported to the caller instead of terminating the whole process from a
+	// background goroutine.
+	if ServerTlsEnable {
+		tlsBridgePort := beego.AppConfig.DefaultInt("tls_bridge_port", 8025)
+		logs.Info("tls server start, the bridge type is %s, the tls bridge port is %d", "tcp", tlsBridgePort)
+		tlsListener, tlsErr := net.Listen("tcp", net.JoinHostPort(strings.TrimSpace(beego.AppConfig.String("bridge_ip")), strconv.Itoa(tlsBridgePort)))
+		if tlsErr != nil {
+			_ = listener.Close()
+			return tlsErr
+		}
+		go conn.Accept(tlsListener, func(c net.Conn) {
+			s.cliProcess(conn.NewConn(tls.Server(c, &tls.Config{Certificates: []tls.Certificate{crypt.GetCert()}, MinVersion: tls.VersionTLS12})))
+		})
+	}
+	go s.ping()
+	go conn.Accept(listener, func(c net.Conn) {
+		s.cliProcess(conn.NewConn(c))
+	})
 	return nil
 }
 
@@ -145,69 +218,107 @@ func (s *Bridge) requestClientLocalAddr(id int, c *conn.Conn) {
 	}
 }
 
-// get health information form client
-func (s *Bridge) GetHealthFromClient(id int, c *conn.Conn) {
-	for {
-		if info, status, err := c.GetHealthInfo(); err != nil {
-			break
-		} else if !status { // health check failed, remove target from TargetArr
-			file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
-				v := value.(*file.Tunnel)
-				if v.Client.Id == id && v.Mode == "tcp" && strings.Contains(v.Target.TargetStr, info) {
-					v.Lock()
-					if v.Target.TargetArr == nil || (len(v.Target.TargetArr) == 0 && len(v.HealthRemoveArr) == 0) {
-						v.Target.TargetArr = common.TrimArr(strings.Split(v.Target.TargetStr, "\n"))
-					}
-					v.Target.TargetArr = common.RemoveArrVal(v.Target.TargetArr, info)
-					if v.HealthRemoveArr == nil {
-						v.HealthRemoveArr = make([]string, 0)
-					}
-					v.HealthRemoveArr = append(v.HealthRemoveArr, info)
-					v.Unlock()
-				}
-				return true
-			})
-			file.GetDb().JsonDb.Hosts.Range(func(key, value interface{}) bool {
-				v := value.(*file.Host)
-				if v.Client.Id == id && strings.Contains(v.Target.TargetStr, info) {
-					v.Lock()
-					if v.Target.TargetArr == nil || (len(v.Target.TargetArr) == 0 && len(v.HealthRemoveArr) == 0) {
-						v.Target.TargetArr = common.TrimArr(strings.Split(v.Target.TargetStr, "\n"))
-					}
-					v.Target.TargetArr = common.RemoveArrVal(v.Target.TargetArr, info)
-					if v.HealthRemoveArr == nil {
-						v.HealthRemoveArr = make([]string, 0)
-					}
-					v.HealthRemoveArr = append(v.HealthRemoveArr, info)
-					v.Unlock()
-				}
-				return true
-			})
-		} else { // health check passed, restore target to TargetArr
-			file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
-				v := value.(*file.Tunnel)
-				if v.Client.Id == id && v.Mode == "tcp" && common.IsArrContains(v.HealthRemoveArr, info) && !common.IsArrContains(v.Target.TargetArr, info) {
-					v.Lock()
-					v.Target.TargetArr = append(v.Target.TargetArr, info)
-					v.HealthRemoveArr = common.RemoveArrVal(v.HealthRemoveArr, info)
-					v.Unlock()
-				}
-				return true
-			})
-
-			file.GetDb().JsonDb.Hosts.Range(func(key, value interface{}) bool {
-				v := value.(*file.Host)
-				if v.Client.Id == id && common.IsArrContains(v.HealthRemoveArr, info) && !common.IsArrContains(v.Target.TargetArr, info) {
-					v.Lock()
-					v.Target.TargetArr = append(v.Target.TargetArr, info)
-					v.HealthRemoveArr = common.RemoveArrVal(v.HealthRemoveArr, info)
-					v.Unlock()
-				}
-				return true
-			})
-		}
+func matchesHealthClient(client *file.Client, id int) bool {
+	if client == nil {
+		return false
 	}
-	s.DelClient(id)
+	client.RLock()
+	clientID := client.Id
+	client.RUnlock()
+	return clientID == id
+}
+
+func applyHealthResult(target *file.Target, health *file.Health, info string, healthy bool) {
+	if target == nil || health == nil || !strings.Contains(target.TargetStr, info) {
+		return
+	}
+	if !healthy {
+		if target.TargetArr == nil || (len(target.TargetArr) == 0 && len(health.HealthRemoveArr) == 0) {
+			target.TargetArr = common.TrimArr(strings.Split(target.TargetStr, "\n"))
+		}
+		target.TargetArr = common.RemoveArrVal(target.TargetArr, info)
+		if !common.IsArrContains(health.HealthRemoveArr, info) {
+			health.HealthRemoveArr = append(health.HealthRemoveArr, info)
+		}
+		return
+	}
+	if common.IsArrContains(health.HealthRemoveArr, info) && !common.IsArrContains(target.TargetArr, info) {
+		target.TargetArr = append(target.TargetArr, info)
+	}
+	health.HealthRemoveArr = common.RemoveArrVal(health.HealthRemoveArr, info)
+}
+
+func updateTunnelHealth(tunnel *file.Tunnel, clientID int, info string, healthy bool) {
+	if tunnel == nil {
+		return
+	}
+	tunnel.RLock()
+	client, target, mode := tunnel.Client, tunnel.Target, tunnel.Mode
+	tunnel.RUnlock()
+	if mode != "tcp" || target == nil || !matchesHealthClient(client, clientID) {
+		return
+	}
+	tunnel.Lock()
+	defer tunnel.Unlock()
+	if tunnel.Client != client || tunnel.Target != target || tunnel.Mode != "tcp" {
+		return
+	}
+	target.Lock()
+	defer target.Unlock()
+	applyHealthResult(target, &tunnel.Health, info, healthy)
+}
+
+func updateHostHealth(host *file.Host, clientID int, info string, healthy bool) {
+	if host == nil {
+		return
+	}
+	host.RLock()
+	client, target := host.Client, host.Target
+	host.RUnlock()
+	if target == nil || !matchesHealthClient(client, clientID) {
+		return
+	}
+	host.Lock()
+	defer host.Unlock()
+	if host.Client != client || host.Target != target {
+		return
+	}
+	target.Lock()
+	defer target.Unlock()
+	applyHealthResult(target, &host.Health, info, healthy)
+}
+
+// GetHealthFromClient updates the target pool reported by one client. It
+// snapshots the object graph before mutation so malformed runtime data and
+// simultaneous console edits cannot panic this control path.
+func (s *Bridge) GetHealthFromClient(id int, c *conn.Conn) {
+	if c == nil || c.Conn == nil {
+		return
+	}
+	for {
+		info, healthy, err := c.GetHealthInfo()
+		if err != nil {
+			break
+		}
+		file.GetDb().JsonDb.Tasks.Range(func(_, value interface{}) bool {
+			tunnel, ok := value.(*file.Tunnel)
+			if ok {
+				updateTunnelHealth(tunnel, id, info, healthy)
+			}
+			return true
+		})
+		file.GetDb().JsonDb.Hosts.Range(func(_, value interface{}) bool {
+			host, ok := value.(*file.Host)
+			if ok {
+				updateHostHealth(host, id, info, healthy)
+			}
+			return true
+		})
+	}
+	// A reconnect can replace the main connection while this goroutine is
+	// blocked in GetHealthInfo. Do not let the old reader tear down the newer
+	// session when its socket eventually reports EOF.
+	s.delClientIfCurrentSignal(id, c)
 }
 
 // 验证失败，返回错误验证flag，并且关闭连接
@@ -272,28 +383,105 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 }
 
 func (s *Bridge) DelClient(id int) {
-	if v, ok := s.Client.Load(id); ok {
-		cl := v.(*Client)
-		cl.mu.Lock()
-		if cl.signal != nil {
-			cl.signal.Close()
-		}
-		if cl.tunnel != nil {
-			cl.tunnel.Close()
-		}
-		if cl.file != nil {
-			cl.file.Close()
-		}
+	s.delClient(id, nil)
+}
+
+func (s *Bridge) delClientIfCurrentSignal(id int, signal *conn.Conn) {
+	s.delClient(id, signal)
+}
+
+// delClientIfSnapshot removes a client only when the map entry and all
+// session resources still match the snapshot taken by the caller. This keeps
+// a stale ping/health goroutine from deleting a freshly reconnected session.
+func (s *Bridge) delClientIfSnapshot(id int, snapshot clientSessionSnapshot) {
+	s.clientsMu.Lock()
+	v, ok := s.Client.Load(id)
+	if !ok {
+		s.clientsMu.Unlock()
+		return
+	}
+	cl, ok := v.(*Client)
+	if !ok || cl != snapshot.client {
+		s.clientsMu.Unlock()
+		return
+	}
+	cl.mu.Lock()
+	if cl.signal != snapshot.signal || cl.tunnel != snapshot.tunnel || cl.file != snapshot.file {
 		cl.mu.Unlock()
-		s.Client.Delete(id)
-		if file.GetDb().IsPubClient(id) {
-			return
+		s.clientsMu.Unlock()
+		return
+	}
+	s.Client.Delete(id)
+	signal, tunnel, fileMux := cl.signal, cl.tunnel, cl.file
+	cl.signal, cl.tunnel, cl.file = nil, nil, nil
+	cl.mu.Unlock()
+	s.clientsMu.Unlock()
+
+	if signal != nil {
+		_ = signal.Close()
+	}
+	if tunnel != nil {
+		_ = tunnel.Close()
+	}
+	if fileMux != nil {
+		_ = fileMux.Close()
+	}
+	if file.GetDb().IsPubClient(id) {
+		return
+	}
+	if c, err := file.GetDb().GetClient(id); err == nil {
+		select {
+		case s.CloseClient <- c.Id:
+		default:
 		}
-		if c, err := file.GetDb().GetClient(id); err == nil {
-			select {
-			case s.CloseClient <- c.Id:
-			default:
-			}
+	}
+}
+
+// delClient serializes a main-connection replacement with cleanup. When
+// expectedSignal is set, the delete applies only if that signal is still the
+// active one for the client.
+func (s *Bridge) delClient(id int, expectedSignal *conn.Conn) {
+	s.clientsMu.Lock()
+	v, ok := s.Client.Load(id)
+	if !ok {
+		s.clientsMu.Unlock()
+		return
+	}
+	cl, valid := bridgeClient(v)
+	if !valid {
+		// A malformed runtime entry must not crash the cleanup goroutine.
+		s.Client.Delete(id)
+		s.clientsMu.Unlock()
+		return
+	}
+	cl.mu.Lock()
+	if expectedSignal != nil && cl.signal != expectedSignal {
+		cl.mu.Unlock()
+		s.clientsMu.Unlock()
+		return
+	}
+	s.Client.Delete(id)
+	signal, tunnel, fileMux := cl.signal, cl.tunnel, cl.file
+	cl.signal, cl.tunnel, cl.file = nil, nil, nil
+	cl.mu.Unlock()
+	s.clientsMu.Unlock()
+
+	if signal != nil {
+		_ = signal.Close()
+	}
+	if tunnel != nil {
+		_ = tunnel.Close()
+	}
+	if fileMux != nil {
+		_ = fileMux.Close()
+	}
+	if file.GetDb().IsPubClient(id) {
+		return
+	}
+	if c, err := file.GetDb().GetClient(id); err == nil {
+		select {
+		case s.CloseClient <- c.Id:
+		default:
 		}
 	}
 }
@@ -313,34 +501,63 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 			_ = tcpConn.SetKeepAlive(true)
 			_ = tcpConn.SetKeepAlivePeriod(5 * time.Second)
 		}
-		//the vKey connect by another ,close the client of before
-		if v, ok := s.Client.LoadOrStore(id, NewClient(nil, nil, c, vs)); ok {
-			cl := v.(*Client)
-			cl.mu.Lock()
-			if cl.signal != nil {
-				cl.signal.WriteClose()
+		// The same vKey may reconnect while the old health reader is still
+		// blocked. Serialize the replacement with client cleanup, then close the
+		// old socket so that reader can exit without retaining resources.
+		var oldSignal *conn.Conn
+		s.clientsMu.Lock()
+		if v, ok := s.Client.Load(id); ok {
+			if cl, valid := bridgeClient(v); valid {
+				cl.mu.Lock()
+				oldSignal = cl.signal
+				cl.signal = c
+				cl.Version = vs
+				cl.mu.Unlock()
+			} else {
+				s.Client.Delete(id)
+				s.Client.Store(id, NewClient(nil, nil, c, vs))
 			}
-			cl.signal = c
-			cl.Version = vs
-			cl.mu.Unlock()
+		} else {
+			s.Client.Store(id, NewClient(nil, nil, c, vs))
+		}
+		s.clientsMu.Unlock()
+		if oldSignal != nil && oldSignal != c {
+			_ = oldSignal.Close()
 		}
 		s.requestClientLocalAddr(id, c)
 		go s.GetHealthFromClient(id, c)
 		logs.Info("clientId %d connection succeeded, address:%s ", id, c.Conn.RemoteAddr())
 	case common.WORK_CHAN:
 		muxConn := nps_mux.NewMux(c.Conn, s.tunnelType, s.disconnectTime)
-		if v, ok := s.Client.LoadOrStore(id, NewClient(muxConn, nil, nil, vs)); ok {
-			cl := v.(*Client)
-			cl.mu.Lock()
-			if cl.tunnel != nil {
-				cl.tunnel.Close()
+		var oldTunnel *nps_mux.Mux
+		s.clientsMu.Lock()
+		if v, ok := s.Client.Load(id); ok {
+			if cl, valid := bridgeClient(v); valid {
+				cl.mu.Lock()
+				oldTunnel = cl.tunnel
+				cl.tunnel = muxConn
+				cl.mu.Unlock()
+			} else {
+				s.Client.Delete(id)
+				s.Client.Store(id, NewClient(muxConn, nil, nil, vs))
 			}
-			cl.tunnel = muxConn
-			cl.mu.Unlock()
+		} else {
+			s.Client.Store(id, NewClient(muxConn, nil, nil, vs))
+		}
+		s.clientsMu.Unlock()
+		if oldTunnel != nil {
+			_ = oldTunnel.Close()
 		}
 	case common.WORK_CONFIG:
 		client, err := file.GetDb().GetClient(id)
-		if err != nil || (!isPub && !client.ConfigConnAllow) {
+		if err != nil || client == nil {
+			c.Close()
+			return
+		}
+		client.RLock()
+		configConnAllow := client.ConfigConnAllow
+		client.RUnlock()
+		if !isPub && !configConnAllow {
 			c.Close()
 			return
 		}
@@ -357,14 +574,24 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 		}
 	case common.WORK_FILE:
 		muxConn := nps_mux.NewMux(c.Conn, s.tunnelType, s.disconnectTime)
-		if v, ok := s.Client.LoadOrStore(id, NewClient(nil, muxConn, nil, vs)); ok {
-			cl := v.(*Client)
-			cl.mu.Lock()
-			if cl.file != nil {
-				cl.file.Close()
+		var oldFile *nps_mux.Mux
+		s.clientsMu.Lock()
+		if v, ok := s.Client.Load(id); ok {
+			if cl, valid := bridgeClient(v); valid {
+				cl.mu.Lock()
+				oldFile = cl.file
+				cl.file = muxConn
+				cl.mu.Unlock()
+			} else {
+				s.Client.Delete(id)
+				s.Client.Store(id, NewClient(nil, muxConn, nil, vs))
 			}
-			cl.file = muxConn
-			cl.mu.Unlock()
+		} else {
+			s.Client.Store(id, NewClient(nil, muxConn, nil, vs))
+		}
+		s.clientsMu.Unlock()
+		if oldFile != nil {
+			_ = oldFile.Close()
 		}
 	case common.WORK_P2P:
 		//read md5 secret
@@ -375,11 +602,26 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 			logs.Error("p2p error, failed to match the key successfully")
 			c.Close()
 		} else {
-			if v, ok := s.Client.Load(t.Client.Id); !ok {
+			t.RLock()
+			taskStatus, taskMode, taskClient := t.Status, t.Mode, t.Client
+			t.RUnlock()
+			if !taskStatus || taskMode != "p2p" || taskClient == nil {
+				logs.Error("p2p error, task is inactive or malformed")
+				c.Close()
+				return
+			}
+			taskClient.RLock()
+			clientID := taskClient.Id
+			taskClient.RUnlock()
+			if v, ok := s.Client.Load(clientID); !ok {
 				c.Close()
 				return
 			} else {
-				cl := v.(*Client)
+				cl, valid := bridgeClient(v)
+				if !valid {
+					_ = c.Close()
+					return
+				}
 				cl.mu.Lock()
 				sig := cl.signal
 				cl.mu.Unlock()
@@ -388,11 +630,22 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 					c.Close()
 					return
 				}
-				sig.Write([]byte(common.NEW_UDP_CONN))
+				if _, err := sig.Write([]byte(common.NEW_UDP_CONN)); err != nil {
+					_ = c.Close()
+					return
+				}
 				svrAddr := beego.AppConfig.String("p2p_ip") + ":" + beego.AppConfig.String("p2p_port")
-				sig.WriteLenContent([]byte(svrAddr))
-				sig.WriteLenContent(b)
-				c.WriteLenContent([]byte(svrAddr))
+				if err := sig.WriteLenContent([]byte(svrAddr)); err != nil {
+					_ = c.Close()
+					return
+				}
+				if err := sig.WriteLenContent(b); err != nil {
+					_ = c.Close()
+					return
+				}
+				if err := c.WriteLenContent([]byte(svrAddr)); err != nil {
+					_ = c.Close()
+				}
 			}
 		}
 		return
@@ -410,8 +663,14 @@ func (s *Bridge) register(c *conn.Conn) {
 }
 
 func (s *Bridge) SendLinkInfo(clientId int, link *conn.Link, t *file.Tunnel) (target net.Conn, err error) {
+	if s == nil || link == nil {
+		return nil, errors.New("invalid link")
+	}
 	//if the proxy type is local
 	if link.LocalProxy {
+		if !beego.AppConfig.DefaultBool("allow_local_proxy", false) {
+			return nil, errors.New("local proxy is disabled")
+		}
 		target, err = net.Dial("tcp", link.Host)
 		return
 	}
@@ -419,15 +678,19 @@ func (s *Bridge) SendLinkInfo(clientId int, link *conn.Link, t *file.Tunnel) (ta
 		//If ip is restricted to do ip verification
 		if s.ipVerify {
 			ip := common.GetIpByAddr(link.RemoteAddr)
-			if v, ok := s.Register.Load(ip); !ok {
+			registered, ok := s.Register.Load(ip)
+			if !ok {
 				return nil, errors.New(fmt.Sprintf("The ip %s is not in the validation list", ip))
-			} else {
-				if !v.(time.Time).After(time.Now()) {
-					return nil, errors.New(fmt.Sprintf("The validity of the ip %s has expired", ip))
-				}
+			}
+			expiresAt, valid := registered.(time.Time)
+			if !valid || !expiresAt.After(time.Now()) {
+				return nil, errors.New(fmt.Sprintf("The validity of the ip %s has expired", ip))
 			}
 		}
-		cl := v.(*Client)
+		cl, valid := bridgeClient(v)
+		if !valid {
+			return nil, errors.New(fmt.Sprintf("the client %d record is invalid", clientId))
+		}
 		cl.mu.Lock()
 		var tunnel *nps_mux.Mux
 		if t != nil && t.Mode == "file" {
@@ -451,6 +714,10 @@ func (s *Bridge) SendLinkInfo(clientId int, link *conn.Link, t *file.Tunnel) (ta
 		}
 		if _, err = conn.NewConn(target).SendInfo(link, ""); err != nil {
 			logs.Info("new connect error ,the target %s refuse to connect", link.Host)
+			// NewConn has already reserved a mux stream. If the link metadata
+			// cannot be sent, close the stream so it is removed from the mux map
+			// and the remote side is notified instead of leaking indefinitely.
+			_ = target.Close()
 			return
 		}
 	} else {
@@ -465,34 +732,62 @@ func (s *Bridge) ping() {
 	for {
 		select {
 		case <-ticker.C:
-			arr := make([]int, 0)
+			arr := make([]struct {
+				id       int
+				snapshot clientSessionSnapshot
+			}, 0)
 			s.Client.Range(func(key, value interface{}) bool {
-				v := value.(*Client)
+				id, ok := key.(int)
+				if !ok {
+					return true
+				}
+				v, ok := value.(*Client)
+				if !ok || v == nil {
+					return true
+				}
 				v.mu.Lock()
-				tunnel := v.tunnel
-				signal := v.signal
-				isClose := v.tunnel != nil && v.tunnel.IsClose()
+				snapshot := clientSessionSnapshot{
+					client: v,
+					signal: v.signal,
+					tunnel: v.tunnel,
+					file:   v.file,
+				}
+				isClose := snapshot.tunnel != nil && snapshot.tunnel.IsClose()
+				healthy := snapshot.tunnel != nil && snapshot.signal != nil && !isClose
 				v.mu.Unlock()
-				if tunnel == nil || signal == nil {
+				if healthy {
+					// A successful health cycle clears prior transient misses;
+					// otherwise three old misses can evict a live reconnect.
+					v.retryTime.Store(0)
+					return true
+				}
+				if snapshot.tunnel == nil || snapshot.signal == nil {
 					v.retryTime.Add(1)
 					if v.retryTime.Load() >= 3 {
-						arr = append(arr, key.(int))
+						arr = append(arr, struct {
+							id       int
+							snapshot clientSessionSnapshot
+						}{id: id, snapshot: snapshot})
 					}
 					return true
 				}
 				if isClose {
-					arr = append(arr, key.(int))
+					arr = append(arr, struct {
+						id       int
+						snapshot clientSessionSnapshot
+					}{id: id, snapshot: snapshot})
 				}
 				return true
 			})
 			for _, v := range arr {
-				logs.Info("the client %d closed", v)
-				s.DelClient(v)
+				logs.Info("the client %d closed", v.id)
+				s.delClientIfSnapshot(v.id, v.snapshot)
 			}
 			// 清理过期的 Register 条目
 			now := time.Now()
 			s.Register.Range(func(key, value interface{}) bool {
-				if value.(time.Time).Before(now) {
+				expiresAt, valid := value.(time.Time)
+				if !valid || expiresAt.Before(now) {
 					s.Register.Delete(key)
 				}
 				return true
@@ -521,17 +816,40 @@ loop:
 					break loop
 				}
 				file.GetDb().JsonDb.Hosts.Range(func(key, value interface{}) bool {
-					v := value.(*file.Host)
-					if v.Client.Id == id {
-						str += v.Remark + common.CONN_DATA_SEQ
+					v, ok := value.(*file.Host)
+					if !ok || v == nil {
+						return true
+					}
+					v.RLock()
+					client, remark := v.Client, v.Remark
+					v.RUnlock()
+					if client != nil {
+						client.RLock()
+						clientID := client.Id
+						client.RUnlock()
+						if clientID == id {
+							str += remark + common.CONN_DATA_SEQ
+						}
 					}
 					return true
 				})
 				file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
-					v := value.(*file.Tunnel)
-					//if _, ok := s.runList[v.Id]; ok && v.Client.Id == id {
-					if _, ok := s.runList.Load(v.Id); ok && v.Client.Id == id {
-						str += v.Remark + common.CONN_DATA_SEQ
+					v, ok := value.(*file.Tunnel)
+					if !ok || v == nil {
+						return true
+					}
+					v.RLock()
+					taskID, client, remark := v.Id, v.Client, v.Remark
+					v.RUnlock()
+					if client != nil {
+						client.RLock()
+						clientID := client.Id
+						client.RUnlock()
+						if s.runList != nil {
+							if _, running := s.runList.Load(taskID); running && clientID == id {
+								str += remark + common.CONN_DATA_SEQ
+							}
+						}
 					}
 					return true
 				})
@@ -539,17 +857,31 @@ loop:
 				binary.Write(c, binary.LittleEndian, []byte(str))
 			}
 		case common.NEW_CONF:
+			if !isPub {
+				// An established client may exchange its own hosts/tunnels, but
+				// it must never submit a replacement Client record. Public-key
+				// onboarding is the only flow that creates a client here.
+				c.WriteAddFail()
+				break loop
+			}
 			var err error
-			if client, err = c.GetConfigInfo(); err != nil {
+			var candidate *file.Client
+			if candidate, err = c.GetConfigInfo(); err != nil {
 				fail = true
 				c.WriteAddFail()
 				break loop
 			} else {
-				if err = file.GetDb().NewClient(client); err != nil {
+				if err = sanitizePublicClient(candidate); err != nil {
 					fail = true
 					c.WriteAddFail()
 					break loop
 				}
+				if err = file.GetDb().NewClient(candidate); err != nil {
+					fail = true
+					c.WriteAddFail()
+					break loop
+				}
+				client = candidate
 				c.WriteAddOk()
 				c.Write([]byte(client.VerifyKey))
 				s.Client.Store(client.Id, NewClient(nil, nil, nil, ""))
@@ -561,28 +893,55 @@ loop:
 				c.WriteAddFail()
 				break loop
 			}
+			if client == nil {
+				fail = true
+				c.WriteAddFail()
+				break loop
+			}
+			if h.Target != nil && !beego.AppConfig.DefaultBool("allow_local_proxy", false) {
+				h.Target.Lock()
+				h.Target.LocalProxy = false
+				h.Target.Unlock()
+			}
 			h.Client = client
 			if h.Location == "" {
 				h.Location = "/"
 			}
-			if !client.HasHost(h) {
-				if file.GetDb().IsHostExist(h) {
+			s.configMu.Lock()
+			hasHost := client.HasHost(h)
+			if !hasHost {
+				if err := clientTunnelQuotaError(client); err != nil {
+					s.configMu.Unlock()
 					fail = true
 					c.WriteAddFail()
 					break loop
-				} else {
-					file.GetDb().NewHost(h)
-					c.WriteAddOk()
 				}
-			} else {
-				c.WriteAddOk()
+				if file.GetDb().IsHostExist(h) {
+					s.configMu.Unlock()
+					fail = true
+					c.WriteAddFail()
+					break loop
+				}
+				if err := file.GetDb().NewHost(h); err != nil {
+					s.configMu.Unlock()
+					fail = true
+					c.WriteAddFail()
+					break loop
+				}
 			}
+			s.configMu.Unlock()
+			c.WriteAddOk()
 		case common.NEW_TASK:
 			if t, err := c.GetTaskInfo(); err != nil {
 				fail = true
 				c.WriteAddFail()
 				break loop
 			} else {
+				if t.Target != nil && !beego.AppConfig.DefaultBool("allow_local_proxy", false) {
+					t.Target.Lock()
+					t.Target.LocalProxy = false
+					t.Target.Unlock()
+				}
 				ports := common.GetPorts(t.Ports)
 				targets := common.GetPorts(t.Target.TargetStr)
 				if len(ports) > 1 && (t.Mode == "tcp" || t.Mode == "udp") && (len(ports) != len(targets)) {
@@ -623,19 +982,41 @@ loop:
 					tl.LocalPath = t.LocalPath
 					tl.StripPre = t.StripPre
 					tl.MultiAccount = t.MultiAccount
-					if !client.HasTunnel(tl) {
-						if err := file.GetDb().NewTask(tl); err != nil {
-							logs.Notice("Add task error ", err.Error())
+					s.configMu.Lock()
+					hasTunnel := client.HasTunnel(tl)
+					if !hasTunnel {
+						if err := clientTunnelQuotaError(client); err != nil {
+							s.configMu.Unlock()
 							fail = true
 							c.WriteAddFail()
 							break loop
 						}
-						if b := tool.TestServerPort(tl.Port, tl.Mode); !b && t.Mode != "secret" && t.Mode != "p2p" {
+						if err := file.GetDb().NewTask(tl); err != nil {
+							logs.Notice("Add task error ", err.Error())
+							s.configMu.Unlock()
 							fail = true
 							c.WriteAddFail()
 							break loop
-						} else {
-							s.OpenTask <- tl
+						}
+					}
+					s.configMu.Unlock()
+					if !hasTunnel {
+						if b := tool.TestServerPort(tl.Port, tl.Mode); !b && t.Mode != "secret" && t.Mode != "p2p" {
+							// Remove the record if its listener cannot be reserved.
+							file.GetDb().DelTask(tl.Id)
+							fail = true
+							c.WriteAddFail()
+							break loop
+						}
+						select {
+						case s.OpenTask <- tl:
+						default:
+							// The command queue is bounded; avoid retaining a task that can
+							// never be started when the server is under load.
+							file.GetDb().DelTask(tl.Id)
+							fail = true
+							c.WriteAddFail()
+							break loop
 						}
 					}
 					c.WriteAddOk()

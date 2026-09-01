@@ -240,19 +240,28 @@
     })
 
     function getClientList() {
-        $("select[name='client_id']").empty();
+        var select = document.querySelector("select[name='client_id']");
+        if (!select) return;
+        select.textContent = '';
+        var selectedClientId = Number('{{.client_id}}');
+        if (!isFinite(selectedClientId) || Math.floor(selectedClientId) !== selectedClientId || selectedClientId < 0) {
+            selectedClientId = 0;
+        }
         $.ajax({
             type: "POST",
             url: "{{.web_base_url}}/client/list",
             data: {order: "asc", offset: 0, limit: 999},
             dataType: "json",
             success: function (data) {
-                if (data && data.rows.length > 0) {
+                if (data && Array.isArray(data.rows)) {
                     for (var i = 0; i < data.rows.length; i++) {
-                        var option = "<option value=\"" + data.rows[i].Id + "\"";
-                        option += ">" + data.rows[i].Id + '-' + data.rows[i].Remark + "</option>";
-                        $("select[name='client_id']").append(option);
-                        $("select[name='client_id']").find("option[value='{{.client_id}}']").attr("selected", true);
+                        var clientId = Number(data.rows[i].Id);
+                        if (!isFinite(clientId) || Math.floor(clientId) !== clientId || clientId <= 0) continue;
+                        var option = document.createElement('option');
+                        option.value = String(clientId);
+                        option.textContent = clientId + '-' + (data.rows[i].Remark || '');
+                        option.selected = clientId === selectedClientId;
+                        select.appendChild(option);
                     }
                 }
             }

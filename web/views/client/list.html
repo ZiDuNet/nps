@@ -56,7 +56,6 @@
         detailFormatter: function (index, row, element) {
             var english = npsIsEnglish();
             var flow = row.Flow || {};
-            var config = row.Cnf || {};
             var text = function (value, fallback) {
                 if (value == null || value === '') value = fallback == null ? '' : fallback;
                 return npsEscapeHtml(value);
@@ -93,15 +92,14 @@
                 + '<div class="client-detail__columns">'
                 + '<div class="client-detail__column">'
                 + section('key', english ? 'Authentication' : '认证信息',
-                    kv('<span langtag="word-webusername"></span>', text(row.WebUserName, '-'))
-                    + kv('<span langtag="word-webpassword"></span>', text(row.WebPassword, '-'))
-                    + kv('<span langtag="word-basicusername"></span>', text(config.U, '-'))
-                    + kv('<span langtag="word-basicpassword"></span>', text(config.P, '-')))
+                    kv('<span langtag="word-webusername"></span>', '-')
+                    + kv('<span langtag="word-webpassword"></span>', '-')
+                    + kv('<span langtag="word-basicusername"></span>', '-')
+                    + kv('<span langtag="word-basicpassword"></span>', '-'))
                 + '</div>'
                 + '<div class="client-detail__column">'
                 + section('shield-alt', english ? 'Access control' : '访问控制',
-                    kv('<span langtag="word-ipwhite"></span>', npsBooleanMarkup(!!row.IpWhite))
-                    + kv('<span langtag="word-ipwhitepass"></span>', text(row.IpWhitePass, '-')))
+                    kv('<span langtag="word-ipwhite"></span>', npsBooleanMarkup(!!row.IpWhite)))
                 + '<p class="client-detail__line"><span langtag="word-ipwhitelist"></span>: <span>' + listText(row.IpWhiteList) + '</span></p>'
                 + '<p class="client-detail__line"><span langtag="word-blackip"></span>: <span>' + listText(row.BlackIpList) + '</span></p>'
                 + '</div></div>'

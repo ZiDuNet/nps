@@ -67,3 +67,15 @@ func TestGetTitleContent(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestDealCommonParsesTLSVerificationOptions(t *testing.T) {
+	c := dealCommon(`server=127.0.0.1:8025
+tls_enable=true
+tls_ca_file=/etc/nps/ca.pem
+tls_server_name=bridge.example.com
+tls_fingerprint=sha256:AA
+tls_insecure_skip_verify=true`)
+	if c == nil || !c.TlsEnable || c.TLSCAFile != "/etc/nps/ca.pem" || c.TLSServerName != "bridge.example.com" || c.TLSFingerprint != "sha256:AA" || !c.TLSInsecureSkipVerify {
+		t.Fatalf("TLS options were not parsed: %#v", c)
+	}
+}

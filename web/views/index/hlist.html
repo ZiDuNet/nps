@@ -26,6 +26,11 @@
 </section>
 
 <script>
+    var hostListClientId = Number('{{.client_id}}');
+    if (!isFinite(hostListClientId) || Math.floor(hostListClientId) !== hostListClientId || hostListClientId < 0) {
+        hostListClientId = 0;
+    }
+
     /*bootstrap table*/
     $('#table').bootstrapTable({
         toolbar: "#toolbar",
@@ -38,7 +43,7 @@
                 "search": params.search,
                 "sort": params.sort,
                 "order": params.order,
-                "client_id": {{if .client_id}}{{.client_id}}{{else}}0{{end}}
+                "client_id": hostListClientId
             }
         },
         search: true,

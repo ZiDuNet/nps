@@ -33,6 +33,9 @@ func (s *GlobalController) Save() {
 		s.SetInfo("save global")
 		s.display()
 	} else {
+		if !s.RequirePost() {
+			return
+		}
 
 		t := &file.Glob{
 			BlackIpList: RemoveRepeatedElement(strings.Split(s.getEscapeString("globalBlackIpList"), "\r\n")),
@@ -40,6 +43,7 @@ func (s *GlobalController) Save() {
 
 		if err := file.GetDb().SaveGlobal(t); err != nil {
 			s.AjaxErr(err.Error())
+			return
 		}
 		s.AjaxOk("save success")
 	}

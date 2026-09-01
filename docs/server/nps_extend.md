@@ -54,7 +54,7 @@ web 后台 → 全局参数 页面（对应 `conf/global.json`）：
 
 | 字段 | 含义 |
 | --- | --- |
-| 全局 IP 黑名单 | 一行一个 IPv4，不支持范围匹配。命中后所有 TCP/HTTP/HTTPS/UDP 入口请求都会被直接关闭。用于防止扫描和暴力破解 |
+| 全局 IP 黑名单 | 一行一个精确 IP（支持 IPv4 或 IPv6），不支持 CIDR 或范围匹配。命中后所有 TCP/HTTP/HTTPS/UDP 入口请求都会被直接关闭。用于防止扫描和暴力破解 |
 | 服务地址 |用于在 web 上生成 [客户端快捷启动命令]、隧道访问 URL 时拼接的服务端地址。留空则使用浏览器当前访问地址 |
 
 
@@ -93,7 +93,7 @@ open_captcha=true
 如需关闭 http 代理，将 `http_proxy_port` 留空；如需关闭 https 代理，将 `https_proxy_port` 留空。
 
 ## 流量数据持久化
-服务端支持将流量数据持久化，默认关闭。在 `nps.conf` 中设置 `flow_store_interval`（单位分钟）即可开启。
+服务端默认每 1 分钟持久化一次流量数据。将 `flow_store_interval` 设为空或 `0` 可关闭定时持久化；单位为分钟。
 
 **注意：** nps 不会持久化通过公钥连接的客户端。
 
@@ -105,7 +105,7 @@ nps 服务端支持在 web 上显示和统计服务器相关信息，`system_inf
 将 `nps.conf` 中的 `web_port` 设置为空或删除。
 
 ## 服务端多用户登录
-将 `allow_user_login=true`，登录用户名 `user`，密码为对应客户端的验证密钥。登录后可进入客户端编辑修改 web 登录用户名密码。默认关闭。
+`allow_user_login` 默认开启。登录用户名为 `user`，密码为对应客户端的验证密钥；登录后可进入客户端编辑修改 Web 登录用户名和密码。
 
 ## 用户注册功能
 将 `allow_user_register=true` 后登录页会出现注册入口。

@@ -30,7 +30,7 @@ type Conn struct {
 	Rb   []byte
 }
 
-//new conn
+// new conn
 func NewConn(conn net.Conn) *Conn {
 	return &Conn{Conn: conn}
 }
@@ -57,7 +57,7 @@ func (s *Conn) readRequest(buf []byte) (n int, err error) {
 	}
 }
 
-//get host 、connection type、method...from connection
+// get host 、connection type、method...from connection
 func (s *Conn) GetHost() (method, address string, rb []byte, err error, r *http.Request) {
 	var b [32 * 1024]byte
 	var n int
@@ -106,17 +106,25 @@ func (s *Conn) GetShortLenContent() (b []byte, err error) {
 }
 
 func (s *Conn) GetShortContent(l int) (b []byte, err error) {
+	if l < 0 || l > common.PoolSize {
+		return nil, errors.New("内容长度超出限制")
+	}
 	buf := make([]byte, l)
-	return buf, binary.Read(s, binary.LittleEndian, &buf)
+	_, err = io.ReadFull(s, buf)
+	return buf, err
 }
 
-//读取指定长度内容
+// 读取指定长度内容
 func (s *Conn) ReadLen(cLen int, buf []byte) (int, error) {
 	if cLen > len(buf) || cLen <= 0 {
 		return 0, errors.New("长度错误" + strconv.Itoa(cLen))
 	}
-	if n, err := io.ReadFull(s, buf[:cLen]); err != nil || n != cLen {
+	n, err := io.ReadFull(s, buf[:cLen])
+	if err != nil {
 		return n, errors.New("Error reading specified length " + err.Error())
+	}
+	if n != cLen {
+		return n, io.ErrUnexpectedEOF
 	}
 	return cLen, nil
 }
@@ -135,13 +143,13 @@ func (s *Conn) WriteLenContent(buf []byte) (err error) {
 	return binary.Write(s.Conn, binary.LittleEndian, b)
 }
 
-//read flag
+// read flag
 func (s *Conn) ReadFlag() (string, error) {
 	buf := make([]byte, 4)
 	return string(buf), binary.Read(s, binary.LittleEndian, &buf)
 }
 
-//set alive
+// set alive
 func (s *Conn) SetAlive(tp string) {
 	switch s.Conn.(type) {
 	case *kcp.UDPSession:
@@ -156,7 +164,7 @@ func (s *Conn) SetAlive(tp string) {
 	}
 }
 
-//set read deadline
+// set read deadline
 func (s *Conn) SetReadDeadlineBySecond(t time.Duration) {
 	switch s.Conn.(type) {
 	case *kcp.UDPSession:
@@ -168,20 +176,23 @@ func (s *Conn) SetReadDeadlineBySecond(t time.Duration) {
 	}
 }
 
-//get link info from conn
+// get link info from conn
 func (s *Conn) GetLinkInfo() (lk *Link, err error) {
 	err = s.getInfo(&lk)
+	if err == nil && lk == nil {
+		err = errors.New("收到空的链接信息")
+	}
 	return
 }
 
-//send info for link
+// send info for link
 func (s *Conn) SendHealthInfo(info, status string) (int, error) {
 	raw := bytes.NewBuffer([]byte{})
 	common.BinaryWrite(raw, info, status)
 	return s.Write(raw.Bytes())
 }
 
-//get health info from conn
+// get health info from conn
 func (s *Conn) GetHealthInfo() (info string, status bool, err error) {
 	var l int
 	buf := common.BufPoolMax.Get().([]byte)
@@ -199,18 +210,31 @@ func (s *Conn) GetHealthInfo() (info string, status bool, err error) {
 	return "", false, errors.New("receive health info error")
 }
 
-//get task info
+// get task info
 func (s *Conn) GetHostInfo() (h *file.Host, err error) {
-	err = s.getInfo(&h)
+	if err = s.getInfo(&h); err != nil {
+		return nil, err
+	}
+	if h == nil {
+		return nil, errors.New("收到空的主机信息")
+	}
+	if h.Target == nil {
+		return nil, errors.New("主机目标为空")
+	}
 	h.Id = int(file.GetDb().JsonDb.GetHostId())
 	h.Flow = new(file.Flow)
 	h.NoStore = true
 	return
 }
 
-//get task info
+// get task info
 func (s *Conn) GetConfigInfo() (c *file.Client, err error) {
-	err = s.getInfo(&c)
+	if err = s.getInfo(&c); err != nil {
+		return nil, err
+	}
+	if c == nil {
+		return nil, errors.New("收到空的客户端信息")
+	}
 	c.NoStore = true
 	c.Status = true
 	if c.Flow == nil {
@@ -220,16 +244,24 @@ func (s *Conn) GetConfigInfo() (c *file.Client, err error) {
 	return
 }
 
-//get task info
+// get task info
 func (s *Conn) GetTaskInfo() (t *file.Tunnel, err error) {
-	err = s.getInfo(&t)
+	if err = s.getInfo(&t); err != nil {
+		return nil, err
+	}
+	if t == nil {
+		return nil, errors.New("收到空的隧道信息")
+	}
+	if t.Target == nil {
+		return nil, errors.New("隧道目标为空")
+	}
 	t.Id = int(file.GetDb().JsonDb.GetTaskId())
 	t.NoStore = true
 	t.Flow = new(file.Flow)
 	return
 }
 
-//send  info
+// send  info
 func (s *Conn) SendInfo(t interface{}, flag string) (int, error) {
 	/*
 		The task info is formed as follows:
@@ -255,7 +287,7 @@ func (s *Conn) SendInfo(t interface{}, flag string) (int, error) {
 	return s.Write(raw.Bytes())
 }
 
-//get task info
+// get task info
 func (s *Conn) getInfo(t interface{}) (err error) {
 	var l int
 	buf := common.BufPoolMax.Get().([]byte)
@@ -265,22 +297,22 @@ func (s *Conn) getInfo(t interface{}) (err error) {
 	} else if _, err = s.ReadLen(l, buf); err != nil {
 		return
 	} else {
-		json.Unmarshal(buf[:l], &t)
+		err = json.Unmarshal(buf[:l], t)
 	}
 	return
 }
 
-//close
+// close
 func (s *Conn) Close() error {
 	return s.Conn.Close()
 }
 
-//write
+// write
 func (s *Conn) Write(b []byte) (int, error) {
 	return s.Conn.Write(b)
 }
 
-//read
+// read
 func (s *Conn) Read(b []byte) (n int, err error) {
 	if s.Rb != nil {
 		//if the rb is not nil ,read rb first
@@ -294,27 +326,27 @@ func (s *Conn) Read(b []byte) (n int, err error) {
 	return s.Conn.Read(b)
 }
 
-//write sign flag
+// write sign flag
 func (s *Conn) WriteClose() (int, error) {
 	return s.Write([]byte(common.RES_CLOSE))
 }
 
-//write main
+// write main
 func (s *Conn) WriteMain() (int, error) {
 	return s.Write([]byte(common.WORK_MAIN))
 }
 
-//write main
+// write main
 func (s *Conn) WriteConfig() (int, error) {
 	return s.Write([]byte(common.WORK_CONFIG))
 }
 
-//write chan
+// write chan
 func (s *Conn) WriteChan() (int, error) {
 	return s.Write([]byte(common.WORK_CHAN))
 }
 
-//get task or host result of add
+// get task or host result of add
 func (s *Conn) GetAddStatus() (b bool) {
 	binary.Read(s.Conn, binary.LittleEndian, &b)
 	return
@@ -349,7 +381,7 @@ func (s *Conn) SetReadDeadline(t time.Time) error {
 	return s.Conn.SetReadDeadline(t)
 }
 
-//get the assembled amount data(len 4 and content)
+// get the assembled amount data(len 4 and content)
 func GetLenBytes(buf []byte) (b []byte, err error) {
 	raw := bytes.NewBuffer([]byte{})
 	if err = binary.Write(raw, binary.LittleEndian, int32(len(buf))); err != nil {
@@ -362,7 +394,7 @@ func GetLenBytes(buf []byte) (b []byte, err error) {
 	return
 }
 
-//udp connection setting
+// udp connection setting
 func SetUdpSession(sess *kcp.UDPSession) {
 	sess.SetStreamMode(true)
 	sess.SetWindowSize(1024, 1024)
@@ -374,12 +406,12 @@ func SetUdpSession(sess *kcp.UDPSession) {
 	sess.SetWriteDelay(false)
 }
 
-//conn1 mux conn
+// conn1 mux conn
 func CopyWaitGroup(conn1, conn2 net.Conn, crypt bool, snappy bool, rate *rate.Rate,
-	flow *file.Flow, isServer bool, rb []byte, task *file.Tunnel, host *file.Host) {
+	flow *file.Flow, isServer bool, rb []byte, task *file.Tunnel, host *file.Host, tlsFingerprint ...string) {
 	//var in, out int64
 	//var wg sync.WaitGroup
-	connHandle := GetConn(conn1, crypt, snappy, rate, isServer)
+	connHandle := GetConn(conn1, crypt, snappy, rate, isServer, tlsFingerprint...)
 	if rb != nil {
 		connHandle.Write(rb)
 	}
@@ -406,13 +438,13 @@ func CopyWaitGroup(conn1, conn2 net.Conn, crypt bool, snappy bool, rate *rate.Ra
 	}
 }
 
-//get crypt or snappy conn
-func GetConn(conn net.Conn, cpt, snappy bool, rt *rate.Rate, isServer bool) io.ReadWriteCloser {
+// get crypt or snappy conn
+func GetConn(conn net.Conn, cpt, snappy bool, rt *rate.Rate, isServer bool, tlsFingerprint ...string) io.ReadWriteCloser {
 	if cpt {
 		if isServer {
 			return rate.NewRateConn(crypt.NewTlsServerConn(conn), rt)
 		}
-		return rate.NewRateConn(crypt.NewTlsClientConn(conn), rt)
+		return rate.NewRateConn(crypt.NewTlsClientConnWithFingerprint(conn, tlsFingerprint...), rt)
 	} else if snappy {
 		return rate.NewRateConn(NewSnappyConn(conn), rt)
 	}

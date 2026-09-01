@@ -1,6 +1,9 @@
 package controllers
 
-import "testing"
+import (
+	"net/http/httptest"
+	"testing"
+)
 
 func TestSessionBoolAcceptsCommonSessionValues(t *testing.T) {
 	tests := []struct {
@@ -23,5 +26,100 @@ func TestSessionBoolAcceptsCommonSessionValues(t *testing.T) {
 				t.Fatalf("sessionBool(%#v) = %v, want %v", test.value, got, test.want)
 			}
 		})
+	}
+}
+
+func TestIsAdminAuthorizedKeepsAPICredentialsRequestScoped(t *testing.T) {
+	if !isAdminAuthorized(true, false) {
+		t.Fatal("signed API authorization should be effective for its request")
+	}
+	if isAdminAuthorized(false, false) {
+		t.Fatal("an absent API credential and non-admin session must not elevate access")
+	}
+	if !isAdminAuthorized(false, true) {
+		t.Fatal("an admin session should remain effective")
+	}
+}
+
+func TestSameOriginRequest(t *testing.T) {
+	request := httptest.NewRequest("POST", "http://nps.example:8081/index/add", nil)
+	request.Host = "nps.example:8081"
+	request.Header.Set("Origin", "http://nps.example:8081")
+	if !isSameOriginRequest(request) {
+		t.Fatal("matching origin and host should be allowed")
+	}
+
+	request.Header.Set("Origin", "http://nps.example")
+	if isSameOriginRequest(request) {
+		t.Fatal("origin with a different port must be rejected")
+	}
+
+	request.Header.Set("Origin", "https://nps.example:8081")
+	if isSameOriginRequest(request) {
+		t.Fatal("origin with a different scheme must be rejected")
+	}
+
+	request.Header.Set("Origin", "https://nps.example:8081")
+	request.Header.Set("X-Forwarded-Proto", "https")
+	if !isSameOriginRequest(request) {
+		t.Fatal("trusted proxy scheme should be used when checking origin")
+	}
+}
+
+func TestAllowedClientIDsForUserUseCurrentMembership(t *testing.T) {
+	stale := map[int]struct{}{1: {}}
+	fresh := map[int]struct{}{2: {}, 3: {}}
+	loadedFor := 0
+	got := allowedClientIDsForPrincipal(sessionPrincipalUser, 7, 0, stale, func(userID int) map[int]struct{} {
+		loadedFor = userID
+		return fresh
+	})
+	if loadedFor != 7 {
+		t.Fatalf("membership lookup used user %d, want 7", loadedFor)
+	}
+	if _, ok := got[1]; ok {
+		t.Fatalf("stale session client membership was retained: %#v", got)
+	}
+	if _, ok := got[2]; !ok {
+		t.Fatalf("fresh database membership was not used: %#v", got)
+	}
+}
+
+func TestActiveNonAdminPrincipalRequiresExpectedIdentity(t *testing.T) {
+	tests := []struct {
+		name                     string
+		principal                string
+		userID, clientID         int
+		userActive, clientActive bool
+		want                     bool
+	}{
+		{name: "active user", principal: sessionPrincipalUser, userID: 7, userActive: true, want: true},
+		{name: "disabled user", principal: sessionPrincipalUser, userID: 7, userActive: false, want: false},
+		{name: "active client", principal: sessionPrincipalClient, clientID: 4, clientActive: true, want: true},
+		{name: "disabled client", principal: sessionPrincipalClient, clientID: 4, clientActive: false, want: false},
+		{name: "legacy session is invalid", principal: "", userID: 7, userActive: true, want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := activeNonAdminPrincipal(test.principal, test.userID, test.clientID, test.userActive, test.clientActive); got != test.want {
+				t.Fatalf("activeNonAdminPrincipal() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestClearAuthenticationSessionRemovesEveryIdentityValue(t *testing.T) {
+	removed := make(map[string]bool)
+	clearAuthenticationSession(func(key interface{}) {
+		name, ok := key.(string)
+		if !ok {
+			t.Fatalf("unexpected session key type %T", key)
+		}
+		removed[name] = true
+	})
+	for _, key := range []string{"auth", "isAdmin", "clientId", "clientIds", "userId", "username", sessionPrincipalKey} {
+		if !removed[key] {
+			t.Fatalf("session key %q was not cleared", key)
+		}
 	}
 }

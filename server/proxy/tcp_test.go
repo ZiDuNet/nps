@@ -1,3 +1,6 @@
+//go:build !npcgui
+// +build !npcgui
+
 package proxy
 
 import (
@@ -16,6 +19,7 @@ import (
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
+	"github.com/astaxie/beego"
 )
 
 type tunnelTestBridge struct {
@@ -295,5 +299,44 @@ func TestProcessHttpPlainGetWithProxyAuth(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("ProcessHttp did not exit")
+	}
+}
+
+func TestProcessHttpHandshakeTimesOut(t *testing.T) {
+	setupProxyTestConf(t)
+	oldTimeout := httpProxyHandshakeTimeout
+	httpProxyHandshakeTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { httpProxyHandshakeTimeout = oldTimeout })
+
+	client := file.NewClient("test", true, true)
+	client.Id = 2
+	task := &file.Tunnel{Id: 2, Client: client, Target: &file.Target{TargetStr: "127.0.0.1:80"}}
+	server := NewTunnelModeServer(ProcessHttp, &tunnelTestBridge{}, task)
+	peer, local := net.Pipe()
+	defer peer.Close()
+
+	done := make(chan struct{})
+	go func() {
+		_ = ProcessHttp(conn.NewConn(local), server)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP proxy handshake did not time out")
+	}
+}
+
+func TestWebServerTLSConfigEnablesSecureSessionCookies(t *testing.T) {
+	original := beego.BConfig.Listen.EnableHTTPS
+	t.Cleanup(func() { beego.BConfig.Listen.EnableHTTPS = original })
+
+	configureWebSessionTLS(true)
+	if !beego.BConfig.Listen.EnableHTTPS {
+		t.Fatal("TLS web mode must set Beego's HTTPS flag before session setup")
+	}
+	configureWebSessionTLS(false)
+	if beego.BConfig.Listen.EnableHTTPS {
+		t.Fatal("non-TLS web mode must not mark session cookies Secure")
 	}
 }

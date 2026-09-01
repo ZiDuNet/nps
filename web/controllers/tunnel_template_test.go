@@ -251,6 +251,8 @@ func TestTunnelFormTemplatesExecuteWithInitialTypeClass(t *testing.T) {
 func TestTunnelListTemplateQuotesRuntimeJavaScriptValues(t *testing.T) {
 	tpl := template.Must(template.ParseFiles("../views/index/list.html"))
 	data := map[string]interface{}{
+		"type":         "tcp');window.__npsTemplateInjected=true;//",
+		"client_id":    "1');window.__npsTemplateInjected=true;//",
 		"ip":           "127.0.0.1",
 		"p":            8024,
 		"tls_p":        8025,
@@ -266,11 +268,91 @@ func TestTunnelListTemplateQuotesRuntimeJavaScriptValues(t *testing.T) {
 	}
 	content := rendered.String()
 	for _, marker := range []string{
+		`var tunnelListMode = '`,
+		`var tunnelListClientId = Number('`,
 		`var address = "127.0.0.1" + ":"`,
 		`-type=kcp -password=`,
 	} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("rendered tunnel list misses safely quoted runtime value %q", marker)
+		}
+	}
+	if strings.Contains(content, `');window.__npsTemplateInjected=true;//`) {
+		t.Fatal("tunnel list must escape route values embedded in JavaScript strings")
+	}
+}
+
+func TestHostListTemplateEscapesRuntimeJavaScriptValues(t *testing.T) {
+	tpl := template.Must(template.ParseFiles("../views/index/hlist.html"))
+	data := map[string]interface{}{
+		"client_id": "1');window.__npsTemplateInjected=true;//",
+	}
+	var rendered bytes.Buffer
+	if err := tpl.Execute(&rendered, data); err != nil {
+		t.Fatalf("execute host list template: %v", err)
+	}
+	content := rendered.String()
+	if !strings.Contains(content, `var hostListClientId = Number('`) {
+		t.Fatal("host list must wrap client ID in a JavaScript string before conversion")
+	}
+	if strings.Contains(content, `');window.__npsTemplateInjected=true;//`) {
+		t.Fatal("host list must escape route values embedded in JavaScript strings")
+	}
+}
+
+func TestClientSelectorTemplatesUseTextNodes(t *testing.T) {
+	for _, path := range []string{"../views/index/add.html", "../views/index/hadd.html"} {
+		content := readTemplateForTest(t, path)
+		for _, marker := range []string{
+			`document.createElement('option')`,
+			`option.textContent = clientId + '-' + (data.rows[i].Remark || '');`,
+			`option.selected = clientId === selectedClientId;`,
+		} {
+			if !strings.Contains(content, marker) {
+				t.Fatalf("%s must construct client options with DOM text nodes: %s", path, marker)
+			}
+		}
+		if strings.Contains(content, `option += ">" + data.rows[i].Id + '-' + data.rows[i].Remark`) {
+			t.Fatalf("%s must not concatenate a client remark into option HTML", path)
+		}
+	}
+}
+
+func TestListTemplatesNormalizeClientIDBeforeAjax(t *testing.T) {
+	tests := []struct {
+		path     string
+		required []string
+		forbid   string
+	}{
+		{
+			path: "../views/index/list.html",
+			required: []string{
+				`var tunnelListMode = '{{.type}}';`,
+				`var tunnelListClientId = Number('{{.client_id}}');`,
+				`"type": tunnelListMode,`,
+				`"client_id": tunnelListClientId,`,
+			},
+			forbid: `"type":{{.type}}`,
+		},
+		{
+			path: "../views/index/hlist.html",
+			required: []string{
+				`var hostListClientId = Number('{{.client_id}}');`,
+				`"client_id": hostListClientId`,
+			},
+			forbid: `"client_id": {{if .client_id}}{{.client_id}}{{else}}0{{end}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		content := readTemplateForTest(t, tt.path)
+		for _, marker := range tt.required {
+			if !strings.Contains(content, marker) {
+				t.Fatalf("%s must normalize client ID before loading data: %s", tt.path, marker)
+			}
+		}
+		if strings.Contains(content, tt.forbid) {
+			t.Fatalf("%s still injects a template value directly into JavaScript", tt.path)
 		}
 	}
 }
@@ -282,6 +364,22 @@ func TestDashboardTemplateUsesScalarLoadValues(t *testing.T) {
 	}
 	if !strings.Contains(content, `$("#overview_load").text("{{.data.load1}} / {{.data.load5}} / {{.data.load15}}");`) {
 		t.Fatal("dashboard should render load averages from scalar status fields")
+	}
+}
+
+func TestSharedTemplatesQuoteRuntimeConfig(t *testing.T) {
+	for _, path := range []string{
+		"../views/login/index.html",
+		"../views/login/register.html",
+		"../views/public/layout.html",
+	} {
+		content := readTemplateForTest(t, path)
+		if strings.Contains(content, `"web_base_url": {{.web_base_url}}`) {
+			t.Fatalf("%s injects web_base_url as an unquoted JavaScript value", path)
+		}
+		if !strings.Contains(content, `"web_base_url": "{{.web_base_url}}"`) {
+			t.Fatalf("%s must quote web_base_url in the runtime JavaScript object", path)
+		}
 	}
 }
 

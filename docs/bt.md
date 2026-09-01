@@ -20,12 +20,14 @@ services:
     image: wushuo98/nps:latest
     container_name: nps
     restart: unless-stopped
+    environment:
+      NPS_WEB_IP: 0.0.0.0
     ports:
       - "80:80"
       - "443:443"
       - "8024:8024"
       - "8025:8025"
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - ./conf:/conf
 ```
@@ -36,7 +38,7 @@ services:
 
 配置文件在 `/www/docker/nps/conf/nps.conf`，首次启动会自动生成。
 
-Web 管理端口默认 `8081`。首次生成配置时查看日志获取管理员账号 `admin` 和随机管理员密码；已有配置请以 `conf/nps.conf` 为准：
+Web 管理端口默认 `8081`，新配置仅监听本机。首次生成配置时查看日志获取管理员账号 `admin` 和随机管理员密码；已有配置请以 `conf/nps.conf` 为准：
 
 ```bash
 docker logs nps | head -20

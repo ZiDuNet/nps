@@ -201,26 +201,29 @@
 
         if (pwd === '' || pwd == null) {
             document.getElementById("error").hidden = false;
-            document.getElementById("error").innerHTML = "请输入授权秘钥"
+            document.getElementById("error").textContent = "请输入授权秘钥"
+            return
         }
         const xhr = new XMLHttpRequest()
         xhr.addEventListener("readystatechange", function () {
-            // debugger
-            if (xhr.response != null && xhr.response !== '') {
-                var resp = JSON.parse(xhr.response);
-                console.log(resp)
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.responseText !== '') {
+                var resp
+                try {
+                    resp = JSON.parse(xhr.responseText)
+                } catch (e) {
+                    resp = {success: false, message: "服务器返回无效响应"}
+                }
                 if (resp.success !== true) {
                     document.getElementById("error").hidden = false;
-                    document.getElementById("error").innerHTML = resp.message
+                    document.getElementById("error").textContent = resp.message || "授权失败"
                 } else {
                     location.reload();
                 }
-
             }
-            console.log(xhr.response)
         })
-        xhr.open("post", "/authIp?pass=" + pwd)
-        xhr.send()
+        xhr.open("post", "/authIp")
+        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded")
+        xhr.send("pass=" + encodeURIComponent(pwd))
     }
 </script>
 

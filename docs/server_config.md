@@ -11,13 +11,13 @@
 | Windows 服务 | `C:\Program Files\nps\conf\nps.conf` |
 | Docker | 挂载目录中的 `/conf/nps.conf` |
 
-修改配置后需要重启 `nps`。
+Linux/macOS 上可通过 `nps reload` 重新加载 `web_username`、`web_password`、`auth_key` 和 `auth_crypt_key`；Windows 以及监听端口、Bridge、代理和隧道相关配置仍需执行 `nps restart`。
 
 ## Web 管理面板
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `web_ip` | Web 面板监听地址 | `0.0.0.0` |
+| `web_ip` | Web 面板监听地址，新安装默认仅本机访问 | `127.0.0.1` |
 | `web_port` | Web 面板端口 | `8081` |
 | `web_username` | 管理员账号 | `admin` |
 | `web_password` | 管理员密码 | 首次启动随机生成 |
@@ -31,7 +31,7 @@
 
 管理员账号只保存在 `nps.conf` 中。普通用户在 Web 面板「用户管理」中维护，保存到 `conf/users.json`。
 
-安全部署建议：将 `web_ip` 改为 `127.0.0.1` 或仅允许管理网段访问，优先启用 `web_open_ssl`，并在防火墙中只开放实际使用的 Bridge、代理和管理端口。不要启用公共密钥 `public_vkey`，除非确实需要；配置和 JSON 数据文件应限制为服务账号可读。
+安全部署建议：保持 `web_ip=127.0.0.1`，通过 HTTPS 反向代理访问；若必须远程直连，只允许受控管理网段并启用 `web_open_ssl`。Docker 容器可用 `NPS_WEB_IP=0.0.0.0` 让容器内反向代理访问，但宿主机端口应只发布到回环或管理网卡。防火墙只开放实际使用的 Bridge、代理和管理端口。不要启用公共密钥 `public_vkey`，除非确实需要；配置和 JSON 数据文件应限制为服务账号可读。
 
 ## Bridge 客户端连接
 
@@ -118,7 +118,7 @@ P2P 依赖 NAT 类型，不能保证所有网络都能直连。
 |--------|------|--------|
 | `log_level` | 日志级别，`0` 最少，`7` 最详细 | `6` |
 | `log_path` | 日志路径 | `nps.log` |
-| `flow_store_interval` | 流量数据持久化间隔，单位分钟；空值表示不定时保存 | `1` |
+| `flow_store_interval` | 流量数据持久化间隔，单位分钟；留空或 `0` 关闭定时持久化 | `1` |
 | `system_info_display` | 是否在仪表盘显示系统信息 | `true`（默认开启） |
 
 JSON 数据文件见 [升级迁移](migrate.md)。

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"ehang.io/nps/lib/common"
@@ -30,22 +31,27 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-var tlsEnable1 = false
+var tlsEnable1 atomic.Bool
+
+const clientDialTimeout = 10 * time.Second
 
 func SetTlsEnable(tlsEnable11 bool) {
-	tlsEnable1 = tlsEnable11
+	tlsEnable1.Store(tlsEnable11)
 }
 
 func GetTlsEnable() bool {
-	return tlsEnable1
+	return tlsEnable1.Load()
 }
 
 func GetTaskStatus(path string) {
 	cnf, err := config.NewConfig(path)
-	if err != nil {
+	if err != nil || cnf == nil || cnf.CommonConfig == nil {
+		if err == nil {
+			err = errors.New("missing common configuration")
+		}
 		log.Fatalln(err)
 	}
-	c, err := NewConn(cnf.CommonConfig.Tp, cnf.CommonConfig.VKey, cnf.CommonConfig.Server, common.WORK_CONFIG, cnf.CommonConfig.ProxyUrl)
+	c, err := NewConnWithTLS(cnf.CommonConfig.Tp, cnf.CommonConfig.VKey, cnf.CommonConfig.Server, common.WORK_CONFIG, cnf.CommonConfig.ProxyUrl, cnf.CommonConfig.TlsEnable, TLSOptionsFromConfig(cnf.CommonConfig))
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -102,13 +108,16 @@ func StartFromFile(path string) {
 	first := true
 	cnf, err := config.NewConfig(path)
 	if err != nil || cnf.CommonConfig == nil {
-		logs.Error("Config file %s loading error %s", path, err.Error())
-		os.Exit(0)
+		if err != nil {
+			logs.Error("Config file %s loading error %s", path, err)
+		} else {
+			logs.Error("Config file %s loading error: missing common configuration", path)
+		}
+		return
 	}
 	logs.Info("Loading configuration file %s successfully", path)
 
-	SetTlsEnable(cnf.CommonConfig.TlsEnable)
-	logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), GetTlsEnable())
+	logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), cnf.CommonConfig.TlsEnable)
 re:
 	if first || cnf.CommonConfig.AutoReconnection {
 		if !first {
@@ -119,7 +128,7 @@ re:
 		return
 	}
 	first = false
-	c, err := NewConn(cnf.CommonConfig.Tp, cnf.CommonConfig.VKey, cnf.CommonConfig.Server, common.WORK_CONFIG, cnf.CommonConfig.ProxyUrl)
+	c, err := NewConnWithTLS(cnf.CommonConfig.Tp, cnf.CommonConfig.VKey, cnf.CommonConfig.Server, common.WORK_CONFIG, cnf.CommonConfig.ProxyUrl, cnf.CommonConfig.TlsEnable, TLSOptionsFromConfig(cnf.CommonConfig))
 	if err != nil {
 		logs.Error(err)
 		goto re
@@ -162,6 +171,7 @@ re:
 	}
 
 	//send  task to server
+	localGeneration := ensureLocalGeneration()
 	for _, v := range cnf.Tasks {
 		if _, err := c.SendInfo(v, common.NEW_TASK); err != nil {
 			logs.Error(err)
@@ -173,13 +183,13 @@ re:
 		}
 		if v.Mode == "file" {
 			//start local file server
-			go startLocalFileServer(cnf.CommonConfig, v, vkey)
+			go startLocalFileServer(cnf.CommonConfig, v, vkey, localGeneration)
 		}
 	}
 
 	//create local server secret or p2p
 	for _, v := range cnf.LocalServer {
-		go StartLocalServer(v, cnf.CommonConfig)
+		go startLocalServer(v, cnf.CommonConfig, localGeneration)
 	}
 
 	c.Close()
@@ -188,13 +198,20 @@ re:
 	} else {
 		logs.Notice("web access login username:%s password:%s", cnf.CommonConfig.Client.WebUserName, cnf.CommonConfig.Client.WebPassword)
 	}
-	NewRPClient(cnf.CommonConfig.Server, vkey, cnf.CommonConfig.Tp, cnf.CommonConfig.ProxyUrl, cnf, cnf.CommonConfig.DisconnectTime).Start()
+	NewRPClientWithTLS(cnf.CommonConfig.Server, vkey, cnf.CommonConfig.Tp, cnf.CommonConfig.ProxyUrl, cnf, cnf.CommonConfig.DisconnectTime, cnf.CommonConfig.TlsEnable, TLSOptionsFromConfig(cnf.CommonConfig)).Start()
 	CloseLocalServer()
 	goto re
 }
 
 // Create a new connection with the server and verify it
 func NewConn(tp string, vkey string, server string, connType string, proxyUrl string) (*conn.Conn, error) {
+	return NewConnWithTLS(tp, vkey, server, connType, proxyUrl, GetTlsEnable())
+}
+
+// NewConnWithTLS establishes a verified control/data connection using the
+// caller's TLS preference. Keeping the preference on the call path avoids a
+// process-wide setting leaking between concurrently running GUI clients.
+func NewConnWithTLS(tp string, vkey string, server string, connType string, proxyUrl string, tlsEnabled bool, tlsOptions ...TLSOptions) (*conn.Conn, error) {
 	var err error
 	var connection net.Conn
 	var sess *kcp.UDPSession
@@ -215,15 +232,7 @@ func NewConn(tp string, vkey string, server string, connType string, proxyUrl st
 				connection, err = NewHttpProxyConn(u, server)
 			}
 		} else {
-			if GetTlsEnable() {
-				//tls 流量加密
-				conf := &tls.Config{
-					InsecureSkipVerify: true,
-				}
-				connection, err = tls.Dial("tcp", server, conf)
-			} else {
-				connection, err = net.Dial("tcp", server)
-			}
+			connection, err = net.DialTimeout("tcp", server, clientDialTimeout)
 
 			//header := &proxyproto.Header{
 			//	Version:           1,
@@ -242,6 +251,25 @@ func NewConn(tp string, vkey string, server string, connType string, proxyUrl st
 			//_, err = header.WriteTo(connection)
 			//_, err = io.WriteString(connection, "HELO")
 		}
+		if err == nil && tlsEnabled {
+			options := TLSOptions{}
+			if len(tlsOptions) > 0 {
+				options = tlsOptions[0]
+			}
+			config, configErr := tlsClientConfig(server, options)
+			if configErr != nil {
+				return nil, configErr
+			}
+			// Apply the deadline before the handshake so a stalled TLS peer cannot
+			// retain a dialing goroutine indefinitely. This also covers proxy-based
+			// connections, which historically skipped TLS entirely.
+			_ = connection.SetDeadline(time.Now().Add(clientDialTimeout))
+			tlsConnection := tls.Client(connection, config)
+			if err = tlsConnection.Handshake(); err != nil {
+				return nil, fmt.Errorf("TLS handshake failed: %w", err)
+			}
+			connection = tlsConnection
+		}
 	} else {
 		sess, err = kcp.DialWithOptions(server, nil, 10, 3)
 		if err == nil {
@@ -252,6 +280,15 @@ func NewConn(tp string, vkey string, server string, connType string, proxyUrl st
 	if err != nil {
 		return nil, err
 	}
+	if connection == nil {
+		return nil, errors.New("connection was not established")
+	}
+	connected := false
+	defer func() {
+		if !connected {
+			_ = connection.Close()
+		}
+	}()
 	connection.SetDeadline(time.Now().Add(time.Second * 10))
 	defer connection.SetDeadline(time.Time{})
 	c := conn.NewConn(connection)
@@ -285,7 +322,7 @@ func NewConn(tp string, vkey string, server string, connType string, proxyUrl st
 		return nil, err
 	}
 	c.SetAlive(tp)
-
+	connected = true
 	return c, nil
 }
 
@@ -298,20 +335,31 @@ func NewHttpProxyConn(url *url.URL, remoteAddr string) (net.Conn, error) {
 	password, _ := url.User.Password()
 	req.Header.Set("Authorization", "Basic "+basicAuth(strings.Trim(url.User.Username(), " "), password))
 	// we make a http proxy request
-	proxyConn, err := net.Dial("tcp", url.Host)
+	proxyConn, err := net.DialTimeout("tcp", url.Host, clientDialTimeout)
 	if err != nil {
 		return nil, err
 	}
+	if err := proxyConn.SetDeadline(time.Now().Add(clientDialTimeout)); err != nil {
+		_ = proxyConn.Close()
+		return nil, err
+	}
 	if err := req.Write(proxyConn); err != nil {
+		_ = proxyConn.Close()
 		return nil, err
 	}
 	res, err := http.ReadResponse(bufio.NewReader(proxyConn), req)
 	if err != nil {
+		_ = proxyConn.Close()
 		return nil, err
 	}
 	_ = res.Body.Close()
 	if res.StatusCode != 200 {
+		_ = proxyConn.Close()
 		return nil, errors.New("Proxy error " + res.Status)
+	}
+	if err := proxyConn.SetDeadline(time.Time{}); err != nil {
+		_ = proxyConn.Close()
+		return nil, err
 	}
 	return proxyConn, nil
 }
@@ -478,13 +526,22 @@ func sendP2PTestMsg(localConn *net.UDPConn, remoteAddr1, remoteAddr2, remoteAddr
 			logs.Trace("Remotely Address %s Reply Packet Successfully Received", addr.String())
 			return addr.String(), nil
 		case common.WORK_P2P_CONNECT:
+			connectAddr := addr
 			go func() {
 				for i := 20; i > 0; i-- {
-					logs.Trace("try send receive success packet to target %s", addr.String())
-					if _, err = localConn.WriteTo([]byte(common.WORK_P2P_SUCCESS), addr); err != nil {
+					logs.Trace("try send receive success packet to target %s", connectAddr.String())
+					if _, writeErr := localConn.WriteTo([]byte(common.WORK_P2P_SUCCESS), connectAddr); writeErr != nil {
 						return
 					}
-					time.Sleep(time.Second)
+					timer := time.NewTimer(time.Second)
+					select {
+					case <-timer.C:
+					case <-ctx.Done():
+						if !timer.Stop() {
+							<-timer.C
+						}
+						return
+					}
 				}
 			}()
 		default:

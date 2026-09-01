@@ -1,3 +1,9 @@
+//go:build fyne
+
+// The legacy Fyne/Android client is built as a standalone file and requires
+// platform OpenGL/X11 headers. Keep it out of the default server/CLI package
+// test graph; `go build -tags fyne gui/npc/npc.go` remains the supported build
+// command.
 package main
 
 import (

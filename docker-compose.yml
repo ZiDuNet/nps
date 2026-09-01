@@ -8,11 +8,15 @@ services:
       dockerfile: Dockerfile.nps
     container_name: nps
     restart: unless-stopped
+    environment:
+      # The image default binds the panel to loopback. Bind inside the
+      # container so a local HTTPS reverse proxy can reach it.
+      NPS_WEB_IP: 0.0.0.0
     ports:
       - "80:80"       # HTTP
       - "443:443"     # HTTPS
       - "8024:8024"   # Bridge (TCP)
       - "8025:8025"   # Bridge (TLS)
-      - "8081:8081"   # Web 管理面板
+      - "127.0.0.1:8081:8081" # Web 管理面板；请通过 HTTPS 反向代理对外发布
     volumes:
       - ./conf:/conf

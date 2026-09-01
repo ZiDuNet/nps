@@ -17,12 +17,14 @@ services:
     image: wushuo98/nps:latest
     container_name: nps
     restart: unless-stopped
+    environment:
+      NPS_WEB_IP: 0.0.0.0
     ports:
       - "80:80"
       - "443:443"
       - "8024:8024"
       - "8025:8025"
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - ./conf:/conf
 EOF
@@ -61,7 +63,7 @@ nps.exe start
 浏览器打开：
 
 ```text
-http://<服务器IP>:8081
+http://127.0.0.1:8081
 ```
 
 使用首次启动打印的管理员账号和密码登录。管理员账号默认是 `admin`，密码首次启动随机生成。

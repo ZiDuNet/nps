@@ -26,13 +26,14 @@ type App struct {
 
 // ShortClient 与前端结构对应
 type ShortClient struct {
-	Name    string `json:"name"`
-	Addr    string `json:"addr"`
-	Key     string `json:"key"`
-	TLS     bool   `json:"tls"`
-	Running bool   `json:"running"` // 兼容旧版本，实际用Status
-	Error   string `json:"error"`   // 连接错误信息
-	Status  string `json:"status"`  // 连接状态: "stopped", "connecting", "connected"
+	Name           string `json:"name"`
+	Addr           string `json:"addr"`
+	Key            string `json:"key"`
+	TLS            bool   `json:"tls"`
+	TLSFingerprint string `json:"tlsFingerprint,omitempty"`
+	Running        bool   `json:"running"` // 兼容旧版本，实际用Status
+	Error          string `json:"error"`   // 连接错误信息
+	Status         string `json:"status"`  // 连接状态: "stopped", "connecting", "connected"
 }
 
 // ConnectionLog 连接日志项
@@ -417,14 +418,18 @@ func (a *App) AddShortcutFromBase64(s string) error {
 	}
 	payload = payload[len("nps:"):]
 	parts := strings.Split(payload, "|")
-	if len(parts) != 4 {
+	if len(parts) < 4 || len(parts) > 5 {
 		return errors.New("无效的启动命令")
 	}
 	tls := false
 	if parts[3] == "true" {
 		tls = true
 	}
-	sc := ShortClient{Name: parts[0], Addr: parts[1], Key: parts[2], TLS: tls}
+	fingerprint := ""
+	if len(parts) == 5 {
+		fingerprint = strings.TrimSpace(parts[4])
+	}
+	sc := ShortClient{Name: parts[0], Addr: parts[1], Key: parts[2], TLS: tls, TLSFingerprint: fingerprint}
 
 	// Check if shortcut already exists
 	shortcutsMu.Lock()
@@ -521,6 +526,7 @@ func (a *App) RemoveShortcut(name, addr, key string) error {
 func (a *App) ToggleClient(name, addr, key string, tls bool, runningState bool) error {
 	id := addr + "|" + key
 	slog.Info("ToggleClient called", "name", name, "addr", addr, "tls", tls, "runningState", runningState)
+	fingerprint := shortcutFingerprint(addr, key)
 	runningMu.Lock()
 	defer runningMu.Unlock()
 	if runningState {
@@ -535,7 +541,7 @@ func (a *App) ToggleClient(name, addr, key string, tls bool, runningState bool) 
 			clientConnected[id] = false
 			delete(clientAttempted, id)
 			statusMu.Unlock()
-			go startNpcClientWithContext(ctx, id, addr, key, tls)
+			go startNpcClientWithContext(ctx, id, addr, key, tls, fingerprint)
 		} else {
 			slog.Info("Client already running", "id", id)
 		}
@@ -570,16 +576,26 @@ func startNpcClient(id, server, vkey string, tlsEnable bool) {
 	running[id] = cancel
 	runningMu.Unlock()
 
-	startNpcClientWithContext(ctx, id, server, vkey, tlsEnable)
+	startNpcClientWithContext(ctx, id, server, vkey, tlsEnable, "")
+}
+
+func shortcutFingerprint(addr, key string) string {
+	shortcutsMu.Lock()
+	defer shortcutsMu.Unlock()
+	for _, shortcut := range shortcuts {
+		if shortcut.Addr == addr && shortcut.Key == key {
+			return shortcut.TLSFingerprint
+		}
+	}
+	return ""
 }
 
 // startNpcClientWithContext 在给定的 context 中运行 npc 客户端
-func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tlsEnable bool) {
+func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tlsEnable bool, tlsFingerprint string) {
 	// 为该客户端准备日志存储（内存缓冲 + 独立日志文件）
 	store := getClientLogStore(id)
 	clientLogger := &trpcLogger{store: store}
 
-	client.SetTlsEnable(tlsEnable)
 	clientLogger.Info("启动 NPC 客户端: server=%s, vkey=%s, tls=%v", server, vkey, tlsEnable)
 
 	for {
@@ -608,7 +624,7 @@ func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tls
 		clientConnected[id] = false
 		statusMu.Unlock()
 
-		rpcClient := client.NewRPClient(server, vkey, connType, "", nil, disconnectTimeout)
+		rpcClient := client.NewRPClientWithTLS(server, vkey, connType, "", nil, disconnectTimeout, tlsEnable, client.TLSOptions{Fingerprint: tlsFingerprint})
 
 		// 设置客户端的独立 logger
 		rpcClient.SetLogger(clientLogger)

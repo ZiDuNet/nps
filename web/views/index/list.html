@@ -28,6 +28,11 @@
 <script>
     var tunnelListName = '{{.name}}:'.replace(/\s*/g, "");
     var tunnelListType = tunnelListName.split(":")[0];
+    var tunnelListMode = '{{.type}}';
+    var tunnelListClientId = Number('{{.client_id}}');
+    if (!isFinite(tunnelListClientId) || Math.floor(tunnelListClientId) !== tunnelListClientId || tunnelListClientId < 0) {
+        tunnelListClientId = 0;
+    }
     var tunnelListLanguageKey = tunnelListType === 'host' ? 'page-hostlist' : 'page-list' + tunnelListType;
     $('#langtag').attr('langtag', tunnelListLanguageKey);
     $('#list-title-name').text(tunnelListName.split(":")[1]);
@@ -49,8 +54,8 @@
             return {
                 "offset": params.offset,
                 "limit": params.limit,
-                "type":{{.type}},
-                "client_id":{{.client_id}},
+                "type": tunnelListMode,
+                "client_id": tunnelListClientId,
                 "search": params.search,
                 "sort": params.sort,
                 "order": params.order

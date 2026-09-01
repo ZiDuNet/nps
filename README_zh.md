@@ -48,12 +48,13 @@ nps start
 docker run -d --name nps \
   -p 80:80 -p 443:443 \
   -p 8024:8024 -p 8025:8025 \
-  -p 8081:8081 \
+  -p 127.0.0.1:8081:8081 \
+  -e NPS_WEB_IP=0.0.0.0 \
   -v /opt/nps/conf:/conf \
   wushuo98/nps
 ```
 
-启动后访问 `http://<服务器IP>:8081` 进入 Web 管理面板。首次启动会在终端打印管理员账号 `admin` 和随机生成的密码。发布模板中的 `CHANGE_ME` 和历史弱默认值会自动轮换；显式自定义值或留空值会保留（历史共享密钥 `public_vkey=123` 会被关闭）。
+新安装默认只监听本机。使用上面的 Docker 示例时，请在宿主机访问 `http://127.0.0.1:8081`，或通过 HTTPS 反向代理发布该回环端口。首次启动会在终端打印管理员账号 `admin` 和随机生成的密码。发布模板中的 `CHANGE_ME` 和历史弱默认值会自动轮换；显式自定义值或留空值会保留（历史共享密钥 `public_vkey=123` 会被关闭）。
 
 <details>
 <summary>📋 端口说明</summary>
@@ -80,6 +81,10 @@ docker run -d --name nps \
 # TLS 加密模式
 ./npc -server=<IP>:8025 -vkey=<密钥> -tls_enable=true
 
+# 自签名证书建议固定服务端指纹（指纹见 nps 启动日志）
+./npc -server=<IP>:8025 -vkey=<密钥> -tls_enable=true \
+  -tls_fingerprint=<SHA-256指纹>
+
 # Docker
 docker run -d --name npc \
   wushuo98/npc -server=<IP>:8024 -vkey=<密钥>
@@ -88,6 +93,7 @@ docker run -d --name npc \
 > 💡 **推荐无配置文件模式**：删除 npc 目录下的 `conf` 文件夹，所有配置在服务端 Web 面板管理。
 
 当前 Bridge 传输支持 TCP 和 KCP；TLS 通过独立的 TLS Bridge 端口提供。QUIC 和 WebSocket Bridge 传输暂未支持。
+TLS 客户端默认校验证书；也可使用 `-tls_ca_file` 和 `-tls_server_name`，不要在生产环境启用 `-tls_insecure_skip_verify=true`。
 
 ## 隧道模式
 

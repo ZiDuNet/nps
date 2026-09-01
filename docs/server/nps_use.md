@@ -1,8 +1,8 @@
 ## Web 管理
 
-进入 web 界面：`公网IP:web 端口`（默认  `8081`）。
+进入 web 界面：新安装默认使用 `http://127.0.0.1:8081`。远程访问请使用 HTTPS 反向代理，或将 `web_ip` 限制为受控管理网段并开启 `web_open_ssl`。
 
-> **首次启动用户名默认为 `admin`，`web_password`、`auth_key`、`auth_crypt_key` 会随机生成**，并打印到终端日志中，请第一时间复制保存。发布模板中的 `CHANGE_ME` 和历史弱默认值也会自动轮换；显式自定义值或留空值会保留。认证配置可用 `nps reload` 重新加载，端口、Bridge、代理和隧道配置修改后请执行 `nps restart`。
+> **首次启动用户名默认为 `admin`，`web_password`、`auth_key`、`auth_crypt_key` 会随机生成**，并打印到终端日志中，请第一时间复制保存。发布模板中的 `CHANGE_ME` 和历史弱默认值也会自动轮换；显式自定义值或留空值会保留。Linux/macOS 上可用 `nps reload` 重新加载认证配置；Windows 以及端口、Bridge、代理和隧道配置修改后请执行 `nps restart`。
 
 进入 web 管理界面，有详细的说明。
 

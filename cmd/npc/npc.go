@@ -1,3 +1,6 @@
+//go:build !sdk
+// +build !sdk
+
 package main
 
 import (
@@ -46,7 +49,20 @@ var (
 	ver            = flag.Bool("version", false, "show current version")
 	disconnectTime = flag.Int("disconnect_timeout", 60, "not receiving check packet times, until timeout will disconnect the client")
 	tlsEnable      = flag.Bool("tls_enable", false, "enable tls")
+	tlsCAFile      = flag.String("tls_ca_file", "", "TLS CA certificate file")
+	tlsServerName  = flag.String("tls_server_name", "", "TLS server name")
+	tlsFingerprint = flag.String("tls_fingerprint", "", "TLS server SHA-256 certificate fingerprint")
+	tlsInsecure    = flag.Bool("tls_insecure_skip_verify", false, "explicitly disable TLS certificate verification")
 )
+
+func currentTLSOptions() client.TLSOptions {
+	return client.TLSOptions{
+		CAFile:             *tlsCAFile,
+		ServerName:         *tlsServerName,
+		Fingerprint:        *tlsFingerprint,
+		InsecureSkipVerify: *tlsInsecure,
+	}
+}
 
 func main() {
 	flag.Parse()
@@ -220,6 +236,11 @@ func run() {
 		commonConfig.Server = *serverAddr
 		commonConfig.VKey = *verifyKey
 		commonConfig.Tp = *connType
+		commonConfig.TlsEnable = *tlsEnable
+		commonConfig.TLSCAFile = *tlsCAFile
+		commonConfig.TLSServerName = *tlsServerName
+		commonConfig.TLSFingerprint = *tlsFingerprint
+		commonConfig.TLSInsecureSkipVerify = *tlsInsecure
 		localServer := new(config.LocalServer)
 		localServer.Type = *localType
 		localServer.Password = *password
@@ -238,8 +259,7 @@ func run() {
 		*verifyKey, _ = env["NPC_SERVER_VKEY"]
 	}
 	if *verifyKey != "" && *serverAddr != "" && *configPath == "" {
-		client.SetTlsEnable(*tlsEnable)
-		logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), client.GetTlsEnable())
+		logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), *tlsEnable)
 
 		vkeys := strings.Split(*verifyKey, `,`)
 		for _, key := range vkeys {
@@ -247,7 +267,7 @@ func run() {
 			go func() {
 				for {
 					logs.Info("start vkey:" + key)
-					client.NewRPClient(*serverAddr, key, *connType, *proxyUrl, nil, *disconnectTime).Start()
+					client.NewRPClientWithTLS(*serverAddr, key, *connType, *proxyUrl, nil, *disconnectTime, *tlsEnable, currentTLSOptions()).Start()
 					logs.Info("Client closed! It will be reconnected in five seconds")
 					time.Sleep(time.Second * 5)
 				}
@@ -371,14 +391,13 @@ func startNpcServer(startCmd string) {
 
 	go func() {
 		for {
-			client.SetTlsEnable(tlsEnable)
 			if tlsEnable {
 				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey + " -tls_enable=true")
 			} else {
 				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey)
 			}
-			logs.Info("版本: %s, 核心版本: %s, TLS: %t", version.VERSION, version.GetVersion(), client.GetTlsEnable())
-			client.NewRPClient(serAddr, vkey, *connType, *proxyUrl, nil, *disconnectTime).Start()
+			logs.Info("版本: %s, 核心版本: %s, TLS: %t", version.VERSION, version.GetVersion(), tlsEnable)
+			client.NewRPClientWithTLS(serAddr, vkey, *connType, *proxyUrl, nil, *disconnectTime, tlsEnable, currentTLSOptions()).Start()
 			logs.Info("连接断开，5秒后重连")
 			time.Sleep(time.Second * 5)
 		}

@@ -16,8 +16,8 @@
 | bridge_port | 服务端客户端通信端口 | `8024` |
 | tls_enable | 是否开启 TLS。开启后客户端可通过 `-tls_enable=true` 连接 `tls_bridge_port` | `true` |
 | tls_bridge_port | TLS 桥接端口，默认 `8025`。**与 `bridge_port` 并存**：客户端可分别用 `bridge_port`（明文）或 `tls_bridge_port`（TLS）接入 | `8025` |
-| disconnect_timeout | 客户端连接超时，单位为 5s，默认 `60`（即 5 分钟） | `60` |
-| flow_store_interval | 流量数据持久化间隔，单位分钟；忽略表示不持久化| `1` |
+| disconnect_timeout | 未收到 mux 心跳回包的最大次数；每次检查间隔为 5 秒，默认 `60`（即约 5 分钟） | `60` |
+| flow_store_interval | 流量数据持久化间隔，单位分钟；留空或 `0` 关闭定时持久化 | `1` |
 | log_level | 日志级别 0~7 | `6` |
 | log_path | 日志文件路径 | `nps.log` |
 | ip_limit | 是否限制 IP 访问，`true` / `false` / 忽略 | - |
@@ -44,9 +44,9 @@
 | web_username | web 后台用户名 | `admin` |
 | web_password | web 后台密码 | 首次启动随机生成 |
 | web_port | web 管理端口，留空关闭 web | `8081` |
-| web_ip | web 管理监听 IP | `0.0.0.0` |
+| web_ip | web 管理监听 IP，新安装默认仅本机访问 | `127.0.0.1` |
 | web_base_url | web 管理子路径，例如 `/nps`，用于反代到子路径时使用 | （空） |
-| web_open_ssl | web 管理是否启用 https | `false` |
+| web_open_ssl | web 管理是否启用 https；远程直连时应开启 | `false` |
 | web_cert_file | web 管理 https 证书路径 | `conf/server.pem` |
 | web_key_file | web 管理 https 私钥路径 | `conf/server.key` |
 | open_captcha | 登录是否开启验证码校验 | `false` |
@@ -70,7 +70,7 @@
 
 ## 限制开关
 
-> 这些开关默认关闭。开启后才会在 web 管理中暴露对应字段。
+> 发布配置默认启用除 `allow_local_proxy` 外的各项开关；关闭某项后，Web 管理面板会隐藏对应字段。
 
 | 名称 | 含义 | 默认值 |
 | --- | --- | --- |

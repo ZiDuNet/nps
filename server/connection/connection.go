@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 
 	"ehang.io/nps/lib/pmux"
 	"github.com/astaxie/beego"
@@ -26,9 +27,13 @@ func InitConnectionService() {
 		port, err := strconv.Atoi(bridgePort)
 		if err != nil {
 			logs.Error(err)
-			os.Exit(0)
+			return
 		}
-		pMux = pmux.NewPortMux(port, beego.AppConfig.String("web_host"))
+		pMux = pmux.NewPortMuxWithAddress(port, beego.AppConfig.String("web_host"), beego.AppConfig.String("bridge_ip"))
+		if err := pMux.StartError(); err != nil {
+			logs.Error("start port multiplexer failed: %v", err)
+			pMux = nil
+		}
 	}
 }
 
@@ -42,7 +47,7 @@ func GetBridgeListener(tp string) (net.Listener, error) {
 	if pMux != nil {
 		return pMux.GetClientListener(), nil
 	}
-	return net.ListenTCP("tcp", &net.TCPAddr{net.ParseIP(beego.AppConfig.String("bridge_ip")), p, ""})
+	return getTcpListener(beego.AppConfig.String("bridge_ip"), strconv.Itoa(p))
 }
 
 func GetHttpListener() (net.Listener, error) {
@@ -69,17 +74,37 @@ func GetWebManagerListener() (net.Listener, error) {
 		return pMux.GetManagerListener(), nil
 	}
 	logs.Info("web management start, access port is", webPort)
-	return getTcpListener(beego.AppConfig.String("web_ip"), webPort)
+	return getTcpListener(WebManagerIP(), webPort)
+}
+
+// WebManagerIP returns the configured Web management listener address.  The
+// environment override is intentionally narrow: container deployments can
+// bind inside the container without changing the persisted, secure default.
+func WebManagerIP() string {
+	if ip := strings.TrimSpace(os.Getenv("NPS_WEB_IP")); ip != "" {
+		return ip
+	}
+	return strings.TrimSpace(beego.AppConfig.String("web_ip"))
+}
+
+// WebManagerUsesPortMultiplexing reports whether the management panel shares
+// the bridge listener. In that mode the bridge bind address controls panel
+// exposure rather than web_ip.
+func WebManagerUsesPortMultiplexing() bool {
+	return pMux != nil && webPort == bridgePort
 }
 
 func getTcpListener(ip, p string) (net.Listener, error) {
 	port, err := strconv.Atoi(p)
 	if err != nil {
 		logs.Error(err)
-		os.Exit(0)
+		return nil, err
 	}
 	if ip == "" {
 		ip = "0.0.0.0"
 	}
-	return net.ListenTCP("tcp", &net.TCPAddr{net.ParseIP(ip), port, ""})
+	// net.ParseIP returns nil for hostnames and malformed input. Passing that
+	// nil to net.ListenTCP silently turns the listener into a wildcard bind.
+	// Let net.Listen resolve valid hostnames and reject invalid addresses.
+	return net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 }

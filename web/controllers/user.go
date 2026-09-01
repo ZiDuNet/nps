@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/server"
 )
 
 type UserController struct {
@@ -33,15 +34,19 @@ func newUserListRows(users []*file.User) []*userListRow {
 		if user == nil {
 			continue
 		}
+		user.RLock()
+		id, userName, status := user.Id, user.UserName, user.Status
+		remark, maxTunnelNum, expireTime, createTime := user.Remark, user.MaxTunnelNum, user.ExpireTime, user.CreateTime
+		user.RUnlock()
 		rows = append(rows, &userListRow{
-			Id:           user.Id,
-			UserName:     html.UnescapeString(user.UserName),
+			Id:           id,
+			UserName:     html.UnescapeString(userName),
 			Password:     "",
-			Status:       user.Status,
-			Remark:       html.UnescapeString(user.Remark),
-			MaxTunnelNum: user.MaxTunnelNum,
-			ExpireTime:   user.ExpireTime,
-			CreateTime:   user.CreateTime,
+			Status:       status,
+			Remark:       html.UnescapeString(remark),
+			MaxTunnelNum: maxTunnelNum,
+			ExpireTime:   expireTime,
+			CreateTime:   createTime,
 		})
 	}
 	return rows
@@ -78,15 +83,18 @@ func parseUserStatus(value string) (bool, error) {
 }
 
 func newUserUpdateCandidate(existing *file.User, username, password, remark string, maxTunnelNum int, expireTime string) *file.User {
+	existing.RLock()
+	id, existingPassword, status, createTime := existing.Id, existing.Password, existing.Status, existing.CreateTime
+	existing.RUnlock()
 	updated := &file.User{
-		Id:           existing.Id,
+		Id:           id,
 		UserName:     username,
-		Password:     existing.Password,
-		Status:       existing.Status,
+		Password:     existingPassword,
+		Status:       status,
 		Remark:       remark,
 		MaxTunnelNum: maxTunnelNum,
 		ExpireTime:   expireTime,
-		CreateTime:   existing.CreateTime,
+		CreateTime:   createTime,
 	}
 	if password != "" {
 		updated.Password = password
@@ -111,6 +119,9 @@ func (s *UserController) Add() {
 		s.Data["menu"] = "user"
 		s.SetInfo("add user")
 		s.display()
+		return
+	}
+	if !s.RequirePost() {
 		return
 	}
 	expireTime, err := normalizeUserExpireTime(s.GetString("expire_time"))
@@ -148,6 +159,9 @@ func (s *UserController) Edit() {
 		s.display()
 		return
 	}
+	if !s.RequirePost() {
+		return
+	}
 	u, err := file.GetDb().GetUser(id)
 	if err != nil {
 		s.AjaxErr("user ID not found")
@@ -174,6 +188,9 @@ func (s *UserController) Edit() {
 }
 
 func (s *UserController) ChangeStatus() {
+	if !s.RequirePost() {
+		return
+	}
 	id := s.GetIntNoErr("id")
 	if id <= 0 {
 		s.AjaxErr("user ID not found")
@@ -191,12 +208,18 @@ func (s *UserController) ChangeStatus() {
 	}
 	user.Lock()
 	user.Status = status
-	file.GetDb().JsonDb.StoreUsersToJsonFile()
 	user.Unlock()
+	if !status {
+		server.RevokeUserClients(id)
+	}
+	file.GetDb().JsonDb.StoreUsersToJsonFile()
 	s.AjaxOk("modified success")
 }
 
 func (s *UserController) Del() {
+	if !s.RequirePost() {
+		return
+	}
 	id := s.GetIntNoErr("id")
 	if id <= 0 {
 		s.AjaxErr("user ID not found")
@@ -206,6 +229,19 @@ func (s *UserController) Del() {
 		s.AjaxErr("user ID not found")
 		return
 	}
+	// Mark the account inactive before revocation so a reconnect cannot win a
+	// race between disconnecting the old session and removing its ownership
+	// link. DelUser also disables the persisted clients for direct callers.
+	user, err := file.GetDb().GetUser(id)
+	if err != nil {
+		s.AjaxErr("user ID not found")
+		return
+	}
+	user.Lock()
+	user.Status = false
+	user.Unlock()
+	file.GetDb().JsonDb.StoreUsersToJsonFile()
+	server.RevokeUserClients(id)
 	if err := file.GetDb().DelUser(id); err != nil {
 		s.AjaxErr("delete error")
 		return

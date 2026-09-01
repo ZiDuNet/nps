@@ -1,16 +1,16 @@
 package pmux
 
 import (
-	"errors"
 	"net"
+	"sync"
 )
 
 type PortListener struct {
 	net.Listener
-	connCh  chan *PortConn
-	addr    net.Addr
-	isClose bool
-	done    chan struct{}
+	connCh    chan *PortConn
+	addr      net.Addr
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 func NewPortListener(connCh chan *PortConn, addr net.Addr) *PortListener {
@@ -22,26 +22,36 @@ func NewPortListener(connCh chan *PortConn, addr net.Addr) *PortListener {
 }
 
 func (pListener *PortListener) Accept() (net.Conn, error) {
-	if pListener.isClose {
-		return nil, errors.New("the listener has closed")
+	// Prefer a closed listener when both the shutdown signal and a producer
+	// are ready. This keeps Close from handing out a connection after it has
+	// already unblocked a pending Accept.
+	select {
+	case <-pListener.done:
+		return nil, net.ErrClosed
+	default:
 	}
 	select {
 	case <-pListener.done:
-		return nil, errors.New("the listener has closed")
-	case conn := <-pListener.connCh:
+		return nil, net.ErrClosed
+	case conn, ok := <-pListener.connCh:
+		if !ok {
+			return nil, net.ErrClosed
+		}
 		if conn != nil {
+			select {
+			case <-pListener.done:
+				_ = conn.Close()
+				return nil, net.ErrClosed
+			default:
+			}
 			return conn, nil
 		}
-		return nil, errors.New("the listener has closed")
+		return nil, net.ErrClosed
 	}
 }
 
 func (pListener *PortListener) Close() error {
-	if pListener.isClose {
-		return errors.New("the listener has closed")
-	}
-	pListener.isClose = true
-	close(pListener.done)
+	pListener.closeOnce.Do(func() { close(pListener.done) })
 	return nil
 }
 
