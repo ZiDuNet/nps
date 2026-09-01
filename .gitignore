@@ -12,3 +12,7 @@ cmd/npc/npc-gui/build/
 cmd/npc/npc-gui/frontend/dist/
 cmd/npc/npc-gui/frontend/node_modules/
 cmd/npc/npc-gui/frontend/package-lock.json
+docs/node_modules/
+docs/.vuepress/.cache/
+docs/.vuepress/.temp/
+docs/.vuepress/dist/

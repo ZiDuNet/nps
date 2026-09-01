@@ -86,6 +86,32 @@ SOCKS5 的账号密码不在「新增 SOCKS5 隧道」页面单独设置，而�
 - 自定义证书路径
 - 自动 HTTPS
 
+### 域名、DNS 与非标准端口
+
+域名代理不是 DNS 服务。DNS 的职责是把域名解析到 NPS 公网 IP；NPS 根据请求里的 Host 决定转发到哪条域名规则。
+
+假设 NPS 公网地址为 `203.0.113.10`，HTTP 入口为 `30111`，NPC 连接的目标为 `127.0.0.1:8081`：
+
+1. 在 DNS 控制台为 `app.example.com` 添加 A/AAAA 记录，指向 NPS 公网 IP。泛域名场景可添加 `*.example.com`。
+2. 在 `nps.conf` 设置 `http_proxy_port=30111`，重启 NPS。
+3. 在 Web 面板创建域名规则：域名为 `app.example.com`，目标为 `127.0.0.1:8081`，并选择对应客户端。
+4. 在云安全组、系统防火墙和容器端口策略放行 TCP `30111`。
+5. 使用 `http://app.example.com:30111/` 访问。端口不是 80 时必须写在 URL 中。
+
+在 NPS 服务器上可先检查：
+
+~~~bash
+curl -i -H 'Host: app.example.com' http://127.0.0.1:30111/
+~~~
+
+若本机请求成功、外网失败，问题通常在云安全组、防火墙、宿主机端口监听或 Docker 网络，而不是 DNS。若本机请求也失败，确认 NPS 日志出现 `start http listener, port is 30111`，并检查 Host 规则是否已保存、所属客户端是否在线。
+
+### HTTPS 与反向代理
+
+HTTPS 可由 NPS 终结，也可让内网服务自行处理 TLS。使用非标准 HTTPS 端口时，访问地址同样必须包含端口，例如 `https://app.example.com:30443/`。证书、自动 HTTPS 和 Nginx/Caddy 前置反代配置见[服务端增强功能](server/nps_extend.md)。
+
+当 80/443 被 Nginx、Caddy 或其他服务占用时，NPS 可以监听 `30111`/`30443`，由前置反代转发并保留 Host。此时域名仍解析到前置反代所在地址，NPS 不需要直接占用 80/443。
+
 ## Secret 私密代理
 
 Secret 不固定占用公网端口。服务端保存一个唯一密钥，访问端通过同一个密钥建立本地端口。

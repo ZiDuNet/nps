@@ -29,7 +29,7 @@
 | --- | --- | --- |
 | http_proxy_ip | http(s) 代理监听 IP，默认 `0.0.0.0` | `0.0.0.0` |
 | http_proxy_port | 域名代理 http 监听端口（默认 `80`），留空关闭 | `80` |
-| https_proxy_port | 域名代理 https 监听端口（默认 `443`），留空关闭。详见 [使用 https](/server/nps_extend.html#使用-https) | `443` |
+| https_proxy_port | 域名代理 https 监听端口（默认 `443`），留空关闭。详见 [使用 https](nps_extend.md#使用-https) | `443` |
 | show_http_proxy_port | 域名隧道访问地址是否拼接非 80/443 端口，`true` / `false` | `true` |
 | http_add_origin_header | 是否在 http(s) 请求头中追加 `X-Forwarded-For` / `X-Real-IP`，用于内网获取真实 IP | `true` |
 | http_cache | 是否开启静态文件缓存 | `false` |
@@ -58,7 +58,7 @@
 
 | 名称 | 含义 | 默认值 |
 | --- | --- | --- |
-| auth_key | web API 鉴权密钥，详见 [Web API](/nps/extend/api.html) | 首次启动随机生成 |
+| auth_key | web API 鉴权密钥，详见 [Web API](../extend/api.md) | 首次启动随机生成 |
 | auth_crypt_key | `auth/getauthkey` 接口的 AES 加密密钥，**必须 16 位** | 首次启动随机生成 |
 
 ## P2P

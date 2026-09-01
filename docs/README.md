@@ -37,6 +37,54 @@
 10. [GUI 客户端](gui.md)
 11. [升级迁移](migrate.md)
 
+## 文档目录
+
+### 开始使用
+
+- [安装部署](install.md)
+- [快速开始](start.md)
+- [运行命令速查](run.md)
+- [使用示例](extend/example.md)
+- [隧道模式](tunnel.md)
+
+### 服务端
+
+- [服务端介绍](introduction.md)
+- [服务端使用](server/nps_use.md)
+- [服务端配置](server_config.md)
+- [服务端增强功能](server/nps_extend.md)
+- [Docker 部署](docker.md)
+- [宝塔面板部署](bt.md)
+
+### 客户端
+
+- [客户端配置与启动](client_config.md)
+- [配置文件参考](client/config-file.md)
+- [客户端使用](client/use.md)
+- [客户端增强功能](client/npc_extend.md)
+- [GUI 客户端](gui.md)
+- [NPC SDK](client/npc_sdk.md)
+
+### 功能、运维与 API
+
+- [功能概览与能力边界](extend/feature.md)
+- [运行说明与排查](extend/description.md)
+- [用户体系](user.md)
+- [系统架构](architecture.md)
+- [升级迁移](migrate.md)
+- [构建发布](build.md)
+- [Web API 鉴权](extend/api.md)
+- [Web API 清单](extend/webapi.md)
+
+### 社区
+
+- [FAQ](faq.md)
+- [贡献](contribute.md)
+- [交流](discuss.md)
+- [捐助](donate.md)
+- [致谢](thanks.md)
+- [更新日志](changelog.md)
+
 ## 项目链接
 
 - [GitHub](https://github.com/ZiDuNet/nps)

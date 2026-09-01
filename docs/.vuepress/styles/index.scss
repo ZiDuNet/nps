@@ -1,0 +1,66 @@
+:root {
+  --c-brand: #0f766e;
+  --c-brand-light: #0d9488;
+  --c-brand-dark: #115e59;
+  --vp-c-accent: #0f766e;
+  --vp-c-accent-bg: #0f766e;
+  --vp-c-accent-hover: #115e59;
+}
+
+html.dark,
+[data-theme='dark'] {
+  --c-brand: #2dd4bf;
+  --c-brand-light: #5eead4;
+  --c-brand-dark: #14b8a6;
+  --vp-c-accent: #5eead4;
+  --vp-c-accent-bg: #0f766e;
+  --vp-c-accent-hover: #99f6e4;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  line-height: 1.7;
+}
+
+.vp-page [vp-content] {
+  max-width: 52rem;
+}
+
+.vp-page [vp-content] h1 {
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--c-border, #d8dee7);
+}
+
+.vp-page [vp-content] h2 {
+  margin-top: 2.75rem;
+  padding-top: 0.25rem;
+}
+
+.vp-page [vp-content] table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: normal;
+}
+
+.vp-page [vp-content] code {
+  overflow-wrap: anywhere;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--c-brand, #0f766e);
+  outline-offset: 3px;
+}
+
+@media (max-width: 719px) {
+  .vp-page [vp-content] {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
