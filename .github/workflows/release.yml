@@ -316,9 +316,6 @@ jobs:
         with:
           go-version-file: ${{ env.GUI_DIR }}/go.mod
           check-latest: true
-      - name: Test GUI backend
-        working-directory: ${{ env.GUI_DIR }}
-        run: go test ./...
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
         working-directory: ${{ env.GUI_DIR }}
@@ -337,6 +334,9 @@ jobs:
             exit 1
           fi
           zip -q "$APP_NAME-${{ matrix.os_name }}-${{ matrix.arch }}.zip" "$bin"
+      - name: Test GUI backend
+        working-directory: ${{ env.GUI_DIR }}
+        run: go test ./...
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
