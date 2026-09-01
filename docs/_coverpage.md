@@ -1,4 +1,4 @@
-﻿![logo](logo.svg)
+![logo](/logo.svg)
 
 # NPS <small>1.1.2</small>
 

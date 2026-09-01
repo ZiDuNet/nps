@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    branches:
+      - master
     tags:
       - 'v*'
   workflow_dispatch:
@@ -13,6 +15,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   GUI_DIR: cmd/npc/npc-gui
@@ -44,6 +50,16 @@ jobs:
         run: |
           chmod +x build.assets.sh
           ./build.assets.sh
+      - name: Upload cross-platform CLI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-assets
+          path: |
+            *_client.tar.gz
+            *_server.tar.gz
+            npc_sdk.tar.gz
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag' || inputs.release_tag != ''
@@ -99,6 +115,13 @@ jobs:
           chmod +x build.android.sh
           docker run --rm -i -w /app -v $(pwd):/app -e ANDROID_HOME=/usr/local/android_sdk -e GOPROXY=direct fyneio/fyne-cross:android-latest /app/build.android.sh
           ls -la android_client.apk
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-client
+          path: android_client.apk
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag' || inputs.release_tag != ''
@@ -111,7 +134,7 @@ jobs:
 
   # ==================== Docker 镜像 ====================
   build_docker:
-    if: github.ref_type == 'tag' || inputs.release_tag != ''
+    if: github.ref == 'refs/heads/master' || github.ref_type == 'tag' || inputs.release_tag != ''
     runs-on: ubuntu-latest
     env:
       DOCKER_BUILD_RECORD_UPLOAD: false
@@ -121,7 +144,11 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set env
-        run: echo "RELEASE_VERSION=${{ inputs.release_tag || github.ref_name }}" >> $GITHUB_ENV
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          release_version="${RELEASE_TAG_INPUT:-$GITHUB_REF_NAME}"
+          printf 'RELEASE_VERSION=%s\n' "$release_version" >> "$GITHUB_ENV"
       - name: Generate changelog
         id: changelog
         run: |
