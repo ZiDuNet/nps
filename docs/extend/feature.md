@@ -2,6 +2,17 @@
 
 本页按当前实现列出可用功能、配置入口和使用边界。完整的端到端操作可直接参考[使用示例](example.md)；服务端参数见[服务端配置](../server_config.md)，NPC 参数与配置文件格式见[客户端配置](../client_config.md)。
 
+## 功能索引
+
+| 目标 | 阅读入口 |
+| --- | --- |
+| 选择 TCP、UDP、HTTP(S)、SOCKS5、Secret、P2P 或文件访问 | [代理模式](#代理模式)与[隧道模式](../tunnel.md) |
+| 配置域名、泛域名、路径路由、Host/Header、证书或非标准端口 | [域名代理与路由](domain-proxy.md) |
+| 配置 Basic 认证、白名单、黑名单、端口限制、用户和客户端配额 | [访问控制与配额](access-control.md) |
+| 打开 TLS Bridge、KCP、压缩/加密、多路复用或健康检查 | [服务端增强功能](../server/nps_extend.md)与[NPC 配置文件参考](../client/config-file.md) |
+| 查看真实 IP、流量、带宽、连接状态、日志、pprof 和排查顺序 | [运行说明](description.md) |
+| 使用 Web API 自动化客户端、隧道和 Host 管理 | [API 鉴权](api.md)与[API 清单](webapi.md) |
+
 ## 代理模式
 
 | 模式 | 适用场景 | 配置入口 |
@@ -16,6 +27,12 @@
 | 文件访问 | 将客户端本地目录通过 HTTP 暴露 | `mode=file`，配置 `local_path` 与 `strip_pre` |
 
 各模式的端口、命令和限制说明见[隧道模式](../tunnel.md)。普通 TCP/UDP/HTTP/SOCKS5/文件隧道占用服务端端口；域名代理使用统一 HTTP(S) 入口；Secret 与 P2P 在访问端本地监听端口。
+
+## 隧道创建与复制
+
+在 Web 面板新增普通隧道时，服务端端口留空或填 `0` 会由 NPS 在允许范围内自动选择未占用端口。若设置了 `allow_ports`，自动分配同样遵守该白名单。
+
+隧道列表提供「复制」操作。复制会保留所属客户端、模式、目标、备注和访问控制相关设置，并分配新的隧道 ID 与服务端端口；复制后仍应确认端口开放策略、目标可达性和密钥是否符合预期。
 
 ## 域名代理能力
 
@@ -148,7 +165,7 @@ NPS 支持将 Bridge、HTTP(S) 或 Web 管理端口复用在同一监听端口�
 - 客户端可配置带宽、流量、最大连接数和最大隧道数。
 - 普通用户可拥有多个客户端；用户级 `MaxTunnelNum` 统计其所有客户端下的普通隧道与 Host 规则。
 - 客户端或用户到期、停用后，其代理资源会被停止或拒绝新连接。
-- 详细的对象关系、权限和迁移影响见[用户体系](../user.md)与[部署与运行说明](description.md#流量带宽和连接数)。
+- 详细的对象关系、权限和迁移影响见[用户体系](../user.md)与[部署与运行说明](description.md#流量、带宽和连接数)。
 
 ### IP 白名单、黑名单与访问授权
 
@@ -164,7 +181,7 @@ NPS 支持将 Bridge、HTTP(S) 或 Web 管理端口复用在同一监听端口�
 - 管理员账号在 `nps.conf` 中；普通用户、客户端级 Web 登录账号保存在 JSON 数据文件中。
 - HTTP 正向代理、SOCKS5 与域名代理使用客户端的 Basic 认证配置。
 - Web API 使用 `auth_key` 与时间戳签名；见[API 鉴权](api.md)和[API 清单](webapi.md)。
-- 登录验证码通过 `open_captcha=true` 开启，登录尝试限制和安全部署建议见[部署与运行说明](description.md#web-登录保护)。
+- 登录验证码通过 `open_captcha=true` 开启，登录尝试限制和安全部署建议见[部署与运行说明](description.md#web-管理保护)。
 
 ## 运维能力
 

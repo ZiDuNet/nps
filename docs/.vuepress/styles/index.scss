@@ -60,7 +60,9 @@ input:focus-visible {
 
 @media (max-width: 719px) {
   .vp-page [vp-content] {
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
+    // VuePress code blocks extend by 1.5rem on small screens. Keep the
+    // content inset aligned so those blocks cannot create page-level scroll.
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 }

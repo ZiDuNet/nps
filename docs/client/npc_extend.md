@@ -45,7 +45,7 @@ proxy_url=http://user:pass@127.0.0.1:8080
 | `-log_level=0..7` | 日志等级，数值越高输出越详细。 |
 | `-log_path=/path/npc.log` | 指定日志文件路径。 |
 | `-pprof=127.0.0.1:9999` | 临时开启 Go pprof；只可绑定回环或管理网段。 |
-| `-disconnect_timeout=60` | 设置断线检测超时秒数；网络不稳定时需结合服务端设置一起评估。 |
+| `-disconnect_timeout=60` | 设置未收到心跳回包的最大检查次数；检查间隔为 5 秒，默认值约等于 5 分钟。网络不稳定时需与服务端设置一起评估。 |
 
 系统服务日志默认位于 Linux/macOS 的 `/var/log/` 或 Windows 的 NPC 程序目录。按 vkey 创建的独立服务通常使用 `npc-<vkey>.log`。
 

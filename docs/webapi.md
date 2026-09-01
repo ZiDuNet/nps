@@ -1,5 +1,8 @@
 # Web API 兼容页
 
-Web API 文档已合并到 [Web API](api.md)。
+Web API 文档已拆分为两个公开入口：
 
-请优先阅读 [api.md](api.md)，其中包含鉴权方式、客户端接口、用户接口、隧道接口和 Host 域名接口。
+- [Web API 鉴权](extend/api.md)：签名、时间戳、加密 `auth_key` 和调用示例。
+- [Web API 清单](extend/webapi.md)：客户端、用户、隧道、域名和全局设置接口。
+
+请优先使用上述结构化页面。旧链接保留用于兼容外部引用。

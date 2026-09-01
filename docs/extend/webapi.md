@@ -103,8 +103,6 @@ POST /client/edit/
 | ipwhitepass | IP 白名单授权密码 |
 | ipwhitelist | 白名单 IP 列表，`\r\n` 分隔 |
 | expire_time | 到期时间，格式同新增接口 |
-| flow_inlet | 入口流量，单位字节，传入则覆盖原值（留空不修改） |
-| flow_export | 出口流量，单位字节，传入则覆盖原值（留空不修改） |
 
 ---
 
@@ -130,6 +128,67 @@ POST /client/del/
 | 参数 | 含义 |
 | --- | --- |
 | id | 要删除的客户端 id |
+
+---
+
+## User 用户管理
+
+用户接口仅供管理员调用。普通用户账号归属 `users.json`，与客户端的历史 Web 登录字段不同。
+
+### 用户列表
+
+```
+POST /user/list/
+```
+
+| 参数 | 含义 |
+| --- | --- |
+| search | 用户名或备注关键词 |
+| sort | 排序字段 |
+| order | `asc` 或 `desc` |
+| offset | 分页起始 |
+| limit | 每页数量 |
+
+### 添加用户
+
+```
+POST /user/add/
+```
+
+| 参数 | 含义 |
+| --- | --- |
+| username | 登录用户名，必须唯一 |
+| password | 登录密码 |
+| remark | 管理备注 |
+| max_tunnel | 该用户全部客户端可创建的最大隧道数，`0` 为不限制 |
+| expire_time | 到期时间；留空表示永不过期 |
+
+### 修改用户
+
+```
+POST /user/edit/
+```
+
+| 参数 | 含义 |
+| --- | --- |
+| id | 用户 ID |
+| username | 登录用户名 |
+| password | 新密码；留空时保留原密码 |
+| remark | 管理备注 |
+| max_tunnel | 最大隧道数，`0` 为不限制 |
+| expire_time | 到期时间；留空表示永不过期 |
+
+### 更改用户状态与删除
+
+```
+POST /user/changestatus/
+POST /user/del/
+```
+
+| 接口 | 参数 | 含义 |
+| --- | --- | --- |
+| `/user/changestatus/` | `id`、`status` | 启用或停用用户。停用时会撤销其名下客户端的在线连接。 |
+| `/user/del/` | `id` | 删除用户，并停用其名下客户端。 |
 
 ---
 
@@ -182,7 +241,7 @@ POST /index/add/
 | local_proxy | 是否转发到 nps 服务器本地，`true` / `false` |
 | password | 隧道密码（secret 模式） |
 | local_path | 本地文件路径（file 模式） |
-| strip_pre | URL 前缀去除（httpProxy 模式） |
+| strip_pre | URL 前缀去除（仅 `file` 模式） |
 | proto_version | 协议版本 |
 
 ---
@@ -219,10 +278,8 @@ POST /index/edit/
 | remark | 备注 |
 | password | 隧道密码 |
 | local_path | 本地文件路径 |
-| strip_pre | URL 前缀去除 |
+| strip_pre | URL 前缀去除（仅 `file` 模式） |
 | proto_version | 协议版本 |
-| flow_inlet | 入口流量，单位字节，传入则覆盖原值（留空不修改） |
-| flow_export | 出口流量，单位字节，传入则覆盖原值（留空不修改） |
 
 ---
 
@@ -335,8 +392,6 @@ POST /index/edithost/
 | key_file_path | HTTPS 证书私钥文本或路径 |
 | cert_file_path | HTTPS 证书文件文本或路径 |
 | AutoHttps | 是否自动 HTTPS |
-| flow_inlet | 入口流量，单位字节，传入则覆盖原值（留空不修改） |
-| flow_export | 出口流量，单位字节，传入则覆盖原值（留空不修改） |
 
 ```
 POST /index/hoststop/

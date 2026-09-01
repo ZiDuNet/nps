@@ -91,7 +91,7 @@ TLS 连接使用：
 | `auth_key` | Web API 鉴权密钥 | 首次启动随机生成 |
 | `auth_crypt_key` | 获取加密 authKey 的 AES 密钥，必须 16 位 | 首次启动随机生成 |
 | `public_vkey` | 公共客户端密钥，留空关闭 | 空（关闭） |
-| `ip_limit` | 是否启用 Bridge IP 访问限制 | `false` |
+| `ip_limit` | 是否只允许已注册的来源 IP 访问代理资源 | `false` |
 | `allow_ports` | 隧道端口白名单 | 空 |
 | `allow_local_proxy` | 是否允许代理到服务端本机 | `false` |
 

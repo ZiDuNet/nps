@@ -48,11 +48,11 @@ server_port=9001
 | `max_conn` | 此客户端最大数据连接数。 |
 | `rate_limit` | 此客户端带宽上限，单位 KiB/s。 |
 | `flow_limit` | 此客户端累计流量上限，单位 MiB，入口与出口相加计算。 |
-| `disconnect_timeout` | 断线检测超时秒数，默认 `60`。 |
+| `disconnect_timeout` | 未收到心跳回包的最大检查次数；检查间隔为 5 秒，默认 `60`，约为 5 分钟。 |
 | `pprof_addr` | 可选调试监听地址，例如 `127.0.0.1:9999`。只允许在受控网络使用。 |
 | `remark` | 客户端显示备注。 |
 
-服务端是否执行 `max_conn`、`rate_limit` 和 `flow_limit`，取决于对应的 `allow_*` 开关。具体配额语义见[运行说明](../extend/description.md#流量带宽和连接数)。
+服务端是否执行 `max_conn`、`rate_limit` 和 `flow_limit`，取决于对应的 `allow_*` 开关。具体配额语义见[运行说明](../extend/description.md#流量、带宽和连接数)。
 
 ## HTTP(S) 域名规则
 

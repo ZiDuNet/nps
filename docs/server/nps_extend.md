@@ -44,7 +44,7 @@ npc.exe -server=1.1.1.1:8024 -vkey=xxx                       # 明文桥接（br
 npc.exe -server=1.1.1.1:8025 -vkey=xxx -tls_enable=true      # TLS 桥接（tls_bridge_port）
 ```
 
-> 客户端忽略证书校验，请勿暴露在不可信网络里。
+> 客户端默认会校验证书。使用自签名证书时，请配置 `-tls_fingerprint`、`-tls_ca_file` 或 `-tls_server_name`；`-tls_insecure_skip_verify=true` 仅用于兼容旧部署，生产环境不要开启。
 
 ## 全局参数
 
@@ -129,7 +129,7 @@ nps 服务端支持在 web 上显示和统计服务器相关信息，`system_inf
 将 `nps.conf` 中的 `web_port` 设置为空或删除。
 
 ## 服务端多用户登录
-`allow_user_login` 默认开启。登录用户名为 `user`，密码为对应客户端的验证密钥；登录后可进入客户端编辑修改 Web 登录用户名和密码。
+`allow_user_login` 默认开启。当前优先使用「用户管理」中创建的普通用户账号登录，账号与密码保存在 `users.json`；登录后可管理归属给该用户的多个客户端。历史客户端仍兼容两种登录方式：配置过 `WebUserName`/`WebPassword` 时使用该凭据；两项均为空时可使用用户名 `user` 与该客户端 `VerifyKey` 登录。新部署请使用独立用户体系，详见[用户体系](../user.md)。
 
 ## 用户注册功能
 将 `allow_user_register=true` 后登录页会出现注册入口。

@@ -1,4 +1,6 @@
-﻿## 直接运行
+# 客户端使用
+
+## 直接运行
 
 直接双击 `npc`/`npc.exe`，无任何参数，按提示输入即可：
 
@@ -23,6 +25,16 @@
 ./npc -server=ip:8025 -vkey=xxx -tls_enable=true       # TLS 桥接
 ./npc -server=ip:8024 -vkey=ytkpyr0er676m0r7,iwnbjfbvygvzyzzt  # 同时拉起多个隧道 ID（逗号拼接）
 ```
+
+## 配置文件模式
+
+无配置文件模式适合由 Web 管理面板统一维护客户端、隧道和域名规则；配置文件模式则适合批量部署、将规则纳入基础设施代码，或使用健康检查、端口范围映射等进阶能力。
+
+```shell
+./npc -config=conf/npc.conf
+```
+
+一个配置文件使用 `[common]` 定义 `server_addr`、`vkey`、TLS 和日志等公共参数，再用多个规则节定义 TCP、UDP、Host、Secret、P2P 或文件访问。完整字段、模板环境变量和可运行示例见 [NPC 配置文件参考](config-file.md)。
 
 
 ## GUI 客户端

@@ -1,19 +1,14 @@
-# 增强功能
+# 服务端增强功能（兼容路径）
 
-> 本页保留部分早期扩展说明。当前版本的端口、用户体系和配置默认值以 [安装部署](install.md)、[服务端配置](server_config.md) 和 [用户体系](user.md) 为准。
+> 此路径为早期外部链接保留。请优先阅读[服务端增强功能](server/nps_extend.md)和[域名代理与路由](extend/domain-proxy.md)，它们对应当前版本的配置项与实现。
 
-## 使用https
+## HTTPS
 
-**方式一：** 类似于nginx实现https的处理
+当前版本不再使用 `https_just_proxy`。域名规则上传证书时由 NPS 终结 TLS；未上传证书时 NPS 将 TLS 流量转发给内网服务处理。证书、自动 HTTPS、非标准端口和前置反向代理配置请使用[当前 HTTPS 说明](server/nps_extend.md#使用-https)。
 
-在配置文件中将https_proxy_port设置为443或者其他你想配置的端口，将`https_just_proxy`设置为false，nps 重启后，在web管理界面，域名新增或修改界面中修改域名证书和密钥。
+## 历史补充
 
-**此外：** 可以在`nps.conf`中设置一个默认的https配置，当遇到未在web中设置https证书的域名解析时，将自动使用默认证书，另还有一种情况就是对于某些请求的clienthello不携带sni扩展信息，nps也将自动使用默认证书
-
-
-**方式二：** 在内网对应服务器上设置https
-
-在`nps.conf`中将`https_just_proxy`设置为true，并且打开`https_proxy_port`端口，然后nps将直接转发https请求到内网服务器上，由内网服务器进行https处理
+以下内容仅保留早期部署参考。涉及监听端口、用户登录、证书、容器网络或安全控制时，请以当前结构化页面为准。
 
 ## 与nginx配合
 

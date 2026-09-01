@@ -25,13 +25,13 @@
 
 ## 推荐阅读顺序
 
-1. [安装部署](install.md)
+1. [安装与部署](install/)
 2. [快速开始](start.md)
 3. [运行命令速查](run.md)
 4. [用户体系](user.md)
 5. [隧道模式](tunnel.md)
 6. [系统架构](architecture.md)
-7. [服务端配置](server_config.md)
+7. [服务端配置文件参考](server/server_config.md)
 8. [客户端配置](client_config.md)
 9. [Docker 部署](docker.md)
 10. [GUI 客户端](gui.md)
@@ -39,9 +39,10 @@
 
 ## 文档目录
 
-### 开始使用
+### 快速上手
 
-- [安装部署](install.md)
+- [安装与部署](install/)
+- [完整部署参考](install.md)
 - [快速开始](start.md)
 - [运行命令速查](run.md)
 - [使用示例](extend/example.md)
@@ -51,7 +52,8 @@
 
 - [服务端介绍](introduction.md)
 - [服务端使用](server/nps_use.md)
-- [服务端配置](server_config.md)
+- [服务端配置文件参考](server/server_config.md)
+- [部署安全与参数速查](server_config.md)
 - [服务端增强功能](server/nps_extend.md)
 - [Docker 部署](docker.md)
 - [宝塔面板部署](bt.md)
@@ -65,25 +67,28 @@
 - [GUI 客户端](gui.md)
 - [NPC SDK](client/npc_sdk.md)
 
-### 功能、运维与 API
+### 扩展功能
 
 - [功能概览与能力边界](extend/feature.md)
+- [域名代理与路由](extend/domain-proxy.md)
+- [访问控制与配额](extend/access-control.md)
 - [运行说明与排查](extend/description.md)
+- [Web API 鉴权](extend/api.md)
+- [Web API 清单](extend/webapi.md)
+
+### 项目与社区
+
 - [用户体系](user.md)
 - [系统架构](architecture.md)
 - [升级迁移](migrate.md)
 - [构建发布](build.md)
-- [Web API 鉴权](extend/api.md)
-- [Web API 清单](extend/webapi.md)
-
-### 社区
-
+- [本项目更新日志](changelog.md)
+- [上游更新日志](changelog/)
 - [FAQ](faq.md)
 - [贡献](contribute.md)
 - [交流](discuss.md)
 - [捐助](donate.md)
 - [致谢](thanks.md)
-- [更新日志](changelog.md)
 
 ## 项目链接
 

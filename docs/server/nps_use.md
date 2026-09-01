@@ -1,3 +1,5 @@
+# 服务端使用
+
 ## Web 管理
 
 进入 web 界面：新安装默认使用 `http://127.0.0.1:8081`。远程访问请使用 HTTPS 反向代理，或将 `web_ip` 限制为受控管理网段并开启 `web_open_ssl`。
@@ -25,9 +27,10 @@ nps.exe -server       # windows（操作系统服务时需管理员）
 nps_dir/
 ├── conf/
 │   └── nps.conf    // nps主配置文件
-│   └── client.json // 客户端列表配置文件
+│   └── clients.json // 客户端列表配置文件
 │   └── tasks.json  // 隧道列表配置文件
 │   └── hosts.json  // 域名解析列表配置文件
+│   └── users.json  // 普通用户列表配置文件
 │   └── global.json // 全局参数配置文件
 ├── nps // nps主程序
 ```

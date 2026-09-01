@@ -50,7 +50,7 @@
 | web_cert_file | web 管理 https 证书路径 | `conf/server.pem` |
 | web_key_file | web 管理 https 私钥路径 | `conf/server.key` |
 | open_captcha | 登录是否开启验证码校验 | `false` |
-| allow_user_login | 是否允许多用户登录，开启后用户名 `user`，密码为客户端的验证密钥 | `true` |
+| allow_user_login | 是否允许普通用户登录。优先使用「用户管理」中创建的账号；`user` + 客户端 VerifyKey 仅为历史兼容方式 | `true` |
 | allow_user_register | 是否允许从登录页注册账号 | `false` |
 | allow_user_change_username | 多用户登录后是否允许修改用户名 | `true` |
 
