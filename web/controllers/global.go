@@ -40,6 +40,10 @@ func inspectPlatformDomain(domain file.PlatformDomain) platformDomainStatus {
 		KeyFilePath:  domain.KeyFilePath,
 		Status:       "证书不可用",
 	}
+	if domain.CertFilePath == "" && domain.KeyFilePath == "" {
+		status.Status = "未配置证书（仅 HTTP）"
+		return status
+	}
 	pair, err := tls.LoadX509KeyPair(domain.CertFilePath, domain.KeyFilePath)
 	if err != nil {
 		status.Status = "读取或校验证书失败"

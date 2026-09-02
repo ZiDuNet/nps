@@ -40,7 +40,7 @@
 在 Web 面板「域名」新增 Host 规则，或在 NPC 配置文件中配置 `host` 和 `target_addr`。每条规则可以设置：
 
 - **精确域名与泛域名**：`app.example.com` 或 `*.example.com`。DNS 仍要将相应域名解析到 NPS 公网 IP。
-- **平台泛域名池**：管理员可在全局参数维护多个带证书的 `*.example.com`，用户选择后以唯一前缀创建子域名，平台证书在服务端锁定。DNS、续期和诊断见[平台域名说明](platform-domain.md)。
+- **平台泛域名池**：管理员可在全局参数维护多个 `*.example.com`，按需绑定证书；用户选择后以唯一前缀创建子域名，平台证书在服务端锁定，无证书项仅支持 HTTP。DNS、续期和诊断见[平台域名说明](platform-domain.md)。
 - **协议选择**：`http`、`https` 或 `all`。HTTP 与 HTTPS 监听端口由 `http_proxy_port` 和 `https_proxy_port` 决定；非 80/443 端口需要在浏览器 URL 中显式写出。
 - **路径路由**：同一个域名可按 `location` 匹配不同路径，例如 `/api` 和 `/static`。
 - **多目标轮询**：目标地址每行一个，NPS 按顺序轮换，可用于简单负载均衡。需要按存活状态摘除节点时，配合[健康检查](#健康检查)。

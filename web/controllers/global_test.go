@@ -69,6 +69,13 @@ func TestInspectPlatformDomainChecksWildcardCoverage(t *testing.T) {
 	}
 }
 
+func TestInspectPlatformDomainReportsHTTPOnlyWithoutCertificate(t *testing.T) {
+	status := inspectPlatformDomain(file.PlatformDomain{ID: "http-only", Wildcard: "*.example.com"})
+	if status.Readable || status.Status != "未配置证书（仅 HTTP）" {
+		t.Fatalf("HTTP-only platform status = %#v", status)
+	}
+}
+
 func writeControllerTestCertificate(t *testing.T, dnsNames []string) (string, string) {
 	t.Helper()
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

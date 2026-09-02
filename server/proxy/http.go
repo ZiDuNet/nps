@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/subtle"
 	"crypto/tls"
 	"ehang.io/nps/bridge"
@@ -70,6 +71,64 @@ const (
 )
 
 var httpProxyHandshakeTimeout = 10 * time.Second
+
+// hostRequestReadTimeout is the idle window used while waiting for a subsequent
+// request on a hijacked Host connection. It is cleared only after the upstream
+// response is identified as an SSE stream; finite responses keep this bound.
+var hostRequestReadTimeout = httpReadHeaderTimeout
+
+type responseProbeReader struct {
+	reader     io.Reader
+	streaming  chan struct{}
+	streamOnce sync.Once
+	header     []byte
+	parsed     bool
+}
+
+func (r *responseProbeReader) Read(p []byte) (int, error) {
+	if r == nil || r.reader == nil {
+		return 0, io.EOF
+	}
+	n, err := r.reader.Read(p)
+	if n > 0 {
+		r.inspectHeader(p[:n])
+	}
+	return n, err
+}
+
+// inspectHeader identifies response types whose body is intentionally kept
+// open after the first event. Ordinary finite responses can use a persistent
+// upstream connection too, so treating every first byte as a stream would
+// disable idle cleanup and leak the hijacked connection.
+func (r *responseProbeReader) inspectHeader(chunk []byte) {
+	if r == nil || r.parsed || r.streaming == nil {
+		return
+	}
+	const maxProbeHeaderSize = 64 << 10
+	if len(r.header)+len(chunk) > maxProbeHeaderSize {
+		chunk = chunk[:maxProbeHeaderSize-len(r.header)]
+	}
+	if len(chunk) > 0 {
+		r.header = append(r.header, chunk...)
+	}
+	end := bytes.Index(r.header, []byte("\r\n\r\n"))
+	if end < 0 {
+		if len(r.header) >= maxProbeHeaderSize {
+			r.parsed = true
+		}
+		return
+	}
+	r.parsed = true
+	response, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(r.header[:end+4])), nil)
+	if err != nil {
+		return
+	}
+	defer response.Body.Close()
+	contentType := strings.ToLower(strings.TrimSpace(strings.SplitN(response.Header.Get("Content-Type"), ";", 2)[0]))
+	if contentType == "text/event-stream" {
+		r.streamOnce.Do(func() { close(r.streaming) })
+	}
+}
 
 // waitHTTPResponse bounds the hand-off wait used by keep-alive Host changes.
 // A client that stops reading can otherwise leave CopyBuffer blocked in c.Write
@@ -362,7 +421,11 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		c.Close()
 	}()
 	firstReq := true
+	var responseDone chan struct{}
+	var responseStreaming chan struct{}
 reset:
+	responseDone = make(chan struct{})
+	responseStreaming = make(chan struct{})
 	remoteAddr = strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
 	if len(remoteAddr) == 0 {
 		remoteAddr = c.RemoteAddr().String()
@@ -449,19 +512,21 @@ reset:
 	// Read response bytes from the client-side target connection.
 	isReset.Store(false)
 	wg.Add(1)
-	go func(targetConn io.ReadWriteCloser, requestHost *file.Host) {
+	go func(targetConn io.ReadWriteCloser, requestHost *file.Host, streaming, done chan struct{}) {
 		defer targetConn.Close()
 		defer func() {
 			if !isReset.Load() {
 				c.Close()
 			}
 			wg.Done()
+			close(done)
 		}()
 
-		if err1 := goroutine.CopyBuffer(c, targetConn, hostFlow, nil, requestHost, ""); err1 != nil {
+		probe := &responseProbeReader{reader: targetConn, streaming: streaming}
+		if err1 := goroutine.CopyBufferWithFlows(c, probe, hostFlow, []*file.Flow{clientFlow}, nil, requestHost, ""); err1 != nil {
 			return
 		}
-	}(connClient, currentHost)
+	}(connClient, currentHost, responseStreaming, responseDone)
 
 	for {
 		//if the cache start and the request is in the cache list, return the cache
@@ -518,13 +583,44 @@ reset:
 
 	readReq:
 		//read req from connection
-		if err := c.SetReadDeadline(time.Now().Add(httpReadHeaderTimeout)); err != nil {
+		if err := c.SetReadDeadline(time.Now().Add(hostRequestReadTimeout)); err != nil {
 			return
 		}
 		r, err = http.ReadRequest(br)
 		if err != nil {
-			//break
-			return
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				// Prefer a completed upstream response when both channels become
+				// ready together. Otherwise a finite response could randomly enter
+				// the streaming branch and keep the handler blocked on a new request.
+				select {
+				case <-responseDone:
+					return
+				default:
+				}
+				select {
+				case <-responseDone:
+					return
+				case <-responseStreaming:
+					select {
+					case <-responseDone:
+						return
+					default:
+					}
+					// An explicit SSE response owns this connection. Continue
+					// waiting for a client request or disconnect without an
+					// artificial deadline. Other response types retain the
+					// bounded idle timeout above.
+					if deadlineErr := c.SetReadDeadline(time.Time{}); deadlineErr != nil {
+						return
+					}
+					r, err = http.ReadRequest(br)
+				default:
+					return
+				}
+			}
+			if err != nil {
+				return
+			}
 		}
 		r.URL.Scheme = scheme
 		if hostTmp, err := file.GetDb().GetInfoByHost(r.Host, r); err != nil {

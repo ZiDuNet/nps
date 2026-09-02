@@ -581,6 +581,9 @@ func (s *DbUtils) SaveGlobal(t *Glob) error {
 	if err := s.validatePlatformWildcardConflicts(platformDomains); err != nil {
 		return err
 	}
+	if err := s.validatePlatformDomainHostSchemes(platformDomains); err != nil {
+		return err
+	}
 	for _, domain := range platformDomains {
 		if err := validatePlatformDomainCertificate(domain); err != nil {
 			return err
@@ -825,7 +828,9 @@ func (s *DbUtils) GetPlatformDomains() []PlatformDomain {
 }
 
 // GetUsablePlatformDomains omits manually edited or stale entries whose
-// certificate cannot safely serve a platform hostname. The administrator can
+// certificate cannot safely serve a platform hostname. A pair of empty paths
+// is intentionally retained as an HTTP-only wildcard; the Host write path
+// rejects HTTPS or dual-protocol rules for that case. The administrator can
 // still see and repair every entry on the global settings page.
 func (s *DbUtils) GetUsablePlatformDomains() []PlatformDomain {
 	domains := s.GetPlatformDomains()
@@ -1010,6 +1015,38 @@ func (s *DbUtils) validatePlatformWildcardConflicts(domains []PlatformDomain) er
 	return conflict
 }
 
+// validatePlatformDomainHostSchemes prevents an administrator from removing
+// a certificate while a referenced platform Host still requires HTTPS. The
+// existing route must be edited to HTTP first; silently downgrading it would
+// change its public behavior and could leave AutoHttps enabled.
+func (s *DbUtils) validatePlatformDomainHostSchemes(domains []PlatformDomain) error {
+	if len(domains) == 0 {
+		return nil
+	}
+	domainsByID := make(map[string]PlatformDomain, len(domains))
+	for _, domain := range domains {
+		domainsByID[domain.ID] = domain
+	}
+	var conflict error
+	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.RLock()
+		domain, usesDomain := domainsByID[host.PlatformDomainID]
+		scheme := strings.ToLower(strings.TrimSpace(host.Scheme))
+		hostID := host.Id
+		host.RUnlock()
+		if usesDomain && domain.CertFilePath == "" && domain.KeyFilePath == "" && scheme != "http" {
+			conflict = fmt.Errorf("平台域名 %s 仍被 HTTPS 或双协议主机 %d 使用，请先将该主机改为 HTTP", domain.Wildcard, hostID)
+			return false
+		}
+		return true
+	})
+	return conflict
+}
+
 func (s *DbUtils) preparePlatformHost(host *Host, previous *Host) error {
 	platformDomainID := strings.TrimSpace(host.PlatformDomainID)
 	if platformDomainID == "" {
@@ -1035,6 +1072,9 @@ func (s *DbUtils) preparePlatformHost(host *Host, previous *Host) error {
 	}
 	if err := validatePlatformDomainCertificate(*domain); err != nil {
 		return err
+	}
+	if domain.CertFilePath == "" && domain.KeyFilePath == "" && host.Scheme != "http" {
+		return fmt.Errorf("平台域名 %s 未配置证书，只能创建 HTTP 规则", domain.Wildcard)
 	}
 	hostName := normalizeHostName(host.Host)
 	if !platformHostMatches(hostName, domain.Wildcard) {
@@ -1398,8 +1438,8 @@ func normalizePlatformDomains(input []PlatformDomain) ([]PlatformDomain, error) 
 		if _, exists := byID[domain.ID]; exists {
 			return nil, errors.New("平台域名 ID 重复")
 		}
-		if domain.CertFilePath == "" || domain.KeyFilePath == "" {
-			return nil, fmt.Errorf("平台域名 %s 的证书和私钥路径不能为空", wildcard)
+		if (domain.CertFilePath == "") != (domain.KeyFilePath == "") {
+			return nil, fmt.Errorf("平台域名 %s 的证书和私钥路径必须同时填写，或同时留空", wildcard)
 		}
 		domain.Wildcard = wildcard
 		for _, existing := range domains {
@@ -1433,6 +1473,12 @@ func deterministicPlatformDomainID(wildcard string, existing map[string]struct{}
 // issued to a new platform hostname. The same check runs on SaveGlobal and at
 // the data-layer Host write boundary so manually edited JSON cannot bypass it.
 func validatePlatformDomainCertificate(domain PlatformDomain) error {
+	// A platform wildcard may intentionally be HTTP-only. Empty certificate
+	// paths are valid as a pair; HTTPS hosts still reject this configuration in
+	// preparePlatformHost below.
+	if domain.CertFilePath == "" && domain.KeyFilePath == "" {
+		return nil
+	}
 	pair, err := tls.LoadX509KeyPair(domain.CertFilePath, domain.KeyFilePath)
 	if err != nil {
 		return fmt.Errorf("平台域名 %s 的证书或私钥不可用: %w", domain.Wildcard, err)

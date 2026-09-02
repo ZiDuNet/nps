@@ -490,6 +490,6 @@ POST /global/save/
 | --- | --- |
 | globalBlackIpList | 全局黑名单 IP 列表，`\r\n` 分隔 |
 | serverUrl | 服务端访问地址（用于更正显示 IP） |
-| platform_domains | 平台域名数组的 JSON。每项为 `ID`、`Wildcard`（`*.example.com`）、`CertFilePath`、`KeyFilePath`；新增项可省略 `ID`，系统会生成。已被 Host 引用的项不可删除或修改 `Wildcard`，但可更新证书路径。 |
+| platform_domains | 平台域名数组的 JSON。每项为 `ID`、`Wildcard`（`*.example.com`）、`CertFilePath`、`KeyFilePath`；证书和私钥可同时留空（该项仅支持 HTTP），但不能只填一项。新增项可省略 `ID`，系统会生成。已被 Host 引用的项不可删除或修改 `Wildcard`，但可更新证书路径。 |
 
 ---

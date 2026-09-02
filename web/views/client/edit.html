@@ -20,6 +20,13 @@
                     <input type="hidden" name="id" value="{{.c.Id}}">
 
                     <div class="form-section-title"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
+                    <div class="form-group form-group--wide">
+                        <label class="col-sm-2 control-label font-bold" data-i18n-zh="客户端标识" data-i18n-en="Client identity">客户端标识</label>
+                        <div class="col-sm-10">
+                            <div class="readonly-client"><strong>{{if .c.Remark}}{{.c.Remark}}{{else}}未命名客户端{{end}}</strong><small>ID {{.c.Id}}</small></div>
+                            <span class="help-block" data-i18n-zh="客户端 ID 由系统分配，编辑时不可更换。" data-i18n-en="The client ID is assigned by the system and cannot be changed while editing.">客户端 ID 由系统分配，编辑时不可更换。</span>
+                        </div>
+                    </div>
                     <div class="form-group" id="remark">
                         <label class="col-sm-2 control-label font-bold" for="client-remark" langtag="word-remark"></label>
                         <div class="col-sm-10">

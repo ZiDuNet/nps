@@ -523,12 +523,12 @@
 		<en-US>Target (IP:Port)</en-US>
 	</lang>
 	<lang id="word-tcpconnections_established">
-		<zh-CN>TCP 连接 (已建立)</zh-CN>
-		<en-US>TCP connections (establish)</en-US>
+		<zh-CN>系统 TCP 连接 (已建立)</zh-CN>
+		<en-US>System TCP connections (established)</en-US>
 	</lang>
 	<lang id="word-tcpconnections">
-		<zh-CN>当前TCP连接数</zh-CN>
-		<en-US>TCP connections</en-US>
+		<zh-CN>当前代理连接</zh-CN>
+		<en-US>Active proxy connections</en-US>
 	</lang>
 	<lang id="word-totalclients">
 		<zh-CN>客户端总数</zh-CN>

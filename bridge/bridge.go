@@ -232,6 +232,8 @@ func applyHealthResult(target *file.Target, health *file.Health, info string, he
 	if target == nil || health == nil || !strings.Contains(target.TargetStr, info) {
 		return
 	}
+	health.Lock()
+	defer health.Unlock()
 	if !healthy {
 		if target.TargetArr == nil || (len(target.TargetArr) == 0 && len(health.HealthRemoveArr) == 0) {
 			target.TargetArr = common.TrimArr(strings.Split(target.TargetStr, "\n"))

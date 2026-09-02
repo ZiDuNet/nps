@@ -139,6 +139,64 @@ func TestPlatformDomainMissingIDIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestPlatformDomainAllowsHTTPOnlyWithoutCertificate(t *testing.T) {
+	domain := testPlatformDomain("http-only", "*.example.com", "", "")
+	normalized, err := normalizePlatformDomains([]PlatformDomain{domain})
+	if err != nil {
+		t.Fatalf("empty certificate pair should be valid: %v", err)
+	}
+	if len(normalized) != 1 || normalized[0].CertFilePath != "" || normalized[0].KeyFilePath != "" {
+		t.Fatalf("empty certificate pair was changed: %#v", normalized)
+	}
+
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	if err := utils.SaveGlobal(&Glob{PlatformDomains: []PlatformDomain{domain}}); err != nil {
+		t.Fatalf("HTTP-only platform domain should save: %v", err)
+	}
+	if got := utils.GetUsablePlatformDomains(); len(got) != 1 {
+		t.Fatalf("HTTP-only platform domain should remain selectable: %#v", got)
+	}
+
+	httpHost := testPlatformHost(1, "app.example.com", "http-only")
+	httpHost.Scheme = "http"
+	if err := utils.NewHost(httpHost); err != nil {
+		t.Fatalf("HTTP-only platform host should save: %v", err)
+	}
+	httpsHost := testPlatformHost(2, "secure.example.com", "http-only")
+	httpsHost.Scheme = "https"
+	if err := utils.NewHost(httpsHost); err == nil {
+		t.Fatal("HTTP-only platform host must reject HTTPS")
+	}
+}
+
+func TestPlatformDomainCannotLoseCertificateWhileHTTPSHostUsesIt(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	configured := testPlatformDomainWithCertificate(t, "platform-1", "*.example.com")
+	if err := utils.SaveGlobal(&Glob{PlatformDomains: []PlatformDomain{configured}}); err != nil {
+		t.Fatal(err)
+	}
+	host := testPlatformHost(1, "app.example.com", "platform-1")
+	if err := utils.NewHost(host); err != nil {
+		t.Fatal(err)
+	}
+	if err := utils.SaveGlobal(&Glob{PlatformDomains: []PlatformDomain{
+		testPlatformDomain("platform-1", "*.example.com", "", ""),
+	}}); err == nil {
+		t.Fatal("certificate removal must be rejected while an HTTPS host uses it")
+	}
+
+	host.Lock()
+	host.Scheme = "http"
+	host.Unlock()
+	if err := utils.SaveGlobal(&Glob{PlatformDomains: []PlatformDomain{
+		testPlatformDomain("platform-1", "*.example.com", "", ""),
+	}}); err != nil {
+		t.Fatalf("certificate removal should be allowed after switching host to HTTP: %v", err)
+	}
+}
+
 func TestPlatformDomainRejectsUnusableCertificateAtDataBoundary(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}

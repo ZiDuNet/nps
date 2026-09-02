@@ -159,6 +159,14 @@ func newConnGroup(dst, src io.ReadWriteCloser, wg *sync.WaitGroup, n *int64, flo
 }
 
 func CopyBuffer(dst io.Writer, src io.Reader, flow *file.Flow, task *file.Tunnel, host *file.Host, remote string) (err error) {
+	return CopyBufferWithFlows(dst, src, flow, nil, task, host, remote)
+}
+
+// CopyBufferWithFlows copies bytes while accounting them against the primary
+// flow and any additional flows. The extra flow list is useful when one byte
+// stream belongs to more than one ownership scope, such as a Host response
+// that must count toward both the Host and its Client totals.
+func CopyBufferWithFlows(dst io.Writer, src io.Reader, flow *file.Flow, additionalFlows []*file.Flow, task *file.Tunnel, host *file.Host, remote string) (err error) {
 	buf := common.CopyBuff.Get()
 	defer common.CopyBuff.Put(buf)
 	var taskClient *file.Client
@@ -252,6 +260,7 @@ func CopyBuffer(dst io.Writer, src io.Reader, flow *file.Flow, task *file.Tunnel
 		if nr > 0 {
 			nw, ew := dst.Write(buf[0:nr])
 			if nw > 0 {
+				trafficExceeded := false
 				//written += int64(nw)
 				if flow != nil {
 					flow.Add(int64(nw), int64(nw))
@@ -269,7 +278,7 @@ func CopyBuffer(dst io.Writer, src io.Reader, flow *file.Flow, task *file.Tunnel
 						}
 						logs.Error("客户端[%d]流量已经超出", clientID)
 						err = errors.New("traffic exceeded")
-						break
+						trafficExceeded = true
 					}
 				}
 				if taskFlow != nil && flow != taskFlow {
@@ -278,7 +287,30 @@ func CopyBuffer(dst io.Writer, src io.Reader, flow *file.Flow, task *file.Tunnel
 				if hostFlow != nil && flow != hostFlow {
 					hostFlow.Add(int64(nw), int64(nw))
 				}
-
+				for _, additionalFlow := range additionalFlows {
+					if additionalFlow != nil && additionalFlow != flow && additionalFlow != taskFlow && additionalFlow != hostFlow {
+						additionalFlow.Add(int64(nw), int64(nw))
+						if additionalFlow.Exceeded() {
+							clientID := 0
+							if taskClient != nil {
+								taskClient.RLock()
+								clientID = taskClient.Id
+								taskClient.RUnlock()
+							} else if hostClient != nil {
+								hostClient.RLock()
+								clientID = hostClient.Id
+								hostClient.RUnlock()
+							}
+							logs.Error("客户端[%d]流量已经超出", clientID)
+							err = errors.New("traffic exceeded")
+							trafficExceeded = true
+							break
+						}
+					}
+				}
+				if trafficExceeded {
+					break
+				}
 			}
 			if ew != nil {
 				err = ew

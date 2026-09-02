@@ -236,24 +236,10 @@ $(document).ready(function () {
 //}
 
 function SmoothlyMenu() {
-    if (!$('body').hasClass('mini-navbar') || $('body').hasClass('body-small')) {
-        // Hide menu in order to smoothly turn on when maximize menu
-        $('#side-menu').hide();
-        // For smoothly turn on menu
-        setTimeout(
-            function () {
-                $('#side-menu').fadeIn(400);
-            }, 200);
-    } else if ($('body').hasClass('fixed-sidebar')) {
-        $('#side-menu').hide();
-        setTimeout(
-            function () {
-                $('#side-menu').fadeIn(400);
-            }, 100);
-    } else {
-        // Remove all inline style from jquery fadeIn function to reset menu state
-        $('#side-menu').removeAttr('style');
-    }
+    // Keep the menu in the layout while its width/transform changes. The old
+    // hide/fade sequence left a blank sidebar during every navigation toggle.
+    $('#side-menu').stop(true, true).removeAttr('style');
+    $(window).trigger('resize');
 }
 
 // Dragable panels
@@ -271,5 +257,4 @@ function WinMove() {
         })
         .disableSelection();
 }
-
 

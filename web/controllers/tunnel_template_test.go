@@ -166,6 +166,7 @@ func TestHostFormTemplatesRenderPlatformDomainFields(t *testing.T) {
 			for _, marker := range []string{
 				"platform_domain_id",
 				"platform_prefix",
+				"data-certificate-configured",
 				"platformhostavailable",
 				"custom-domain-server-host",
 				"window.location.hostname",

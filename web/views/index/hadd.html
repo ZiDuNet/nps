@@ -53,7 +53,7 @@
                                 <div class="host-platform-domain-fields">
                                     <select id="platform-domain-id" class="form-control" name="platform_domain_id" disabled>
                                         <option value="" data-i18n-zh="选择泛域名" data-i18n-en="Choose a wildcard">选择泛域名</option>
-                                        {{range .platformDomains}}<option value="{{.ID}}" data-wildcard="{{.Wildcard}}">{{.Wildcard}}</option>{{end}}
+                                        {{range .platformDomains}}<option value="{{.ID}}" data-wildcard="{{.Wildcard}}" data-certificate-configured="{{if .CertificateConfigured}}true{{else}}false{{end}}">{{.Wildcard}}</option>{{end}}
                                     </select>
                                     <input id="platform-prefix" class="form-control" type="text" name="platform_prefix" value="{{.platformDefaultPrefix}}" autocomplete="off" disabled aria-describedby="platform-host-status">
                                 </div>
@@ -89,7 +89,7 @@
                         <div class="form-section-title"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="HTTPS 证书" data-i18n-en="HTTPS certificate">HTTPS 证书</span></div>
                         <div id="platform-certificate-note" class="form-group form-group--wide" style="display:none">
                             <label class="col-sm-2 control-label font-bold" data-i18n-zh="托管证书" data-i18n-en="Managed certificate">托管证书</label>
-                            <div class="col-sm-10"><div class="host-certificate-lock"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="平台域名会自动带入管理员配置的证书。证书路径对普通用户不可见，也不能修改。" data-i18n-en="Platform domains automatically use the administrator-managed certificate. Its paths are hidden and cannot be changed by regular users.">平台域名会自动带入管理员配置的证书。证书路径对普通用户不可见，也不能修改。</span></div></div>
+                            <div class="col-sm-10"><div class="host-certificate-lock"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="平台域名会自动使用管理员配置的证书。证书路径对普通用户不可见，也不能修改；如果管理员留空证书，该平台域名仅支持 HTTP。" data-i18n-en="Platform domains use the administrator-managed certificate. Paths stay hidden and cannot be changed; a wildcard with no certificate supports HTTP only.">平台域名会自动使用管理员配置的证书。证书路径对普通用户不可见，也不能修改；如果管理员留空证书，该平台域名仅支持 HTTP。</span></div></div>
                         </div>
                         <div id="custom-certificate-fields" class="form-group form-group--wide">
                             <label class="col-sm-2 control-label font-bold" for="host-cert" data-i18n-zh="证书与私钥" data-i18n-en="Certificate and key">证书与私钥</label>
@@ -152,7 +152,15 @@ $(function () {
         $platformGroup.toggle(platform); $platformID.prop('disabled', !platform); $platformPrefix.prop('disabled', !platform).prop('required', platform);
         $('#platform-certificate-note').toggle(platform); updateCertificateFields(); checkPlatformAvailability();
     }
+    function updatePlatformCertificateAvailability() {
+        var platform = $mode.filter(':checked').val() === 'platform';
+        var configured = String($platformID.find('option:selected').attr('data-certificate-configured') || 'false') === 'true';
+        var restricted = platform && !configured;
+        $scheme.find('option[value="all"], option[value="https"]').prop('disabled', restricted);
+        if (restricted && $scheme.val() !== 'http') $scheme.val('http');
+    }
     function updateCertificateFields() {
+        updatePlatformCertificateAvailability();
         var needsCertificate = $scheme.val() !== 'http'; var platform = $mode.filter(':checked').val() === 'platform';
         $('#auto-https-group').toggle(needsCertificate); $('#custom-certificate-fields').toggle(needsCertificate && !platform).find('textarea').prop('disabled', !needsCertificate || platform);
     }

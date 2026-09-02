@@ -15,13 +15,41 @@ type Flow struct {
 	InletFlow  int64
 	FlowLimit  int64
 	sync.RWMutex
+	rateSampleAt  time.Time
+	rateSampleIn  int64
+	rateSampleOut int64
+	rateIn        int64
+	rateOut       int64
 }
+
+const flowRateSampleInterval = time.Second
 
 func (s *Flow) Add(in, out int64) {
 	s.Lock()
-	defer s.Unlock()
 	s.InletFlow += int64(in)
 	s.ExportFlow += int64(out)
+	now := time.Now()
+	if s.rateSampleAt.IsZero() {
+		s.rateSampleAt = now
+		s.rateSampleIn = s.InletFlow
+		s.rateSampleOut = s.ExportFlow
+	} else if elapsed := now.Sub(s.rateSampleAt); elapsed >= flowRateSampleInterval {
+		deltaIn := s.InletFlow - s.rateSampleIn
+		deltaOut := s.ExportFlow - s.rateSampleOut
+		if deltaIn < 0 {
+			deltaIn = 0
+		}
+		if deltaOut < 0 {
+			deltaOut = 0
+		}
+		seconds := elapsed.Seconds()
+		s.rateIn = int64(float64(deltaIn) / seconds)
+		s.rateOut = int64(float64(deltaOut) / seconds)
+		s.rateSampleAt = now
+		s.rateSampleIn = s.InletFlow
+		s.rateSampleOut = s.ExportFlow
+	}
+	s.Unlock()
 }
 
 // Snapshot returns a consistent view of the counters and configured limit.
@@ -35,6 +63,24 @@ func (s *Flow) Snapshot() (inlet, export, limit int64) {
 	inlet, export, limit = s.InletFlow, s.ExportFlow, s.FlowLimit
 	s.RUnlock()
 	return inlet, export, limit
+}
+
+// RateSnapshot returns the latest byte-rate sample. Samples are advanced by
+// Add, so dashboard readers do not mutate shared baselines or interfere with
+// one another. The counters remain the source of truth for persistence and
+// quota enforcement; private sampling fields are intentionally not serialized.
+func (s *Flow) RateSnapshot() (inRate, outRate int64) {
+	if s == nil {
+		return 0, 0
+	}
+	now := time.Now()
+	s.RLock()
+	sampleAt, inRate, outRate := s.rateSampleAt, s.rateIn, s.rateOut
+	s.RUnlock()
+	if sampleAt.IsZero() || now.Sub(sampleAt) > 2*flowRateSampleInterval {
+		return 0, 0
+	}
+	return inRate, outRate
 }
 
 func (s *Flow) SetLimit(limit int64) {

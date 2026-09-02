@@ -261,7 +261,7 @@
                         if (!isFinite(clientId) || Math.floor(clientId) !== clientId || clientId <= 0) continue;
                         var option = document.createElement('option');
                         option.value = String(clientId);
-                        option.textContent = clientId + '-' + (data.rows[i].Remark || '');
+                        option.textContent = clientId + ' · ' + (data.rows[i].Remark || (typeof npsIsEnglish === 'function' && npsIsEnglish() ? 'Unnamed client' : '未命名客户端'));
                         option.selected = clientId === selectedClientId;
                         select.appendChild(option);
                     }

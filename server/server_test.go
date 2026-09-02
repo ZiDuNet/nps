@@ -113,3 +113,120 @@ func TestRevokeUserClientsWithOnlyTouchesOwnedClients(t *testing.T) {
 		t.Fatalf("revocation touched unexpected clients: disconnected=%v removed=%v", disconnected, removed)
 	}
 }
+
+func TestDashboardDataForClientsIsolatedAndClassified(t *testing.T) {
+	db := file.NewJsonDb(t.TempDir())
+	owned := file.NewClient("owned", false, false)
+	owned.Id = 1
+	owned.Remark = "owned client"
+	owned.Status = true
+	owned.MaxConn = 4
+	owned.MaxTunnelNum = 4
+	owned.Flow = &file.Flow{InletFlow: 120, ExportFlow: 80, FlowLimit: 1}
+	other := file.NewClient("other", false, false)
+	other.Id = 2
+	other.Remark = "other client"
+	other.Flow = &file.Flow{InletFlow: 900, ExportFlow: 700}
+	db.Clients.Store(owned.Id, owned)
+	db.Clients.Store(other.Id, other)
+	db.Tasks.Store(10, &file.Tunnel{Id: 10, Mode: "tcp", Status: true, Client: owned, Flow: &file.Flow{}})
+	db.Tasks.Store(20, &file.Tunnel{Id: 20, Mode: "udp", Status: true, Client: other, Flow: &file.Flow{}})
+	db.Hosts.Store(30, &file.Host{Id: 30, Host: "owned.example", Client: owned, Flow: &file.Flow{}})
+	db.Hosts.Store(40, &file.Host{Id: 40, Host: "other.example", Client: other, Flow: &file.Flow{}})
+
+	dbUtils := file.GetDb()
+	oldDB := dbUtils.JsonDb
+	oldBridge := Bridge
+	dbUtils.JsonDb = db
+	Bridge = nil
+	t.Cleanup(func() {
+		dbUtils.JsonDb = oldDB
+		Bridge = oldBridge
+	})
+
+	data := GetDashboardDataForClients(map[int]struct{}{owned.Id: {}})
+	if got := data["clientCount"]; got != 1 {
+		t.Fatalf("scoped client count = %v, want 1", got)
+	}
+	if got := data["tunnelCount"]; got != 1 {
+		t.Fatalf("scoped tunnel count = %v, want 1", got)
+	}
+	if got := data["hostCount"]; got != 1 {
+		t.Fatalf("scoped host count = %v, want 1", got)
+	}
+	if got := data["inletFlowCount"]; got != int(owned.Flow.InletFlow) {
+		t.Fatalf("scoped inlet flow = %v, want %d", got, owned.Flow.InletFlow)
+	}
+	if got := data["exportFlowCount"]; got != int(owned.Flow.ExportFlow) {
+		t.Fatalf("scoped export flow = %v, want %d", got, owned.Flow.ExportFlow)
+	}
+	if _, exists := data["cpu"]; exists {
+		t.Fatal("ordinary dashboard must not include host CPU data")
+	}
+	if _, exists := data["httpProxyPort"]; exists {
+		t.Fatal("ordinary dashboard must not include listener configuration")
+	}
+	if got := data["systemInfoDisplay"]; got != false {
+		t.Fatalf("ordinary systemInfoDisplay = %v, want false", got)
+	}
+
+	summary, ok := data["runtimeStatus"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("runtimeStatus type = %T, want map[string]interface{}", data["runtimeStatus"])
+	}
+	if got := summary["clientOffline"]; got != 1 {
+		t.Fatalf("offline clients = %v, want 1", got)
+	}
+	if got := summary["tunnelWaiting"]; got != 1 {
+		t.Fatalf("waiting tunnels = %v, want 1", got)
+	}
+	resource, ok := data["resourceStatus"].(map[string]int)
+	if !ok {
+		t.Fatalf("resourceStatus type = %T, want map[string]int", data["resourceStatus"])
+	}
+	if resource["running"] != 0 || resource["stopped"] != 0 || resource["waiting"] != 1 {
+		t.Fatalf("scoped resource status = %#v, want running=0 stopped=0 waiting=1", resource)
+	}
+	rows, ok := data["runtimeRows"].([]dashboardRuntimeRow)
+	if !ok || len(rows) != 2 {
+		t.Fatalf("scoped runtime rows = %#v, want one client and one tunnel", data["runtimeRows"])
+	}
+	quotas, ok := data["quotas"].([]dashboardQuotaRow)
+	if !ok || len(quotas) != 1 || quotas[0].ClientID != owned.Id {
+		t.Fatalf("scoped quotas = %#v, want only client %d", data["quotas"], owned.Id)
+	}
+}
+
+func TestDashboardPendingItemsIncludeQuotaAndHealthWarnings(t *testing.T) {
+	db := file.NewJsonDb(t.TempDir())
+	client := file.NewClient("pending", false, false)
+	client.Id = 1
+	client.Status = true
+	client.MaxConn = 1
+	client.NowConn = 1
+	client.MaxTunnelNum = 1
+	client.Flow = &file.Flow{FlowLimit: 1, InletFlow: 1 << 20}
+	task := &file.Tunnel{Id: 1, Status: true, Client: client}
+	task.Health.HealthMaxFail = 2
+	task.Health.HealthMap = map[string]int{"backend:8080": 2}
+	db.Clients.Store(client.Id, client)
+	db.Tasks.Store(task.Id, task)
+	dbUtils := file.GetDb()
+	oldDB := dbUtils.JsonDb
+	dbUtils.JsonDb = db
+	t.Cleanup(func() { dbUtils.JsonDb = oldDB })
+
+	pending := dashboardPendingItems(map[int]*file.Client{client.Id: client}, nil)
+	for _, want := range []string{"客户端连接数接近上限", "隧道数量接近上限", "流量配额接近上限", "后端健康检查异常"} {
+		found := false
+		for _, value := range pending {
+			if value == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("pending items %v do not include %q", pending, want)
+		}
+	}
+}

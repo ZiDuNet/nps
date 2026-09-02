@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: '要发布的 Git 标签，例如 v1.1.4；必须与源码版本一致'
+        description: '要发布的 Git 标签，例如 v1.1.5；必须与源码版本一致'
         required: false
         type: string
 

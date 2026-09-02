@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestClientGetConnReservesSlotsAtomically(t *testing.T) {
@@ -45,5 +46,22 @@ func TestClientGetConnReservesSlotsAtomically(t *testing.T) {
 	group.Wait()
 	if got := atomic.LoadInt32(&client.NowConn); got != 0 {
 		t.Fatalf("connection slots were not released, NowConn=%d", got)
+	}
+}
+
+func TestFlowRateSnapshotUsesCounterDelta(t *testing.T) {
+	flow := &Flow{InletFlow: 100, ExportFlow: 40}
+	if inRate, outRate := flow.RateSnapshot(); inRate != 0 || outRate != 0 {
+		t.Fatalf("first rate sample = (%d, %d), want zero baseline", inRate, outRate)
+	}
+	flow.Lock()
+	flow.rateSampleAt = time.Now().Add(-time.Second)
+	flow.rateSampleIn = 100
+	flow.rateSampleOut = 40
+	flow.Unlock()
+	flow.Add(200, 80)
+	inRate, outRate := flow.RateSnapshot()
+	if inRate < 100 || outRate < 30 {
+		t.Fatalf("rate sample = (%d, %d), want positive counter deltas", inRate, outRate)
 	}
 }

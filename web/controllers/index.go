@@ -49,8 +49,9 @@ type hostListTarget struct {
 }
 
 type platformDomainOption struct {
-	ID       string
-	Wildcard string
+	ID                    string
+	Wildcard              string
+	CertificateConfigured bool
 }
 
 type hostDiagnosticResult struct {
@@ -113,7 +114,11 @@ func platformDomainOptions() []platformDomainOption {
 	domains := file.GetDb().GetUsablePlatformDomains()
 	options := make([]platformDomainOption, 0, len(domains))
 	for _, domain := range domains {
-		options = append(options, platformDomainOption{ID: domain.ID, Wildcard: domain.Wildcard})
+		options = append(options, platformDomainOption{
+			ID:                    domain.ID,
+			Wildcard:              domain.Wildcard,
+			CertificateConfigured: domain.CertFilePath != "" && domain.KeyFilePath != "",
+		})
 	}
 	return options
 }
@@ -165,6 +170,36 @@ func (s *IndexController) authorizedHost(id int) (*file.Host, error) {
 	return host, nil
 }
 
+func (s *IndexController) canAccessTask(task *file.Tunnel) bool {
+	if task == nil {
+		return false
+	}
+	if s.IsAdmin() {
+		return true
+	}
+	task.RLock()
+	client := task.Client
+	task.RUnlock()
+	if client == nil {
+		return false
+	}
+	client.RLock()
+	clientID := client.Id
+	client.RUnlock()
+	return isAllowedClient(clientID, s.GetAllowedClientIds())
+}
+
+func (s *IndexController) authorizedTask(id int) (*file.Tunnel, error) {
+	task, err := file.GetDb().GetTask(id)
+	if err != nil {
+		return nil, errors.New("tunnel ID not found")
+	}
+	if !s.canAccessTask(task) {
+		return nil, errors.New("permission denied")
+	}
+	return task, nil
+}
+
 func (s *IndexController) hostDomainFromRequest(excludeHostID int) (string, string, error) {
 	mode := strings.TrimSpace(s.GetString("domain_mode"))
 	if mode != "platform" {
@@ -205,10 +240,30 @@ func clientTunnelLimitReached(client *file.Client) (bool, int) {
 
 func (s *IndexController) Index() {
 	s.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
-	s.Data["data"] = server.GetDashboardData()
+	s.Data["data"] = s.dashboardSnapshot()
 	s.SetInfo("dashboard")
 	s.display("index/index")
 }
+
+// DashboardData is the lightweight JSON snapshot used by the dashboard's
+// periodic refresh. Scope is derived from the authenticated principal on each
+// request, so a user cannot widen the response by changing query parameters.
+func (s *IndexController) DashboardData() {
+	s.Data["json"] = map[string]interface{}{
+		"status": 1,
+		"data":   s.dashboardSnapshot(),
+	}
+	s.ServeJSON()
+	s.StopRun()
+}
+
+func (s *IndexController) dashboardSnapshot() map[string]interface{} {
+	if s.IsAdmin() {
+		return server.GetDashboardData()
+	}
+	return server.GetDashboardDataForClients(s.GetAllowedClientIds())
+}
+
 func (s *IndexController) Help() {
 	s.SetInfo("about")
 	s.display("index/help")
@@ -348,31 +403,55 @@ func (s *IndexController) Copy() {
 		return
 	}
 	oldId := s.GetIntNoErr("id")
-	if oldTask, err := file.GetDb().GetTask(oldId); err != nil {
-		s.AjaxErr("tunnel ID not found")
+	oldTask, err := s.authorizedTask(oldId)
+	if err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
+	oldTask.RLock()
+	oldClient := oldTask.Client
+	oldMode := oldTask.Mode
+	oldServerIP := oldTask.ServerIp
+	oldRemark := oldTask.Remark
+	oldPassword := oldTask.Password
+	oldLocalPath := oldTask.LocalPath
+	oldStripPre := oldTask.StripPre
+	oldProtoVersion := oldTask.ProtoVersion
+	oldTarget := oldTask.Target
+	oldTask.RUnlock()
+	if oldClient == nil {
+		s.AjaxErr("modified error,the client is not exist")
+		return
+	}
+	oldClient.RLock()
+	oldClientID := oldClient.Id
+	oldClient.RUnlock()
+	if client, err := file.GetDb().GetClient(oldClientID); err != nil {
+		s.AjaxErr("modified error,the client is not exist")
 		return
 	} else {
-		if client, err := file.GetDb().GetClient(oldTask.Client.Id); err != nil {
-			s.AjaxErr("modified error,the client is not exist")
-			return
-		} else {
-			oldTask.Client = client
+		var targetStr string
+		var localProxy bool
+		if oldTarget != nil {
+			oldTarget.RLock()
+			targetStr, localProxy = oldTarget.TargetStr, oldTarget.LocalProxy
+			oldTarget.RUnlock()
 		}
 
 		id := int(file.GetDb().JsonDb.GetTaskId())
 		newTask := &file.Tunnel{
-			Client:       oldTask.Client,
-			Port:         tool.GenerateServerPort(oldTask.Mode),
-			ServerIp:     oldTask.ServerIp,
-			Mode:         oldTask.Mode,
-			Target:       oldTask.Target,
+			Client:       client,
+			Port:         tool.GenerateServerPort(oldMode),
+			ServerIp:     oldServerIP,
+			Mode:         oldMode,
+			Target:       &file.Target{TargetStr: targetStr, LocalProxy: localProxy},
 			Id:           id,
 			Status:       true,
-			Remark:       oldTask.Remark,
-			Password:     oldTask.Password,
-			LocalPath:    oldTask.LocalPath,
-			StripPre:     oldTask.StripPre,
-			ProtoVersion: oldTask.ProtoVersion,
+			Remark:       oldRemark,
+			Password:     oldPassword,
+			LocalPath:    oldLocalPath,
+			StripPre:     oldStripPre,
+			ProtoVersion: oldProtoVersion,
 			Flow:         &file.Flow{},
 		}
 		if !tool.TestServerPort(newTask.Port, newTask.Mode) {
@@ -403,7 +482,7 @@ func (s *IndexController) Copy() {
 func (s *IndexController) GetOneTunnel() {
 	id := s.GetIntNoErr("id")
 	data := make(map[string]interface{})
-	if t, err := file.GetDb().GetTask(id); err != nil {
+	if t, err := s.authorizedTask(id); err != nil {
 		data["code"] = 0
 	} else {
 		data["code"] = 1
@@ -423,7 +502,7 @@ func (s *IndexController) Edit() {
 		return
 	}
 	if s.Ctx.Request.Method == "GET" {
-		if t, err := file.GetDb().GetTask(id); err != nil {
+		if t, err := s.authorizedTask(id); err != nil {
 			s.error()
 			return
 		} else {
@@ -435,17 +514,15 @@ func (s *IndexController) Edit() {
 		if !s.RequirePost() {
 			return
 		}
-		if t, err := file.GetDb().GetTask(id); err != nil {
-			s.AjaxErr("tunnel ID not found")
+		if t, err := s.authorizedTask(id); err != nil {
+			s.AjaxErr(err.Error())
 			return
 		} else {
-			desiredClient, clientErr := file.GetDb().GetClient(s.GetIntNoErr("client_id"))
-			if clientErr != nil {
+			t.RLock()
+			desiredClient := t.Client
+			t.RUnlock()
+			if desiredClient == nil {
 				s.AjaxErr("modified error,the client is not exist")
-				return
-			}
-			if !s.IsAdmin() && !isAllowedClient(desiredClient.Id, s.GetAllowedClientIds()) {
-				s.AjaxErr("permission denied")
 				return
 			}
 			desiredPort := s.GetIntNoErr("port")
@@ -509,6 +586,10 @@ func (s *IndexController) Stop() {
 		s.AjaxErr("tunnel ID not found")
 		return
 	}
+	if _, err := s.authorizedTask(id); err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
 	if err := server.StopServer(id); err != nil {
 		s.AjaxErr("stop error")
 		return
@@ -525,6 +606,10 @@ func (s *IndexController) Del() {
 		s.AjaxErr("tunnel ID not found")
 		return
 	}
+	if _, err := s.authorizedTask(id); err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
 	if err := server.DelTask(id); err != nil {
 		s.AjaxErr("delete error")
 		return
@@ -539,6 +624,10 @@ func (s *IndexController) Start() {
 	id := s.GetIntNoErr("id")
 	if id <= 0 {
 		s.AjaxErr("tunnel ID not found")
+		return
+	}
+	if _, err := s.authorizedTask(id); err != nil {
+		s.AjaxErr(err.Error())
 		return
 	}
 	if err := server.StartTask(id); err != nil {
@@ -718,7 +807,8 @@ func (s *IndexController) EditHost() {
 		if !s.RequirePost() {
 			return
 		}
-		if _, err := s.authorizedHost(id); err != nil {
+		storedHost, err := s.authorizedHost(id)
+		if err != nil {
 			s.AjaxErr(err.Error())
 			return
 		} else {
@@ -729,8 +819,10 @@ func (s *IndexController) EditHost() {
 			}
 			desiredLocation := s.getEscapeString("location")
 			desiredScheme := s.getEscapeString("scheme")
-			desiredClient, clientErr := file.GetDb().GetClient(s.GetIntNoErr("client_id"))
-			if clientErr != nil {
+			storedHost.RLock()
+			desiredClient := storedHost.Client
+			storedHost.RUnlock()
+			if desiredClient == nil {
 				s.AjaxErr("modified error,the client is not exist")
 				return
 			}

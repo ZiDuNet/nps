@@ -93,10 +93,11 @@
 
                     <div class="form-section-title"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="基础配置" data-i18n-en="Connection">基础配置</span></div>
                     <div class="form-group" id="client_id">
-                        <label class="col-sm-2 control-label font-bold" for="tunnel-client-id" langtag="word-clientid"></label>
+                        <label class="col-sm-2 control-label font-bold" data-i18n-zh="所属客户端" data-i18n-en="Client">所属客户端</label>
                         <div class="col-sm-10">
-                            <input id="tunnel-client-id" value="{{.t.Client.Id}}" class="form-control" type="text"
-                                   name="client_id" placeholder="" langtag="word-clientid">
+                            <div class="readonly-client"><strong>{{if .t.Client.Remark}}{{.t.Client.Remark}}{{else}}未命名客户端{{end}}</strong><small>ID {{.t.Client.Id}}</small></div>
+                            <input type="hidden" name="client_id" value="{{.t.Client.Id}}">
+                            <span class="help-block" data-i18n-zh="所属客户端在编辑时保持不变；如需迁移，请新建隧道。" data-i18n-en="The assigned client stays fixed while editing. Create a new tunnel to migrate it.">所属客户端在编辑时保持不变；如需迁移，请新建隧道。</span>
                         </div>
                     </div>
                     <div class="form-group" id="remark_group">

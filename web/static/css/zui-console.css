@@ -9,38 +9,38 @@
 }
 
 :root {
-    --nps-canvas: #f3f6f5;
+    --nps-canvas: #f4f8fc;
     --nps-surface: #ffffff;
-    --nps-surface-subtle: #f7f9f8;
-    --nps-surface-hover: #edf7f5;
-    --nps-ink: #17211f;
-    --nps-muted: #5b6a66;
-    --nps-faint: #83918d;
-    --nps-line: #dce5e1;
-    --nps-line-strong: #c7d5d0;
-    --nps-primary: #0f766e;
-    --nps-primary-hover: #0b625b;
-    --nps-primary-soft: #d9f1ed;
-    --nps-cyan: #087f8c;
-    --nps-cyan-soft: #d9f2f4;
-    --nps-sidebar: #13211e;
-    --nps-sidebar-ink: #d7e7e1;
-    --nps-sidebar-muted: #8fa8a0;
-    --nps-sidebar-hover: #1c332e;
-    --nps-sidebar-active: #164e48;
-    --nps-sidebar-line: rgba(211, 235, 225, .13);
-    --nps-success: #16794c;
-    --nps-success-soft: #e5f5ec;
-    --nps-warning: #a46105;
-    --nps-warning-soft: #fff2d8;
-    --nps-danger: #b42332;
-    --nps-danger-soft: #fde8eb;
-    --nps-info: #176f88;
-    --nps-info-soft: #e2f3f6;
-    --nps-shadow: 0 12px 30px rgba(27, 52, 46, .08);
-    --nps-shadow-sm: 0 2px 8px rgba(27, 52, 46, .07);
+    --nps-surface-subtle: #f7faff;
+    --nps-surface-hover: #eef6ff;
+    --nps-ink: #12233f;
+    --nps-muted: #536985;
+    --nps-faint: #7b8ea8;
+    --nps-line: #dce6f1;
+    --nps-line-strong: #c4d3e3;
+    --nps-primary: #2563eb;
+    --nps-primary-hover: #1d4ed8;
+    --nps-primary-soft: #e8f1ff;
+    --nps-cyan: #0891b2;
+    --nps-cyan-soft: #e2f8fc;
+    --nps-sidebar: #14243d;
+    --nps-sidebar-ink: #e4edf9;
+    --nps-sidebar-muted: #9eb2ce;
+    --nps-sidebar-hover: #1d3556;
+    --nps-sidebar-active: #24539a;
+    --nps-sidebar-line: rgba(211, 227, 247, .15);
+    --nps-success: #16845b;
+    --nps-success-soft: #e6f7ef;
+    --nps-warning: #b66a06;
+    --nps-warning-soft: #fff4dc;
+    --nps-danger: #c3364a;
+    --nps-danger-soft: #ffebef;
+    --nps-info: #176fa6;
+    --nps-info-soft: #e6f4ff;
+    --nps-shadow: 0 12px 30px rgba(34, 64, 101, .08);
+    --nps-shadow-sm: 0 2px 8px rgba(34, 64, 101, .07);
     --nps-radius: 8px;
-    --nps-focus: 0 0 0 3px rgba(15, 118, 110, .22);
+    --nps-focus: 0 0 0 3px rgba(37, 99, 235, .2);
     --c-accent: var(--nps-primary);
     --c-accent-light: var(--nps-primary-soft);
     --c-border: var(--nps-line);
@@ -49,39 +49,39 @@
 }
 
 [data-theme="dark"] {
-    --nps-canvas: #101917;
-    --nps-surface: #16211e;
-    --nps-surface-subtle: #1b2925;
-    --nps-surface-hover: #20362f;
-    --nps-ink: #ecf4f0;
-    --nps-muted: #adbbb6;
-    --nps-faint: #84958f;
-    --nps-line: #2b3e37;
-    --nps-line-strong: #3b514a;
-    --nps-primary: #5bd1c0;
-    --nps-primary-hover: #8ae4d8;
-    --nps-primary-soft: #1d4740;
-    --nps-cyan: #67d4dd;
-    --nps-cyan-soft: #173f42;
-    --nps-sidebar: #0b1512;
-    --nps-sidebar-ink: #d9e9e3;
-    --nps-sidebar-muted: #8da79e;
-    --nps-sidebar-hover: #142923;
-    --nps-sidebar-active: #17453e;
-    --nps-sidebar-line: rgba(211, 235, 225, .12);
-    --nps-success: #65d19b;
-    --nps-success-soft: #163b2a;
-    --nps-warning: #f2bf71;
-    --nps-warning-soft: #49351d;
-    --nps-danger: #ff9da6;
-    --nps-danger-soft: #4b272d;
-    --nps-info: #8bd6e5;
-    --nps-info-soft: #183e42;
+    --nps-canvas: #0e1727;
+    --nps-surface: #152238;
+    --nps-surface-subtle: #1a2a43;
+    --nps-surface-hover: #213a5d;
+    --nps-ink: #edf4ff;
+    --nps-muted: #b3c4dc;
+    --nps-faint: #8ea4c2;
+    --nps-line: #2a3e5a;
+    --nps-line-strong: #3b5577;
+    --nps-primary: #6ea0ff;
+    --nps-primary-hover: #91b7ff;
+    --nps-primary-soft: #203b6b;
+    --nps-cyan: #55c9de;
+    --nps-cyan-soft: #153f55;
+    --nps-sidebar: #0a1426;
+    --nps-sidebar-ink: #e1ebfb;
+    --nps-sidebar-muted: #92a8c6;
+    --nps-sidebar-hover: #142b4b;
+    --nps-sidebar-active: #1d4d91;
+    --nps-sidebar-line: rgba(211, 227, 247, .13);
+    --nps-success: #66d5a1;
+    --nps-success-soft: #163d32;
+    --nps-warning: #f4c56f;
+    --nps-warning-soft: #493719;
+    --nps-danger: #ff9bab;
+    --nps-danger-soft: #4b2731;
+    --nps-info: #83cdf0;
+    --nps-info-soft: #173b55;
     --nps-shadow: 0 14px 34px rgba(0, 0, 0, .28);
     --nps-shadow-sm: 0 3px 10px rgba(0, 0, 0, .22);
-    --nps-focus: 0 0 0 3px rgba(91, 209, 192, .25);
+    --nps-focus: 0 0 0 3px rgba(110, 160, 255, .28);
 }
-[data-theme="dark"] body.zui-app ::selection { color: #0a211d; }
+[data-theme="dark"] body.zui-app ::selection { color: #071326; }
 [data-theme="dark"] body.zui-app .btn-primary,
 [data-theme="dark"] body.zui-app .btn.primary,
 [data-theme="dark"] body.zui-app .form-horizontal .btn-success,
@@ -92,7 +92,7 @@
 [data-theme="dark"] body.zui-app .btn-info,
 [data-theme="dark"] body.zui-app .pagination > .active > a,
 [data-theme="dark"] body.zui-app .pagination > .active > a:hover,
-[data-theme="dark"] body.zui-app .pagination > .active > span { color: #0a211d !important; }
+[data-theme="dark"] body.zui-app .pagination > .active > span { color: #071326 !important; }
 
 html {
     background: var(--nps-canvas);
@@ -145,21 +145,21 @@ body.zui-app .nps-brand-mark {
     height: 39px;
     align-items: center;
     justify-content: center;
-    color: #d8f4eb;
-    background: #16453e;
-    border: 1px solid #32766b;
+    color: #deebff;
+    background: #1e4380;
+    border: 1px solid #4d7dc5;
     border-radius: var(--nps-radius);
 }
-body.zui-app .nps-brand-mark i { color: #95dfd2 !important; font-size: 17px !important; }
+body.zui-app .nps-brand-mark i { color: #9fc2ff !important; font-size: 17px !important; }
 body.zui-app .nps-brand-copy { display: grid; gap: 1px; min-width: 0; }
 body.zui-app .nps-brand-copy strong { color: #f5f8ff; font-size: 18px; font-weight: 750; letter-spacing: .03em; }
 body.zui-app .nps-brand-copy small { color: var(--nps-sidebar-muted); font-size: 11px; line-height: 1.35; }
 body.zui-app .nav-account { display: flex; align-items: center; gap: 9px; margin-top: 16px; color: var(--nps-sidebar-muted); }
-body.zui-app .nav-account > i { width: 17px; color: #87d5c8; font-size: 13px; text-align: center; }
+body.zui-app .nav-account > i { width: 17px; color: #8eb8ff; font-size: 13px; text-align: center; }
 body.zui-app .nav-account span { display: grid; gap: 1px; min-width: 0; }
 body.zui-app .nav-account strong { color: var(--nps-sidebar-ink); font-size: 12px; font-weight: 650; }
 body.zui-app .nav-account small { color: var(--nps-sidebar-muted); font-size: 11px; }
-body.zui-app .nav-header .logo-element { padding: 8px 0 !important; color: #95dfd2 !important; font-weight: 750; letter-spacing: .08em; }
+body.zui-app .nav-header .logo-element { padding: 8px 0 !important; color: #9fc2ff !important; font-weight: 750; letter-spacing: .08em; }
 body.zui-app #side-menu { padding: 13px 0 24px; }
 body.zui-app #side-menu li a,
 body.zui-app #side-menu .zui-nav-item {
@@ -176,10 +176,10 @@ body.zui-app #side-menu .zui-nav-item {
 }
 body.zui-app #side-menu li a i { width: 21px; margin-right: 10px; color: var(--nps-sidebar-muted) !important; font-size: 15px !important; text-align: center; }
 body.zui-app #side-menu li a:hover { color: #fff !important; background: var(--nps-sidebar-hover) !important; }
-body.zui-app #side-menu li a:hover i { color: #9ce3d7 !important; }
+body.zui-app #side-menu li a:hover i { color: #a8c7ff !important; }
 body.zui-app #side-menu > li.active { background: transparent !important; border-left: 0 !important; }
-body.zui-app #side-menu li.active > a { color: #fff !important; background: var(--nps-sidebar-active) !important; box-shadow: inset 3px 0 #91ddcf; font-weight: 650; }
-body.zui-app #side-menu li.active > a i { color: #9ce3d7 !important; }
+body.zui-app #side-menu li.active > a { color: #fff !important; background: var(--nps-sidebar-active) !important; box-shadow: inset 3px 0 #9ec1ff; font-weight: 650; }
+body.zui-app #side-menu li.active > a i { color: #a8c7ff !important; }
 body.zui-app .nav-group-title { margin: 18px 22px 6px; padding: 0 0 7px !important; color: var(--nps-sidebar-muted) !important; border-bottom: 1px solid var(--nps-sidebar-line); font-size: 10px !important; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; pointer-events: none; }
 
 body.zui-app #page-wrapper { min-height: 100vh; margin-left: 256px !important; padding: 74px clamp(16px, 1.2vw, 24px) 42px !important; border: 0 !important; transition: margin-left .18s ease; }
@@ -197,12 +197,12 @@ body.zui-app .white-bg {
     background: rgba(255, 255, 255, .96) !important;
     border: 0 !important;
     border-bottom: 1px solid var(--nps-line) !important;
-    box-shadow: 0 1px 5px rgba(27, 52, 46, .04);
+    box-shadow: 0 1px 5px rgba(34, 64, 101, .04);
     transition: left .18s ease;
 }
 [data-theme="dark"] body.zui-app .navbar-fixed-top,
 [data-theme="dark"] body.zui-app .navbar-static-top,
-[data-theme="dark"] body.zui-app .white-bg { background: rgba(22, 33, 30, .97) !important; }
+[data-theme="dark"] body.zui-app .white-bg { background: rgba(14, 23, 39, .97) !important; }
 body.zui-app .navbar-header { min-height: 60px; }
 body.zui-app .navbar-minimalize { width: 36px; height: 36px; margin: 12px 0 0 17px !important; padding: 0 !important; color: var(--nps-muted) !important; background: var(--nps-surface) !important; border: 1px solid var(--nps-line) !important; border-radius: 6px !important; box-shadow: none !important; }
 body.zui-app .navbar-minimalize:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; border-color: var(--nps-primary-soft) !important; }
@@ -940,4 +940,345 @@ body.zui-app .client-detail__copy {
 
 @media (prefers-reduced-motion: reduce) {
     body.zui-app *, body.auth-body * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
+
+/* Dashboard runtime status: compact, readable at a glance, and safe for long values. */
+body.zui-app .dashboard-runtime-panel { overflow: hidden; }
+body.zui-app .dashboard-runtime-toolbar { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; min-width: 0; }
+body.zui-app .dashboard-last-updated { max-width: 180px; color: var(--nps-faint); font-size: 11px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.zui-app .dashboard-refresh-button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; color: var(--nps-muted); background: transparent; border: 1px solid var(--nps-line); border-radius: 5px; }
+body.zui-app .dashboard-refresh-button:hover,
+body.zui-app .dashboard-refresh-button:focus { color: var(--nps-primary); background: var(--nps-primary-soft); border-color: var(--nps-primary); outline: 0; }
+body.zui-app .dashboard-refresh-button:disabled { opacity: .65; cursor: wait; }
+body.zui-app .dashboard-refresh-button.is-refreshing i { animation: nps-dashboard-spin .75s linear infinite; }
+@keyframes nps-dashboard-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+body.zui-app .dashboard-runtime-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 -19px; border-bottom: 1px solid var(--nps-line); }
+body.zui-app .dashboard-runtime-item { min-width: 0; padding: 3px 19px 18px; border-left: 1px solid var(--nps-line); }
+body.zui-app .dashboard-runtime-item:first-child { border-left: 0; }
+body.zui-app .dashboard-runtime-label,
+body.zui-app .dashboard-pending-label { color: var(--nps-muted); font-size: 11px; font-weight: 750; letter-spacing: .03em; }
+body.zui-app .dashboard-runtime-value { min-height: 27px; margin-top: 8px; color: var(--nps-ink); font-size: 18px; font-weight: 750; line-height: 1.45; overflow-wrap: anywhere; }
+body.zui-app .dashboard-runtime-detail { margin-top: 4px; color: var(--nps-faint); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+body.zui-app .dashboard-pending { display: grid; grid-template-columns: minmax(96px, 17%) minmax(0, 1fr); gap: 12px; align-items: start; padding-top: 16px; }
+body.zui-app .dashboard-pending-list { display: flex; flex-wrap: wrap; gap: 7px; min-width: 0; margin: 0; padding: 0; list-style: none; }
+body.zui-app .dashboard-pending-item,
+body.zui-app .dashboard-pending-empty { max-width: 100%; padding: 5px 9px; color: var(--nps-warning); background: var(--nps-warning-soft); border-radius: 4px; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+body.zui-app .dashboard-pending-item--danger { color: var(--nps-danger); background: var(--nps-danger-soft); }
+body.zui-app .dashboard-pending-item--info { color: var(--nps-info); background: var(--nps-info-soft); }
+body.zui-app .dashboard-pending-empty { color: var(--nps-faint); background: var(--nps-surface-subtle); }
+body.zui-app .dashboard-quota-summary { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--nps-line); }
+body.zui-app .dashboard-quota-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 7px; min-width: 0; margin: 8px 0 0; padding: 0; list-style: none; }
+body.zui-app .dashboard-quota-item { min-width: 0; padding: 6px 9px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 4px; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+
+/* The legacy theme applies a broad .pace-done transition and SmoothlyMenu also
+   hides the menu before fading it in. Keep navigation transitions bounded so
+   changing menus never flashes a blank page. */
+body.zui-app .navbar-static-side,
+body.zui-app .nav-header,
+body.zui-app li.active,
+body.zui-app #page-wrapper,
+body.zui-app .footer { transition: width .18s ease, margin-left .18s ease, left .18s ease, transform .18s ease, background-color .15s ease, color .15s ease, border-color .15s ease !important; }
+body.zui-app .navbar-fixed-top { transition: left .18s ease, background-color .15s ease, border-color .15s ease !important; }
+body.zui-app #side-menu { opacity: 1; }
+body.zui-app .animated,
+body.zui-app .animated.fadeInRight,
+body.zui-app.fullscreen-ibox-mode .animated { animation: none !important; opacity: 1 !important; transform: none !important; }
+
+@media (max-width: 991px) {
+    body.zui-app .dashboard-runtime-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    body.zui-app .dashboard-runtime-item:nth-child(odd) { border-left: 0; }
+    body.zui-app .dashboard-runtime-item:nth-child(n + 3) { padding-top: 16px; border-top: 1px solid var(--nps-line); }
+}
+
+@media (max-width: 600px) {
+    body.zui-app .dashboard-runtime-toolbar { gap: 6px; }
+    body.zui-app .dashboard-last-updated { max-width: 132px; }
+    body.zui-app .dashboard-runtime-grid { grid-template-columns: minmax(0, 1fr); margin-right: -18px; margin-left: -18px; }
+    body.zui-app .dashboard-runtime-item,
+    body.zui-app .dashboard-runtime-item:nth-child(n + 3) { padding: 14px 18px 16px; border-top: 1px solid var(--nps-line); border-left: 0; }
+    body.zui-app .dashboard-runtime-item:first-child { padding-top: 3px; border-top: 0; }
+    body.zui-app .dashboard-pending { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
+
+/* Unified ZUI form system. The templates still expose the legacy Bootstrap
+   hooks for compatibility, but the form itself owns the layout and spacing. */
+body.zui-app .form-page {
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+}
+body.zui-app .form-page .form-page-header {
+    margin-bottom: 18px;
+}
+body.zui-app .form-page .form-page-heading p {
+    max-width: 760px;
+    color: var(--nps-muted);
+}
+body.zui-app .form-page-grid {
+    width: 100%;
+}
+body.zui-app .form-page-grid > [class*="col-"] {
+    width: 100% !important;
+    max-width: none !important;
+}
+body.zui-app .form-page .form-workflow-card {
+    width: 100%;
+    max-width: none;
+    margin: 0 auto 20px !important;
+    background: var(--nps-surface) !important;
+    border: 1px solid var(--nps-line) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 10px 28px rgba(34, 64, 101, .07) !important;
+}
+body.zui-app .form-page .form-workflow-content {
+    padding: clamp(22px, 3vw, 38px) !important;
+}
+body.zui-app .form-page .form-workflow-form {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 0 32px;
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+}
+body.zui-app .form-page .form-workflow-form > .form-section-title,
+body.zui-app .form-page .form-workflow-form > .form-title,
+body.zui-app .form-page .form-workflow-form > .form-group--wide,
+body.zui-app .form-page .form-workflow-form > .hr-line-dashed,
+body.zui-app .form-page .form-workflow-form > .form-workflow-divider,
+body.zui-app .form-page .form-workflow-form > .form-workflow-actions {
+    grid-column: 1 / -1;
+}
+body.zui-app .form-page .form-workflow-form > .form-section-title {
+    display: flex;
+    align-items: center;
+    min-height: 42px;
+    margin: 28px 0 20px !important;
+    padding: 10px 14px !important;
+    color: var(--nps-primary) !important;
+    background: var(--nps-primary-soft) !important;
+    border: 0 !important;
+    border-left: 3px solid var(--nps-primary) !important;
+    border-radius: 6px !important;
+    font-size: 14px !important;
+    font-weight: 750 !important;
+}
+body.zui-app .form-page .form-workflow-form > .form-section-title:first-child {
+    margin-top: 0 !important;
+}
+body.zui-app .form-page .form-section-title i {
+    width: 20px;
+    margin-right: 8px;
+    color: var(--nps-primary) !important;
+    text-align: center;
+}
+body.zui-app .form-page .form-workflow-form > .form-group {
+    display: grid !important;
+    grid-template-columns: minmax(112px, .42fr) minmax(0, 1fr);
+    align-items: start;
+    column-gap: 14px;
+    min-width: 0;
+    margin: 0 0 22px !important;
+}
+body.zui-app .form-page .form-workflow-form > .form-group > [class*="col-"] {
+    float: none !important;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+body.zui-app .form-page .form-workflow-form > .form-group > label,
+body.zui-app .form-page .form-workflow-form > .form-group > .control-label {
+    min-width: 0;
+    margin: 0 !important;
+    padding: 9px 0 0 !important;
+    color: var(--nps-ink) !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+body.zui-app .form-page .form-workflow-form .form-control,
+body.zui-app .form-page .form-workflow-form .input-group,
+body.zui-app .form-page .form-workflow-form .toggle-field,
+body.zui-app .form-page .form-workflow-form .host-certificate-lock,
+body.zui-app .form-page .form-workflow-form .readonly-client {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+body.zui-app .form-page .form-workflow-form .help-block,
+body.zui-app .form-page .form-workflow-form .form-field-hint {
+    max-width: 100%;
+    margin: 7px 0 0 !important;
+    color: var(--nps-muted) !important;
+    font-size: 11px !important;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+body.zui-app .form-page .form-workflow-form .form-control {
+    min-height: 42px;
+    padding: 9px 12px;
+    border-color: var(--nps-line-strong) !important;
+    border-radius: 6px !important;
+}
+body.zui-app .form-page .form-workflow-form textarea.form-control {
+    min-height: 112px;
+}
+body.zui-app .form-page .form-workflow-form .input-group .form-control {
+    min-height: 42px;
+}
+body.zui-app .form-page .form-workflow-form .input-group-btn .btn {
+    min-height: 42px;
+    border-color: var(--nps-line-strong) !important;
+}
+body.zui-app .form-page .form-workflow-form .form-workflow-actions {
+    display: flex !important;
+    align-items: center;
+    min-height: 48px;
+    margin: 9px 0 0 !important;
+    padding-top: 22px;
+    border-top: 1px solid var(--nps-line);
+}
+body.zui-app .form-page .form-workflow-form .form-workflow-actions > [class*="col-"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+body.zui-app .form-page .form-workflow-form .form-workflow-actions .btn {
+    min-width: 112px;
+    min-height: 40px;
+}
+body.zui-app .form-page .form-workflow-divider {
+    margin: 30px 0 0 !important;
+}
+body.zui-app .readonly-client {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 42px;
+    padding: 9px 12px;
+    color: var(--nps-ink);
+    background: var(--nps-surface-subtle);
+    border: 1px solid var(--nps-line);
+    border-radius: 6px;
+}
+body.zui-app .readonly-client strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+body.zui-app .readonly-client small {
+    flex: 0 0 auto;
+    color: var(--nps-primary);
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 11px;
+    font-weight: 700;
+}
+body.zui-app .form-page .host-domain-source,
+body.zui-app .form-page .host-domain-source > div {
+    min-width: 0;
+}
+body.zui-app .form-page .host-domain-source__choices {
+    gap: 12px;
+}
+body.zui-app .form-page .host-domain-choice > span {
+    min-height: 94px;
+    padding: 15px;
+    background: var(--nps-surface-subtle);
+    border-color: var(--nps-line);
+}
+body.zui-app .form-page .host-domain-choice.is-selected > span {
+    background: var(--nps-primary-soft);
+    border-color: var(--nps-primary);
+    box-shadow: inset 3px 0 var(--nps-primary);
+}
+body.zui-app .form-page .platform-domain-list {
+    gap: 14px;
+    margin: 14px 0 15px;
+}
+body.zui-app .form-page .platform-domain-row {
+    padding: 18px;
+    background: var(--nps-surface-subtle);
+    border-color: var(--nps-line);
+    border-radius: 8px;
+}
+body.zui-app .form-page .platform-domain-row__fields {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.45fr) minmax(0, 1.45fr);
+    gap: 12px;
+}
+body.zui-app .form-page .platform-domain-row__fields input {
+    min-height: 40px;
+}
+body.zui-app .form-page .platform-domain-row__header {
+    margin-bottom: 15px;
+}
+body.zui-app .form-page .platform-domain-health {
+    gap: 14px;
+    margin-top: 15px;
+    padding-top: 14px;
+}
+body.zui-app .form-page .platform-domain-health dd {
+    line-height: 1.45;
+}
+body.zui-app .form-page .platform-cert-status {
+    color: var(--nps-primary) !important;
+}
+
+@media (max-width: 991px) {
+    body.zui-app .form-page .form-workflow-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    body.zui-app .form-page .form-workflow-form > .form-section-title,
+    body.zui-app .form-page .form-workflow-form > .form-group--wide,
+    body.zui-app .form-page .form-workflow-form > .hr-line-dashed,
+    body.zui-app .form-page .form-workflow-form > .form-workflow-divider,
+    body.zui-app .form-page .form-workflow-form > .form-workflow-actions {
+        grid-column: 1;
+    }
+    body.zui-app .form-page .form-workflow-form > .form-group {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 6px;
+    }
+    body.zui-app .form-page .form-workflow-form > .form-group > label,
+    body.zui-app .form-page .form-workflow-form > .form-group > .control-label {
+        padding-top: 0 !important;
+    }
+    body.zui-app .form-page .platform-domain-row__fields,
+    body.zui-app .form-page .host-certificate-fields,
+    body.zui-app .form-page .host-platform-domain-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    body.zui-app .form-page .platform-domain-health {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    body.zui-app .form-page .form-workflow-content {
+        padding: 20px 16px !important;
+    }
+    body.zui-app .form-page .form-workflow-form {
+        gap: 0;
+    }
+    body.zui-app .form-page .form-workflow-form > .form-section-title {
+        margin-top: 22px !important;
+    }
+    body.zui-app .form-page .host-domain-source__choices {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    body.zui-app .form-page .platform-domain-health {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    body.zui-app .form-page .form-workflow-actions > [class*="col-"] {
+        width: 100% !important;
+    }
+    body.zui-app .form-page .form-workflow-actions .btn {
+        flex: 1 1 auto;
+    }
 }

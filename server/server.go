@@ -807,28 +807,50 @@ func revokeUserClientsWith(userID int, clients *sync.Map, disconnect func(int), 
 }
 
 func GetDashboardData() map[string]interface{} {
+	return getDashboardData(nil, true)
+}
+
+// GetDashboardDataForClients returns a dashboard snapshot scoped to the
+// supplied client IDs. A non-nil allowlist is a hard data boundary: clients,
+// tunnels, hosts, flow totals, rates, quotas and status rows are all derived
+// from that set. Pass nil only for an administrator's global overview.
+func GetDashboardDataForClients(allowedClientIds map[int]struct{}) map[string]interface{} {
+	return getDashboardData(allowedClientIds, allowedClientIds == nil)
+}
+
+func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[string]interface{} {
 	data := make(map[string]interface{})
-	data["version"] = version.VERSION
-	data["hostCount"] = common.GeSynctMapLen(&file.GetDb().JsonDb.Hosts)
-	clientCount := common.GeSynctMapLen(&file.GetDb().JsonDb.Clients)
-	if beego.AppConfig.String("public_vkey") != "" && clientCount > 0 { // remove public vkey
-		clientCount--
+	data["dashboardIsAdmin"] = isAdmin
+	data["dashboardScope"] = "user"
+	if isAdmin {
+		data["dashboardScope"] = "global"
 	}
-	data["clientCount"] = clientCount
-	dealClientData()
-	c := 0
+	data["systemInfoDisplay"] = isAdmin && beego.AppConfig.DefaultBool("system_info_display", true)
+	data["version"] = version.VERSION
+	clientCount := 0
+	hostCount := 0
+	tunnelCount := 0
+	clientOnlineCount := 0
+	currentProxyConnections := 0
 	var in, out int64
+	clients := make(map[int]*file.Client)
 	file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {
-		v, ok := value.(*file.Client)
-		if !ok || v == nil {
+		client, ok := value.(*file.Client)
+		if !ok || client == nil {
 			return true
 		}
-		v.RLock()
-		connected, flow := v.IsConnect, v.Flow
-		v.RUnlock()
-		if connected {
-			c += 1
+		client.RLock()
+		clientID, noDisplay, connected, flow := client.Id, client.NoDisplay, client.IsConnect, client.Flow
+		client.RUnlock()
+		if noDisplay || !dashboardClientAllowed(clientID, allowedClientIds) {
+			return true
 		}
+		clients[clientID] = client
+		clientCount++
+		if connected {
+			clientOnlineCount++
+		}
+		currentProxyConnections += int(atomic.LoadInt32(&client.NowConn))
 		if flow != nil {
 			clientIn, clientOut, _ := flow.Snapshot()
 			in += clientIn
@@ -836,7 +858,33 @@ func GetDashboardData() map[string]interface{} {
 		}
 		return true
 	})
-	data["clientOnlineCount"] = c
+	data["hostCount"] = hostCount
+	data["clientCount"] = clientCount
+	if isAdmin {
+		dealClientData()
+	} else {
+		refreshDashboardClients(clients)
+	}
+	// dealClientData refreshes bridge-backed online state. Re-read the selected
+	// clients after it runs so the returned snapshot is current and scoped.
+	clientOnlineCount = 0
+	currentProxyConnections = 0
+	in, out = 0, 0
+	for _, client := range clients {
+		client.RLock()
+		connected, flow := client.IsConnect, client.Flow
+		client.RUnlock()
+		if connected {
+			clientOnlineCount++
+		}
+		currentProxyConnections += int(atomic.LoadInt32(&client.NowConn))
+		if flow != nil {
+			clientIn, clientOut, _ := flow.Snapshot()
+			in += clientIn
+			out += clientOut
+		}
+	}
+	data["clientOnlineCount"] = clientOnlineCount
 	data["inletFlowCount"] = int(in)
 	data["exportFlowCount"] = int(out)
 	var tcp, udp, secret, socks5, p2p, http int
@@ -845,6 +893,16 @@ func GetDashboardData() map[string]interface{} {
 		if !ok || task == nil {
 			return true
 		}
+		task.RLock()
+		client := task.Client
+		task.RUnlock()
+		if client == nil {
+			return true
+		}
+		if !dashboardClientVisible(client, allowedClientIds) {
+			return true
+		}
+		tunnelCount++
 		task.RLock()
 		mode := task.Mode
 		task.RUnlock()
@@ -864,6 +922,24 @@ func GetDashboardData() map[string]interface{} {
 		}
 		return true
 	})
+	file.GetDb().JsonDb.Hosts.Range(func(key, value interface{}) bool {
+		host, ok := value.(*file.Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.RLock()
+		client := host.Client
+		host.RUnlock()
+		if client == nil {
+			return true
+		}
+		if dashboardClientVisible(client, allowedClientIds) {
+			hostCount++
+		}
+		return true
+	})
+	data["hostCount"] = hostCount
+	data["tunnelCount"] = tunnelCount
 
 	data["tcpC"] = tcp
 	data["udpCount"] = udp
@@ -871,6 +947,44 @@ func GetDashboardData() map[string]interface{} {
 	data["httpProxyCount"] = http
 	data["secretCount"] = secret
 	data["p2pCount"] = p2p
+	data["tcpCount"] = currentProxyConnections
+	data["currentProxyConnections"] = currentProxyConnections
+	var proxyInRate, proxyOutRate int64
+	for _, client := range clients {
+		client.RLock()
+		flow := client.Flow
+		client.RUnlock()
+		if flow != nil {
+			inRate, outRate := flow.RateSnapshot()
+			proxyInRate += inRate
+			proxyOutRate += outRate
+		}
+	}
+	data["proxyInRate"] = proxyInRate
+	data["proxyOutRate"] = proxyOutRate
+	data["proxyRate"] = map[string]int64{"in": proxyInRate, "out": proxyOutRate}
+	updatedAt := time.Now().Format(time.RFC3339)
+	data["updatedAt"] = updatedAt
+	data["lastUpdated"] = updatedAt
+	runtimeRows := dashboardRuntimeStatus(clients, allowedClientIds)
+	runtimeSummary := dashboardRuntimeSummary(runtimeRows, proxyInRate, proxyOutRate)
+	data["runtimeStatus"] = runtimeSummary
+	data["runtimeRows"] = runtimeRows
+	data["resourceStatus"] = map[string]int{
+		"running": dashboardSummaryInt(runtimeSummary, "tunnelRunning"),
+		"stopped": dashboardSummaryInt(runtimeSummary, "tunnelStopped"),
+		"waiting": dashboardSummaryInt(runtimeSummary, "tunnelWaiting"),
+	}
+	data["pendingItems"] = dashboardPendingItems(clients, allowedClientIds)
+	data["quotas"] = dashboardQuotaRows(clients)
+	data["runningTunnels"] = runtimeSummary["tunnelRunning"]
+	data["stoppedTunnels"] = runtimeSummary["tunnelStopped"]
+	if !isAdmin {
+		// Host-machine CPU, memory, socket and NIC samples, as well as listener
+		// configuration, are administrator-only. Resource counters above are
+		// already derived from the allowlist and remain safe for this scope.
+		return data
+	}
 	data["bridgeType"] = beego.AppConfig.String("bridge_type")
 	data["httpProxyPort"] = beego.AppConfig.String("http_proxy_port")
 	data["httpsProxyPort"] = beego.AppConfig.String("https_proxy_port")
@@ -879,16 +993,6 @@ func GetDashboardData() map[string]interface{} {
 	data["serverIp"] = beego.AppConfig.String("p2p_ip")
 	data["p2pPort"] = beego.AppConfig.String("p2p_port")
 	data["logLevel"] = beego.AppConfig.String("log_level")
-	tcpCount := 0
-
-	file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {
-		client, ok := value.(*file.Client)
-		if ok && client != nil {
-			tcpCount += int(atomic.LoadInt32(&client.NowConn))
-		}
-		return true
-	})
-	data["tcpCount"] = tcpCount
 	for key, value := range tool.GetSystemStatus() {
 		data[key] = value
 	}
@@ -896,6 +1000,346 @@ func GetDashboardData() map[string]interface{} {
 		data["sys"+strconv.Itoa(index+1)] = status
 	}
 	return data
+}
+
+func dashboardSummaryInt(summary map[string]interface{}, key string) int {
+	value, ok := summary[key]
+	if !ok {
+		return 0
+	}
+	count, ok := value.(int)
+	if !ok {
+		return 0
+	}
+	return count
+}
+
+func dashboardClientAllowed(clientID int, allowedClientIds map[int]struct{}) bool {
+	if allowedClientIds == nil {
+		return true
+	}
+	_, ok := allowedClientIds[clientID]
+	return ok
+}
+
+func dashboardClientVisible(client *file.Client, allowedClientIds map[int]struct{}) bool {
+	if client == nil {
+		return false
+	}
+	client.RLock()
+	clientID, noDisplay := client.Id, client.NoDisplay
+	client.RUnlock()
+	return !noDisplay && dashboardClientAllowed(clientID, allowedClientIds)
+}
+
+// refreshDashboardClients updates only the clients present in the current
+// scope. Administrators use dealClientData, which also refreshes display-only
+// metadata; user snapshots avoid touching clients outside their allowlist.
+func refreshDashboardClients(clients map[int]*file.Client) {
+	for clientID, client := range clients {
+		if client == nil {
+			continue
+		}
+		connected := bridgeClientConnected(clientID)
+		client.Lock()
+		client.IsConnect = connected
+		if connected {
+			client.LastOnlineTime = time.Now().Format("2006-01-02 15:04:05")
+		}
+		client.Unlock()
+	}
+}
+
+type dashboardRuntimeRow struct {
+	Kind      string `json:"kind"`
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	ClientID  int    `json:"clientId"`
+	UpdatedAt string `json:"updatedAt,omitempty"`
+}
+
+func dashboardRuntimeStatus(clients map[int]*file.Client, allowedClientIds map[int]struct{}) []dashboardRuntimeRow {
+	rows := make([]dashboardRuntimeRow, 0)
+	for clientID, client := range clients {
+		client.RLock()
+		status, connected, remark, expireTime := client.Status, client.IsConnect, client.Remark, client.ExpireTime
+		client.RUnlock()
+		state := "离线"
+		if !status {
+			state = "已停用"
+		} else if clientNearExpiry(expireTime, time.Now()) {
+			state = "即将到期"
+		} else if connected {
+			state = "在线"
+		}
+		rows = append(rows, dashboardRuntimeRow{Kind: "client", ID: clientID, Name: remark, Status: state, ClientID: clientID})
+	}
+	file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
+		task, ok := value.(*file.Tunnel)
+		if !ok || task == nil {
+			return true
+		}
+		task.RLock()
+		id, remark, status, client := task.Id, task.Remark, task.Status, task.Client
+		task.RUnlock()
+		if client == nil {
+			return true
+		}
+		client.RLock()
+		clientID, connected, clientEnabled := client.Id, client.IsConnect, client.Status
+		client.RUnlock()
+		if !dashboardClientVisible(client, allowedClientIds) {
+			return true
+		}
+		_, running := RunList.Load(id)
+		state := "已停止"
+		if !clientEnabled {
+			state = "已停止"
+		} else if status && !connected {
+			state = "等待客户端连接"
+		} else if status && running {
+			state = "运行中"
+		}
+		rows = append(rows, dashboardRuntimeRow{Kind: "tunnel", ID: id, Name: remark, Status: state, ClientID: clientID})
+		return true
+	})
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].Kind != rows[j].Kind {
+			return rows[i].Kind < rows[j].Kind
+		}
+		return rows[i].ID < rows[j].ID
+	})
+	return rows
+}
+
+func dashboardRuntimeSummary(rows []dashboardRuntimeRow, proxyInRate, proxyOutRate int64) map[string]interface{} {
+	summary := map[string]interface{}{
+		"clientOnline":   0,
+		"clientOffline":  0,
+		"clientDisabled": 0,
+		"clientExpiring": 0,
+		"tunnelRunning":  0,
+		"tunnelStopped":  0,
+		"tunnelWaiting":  0,
+		"proxyInRate":    proxyInRate,
+		"proxyOutRate":   proxyOutRate,
+	}
+	for _, row := range rows {
+		var key string
+		switch row.Kind {
+		case "client":
+			switch row.Status {
+			case "在线":
+				key = "clientOnline"
+			case "已停用":
+				key = "clientDisabled"
+			case "即将到期":
+				key = "clientExpiring"
+			default:
+				key = "clientOffline"
+			}
+		case "tunnel":
+			switch row.Status {
+			case "运行中":
+				key = "tunnelRunning"
+			case "等待客户端连接":
+				key = "tunnelWaiting"
+			default:
+				key = "tunnelStopped"
+			}
+		}
+		if key != "" {
+			summary[key] = summary[key].(int) + 1
+		}
+	}
+	return summary
+}
+
+type dashboardQuotaRow struct {
+	ClientID        int    `json:"clientId"`
+	ClientName      string `json:"clientName"`
+	TunnelUsed      int    `json:"tunnelUsed"`
+	TunnelLimit     int    `json:"tunnelLimit"`
+	ConnectionUsed  int32  `json:"connectionUsed"`
+	ConnectionLimit int    `json:"connectionLimit"`
+	FlowUsedBytes   int64  `json:"flowUsedBytes"`
+	FlowLimitBytes  int64  `json:"flowLimitBytes"`
+}
+
+func dashboardQuotaRows(clients map[int]*file.Client) []dashboardQuotaRow {
+	rows := make([]dashboardQuotaRow, 0, len(clients))
+	for clientID, client := range clients {
+		if client == nil {
+			continue
+		}
+		client.RLock()
+		name, maxTunnel, maxConn, nowConn, flow := client.Remark, client.MaxTunnelNum, client.MaxConn, atomic.LoadInt32(&client.NowConn), client.Flow
+		client.RUnlock()
+		var flowUsed, flowLimit int64
+		if flow != nil {
+			inlet, export, limit := flow.Snapshot()
+			flowUsed = inlet + export
+			if limit > 0 {
+				flowLimit = limit << 20
+			}
+		}
+		rows = append(rows, dashboardQuotaRow{
+			ClientID:        clientID,
+			ClientName:      name,
+			TunnelUsed:      client.GetTunnelNum(),
+			TunnelLimit:     maxTunnel,
+			ConnectionUsed:  nowConn,
+			ConnectionLimit: maxConn,
+			FlowUsedBytes:   flowUsed,
+			FlowLimitBytes:  flowLimit,
+		})
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].ClientID < rows[j].ClientID })
+	return rows
+}
+
+func dashboardPendingItems(clients map[int]*file.Client, allowedClientIds map[int]struct{}) []string {
+	pending := make([]string, 0)
+	now := time.Now()
+	for _, client := range clients {
+		client.RLock()
+		maxConn, nowConn, maxTunnel, status, flow, expireTime := client.MaxConn, atomic.LoadInt32(&client.NowConn), client.MaxTunnelNum, client.Status, client.Flow, client.ExpireTime
+		client.RUnlock()
+		if !status {
+			continue
+		}
+		if maxConn > 0 && dashboardNearLimit(int(nowConn), maxConn) {
+			pending = append(pending, "客户端连接数接近上限")
+		}
+		if maxTunnel > 0 {
+			owned := client.GetTunnelNum()
+			if dashboardNearLimit(owned, maxTunnel) {
+				pending = append(pending, "隧道数量接近上限")
+			}
+		}
+		if flow != nil {
+			inlet, export, limit := flow.Snapshot()
+			if limit > 0 {
+				if dashboardNearLimitBytes(inlet+export, limit<<20) {
+					pending = append(pending, "流量配额接近上限")
+				}
+			}
+		}
+		if clientNearExpiry(expireTime, now) {
+			pending = append(pending, "客户端即将到期")
+		}
+	}
+	if dashboardHasUnhealthyResource(allowedClientIds) {
+		pending = append(pending, "后端健康检查异常")
+	}
+	return uniqueDashboardStrings(pending)
+}
+
+func dashboardNearLimit(current, limit int) bool {
+	if current < 0 || limit <= 0 {
+		return false
+	}
+	threshold := (limit*80 + 99) / 100
+	if threshold < 1 {
+		threshold = 1
+	}
+	return current >= threshold
+}
+
+func dashboardNearLimitBytes(current, limit int64) bool {
+	if current < 0 || limit <= 0 {
+		return false
+	}
+	threshold := (limit*80 + 99) / 100
+	if threshold < 1 {
+		threshold = 1
+	}
+	return current >= threshold
+}
+
+func dashboardHasUnhealthyResource(allowedClientIds map[int]struct{}) bool {
+	unhealthy := false
+	file.GetDb().JsonDb.Tasks.Range(func(_, value interface{}) bool {
+		task, ok := value.(*file.Tunnel)
+		if !ok || task == nil {
+			return true
+		}
+		task.RLock()
+		client := task.Client
+		task.RUnlock()
+		if !dashboardClientVisible(client, allowedClientIds) {
+			return true
+		}
+		// Health state has its own lock because the client health reporter updates
+		// it independently of the tunnel's metadata lock.
+		task.Health.RLock()
+		unhealthy = dashboardHealthFailed(task.Health.HealthMap, task.Health.HealthRemoveArr, task.Health.HealthMaxFail)
+		task.Health.RUnlock()
+		return !unhealthy
+	})
+	if unhealthy {
+		return true
+	}
+	file.GetDb().JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*file.Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.RLock()
+		client := host.Client
+		host.RUnlock()
+		if !dashboardClientVisible(client, allowedClientIds) {
+			return true
+		}
+		host.Health.RLock()
+		unhealthy = dashboardHealthFailed(host.Health.HealthMap, host.Health.HealthRemoveArr, host.Health.HealthMaxFail)
+		host.Health.RUnlock()
+		return !unhealthy
+	})
+	return unhealthy
+}
+
+func dashboardHealthFailed(failures map[string]int, removed []string, maxFail int) bool {
+	if len(removed) > 0 {
+		return true
+	}
+	if maxFail <= 0 {
+		return false
+	}
+	for _, count := range failures {
+		if count >= maxFail {
+			return true
+		}
+	}
+	return false
+}
+
+func uniqueDashboardStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
+func clientNearExpiry(expire string, now time.Time) bool {
+	expire = strings.TrimSpace(expire)
+	if expire == "" {
+		return false
+	}
+	for _, layout := range []string{"2006-01-02 15:04:05", time.RFC3339} {
+		parsed, err := time.ParseInLocation(layout, expire, time.Local)
+		if err == nil {
+			return parsed.After(now) && parsed.Sub(now) <= 7*24*time.Hour
+		}
+	}
+	return false
 }
 
 // 实例化流量数据到文件

@@ -2,9 +2,15 @@
 
     <div class="dashboard-page-header">
         <div>
+            {{if eq true .isAdmin}}
             <div class="dashboard-page-kicker" data-i18n-zh="服务器概览" data-i18n-en="SERVER OVERVIEW">服务器概览</div>
             <h1 data-i18n-zh="控制台" data-i18n-en="Control plane">控制台</h1>
             <p data-i18n-zh="查看服务状态、当前连接和代理运行情况。" data-i18n-en="Review service status, current connections, and proxy activity.">查看服务状态、当前连接和代理运行情况。</p>
+            {{else}}
+            <div class="dashboard-page-kicker" data-i18n-zh="工作区概览" data-i18n-en="WORKSPACE OVERVIEW">工作区概览</div>
+            <h1 data-i18n-zh="我的资源" data-i18n-en="My resources">我的资源</h1>
+            <p data-i18n-zh="查看自己名下的客户端、隧道和域名主机。" data-i18n-en="Review your clients, tunnels, and domain hosts.">查看自己名下的客户端、隧道和域名主机。</p>
+            {{end}}
         </div>
         <div class="dashboard-page-actions">
             <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/client/list"><i class="fa fa-desktop"></i><span data-i18n-zh="客户端" data-i18n-en="Clients">客户端</span></a>
@@ -16,12 +22,12 @@
         <div class="col-lg-3 col-md-6">
             <div class="stat-card card-blue">
                 <div class="panel ibox float-e-margins zui-panel">
-                    <i class="fa fa-plug stat-icon"></i>
+                    <i class="fa fa-users stat-icon"></i>
                     <div class="ibox-title">
-                        <h5 langtag="word-connectionport"></h5>
+                        <h5 data-i18n-zh="客户端" data-i18n-en="Clients">客户端</h5>
                     </div>
                     <div class="ibox-content">
-                        <h1 class="no-margins">{{.p1}}</h1>
+                        <h1 class="no-margins" data-dashboard-value="clientCount">{{.data.clientCount}}</h1>
                     </div>
                 </div>
             </div>
@@ -29,12 +35,12 @@
         <div class="col-lg-3 col-md-6">
             <div class="stat-card card-purple">
                 <div class="panel ibox float-e-margins zui-panel">
-                    <i class="fa fa-users stat-icon"></i>
+                    <i class="fa fa-random stat-icon"></i>
                     <div class="ibox-title">
-                        <h5 langtag="word-totalclients"></h5>
+                        <h5 data-i18n-zh="隧道" data-i18n-en="Tunnels">隧道</h5>
                     </div>
                     <div class="ibox-content">
-                        <h1 class="no-margins">{{.data.clientCount}}</h1>
+                        <h1 class="no-margins" data-dashboard-value="tunnelCount">{{.data.tunnelCount}}</h1>
                     </div>
                 </div>
             </div>
@@ -42,12 +48,12 @@
         <div class="col-lg-3 col-md-6">
             <div class="stat-card card-green">
                 <div class="panel ibox float-e-margins zui-panel">
-                    <i class="fa fa-signal stat-icon"></i>
+                    <i class="fa fa-globe stat-icon"></i>
                     <div class="ibox-title">
-                        <h5 langtag="word-onlineclients"></h5>
+                        <h5 data-i18n-zh="域名主机" data-i18n-en="Domain hosts">域名主机</h5>
                     </div>
                     <div class="ibox-content">
-                        <h1 class="no-margins">{{.data.clientOnlineCount}}</h1>
+                        <h1 class="no-margins" data-dashboard-value="hostCount">{{.data.hostCount}}</h1>
                     </div>
                 </div>
             </div>
@@ -60,13 +66,57 @@
                         <h5 langtag="word-tcpconnections"></h5>
                     </div>
                     <div class="ibox-content">
-                        <h1 class="no-margins">{{.data.tcpCount}}</h1>
+                        <h1 class="no-margins" data-dashboard-value="currentProxyConnections">{{.data.currentProxyConnections}}</h1>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <div id="dashboard-runtime-panel" class="panel ibox float-e-margins zui-panel dashboard-runtime-panel">
+        <div class="ibox-title">
+            <h5 data-i18n-zh="运行状态" data-i18n-en="Runtime status">运行状态</h5>
+            <div class="dashboard-runtime-toolbar">
+                <span id="dashboard-last-updated" class="dashboard-last-updated" data-i18n-zh="正在更新" data-i18n-en="Updating">正在更新</span>
+                <button id="dashboard-refresh" class="dashboard-refresh-button" type="button" aria-label="刷新运行状态" data-aria-label-zh="刷新运行状态" data-aria-label-en="Refresh runtime status" data-title-zh="刷新运行状态" data-title-en="Refresh runtime status"><i class="fa fa-refresh" aria-hidden="true"></i></button>
+            </div>
+        </div>
+        <div class="ibox-content">
+            <div class="dashboard-runtime-grid">
+                <section class="dashboard-runtime-item" aria-labelledby="dashboard-client-status-label">
+                    <div id="dashboard-client-status-label" class="dashboard-runtime-label" data-i18n-zh="客户端状态" data-i18n-en="Client status">客户端状态</div>
+                    <div id="dashboard-client-status" class="dashboard-runtime-value">--</div>
+                    <div class="dashboard-runtime-detail"><span data-i18n-zh="在线 / 离线 / 已停用 / 即将到期" data-i18n-en="Online / offline / disabled / expiring">在线 / 离线 / 已停用 / 即将到期</span></div>
+                </section>
+                <section class="dashboard-runtime-item" aria-labelledby="dashboard-tunnel-status-label">
+                    <div id="dashboard-tunnel-status-label" class="dashboard-runtime-label" data-i18n-zh="隧道状态" data-i18n-en="Tunnel status">隧道状态</div>
+                    <div id="dashboard-tunnel-status" class="dashboard-runtime-value">--</div>
+                    <div class="dashboard-runtime-detail"><span data-i18n-zh="运行中 / 已停止 / 等待连接" data-i18n-en="Running / stopped / waiting">运行中 / 已停止 / 等待连接</span></div>
+                </section>
+                <section class="dashboard-runtime-item" aria-labelledby="dashboard-proxy-rate-label">
+                    <div id="dashboard-proxy-rate-label" class="dashboard-runtime-label" data-i18n-zh="当前代理速率" data-i18n-en="Current proxy rate">当前代理速率</div>
+                    <div id="dashboard-proxy-rate" class="dashboard-runtime-value">--</div>
+                    <div class="dashboard-runtime-detail"><span data-i18n-zh="入站 / 出站" data-i18n-en="Inbound / outbound">入站 / 出站</span></div>
+                </section>
+                <section class="dashboard-runtime-item" aria-labelledby="dashboard-proxy-connection-label">
+                    <div id="dashboard-proxy-connection-label" class="dashboard-runtime-label" data-i18n-zh="当前代理连接" data-i18n-en="Active proxy connections">当前代理连接</div>
+                    <div id="dashboard-proxy-connections" class="dashboard-runtime-value">--</div>
+                    <div class="dashboard-runtime-detail"><span data-i18n-zh="由 NPS 转发的活动连接" data-i18n-en="Active connections forwarded by NPS">由 NPS 转发的活动连接</span></div>
+                </section>
+            </div>
+            <div class="dashboard-pending" aria-labelledby="dashboard-pending-label">
+                <div id="dashboard-pending-label" class="dashboard-pending-label" data-i18n-zh="待处理事项" data-i18n-en="Needs attention">待处理事项</div>
+                <ul id="dashboard-pending-list" class="dashboard-pending-list"><li class="dashboard-pending-empty" data-i18n-zh="正在检查资源状态" data-i18n-en="Checking resource status">正在检查资源状态</li></ul>
+            </div>
+            <div class="dashboard-quota-summary" aria-labelledby="dashboard-quota-label">
+                <div id="dashboard-quota-label" class="dashboard-pending-label" data-i18n-zh="配额使用" data-i18n-en="Quota usage">配额使用</div>
+                <ul id="dashboard-quota-list" class="dashboard-quota-list"><li class="dashboard-pending-empty" data-i18n-zh="正在读取配额" data-i18n-en="Loading quotas">正在读取配额</li></ul>
+            </div>
+            <p id="dashboard-refresh-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+        </div>
+    </div>
+
+{{if eq true .isAdmin}}
     <div class="row dashboard-information-grid">
         <div class="col-lg-6">
             <div class="panel ibox float-e-margins zui-panel">
@@ -150,7 +200,9 @@
         </div>
     </div>
 
-{{if eq true .system_info_display}}
+{{end}}
+
+{{if and (eq true .isAdmin) (eq true .system_info_display)}}
     <div class="row dashboard-chart-grid">
         <div class="col-lg-6">
             <div class="panel ibox float-e-margins dashboard-chart-card zui-panel">
@@ -198,8 +250,8 @@
         </div>
         <div class="col-lg-6">
             <div class="panel ibox float-e-margins dashboard-chart-card zui-panel">
-                <div class="ibox-title"><h5 langtag="word-type"></h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠连接类型" data-aria-label-zh="折叠连接类型" data-aria-label-en="Collapse connection types" data-title-zh="折叠连接类型" data-title-en="Collapse connection types"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭连接类型" data-aria-label-zh="关闭连接类型" data-aria-label-en="Close connection types" data-title-zh="关闭连接类型" data-title-en="Close connection types"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
-                <div class="ibox-content"><div id="counts" class="dashboard-chart dashboard-chart--tall" role="img" aria-label="连接类型图表" data-aria-label-zh="连接类型图表" data-aria-label-en="Connection type chart"></div></div>
+                <div class="ibox-title"><h5 data-i18n-zh="资源状态" data-i18n-en="Resource status">资源状态</h5><div class="ibox-tools"><button type="button" class="collapse-link" aria-label="折叠资源状态" data-aria-label-zh="折叠资源状态" data-aria-label-en="Collapse resource status" data-title-zh="折叠资源状态" data-title-en="Collapse resource status"><i class="fa fa-chevron-up" aria-hidden="true"></i></button><button type="button" class="close-link" aria-label="关闭资源状态" data-aria-label-zh="关闭资源状态" data-aria-label-en="Close resource status" data-title-zh="关闭资源状态" data-title-en="Close resource status"><i class="fa fa-times" aria-hidden="true"></i></button></div></div>
+                <div class="ibox-content"><div id="counts" class="dashboard-chart dashboard-chart--tall" role="img" aria-label="资源状态图表" data-aria-label-zh="资源状态图表" data-aria-label-en="Resource status chart"></div></div>
             </div>
         </div>
     </div>
@@ -207,6 +259,7 @@
 </div>
 
 <script>
+{{if and (eq true .isAdmin) (eq true .system_info_display)}}
     $("#overview_cpu").text("{{.data.cpu}}%")
     $("#overview_cpu_bar").width("{{.data.cpu}}%")
     $("#overview_memory").text("{{.data.virtual_mem}}%")
@@ -316,7 +369,7 @@
 				formatter: function (params) {
 					var str = params.length ? params[0].axisValue + '<br>' : '';
 					for (var i = 0; i < params.length; i++){
-						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'MB<br>';
+						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName +': '+ params[i].data +'%<br>';
 					}
 					return str;
 				}
@@ -338,7 +391,7 @@
 				axisLabel: {
 					show: true,
 					interval: 'auto',
-					formatter: '{value} MB'
+					formatter: '{value} %'
 				}
 			},
 			series: [
@@ -447,6 +500,8 @@
 			]
 		};
 
+{{end}}
+
 		chartdatas['flow'] = {
 			tooltip: {
 				trigger: 'item',
@@ -505,7 +560,7 @@
 				itemWidth: 12,
 				itemHeight: 8,
 				itemGap: 10,
-				data: ['', '', '', '', '', '', '']
+				data: ['', '', '']
 			},
 			series: [
 				{
@@ -518,31 +573,15 @@
 					data: [
 						{
 							name: '',
-							value:{{.data.hostCount}}
+							value:{{if .data.runtimeStatus}}{{.data.runtimeStatus.tunnelRunning}}{{else}}0{{end}}
 						},
 						{
 							name: '',
-							value:{{.data.tcpC}}
+							value:{{if .data.runtimeStatus}}{{.data.runtimeStatus.tunnelStopped}}{{else}}0{{end}}
 						},
 						{
 							name: '',
-							value:{{.data.udpCount}}
-						},
-						{
-							name: '',
-							value:{{.data.httpProxyCount}}
-						},
-						{
-							name: '',
-							value:{{.data.socks5Count}}
-						},
-						{
-							name: '',
-							value:{{.data.secretCount}}
-						},
-						{
-							name: '',
-							value:{{.data.p2pCount}}
+							value:{{if .data.runtimeStatus}}{{.data.runtimeStatus.tunnelWaiting}}{{else}}0{{end}}
 						}
 					],
 					itemStyle: {
@@ -569,9 +608,9 @@
 				}
 			}
 			if (chartdatas['counts'] && chartdatas['counts'].legend && chartdatas['counts'].series && chartdatas['counts'].series[0]) {
-				var countNames = english ? ['HOST', 'TCP', 'UDP', 'HTTP', 'SOCKS 5', 'Secret', 'P2P'] : ['域名转发', 'TCP 隧道', 'UDP 隧道', 'HTTP 代理', 'SOCKS 代理', '私密代理', 'P2P 连接'];
+				var countNames = english ? ['Running', 'Stopped', 'Waiting'] : ['运行中', '已停止', '等待客户端连接'];
 				chartdatas['counts'].legend.data = countNames.slice();
-				chartdatas['counts'].series[0].name = english ? 'Scheme type' : '协议类型';
+				chartdatas['counts'].series[0].name = english ? 'Resource status' : '资源状态';
 				if (chartdatas['counts'].series[0].data) {
 					for (var countIndex = 0; countIndex < chartdatas['counts'].series[0].data.length; countIndex++) {
 						chartdatas['counts'].series[0].data[countIndex].name = countNames[countIndex] || '';
@@ -580,6 +619,284 @@
 			}
 		}
 		applyDashboardChartLabels();
+
+        function dashboardValue(source, key, fallback) {
+            return source && source[key] !== undefined && source[key] !== null ? source[key] : fallback;
+        }
+
+        function dashboardNumber(value, fallback) {
+            var number = Number(value);
+            return isFinite(number) ? number : (fallback || 0);
+        }
+
+        function dashboardFormatRate(value) {
+            return typeof changeunit === 'function' ? changeunit(dashboardNumber(value)) + '/s' : dashboardNumber(value) + 'B/s';
+        }
+
+        function dashboardIsEnglish() {
+            return typeof npsIsEnglish === 'function' && npsIsEnglish();
+        }
+
+        function dashboardStatusText(status) {
+            var english = dashboardIsEnglish();
+            var names = {
+                '在线': english ? 'Online' : '在线',
+                '离线': english ? 'Offline' : '离线',
+                '已停用': english ? 'Disabled' : '已停用',
+                '即将到期': english ? 'Expiring' : '即将到期',
+                '运行中': english ? 'Running' : '运行中',
+                '已停止': english ? 'Stopped' : '已停止',
+                '等待客户端连接': english ? 'Waiting' : '等待客户端连接',
+                '等待连接': english ? 'Waiting' : '等待连接'
+            };
+            return names[String(status)] || String(status || (english ? 'Unknown' : '未知'));
+        }
+
+        function dashboardRows(response) {
+            if (!response || typeof response !== 'object') return {};
+            if (response.data && typeof response.data === 'object' && !$.isArray(response.data)) return response.data;
+            return response;
+        }
+
+        function dashboardCountStatuses(rows, kind, allowedStatuses) {
+            var counts = {};
+            if (!$.isArray(rows)) return counts;
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i] || {};
+                if (kind && row.kind && row.kind !== kind) continue;
+                var status = String(row.status || '');
+                if (allowedStatuses && !allowedStatuses[status]) continue;
+                counts[status] = (counts[status] || 0) + 1;
+            }
+            return counts;
+        }
+
+        function dashboardSummaryCounts(summary, prefix) {
+            var counts = {};
+            if (!summary || typeof summary !== 'object') return counts;
+            var mapping = prefix === 'client' ? {
+                clientOnline: '在线', clientOffline: '离线', clientDisabled: '已停用', clientExpiring: '即将到期'
+            } : {
+                tunnelRunning: '运行中', tunnelStopped: '已停止', tunnelWaiting: '等待客户端连接'
+            };
+            for (var key in mapping) {
+                if (!Object.prototype.hasOwnProperty.call(mapping, key)) continue;
+                var value = dashboardNumber(summary[key], 0);
+                if (value) counts[mapping[key]] = value;
+            }
+            return counts;
+        }
+
+        function dashboardNormalizeCounts(counts) {
+            if (!counts || typeof counts !== 'object' || $.isArray(counts)) return counts;
+            var aliases = {
+                online: '在线', offline: '离线', disabled: '已停用', expiring: '即将到期',
+                running: '运行中', stopped: '已停止', waiting: '等待客户端连接',
+                clientOnline: '在线', clientOffline: '离线', clientDisabled: '已停用', clientExpiring: '即将到期',
+                tunnelRunning: '运行中', tunnelStopped: '已停止', tunnelWaiting: '等待客户端连接'
+            };
+            var normalized = {};
+            for (var key in counts) {
+                if (!Object.prototype.hasOwnProperty.call(counts, key)) continue;
+                var status = aliases[key] || key;
+                normalized[status] = (normalized[status] || 0) + dashboardNumber(counts[key], 0);
+            }
+            return normalized;
+        }
+
+        function dashboardStatusSummary(counts, statuses) {
+            var values = [];
+            for (var i = 0; i < statuses.length; i++) {
+                var status = statuses[i];
+                if (counts[status]) values.push(dashboardStatusText(status) + ' ' + counts[status]);
+            }
+            if (!values.length) return dashboardIsEnglish() ? 'No resources' : '暂无资源';
+            return values.join(' · ');
+        }
+
+        function dashboardPendingText(message) {
+            if (!dashboardIsEnglish()) return String(message);
+            var translations = {
+                '客户端连接数接近上限': 'Client connections near the limit',
+                '隧道数量接近上限': 'Tunnel count near the limit',
+                '流量配额接近上限': 'Traffic quota near the limit',
+                '客户端即将到期': 'Client is expiring soon',
+                '后端健康检查异常': 'Backend health check failed'
+            };
+            return translations[String(message)] || String(message);
+        }
+
+        function dashboardSetUpdated(value) {
+            var english = dashboardIsEnglish();
+            var date = value ? new Date(value) : new Date();
+            var text = '';
+            if (!isNaN(date.getTime())) {
+                text = date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+            } else if (value) {
+                text = String(value);
+            }
+            $('#dashboard-last-updated').text((english ? 'Updated ' : '更新于 ') + (text || '--'));
+        }
+
+        function dashboardUpdatePending(items) {
+            var $list = $('#dashboard-pending-list');
+            if (!$list.length) return;
+            $list.empty();
+            if (!$.isArray(items) || !items.length) {
+                $('<li>', {
+                    'class': 'dashboard-pending-empty',
+                    text: dashboardIsEnglish() ? 'No pending items' : '暂无待处理事项'
+                }).appendTo($list);
+                return;
+            }
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i];
+                var message = typeof item === 'string' ? item : dashboardValue(item, 'message', dashboardValue(item, 'title', ''));
+                if (!message) continue;
+                var level = typeof item === 'object' ? String(dashboardValue(item, 'level', 'warning')) : 'warning';
+                var className = level === 'danger' || level === 'error' ? 'dashboard-pending-item--danger' : level === 'info' ? 'dashboard-pending-item--info' : 'dashboard-pending-item--warning';
+                $('<li>', {'class': 'dashboard-pending-item ' + className, text: dashboardPendingText(message)}).appendTo($list);
+            }
+            if (!$list.children().length) {
+                $('<li>', {'class': 'dashboard-pending-empty', text: dashboardIsEnglish() ? 'No pending items' : '暂无待处理事项'}).appendTo($list);
+            }
+        }
+
+        function dashboardFormatQuotaBytes(value) {
+            var bytes = dashboardNumber(value, 0);
+            return typeof changeunit === 'function' ? changeunit(bytes) : bytes + ' B';
+        }
+
+        function dashboardUpdateQuotas(rows) {
+            var $list = $('#dashboard-quota-list');
+            if (!$list.length) return;
+            $list.empty();
+            if (!$.isArray(rows) || !rows.length) {
+                $('<li>', {
+                    'class': 'dashboard-pending-empty',
+                    text: dashboardIsEnglish() ? 'No quota limits configured' : '暂无配额限制'
+                }).appendTo($list);
+                return;
+            }
+            var english = dashboardIsEnglish();
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i] || {};
+                var name = String(dashboardValue(row, 'clientName', '') || (english ? 'Client ' : '客户端 ') + dashboardValue(row, 'clientId', ''));
+                var details = [];
+                var connectionLimit = dashboardNumber(dashboardValue(row, 'connectionLimit', 0));
+                var tunnelLimit = dashboardNumber(dashboardValue(row, 'tunnelLimit', 0));
+                var flowLimit = dashboardNumber(dashboardValue(row, 'flowLimitBytes', 0));
+                if (connectionLimit > 0) {
+                    details.push((english ? 'Connections ' : '连接 ') + dashboardNumber(dashboardValue(row, 'connectionUsed', 0)) + '/' + connectionLimit);
+                }
+                if (tunnelLimit > 0) {
+                    details.push((english ? 'Tunnels ' : '隧道 ') + dashboardNumber(dashboardValue(row, 'tunnelUsed', 0)) + '/' + tunnelLimit);
+                }
+                if (flowLimit > 0) {
+                    details.push((english ? 'Flow ' : '流量 ') + dashboardFormatQuotaBytes(dashboardValue(row, 'flowUsedBytes', 0)) + '/' + dashboardFormatQuotaBytes(flowLimit));
+                }
+                if (!details.length) details.push(english ? 'Unlimited' : '未设置限制');
+                $('<li>', {
+                    'class': 'dashboard-quota-item',
+                    text: name + ' · ' + details.join(' · ')
+                }).appendTo($list);
+            }
+        }
+
+        function dashboardUpdateResourceChart(data, rows) {
+            if (!chartdatas['counts'] || !chartdatas['counts'].series || !chartdatas['counts'].series[0]) return;
+            var resource = dashboardValue(data, 'resourceStatus', null);
+            var labels = dashboardIsEnglish() ? ['Running', 'Stopped', 'Waiting'] : ['运行中', '已停止', '等待客户端连接'];
+            var values = [];
+            if (resource && !$.isArray(resource) && typeof resource === 'object') {
+                var resourceKeys = dashboardIsEnglish() ? ['running', 'stopped', 'waiting'] : ['running', 'stopped', 'waiting'];
+                for (var resourceIndex = 0; resourceIndex < resourceKeys.length; resourceIndex++) {
+                    values.push({name: labels[resourceIndex], value: dashboardNumber(dashboardValue(resource, resourceKeys[resourceIndex], 0))});
+                }
+            } else {
+                var tunnelCounts = dashboardCountStatuses(rows, 'tunnel', {'运行中': true, '已停止': true, '等待客户端连接': true, '等待连接': true});
+                if (!Object.keys(tunnelCounts).length) tunnelCounts = dashboardSummaryCounts(dashboardValue(data, 'runtimeStatus', {}), 'tunnel');
+                values = [
+                    {name: labels[0], value: tunnelCounts['运行中'] || 0},
+                    {name: labels[1], value: tunnelCounts['已停止'] || 0},
+                    {name: labels[2], value: (tunnelCounts['等待客户端连接'] || 0) + (tunnelCounts['等待连接'] || 0)}
+                ];
+            }
+            if (!values.length) return;
+            chartdatas['counts'].legend.data = labels.slice();
+            chartdatas['counts'].series[0].name = dashboardIsEnglish() ? 'Resource status' : '资源状态';
+            chartdatas['counts'].series[0].data = values;
+            if (charts['counts'] && typeof charts['counts'].setOption === 'function') charts['counts'].setOption(chartdatas['counts'], true);
+        }
+
+        function dashboardUpdateFlowChart(data) {
+            if (!chartdatas['flow'] || !chartdatas['flow'].series || !chartdatas['flow'].series[0]) return;
+            var labels = dashboardIsEnglish() ? ['In', 'Out'] : ['入口', '出口'];
+            chartdatas['flow'].legend.data = labels.slice();
+            chartdatas['flow'].series[0].name = dashboardIsEnglish() ? 'Traffic' : '流量统计';
+            chartdatas['flow'].series[0].data = [
+                {name: labels[0], value: dashboardNumber(dashboardValue(data, 'inletFlowCount', 0))},
+                {name: labels[1], value: dashboardNumber(dashboardValue(data, 'exportFlowCount', 0))}
+            ];
+            if (charts['flow'] && typeof charts['flow'].setOption === 'function') charts['flow'].setOption(chartdatas['flow'], true);
+        }
+
+        function dashboardApplySnapshot(response) {
+            var data = dashboardRows(response);
+            var runtimeSummary = dashboardValue(data, 'runtimeStatus', {});
+            var rows = dashboardValue(data, 'runtimeRows', $.isArray(runtimeSummary) ? runtimeSummary : []);
+            var clientCounts = dashboardCountStatuses(rows, 'client', {'在线': true, '离线': true, '已停用': true, '即将到期': true});
+            var tunnelCounts = dashboardCountStatuses(rows, 'tunnel', {'运行中': true, '已停止': true, '等待客户端连接': true, '等待连接': true});
+            if (!Object.keys(clientCounts).length) clientCounts = dashboardSummaryCounts(runtimeSummary, 'client');
+            if (!Object.keys(tunnelCounts).length) tunnelCounts = dashboardSummaryCounts(runtimeSummary, 'tunnel');
+            var clients = dashboardValue(data, 'clientStatus', dashboardValue(data, 'clients', null));
+            var tunnels = dashboardValue(data, 'tunnelStatus', dashboardValue(data, 'tunnels', null));
+            if (clients && typeof clients === 'object' && !$.isArray(clients)) clientCounts = dashboardNormalizeCounts(clients);
+            if (tunnels && typeof tunnels === 'object' && !$.isArray(tunnels)) tunnelCounts = dashboardNormalizeCounts(tunnels);
+
+            $('#dashboard-client-status').text(dashboardStatusSummary(clientCounts, ['在线', '离线', '已停用', '即将到期']));
+            $('#dashboard-tunnel-status').text(dashboardStatusSummary(tunnelCounts, ['运行中', '已停止', '等待客户端连接', '等待连接']));
+            var proxyRate = dashboardValue(data, 'proxyRate', {});
+            var inbound = dashboardValue(data, 'proxyInRate', dashboardValue(proxyRate, 'in', 0));
+            var outbound = dashboardValue(data, 'proxyOutRate', dashboardValue(proxyRate, 'out', 0));
+            $('#dashboard-proxy-rate').text(dashboardFormatRate(inbound) + ' / ' + dashboardFormatRate(outbound));
+            var connections = dashboardValue(data, 'currentProxyConnections', dashboardValue(data, 'tcpCount', 0));
+            $('#dashboard-proxy-connections').text(dashboardNumber(connections));
+            $('[data-dashboard-value="clientCount"]').text(dashboardNumber(dashboardValue(data, 'clientCount', 0)));
+            $('[data-dashboard-value="tunnelCount"]').text(dashboardNumber(dashboardValue(data, 'tunnelCount', 0)));
+            $('[data-dashboard-value="hostCount"]').text(dashboardNumber(dashboardValue(data, 'hostCount', 0)));
+            $('[data-dashboard-value="currentProxyConnections"]').text(dashboardNumber(connections));
+            dashboardUpdatePending(dashboardValue(data, 'pendingItems', dashboardValue(data, 'pending', [])));
+            dashboardUpdateQuotas(dashboardValue(data, 'quotas', []));
+            dashboardSetUpdated(dashboardValue(data, 'lastUpdated', dashboardValue(data, 'updatedAt', null)));
+            dashboardUpdateFlowChart(data);
+            dashboardUpdateResourceChart(data, rows);
+            $('#dashboard-refresh-status').text(dashboardIsEnglish() ? 'Runtime status updated' : '运行状态已更新');
+        }
+
+        function dashboardRefresh() {
+            var base = String((window.nps && window.nps.web_base_url) || '').replace(/\/+$/, '');
+            var endpoint = base + '/index/dashboarddata';
+            var $button = $('#dashboard-refresh');
+            $button.addClass('is-refreshing').prop('disabled', true);
+            $.ajax({url: endpoint, dataType: 'json', cache: false, global: false, timeout: 8000})
+                .done(function (response) { dashboardApplySnapshot(response); })
+                .fail(function () {
+                    $('#dashboard-refresh-status').text(dashboardIsEnglish() ? 'Runtime status could not be updated' : '运行状态更新失败');
+                    $('#dashboard-last-updated').text(dashboardIsEnglish() ? 'Update unavailable' : '更新不可用');
+                })
+                .always(function () { $button.removeClass('is-refreshing').prop('disabled', false); });
+        }
+
+        $(function () {
+            if (!$('#dashboard-runtime-panel').length && !$('#dashboard-refresh').length) return;
+            dashboardRefresh();
+            var dashboardRefreshTimer = window.setInterval(function () {
+                if (!document.hidden) dashboardRefresh();
+            }, 15000);
+            $('#dashboard-refresh').on('click', dashboardRefresh);
+            $(window).on('pagehide', function () { window.clearInterval(dashboardRefreshTimer); });
+        });
 
 		window.addEventListener('resize', () => {
 	        for(var key in charts){
