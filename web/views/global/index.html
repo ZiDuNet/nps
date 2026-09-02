@@ -7,20 +7,20 @@
         </div>
     </header>
 
-    <div class="row form-page-grid"><div class="col-md-12"><section class="panel ibox float-e-margins form-workflow-card zui-panel"><div class="ibox-content form-workflow-content">
-        <form id="global-form" class="form form-horizontal form-workflow-form zui-form" data-form-workflow="global-settings">
+    <div class="form-page-grid"><div class="form-page-column"><section class="panel ibox float-e-margins form-workflow-card zui-panel"><div class="ibox-content form-workflow-content">
+        <form id="global-form" class="form form-horz form-workflow-form zui-form" data-form-workflow="global-settings">
             <div class="form-section-title"><i class="fa fa-server" aria-hidden="true"></i><span data-i18n-zh="服务配置" data-i18n-en="Server settings">服务配置</span></div>
             <div class="form-group">
-                <label class="col-sm-2 control-label font-bold" for="server-url" data-i18n-zh="服务地址" data-i18n-en="Server address">服务地址</label>
-                <div class="col-sm-10"><input id="server-url" class="form-control" value="{{.serverUrl}}" type="text" name="serverUrl" autocomplete="off" placeholder="nps.example.com"><span class="help-block" data-i18n-zh="用于控制台展示的外部地址；不改变正在监听的端口。" data-i18n-en="Used as the external address shown in the console; it does not change listening ports.">用于控制台展示的外部地址；不改变正在监听的端口。</span></div>
+                <label class="form-label font-bold" for="server-url" data-i18n-zh="服务地址" data-i18n-en="Server address">服务地址</label>
+                <div class="form-group-wrapper"><input id="server-url" class="form-control" value="{{.serverUrl}}" type="text" name="serverUrl" autocomplete="off" placeholder="nps.example.com"><span class="help-block" data-i18n-zh="用于控制台展示的外部地址；不改变正在监听的端口。" data-i18n-en="Used as the external address shown in the console; it does not change listening ports.">用于控制台展示的外部地址；不改变正在监听的端口。</span></div>
             </div>
             <div class="form-group form-group--wide">
-                <label class="col-sm-2 control-label font-bold" for="black-ip-list" data-i18n-zh="IP 黑名单" data-i18n-en="IP denylist">IP 黑名单</label>
-                <div class="col-sm-10"><textarea id="black-ip-list" class="form-control" rows="6" name="globalBlackIpList" placeholder="203.0.113.10">{{.globalBlackIpList}}</textarea><span class="help-block" data-i18n-zh="每行一个 IP。此限制对服务端的入口连接生效。" data-i18n-en="One IP per line. This restriction applies to server entry connections.">每行一个 IP。此限制对服务端的入口连接生效。</span></div>
+                <label class="form-label font-bold" for="black-ip-list" data-i18n-zh="IP 黑名单" data-i18n-en="IP denylist">IP 黑名单</label>
+                <div class="form-group-wrapper"><textarea id="black-ip-list" class="form-control" rows="6" name="globalBlackIpList" placeholder="203.0.113.10">{{.globalBlackIpList}}</textarea><span class="help-block" data-i18n-zh="每行一个 IP。此限制对服务端的入口连接生效。" data-i18n-en="One IP per line. This restriction applies to server entry connections.">每行一个 IP。此限制对服务端的入口连接生效。</span></div>
             </div>
 
             <div class="form-section-title"><i class="fa fa-cloud" aria-hidden="true"></i><span data-i18n-zh="平台泛域名" data-i18n-en="Platform wildcard domains">平台泛域名</span></div>
-            <div class="form-group form-group--wide"><label class="col-sm-2 control-label font-bold" data-i18n-zh="域名池" data-i18n-en="Domain pool">域名池</label><div class="col-sm-10">
+            <div class="form-group form-group--wide"><label class="form-label font-bold" data-i18n-zh="域名池" data-i18n-en="Domain pool">域名池</label><div class="form-group-wrapper">
                 <p class="form-field-hint" data-i18n-zh="平台泛域名可选择性托管 PEM/KEY。留空表示仅提供 HTTP，填写时必须同时提供证书与私钥；用户创建平台域名时只能选择它和一个单层前缀，证书路径不会暴露给用户。" data-i18n-en="A platform wildcard may optionally manage a PEM/KEY pair. Leave both blank for HTTP-only routes; when provided, certificate and key must be supplied together. Users can only choose it and one single-label prefix; paths stay private.">平台泛域名可选择性托管 PEM/KEY。留空表示仅提供 HTTP，填写时必须同时提供证书与私钥；用户创建平台域名时只能选择它和一个单层前缀，证书路径不会暴露给用户。</p>
                 <div id="platform-domain-list" class="platform-domain-list">
                     {{range .platformDomains}}
@@ -41,7 +41,7 @@
             </div></div>
             <input id="platform-domains-input" type="hidden" name="platform_domains" value="[]">
             <div class="hr-line-dashed form-workflow-divider"></div>
-            <div class="form-group form-workflow-actions"><div class="col-sm-10"><button class="btn btn-success" type="submit"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存设置" data-i18n-en="Save settings">保存设置</span></button></div></div>
+            <div class="form-group form-workflow-actions"><div class="form-actions"><button class="btn btn-success" type="submit"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存设置" data-i18n-en="Save settings">保存设置</span></button></div></div>
         </form>
     </div></section></div></div>
 </section>

@@ -58,17 +58,17 @@
             </a>
         </div>
     </header>
-    <div class="row form-page-grid tunnel-form tunnel-type-{{.t.Mode}}">
-    <div class="col-md-12 col-md-auto">
+    <div class="form-page-grid tunnel-form tunnel-type-{{.t.Mode}}">
+    <div class="form-page-column">
         <div class="panel ibox float-e-margins form-workflow-card zui-panel">
             <div class="ibox-content form-workflow-content">
-                <form class="form form-horizontal form-workflow-form zui-form" data-form-workflow="tunnel-edit">
+                <form class="form form-horz form-workflow-form zui-form" data-form-workflow="tunnel-edit">
                     <input type="hidden" name="id" value="{{.t.Id}}">
 
                     <div class="form-section-title"><i class="fa fa-cog" aria-hidden="true"></i><span data-i18n-zh="隧道类型" data-i18n-en="Tunnel type">隧道类型</span></div>
                     <div class="form-group form-group--wide">
-                        <label class="col-sm-2 control-label font-bold" for="type" langtag="word-scheme"></label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="type" langtag="word-scheme"></label>
+                        <div class="form-group-wrapper">
                             <span class="help-block m-b-none font-bold" langtag="word-usecase"></span>:
                             <span id="usecase">
                                 <span id="casetcp" langtag="info-casetcp"></span>
@@ -93,40 +93,40 @@
 
                     <div class="form-section-title"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="基础配置" data-i18n-en="Connection">基础配置</span></div>
                     <div class="form-group" id="client_id">
-                        <label class="col-sm-2 control-label font-bold" data-i18n-zh="所属客户端" data-i18n-en="Client">所属客户端</label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" data-i18n-zh="所属客户端" data-i18n-en="Client">所属客户端</label>
+                        <div class="form-group-wrapper">
                             <div class="readonly-client"><strong>{{if .t.Client.Remark}}{{.t.Client.Remark}}{{else}}未命名客户端{{end}}</strong><small>ID {{.t.Client.Id}}</small></div>
                             <input type="hidden" name="client_id" value="{{.t.Client.Id}}">
                             <span class="help-block" data-i18n-zh="所属客户端在编辑时保持不变；如需迁移，请新建隧道。" data-i18n-en="The assigned client stays fixed while editing. Create a new tunnel to migrate it.">所属客户端在编辑时保持不变；如需迁移，请新建隧道。</span>
                         </div>
                     </div>
                     <div class="form-group" id="remark_group">
-                        <label class="col-sm-2 control-label font-bold" for="tunnel-remark" langtag="word-remark"></label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="tunnel-remark" langtag="word-remark"></label>
+                        <div class="form-group-wrapper">
                             <input id="tunnel-remark" value="{{.t.Remark}}" class="form-control" type="text" name="remark" placeholder=""
                                    langtag="info-unrestricted" required>
                         </div>
                     </div>
                     {{if eq true .allow_multi_ip}}
                     <div class="form-group" id="server_ip">
-                        <label class="col-sm-2 control-label font-bold" for="tunnel-server-ip" langtag="word-serverip"></label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="tunnel-server-ip" langtag="word-serverip"></label>
+                        <div class="form-group-wrapper">
                             <input id="tunnel-server-ip" class="form-control" type="text" value="{{.t.ServerIp}}" name="server_ip"
                                    placeholder="" langtag="info-suchasip">
                         </div>
                     </div>
                     {{end}}
                     <div class="form-group" id="port">
-                        <label class="col-sm-2 control-label font-bold" for="tunnel-port" langtag="word-serverport"></label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="tunnel-port" langtag="word-serverport"></label>
+                        <div class="form-group-wrapper">
                             <input id="tunnel-port" value="{{.t.Port}}" class="form-control" type="text" name="port" placeholder=""
                                    langtag="info-suchasport">
                         </div>
                     </div>
                     {{if eq true .allow_local_proxy}}
                     <div class="form-group" id="local_proxy">
-                        <label class="control-label col-sm-2 font-bold" for="tunnel-local-proxy" langtag="word-proxytolocal"></label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="tunnel-local-proxy" langtag="word-proxytolocal"></label>
+                        <div class="form-group-wrapper">
                             <div class="toggle-field">
                                 <input type="hidden" name="local_proxy" value="{{if eq true .t.Target.LocalProxy}}1{{else}}0{{end}}">
                                 <label class="toggle-switch"><input id="tunnel-local-proxy" type="checkbox" {{if eq true .t.Target.LocalProxy}}checked{{end}}><span class="toggle-slider"></span></label>
@@ -138,23 +138,23 @@
 
                     <div class="form-section-title"><i class="fa fa-bullseye" aria-hidden="true"></i><span data-i18n-zh="目标配置" data-i18n-en="Target">目标配置</span></div>
                     <div class="form-group form-group--wide" id="target">
-                        <label class="col-sm-2 control-label font-bold" for="tunnel-target" langtag="word-target"></label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="tunnel-target" langtag="word-target"></label>
+                        <div class="form-group-wrapper">
                             <textarea id="tunnel-target" class="form-control" name="target" rows="4" placeholder=""
                                       langtag="info-suchasiplist">{{.t.Target.TargetStr}}</textarea>
                             <span class="help-block m-b-none" langtag="info-targettunnel"></span>
                         </div>
                     </div>
                     <div class="form-group" id="local_path">
-                        <label class="col-sm-2 control-label font-bold" for="tunnel-local-path" langtag="word-localpath"></label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="tunnel-local-path" langtag="word-localpath"></label>
+                        <div class="form-group-wrapper">
                             <input id="tunnel-local-path" value="{{.t.LocalPath}}" class="form-control" type="text" name="local_path"
                                    placeholder="" langtag="info-suchaslocalpath">
                         </div>
                     </div>
                     <div class="form-group" id="strip_pre">
-                        <label class="col-sm-2 control-label font-bold" for="tunnel-strip-pre" langtag="word-stripprefix"></label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="tunnel-strip-pre" langtag="word-stripprefix"></label>
+                        <div class="form-group-wrapper">
                             <input id="tunnel-strip-pre" value="{{.t.StripPre}}" class="form-control" type="text" name="strip_pre"
                                    placeholder="" langtag="info-suchasstripprefix">
                         </div>
@@ -162,8 +162,8 @@
 
                     <div class="form-section-title"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="安全配置" data-i18n-en="Security">安全配置</span></div>
                     <div class="form-group" id="password">
-                        <label class="col-sm-2 control-label font-bold" for="tunnel-password" langtag="word-identificationkey"></label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="tunnel-password" langtag="word-identificationkey"></label>
+                        <div class="form-group-wrapper">
                             <div class="input-group">
                                 <input id="tunnel-password" value="{{.t.Password}}" class="form-control" type="password" name="password" autocomplete="off" spellcheck="false" placeholder="" langtag="word-identificationkey">
                                 <span class="input-group-btn"><button class="btn btn-default credential-password-toggle" type="button" data-password-target="tunnel-password" aria-controls="tunnel-password" aria-label="显示密码" data-aria-label-zh="显示密码" data-aria-label-en="Show password" aria-pressed="false" title="显示密码" data-title-zh="显示密码" data-title-en="Show password"><i class="fa fa-eye" aria-hidden="true"></i></button></span>
@@ -172,8 +172,8 @@
                         </div>
                     </div>
                     <div class="form-group" id="proto_version">
-                        <label class="control-label col-sm-2 font-bold" for="ProtoVersion" data-i18n-zh="Proxy Protocol" data-i18n-en="Proxy Protocol">Proxy Protocol</label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="ProtoVersion" data-i18n-zh="Proxy Protocol" data-i18n-en="Proxy Protocol">Proxy Protocol</label>
+                        <div class="form-group-wrapper">
                             <select class="form-control" name="proto_version" id="ProtoVersion">
                                 <option value="" data-i18n-zh="关闭" data-i18n-en="Disabled">关闭</option>
                                 <option value="V1">V1</option>
@@ -185,7 +185,7 @@
 
                     <div class="hr-line-dashed form-workflow-divider"></div>
                     <div class="form-group form-workflow-actions">
-                        <div class="col-sm-4 col-sm-offset-2">
+                        <div class="form-actions">
                             <button class="btn btn-success" type="button"
                                     onclick="submitform('edit', '{{.web_base_url}}/index/edit', $('form').serializeArray())">
                                 <i class="fa fa-fw fa-lg fa-check-circle"></i> <span langtag="word-save"></span>

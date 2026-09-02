@@ -8,20 +8,12 @@
 
 $(document).ready(function () {
 
-    // Fast fix bor position issue with Propper.js
-    // Will be fixed in Bootstrap 4.1 - https://github.com/twbs/bootstrap/pull/24092
-    //Popper.Defaults.modifiers.computeStyle.gpuAcceleration = false;
-
-
     // Add body-small class if window less than 768px
     if (window.innerWidth < 769) {
         $('body').addClass('body-small')
     } else {
         $('body').removeClass('body-small')
     }
-
-    // MetisMenu
-    //var sideMenu = $('#side-menu').metisMenu();
 
     // Collapse ibox function
     $('.collapse-link').on('click', function (e) {
@@ -65,24 +57,11 @@ $(document).ready(function () {
         SmoothlyMenu();
     });
 
-    // Run menu of canvas
-    //$('body.canvas-menu .sidebar-collapse').slimScroll({
-    //    height: '100%',
-    //    railOpacity: 0.9
-    //});
-
     // Open close right sidebar
     $('.right-sidebar-toggle').on('click', function (e) {
         e.preventDefault();
         $('#right-sidebar').toggleClass('sidebar-open');
     });
-
-    // Initialize slimscroll for right sidebar
-    //$('.sidebar-container').slimScroll({
-    //    height: '100%',
-    //    railOpacity: 0.4,
-    //    wheelStep: 10
-    //});
 
     // Open close small chat
     $('.open-small-chat').on('click', function (e) {
@@ -90,12 +69,6 @@ $(document).ready(function () {
         $(this).children().toggleClass('fa-comments').toggleClass('fa-times');
         $('.small-chat-box').toggleClass('active');
     });
-
-    // Initialize slimscroll for small chat
-    //$('.small-chat-box .content').slimScroll({
-    //    height: '234px',
-    //    railOpacity: 0.4
-    //});
 
     // Small todo handler
     $('.check-link').on('click', function () {
@@ -140,10 +113,6 @@ $(document).ready(function () {
     //$("[data-toggle=popover]")
     //    .popover();
 
-    // Add slimscroll to element
-    //$('.full-height-scroll').slimscroll({
-    //    height: '100%'
-    //})
 });
 
 // Minimalize menu when screen is less than 768px
@@ -154,17 +123,6 @@ $(window).bind("resize", function () {
         $('body').removeClass('body-small')
     }
 });
-
-// Fixed Sidebar
-$(window).bind("load", function () {
-    if ($("body").hasClass('fixed-sidebar')) {
-        $('.sidebar-collapse').slimScroll({
-            height: '100%',
-            railOpacity: 0.9
-        });
-    }
-});
-
 
 // check if browser support HTML5 local storage
 function localStorageSupport() {
@@ -177,20 +135,11 @@ $(document).ready(function () {
     if (localStorageSupport()) {
 
         var collapse = localStorage.getItem("collapse_menu");
-        var fixedsidebar = localStorage.getItem("fixedsidebar");
         var fixednavbar = localStorage.getItem("fixednavbar");
         var boxedlayout = localStorage.getItem("boxedlayout");
         var fixedfooter = localStorage.getItem("fixedfooter");
 
         var body = $('body');
-
-        if (fixedsidebar == 'on') {
-            body.addClass('fixed-sidebar');
-            $('.sidebar-collapse').slimScroll({
-                height: '100%',
-                railOpacity: 0.9
-            });
-        }
 
         if (collapse == 'on') {
             if (body.hasClass('fixed-sidebar')) {
@@ -257,4 +206,3 @@ function WinMove() {
         })
         .disableSelection();
 }
-

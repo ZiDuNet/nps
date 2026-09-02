@@ -22,7 +22,7 @@
 - 如果是首次生成配置，查看终端输出的随机密码；已有 `conf/nps.conf` 时以文件中的 `web_username` 和 `web_password` 为准
 - 尝试 `http://127.0.0.1:8081` 本地访问
 
-如果页面能打开但语言菜单或下拉框没有反应，确认页面已加载 `static/js/popper.min.js`，然后重启 NPS 让嵌入式静态资源同步，再清理浏览器缓存。
+如果页面能打开但语言菜单或下拉框没有反应，确认页面已加载 ZUI 脚本和 `static/js/language.js`，然后重启 NPS 让嵌入式静态资源同步，再清理浏览器缓存。
 
 ## `nps install` 还能用吗？
 

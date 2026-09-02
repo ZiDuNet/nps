@@ -21,6 +21,9 @@
     --nps-primary: #2563eb;
     --nps-primary-hover: #1d4ed8;
     --nps-primary-soft: #e8f1ff;
+    --nps-accent: var(--nps-primary);
+    --nps-accent-strong: var(--nps-primary-hover);
+    --nps-accent-soft: var(--nps-primary-soft);
     --nps-cyan: #0891b2;
     --nps-cyan-soft: #e2f8fc;
     --nps-sidebar: #14243d;
@@ -61,6 +64,9 @@
     --nps-primary: #6ea0ff;
     --nps-primary-hover: #91b7ff;
     --nps-primary-soft: #203b6b;
+    --nps-accent: var(--nps-primary);
+    --nps-accent-strong: var(--nps-primary-hover);
+    --nps-accent-soft: var(--nps-primary-soft);
     --nps-cyan: #55c9de;
     --nps-cyan-soft: #153f55;
     --nps-sidebar: #0a1426;
@@ -84,7 +90,7 @@
 [data-theme="dark"] body.zui-app ::selection { color: #071326; }
 [data-theme="dark"] body.zui-app .btn-primary,
 [data-theme="dark"] body.zui-app .btn.primary,
-[data-theme="dark"] body.zui-app .form-horizontal .btn-success,
+[data-theme="dark"] body.zui-app .form-horz .btn-success,
 [data-theme="dark"] body.zui-app .login-btn,
 [data-theme="dark"] body.zui-app .btn-success,
 [data-theme="dark"] body.zui-app .btn-warning,
@@ -161,6 +167,8 @@ body.zui-app .nav-account strong { color: var(--nps-sidebar-ink); font-size: 12p
 body.zui-app .nav-account small { color: var(--nps-sidebar-muted); font-size: 11px; }
 body.zui-app .nav-header .logo-element { padding: 8px 0 !important; color: #9fc2ff !important; font-weight: 750; letter-spacing: .08em; }
 body.zui-app #side-menu { padding: 13px 0 24px; }
+body.zui-app #side-menu { display: block !important; width: 100%; margin: 0; list-style: none; }
+body.zui-app #side-menu > li { display: block; width: 100%; margin: 0; padding: 0; list-style: none; }
 body.zui-app #side-menu li a,
 body.zui-app #side-menu .zui-nav-item {
     display: flex;
@@ -183,7 +191,7 @@ body.zui-app #side-menu li.active > a i { color: #a8c7ff !important; }
 body.zui-app .nav-group-title { margin: 18px 22px 6px; padding: 0 0 7px !important; color: var(--nps-sidebar-muted) !important; border-bottom: 1px solid var(--nps-sidebar-line); font-size: 10px !important; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; pointer-events: none; }
 
 body.zui-app #page-wrapper { min-height: 100vh; margin-left: 256px !important; padding: 74px clamp(16px, 1.2vw, 24px) 42px !important; border: 0 !important; transition: margin-left .18s ease; }
-body.zui-app #page-wrapper > .row.border-bottom { height: 0; margin: 0 !important; border: 0 !important; }
+body.zui-app #page-wrapper > .topbar-shell { height: 0; margin: 0 !important; border: 0 !important; }
 body.zui-app .navbar-fixed-top,
 body.zui-app .navbar-static-top,
 body.zui-app .white-bg {
@@ -204,17 +212,27 @@ body.zui-app .white-bg {
 [data-theme="dark"] body.zui-app .navbar-static-top,
 [data-theme="dark"] body.zui-app .white-bg { background: rgba(14, 23, 39, .97) !important; }
 body.zui-app .navbar-header { min-height: 60px; }
+body.zui-app .zui-topbar { display: flex !important; align-items: stretch; min-height: 60px; }
+body.zui-app .navbar-header { display: flex; flex: 0 0 auto; align-items: stretch; }
 body.zui-app .navbar-minimalize { width: 36px; height: 36px; margin: 12px 0 0 17px !important; padding: 0 !important; color: var(--nps-muted) !important; background: var(--nps-surface) !important; border: 1px solid var(--nps-line) !important; border-radius: 6px !important; box-shadow: none !important; }
 body.zui-app .navbar-minimalize:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; border-color: var(--nps-primary-soft) !important; }
-body.zui-app .navbar-top-links { min-height: 60px; }
-body.zui-app .navbar-top-links > li { display: inline-flex; align-items: center; min-height: 60px; }
+body.zui-app .navbar-top-links { display: flex !important; align-items: stretch; min-height: 60px; margin: 0 0 0 auto !important; padding: 0 !important; list-style: none; }
+body.zui-app .navbar-top-links > li { display: inline-flex; align-items: center; min-height: 60px; list-style: none; }
+body.zui-app .navbar-top-links > li > a { display: inline-flex; align-items: center; min-height: 60px; padding: 0 10px; }
 body.zui-app .nav.navbar-top-links a { color: var(--nps-muted) !important; }
 body.zui-app .nav.navbar-top-links a:hover { color: var(--nps-primary) !important; background: transparent !important; }
+body.zui-app .navbar-top-links .dropdown { position: relative; }
+body.zui-app .navbar-top-links .dropdown-menu { right: 0; left: auto; min-width: 144px; margin-top: 0; list-style: none; }
 body.zui-app .welcome-message, body.zui-app .welcome-message a { color: var(--nps-faint) !important; }
 body.zui-app .welcome-message a { color: var(--nps-primary) !important; font-weight: 650; }
 body.zui-app .theme-toggle { width: 36px; height: 36px; padding: 0 !important; color: var(--nps-muted) !important; background: transparent; border: 0; border-radius: 6px; }
 body.zui-app .theme-toggle:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft); }
 body.zui-app #languagemenu { min-width: 40px; height: 36px; padding: 0 10px; color: var(--nps-muted) !important; background: var(--nps-surface-subtle) !important; border: 1px solid var(--nps-line) !important; border-radius: 6px !important; }
+body.zui-app .text-muted { color: var(--nps-muted) !important; }
+body.zui-app .m-r-sm { margin-right: 10px !important; }
+body.zui-app .font-bold { font-weight: 700 !important; }
+body.zui-app .footer { width: 100%; margin: 20px 0 0; padding: 16px 0 0; color: var(--nps-muted); border-top: 1px solid var(--nps-line); background: transparent; }
+body.zui-app .footer.fixed { position: static !important; right: auto !important; bottom: auto !important; left: auto !important; }
 body.zui-app.mini-navbar .navbar-default.navbar-static-side { width: 68px !important; }
 body.zui-app.mini-navbar #page-wrapper { margin-left: 68px !important; }
 body.zui-app.mini-navbar .navbar-fixed-top, body.zui-app.mini-navbar .navbar-static-top, body.zui-app.mini-navbar .white-bg { left: 68px !important; }
@@ -222,6 +240,9 @@ body.zui-app.mini-navbar .nav-header { min-height: 84px; padding: 20px 14px !imp
 body.zui-app.mini-navbar .nav-header .nps-brand, body.zui-app.mini-navbar .nav-header .nav-account { display: none !important; }
 body.zui-app.mini-navbar .nav-header .logo-element { display: block !important; padding: 6px 0 !important; }
 body.zui-app.mini-navbar #side-menu li a { justify-content: center; margin: 2px 9px; padding: 11px !important; }
+body.zui-app.mini-navbar #side-menu .nav-label { display: none !important; }
+body.zui-app.mini-navbar #side-menu li a i { margin-right: 0 !important; }
+body.zui-app.mini-navbar .nav-group-title { display: none !important; }
 body.zui-app.mini-navbar #side-menu li a i { width: auto; margin: 0; }
 body.zui-app.mini-navbar .nav-group-title { display: none; }
 
@@ -279,14 +300,14 @@ body.zui-app button.btn {
 body.zui-app .btn:active { transform: translateY(1px); }
 body.zui-app .btn-primary,
 body.zui-app .btn.primary,
-body.zui-app .form-horizontal .btn-success,
+body.zui-app .form-horz .btn-success,
 body.zui-app .login-btn { color: #fff !important; background: var(--nps-primary) !important; border-color: var(--nps-primary) !important; }
 body.zui-app .btn-primary:hover,
 body.zui-app .btn-primary:focus,
 body.zui-app .btn.primary:hover,
 body.zui-app .btn.primary:focus,
-body.zui-app .form-horizontal .btn-success:hover,
-body.zui-app .form-horizontal .btn-success:focus,
+body.zui-app .form-horz .btn-success:hover,
+body.zui-app .form-horz .btn-success:focus,
 body.zui-app .login-btn:hover,
 body.zui-app .login-btn:focus { color: #fff !important; background: var(--nps-primary-hover) !important; border-color: var(--nps-primary-hover) !important; box-shadow: none !important; }
 body.zui-app .btn-success { color: #fff !important; background: var(--nps-success) !important; border-color: var(--nps-success) !important; }
@@ -316,19 +337,19 @@ body.zui-app .list-group-item { padding: 12px 17px !important; color: var(--nps-
 body.zui-app .list-group-item strong { font-weight: 650; }
 body.zui-app .progress { height: 5px !important; margin: 8px 0 0 !important; overflow: hidden; background: var(--nps-line) !important; border-radius: 99px !important; box-shadow: none !important; }
 body.zui-app .progress-bar { background: var(--nps-primary) !important; box-shadow: none !important; }
-body.zui-app .fixed-table-toolbar { display: flex; align-items: center; min-height: 67px; padding: 14px 18px 11px !important; border-bottom: 1px solid var(--nps-line); }
-body.zui-app .fixed-table-toolbar .columns, body.zui-app .fixed-table-toolbar .search { margin-top: 0 !important; }
-body.zui-app .fixed-table-toolbar .search input { width: 220px !important; height: 36px; }
-body.zui-app .fixed-table-container { border: 0 !important; border-radius: 0 0 var(--nps-radius) var(--nps-radius) !important; }
-body.zui-app .bootstrap-table .fixed-table-container .table { margin: 0 !important; }
+body.zui-app .nps-table__toolbar { display: flex; align-items: center; min-height: 67px; padding: 14px 18px 11px !important; border-bottom: 1px solid var(--nps-line); }
+body.zui-app .nps-table__toolbar .nps-table__columns, body.zui-app .nps-table__toolbar .nps-table__search { margin-top: 0 !important; }
+body.zui-app .nps-table__toolbar .nps-table__search input { width: 220px !important; height: 36px; }
+body.zui-app .nps-table__container { border: 0 !important; border-radius: 0 0 var(--nps-radius) var(--nps-radius) !important; }
+body.zui-app .nps-table .nps-table__container .table { margin: 0 !important; }
 body.zui-app .table { color: var(--nps-ink) !important; }
 body.zui-app .table thead th,
-body.zui-app .bootstrap-table .fixed-table-container thead th { padding: 12px 14px !important; color: var(--nps-muted) !important; background: var(--nps-surface-subtle) !important; border-bottom: 1px solid var(--nps-line) !important; font-size: 11px !important; font-weight: 750 !important; letter-spacing: .04em; }
+body.zui-app .nps-table .nps-table__container thead th { padding: 12px 14px !important; color: var(--nps-muted) !important; background: var(--nps-surface-subtle) !important; border-bottom: 1px solid var(--nps-line) !important; font-size: 11px !important; font-weight: 750 !important; letter-spacing: .04em; }
 body.zui-app .table td,
-body.zui-app .bootstrap-table .table td { padding: 13px 14px !important; vertical-align: middle !important; border-top: 1px solid var(--nps-line) !important; }
+body.zui-app .nps-table .table td { padding: 13px 14px !important; vertical-align: middle !important; border-top: 1px solid var(--nps-line) !important; }
 body.zui-app .table-hover tbody tr:hover { background: var(--nps-surface-hover) !important; }
 body.zui-app .table-striped > tbody > tr:nth-of-type(odd) { background: var(--nps-surface-subtle) !important; }
-body.zui-app .fixed-table-pagination { padding: 14px 18px !important; color: var(--nps-muted); }
+body.zui-app .nps-table__pagination { padding: 14px 18px !important; color: var(--nps-muted); }
 body.zui-app .pagination > li > a, body.zui-app .pagination > li > span { color: var(--nps-muted); background: var(--nps-surface); border-color: var(--nps-line); }
 body.zui-app .pagination > .active > a, body.zui-app .pagination > .active > a:hover, body.zui-app .pagination > .active > span { color: #fff; background: var(--nps-primary); border-color: var(--nps-primary); }
 body.zui-app .pagination > li > a:hover { color: var(--nps-primary); background: var(--nps-primary-soft); border-color: var(--nps-primary-soft); }
@@ -336,9 +357,9 @@ body.zui-app .dropdown-menu { padding: 5px; background: var(--nps-surface) !impo
 body.zui-app .dropdown-menu > li > a { color: var(--nps-ink) !important; border-radius: 4px; }
 body.zui-app .dropdown-menu > li > a:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; }
 
-/* Forms use ZUI's form-label/form-tip language while retaining legacy grid hooks. */
-body.zui-app .form-horizontal .form-group { margin-bottom: 21px !important; }
-body.zui-app .form-horizontal label.control-label,
+/* Forms use ZUI's form-label/form-tip language and semantic wrappers. */
+body.zui-app .form-horz .form-group { margin-bottom: 21px !important; }
+body.zui-app .form-horz label.form-label,
 body.zui-app .form-label { padding-top: 8px !important; color: var(--nps-ink) !important; font-size: 13px !important; font-weight: 700 !important; }
 body.zui-app .form-control,
 body.zui-app input[type="text"],
@@ -375,7 +396,7 @@ body.zui-app .form-workflow-actions .btn { min-width: 102px; }
 body.zui-app .input-group .form-control { border-right: 0 !important; }
 body.zui-app .input-group-btn .btn { min-width: 41px; height: 39px; color: var(--nps-muted); background: var(--nps-surface) !important; border: 1px solid var(--nps-line-strong) !important; border-left: 0 !important; border-radius: 0 6px 6px 0 !important; }
 
-/* Operational forms use a two-column field grid while keeping legacy Bootstrap markup intact. */
+/* Operational forms use a two-column field grid with native ZUI wrappers. */
 body.zui-app .form-page-client .form-page-grid,
 body.zui-app .form-page-tunnel .form-page-grid,
 body.zui-app .form-page-user .form-page-grid {
@@ -431,12 +452,11 @@ body.zui-app .form-page-user .form-workflow-form > .form-group {
 body.zui-app .form-page-client .form-workflow-form > .form-group.is-hidden {
     display: none !important;
 }
-body.zui-app .form-page-client .form-workflow-form > .form-group > [class*="col-"],
-body.zui-app .form-page-tunnel .form-workflow-form > .form-group > [class*="col-"],
-body.zui-app .form-page-user .form-workflow-form > .form-group > [class*="col-"] {
+body.zui-app .form-page-client .form-workflow-form > .form-group > .form-group-wrapper,
+body.zui-app .form-page-tunnel .form-workflow-form > .form-group > .form-group-wrapper,
+body.zui-app .form-page-user .form-workflow-form > .form-group > .form-group-wrapper {
     float: none;
-    /* Bootstrap declares fixed column widths with !important. Let grid tracks
-       own the sizing so Chinese labels cannot collapse to one character wide. */
+    /* Keep the content track fluid so translated labels never collapse. */
     width: auto !important;
     max-width: none !important;
     flex: none !important;
@@ -476,9 +496,9 @@ body.zui-app .form-page-user .form-workflow-form > .form-workflow-actions {
     margin-top: 2px !important;
     margin-bottom: 0 !important;
 }
-body.zui-app .form-page-client .form-workflow-form > .form-workflow-actions > [class*="col-"],
-body.zui-app .form-page-tunnel .form-workflow-form > .form-workflow-actions > [class*="col-"],
-body.zui-app .form-page-user .form-workflow-form > .form-workflow-actions > [class*="col-"] {
+body.zui-app .form-page-client .form-workflow-form > .form-workflow-actions > .form-actions,
+body.zui-app .form-page-tunnel .form-workflow-form > .form-workflow-actions > .form-actions,
+body.zui-app .form-page-user .form-workflow-form > .form-workflow-actions > .form-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -523,10 +543,10 @@ body.zui-app .form-page-global .form-workflow-form > .form-group {
     min-width: 0;
     margin: 0 0 20px !important;
 }
-body.zui-app .form-page-host .form-workflow-form > .form-group > [class*="col-"],
-body.zui-app .form-page-global .form-workflow-form > .form-group > [class*="col-"] {
+body.zui-app .form-page-host .form-workflow-form > .form-group > .form-group-wrapper,
+body.zui-app .form-page-global .form-workflow-form > .form-group > .form-group-wrapper {
     float: none;
-    /* Overrides the legacy Bootstrap width: 16.6667% !important declaration. */
+    /* Let the grid track own the content width. */
     width: auto !important;
     max-width: none !important;
     flex: none !important;
@@ -543,8 +563,8 @@ body.zui-app .form-page-host .form-workflow-form .help-block,
 body.zui-app .form-page-global .form-workflow-form .help-block { overflow-wrap: anywhere; }
 body.zui-app .form-page-host .form-workflow-form > .form-workflow-actions,
 body.zui-app .form-page-global .form-workflow-form > .form-workflow-actions { display: flex !important; align-items: center; min-height: 39px; margin-top: 2px !important; margin-bottom: 0 !important; }
-body.zui-app .form-page-host .form-workflow-form > .form-workflow-actions > [class*="col-"],
-body.zui-app .form-page-global .form-workflow-form > .form-workflow-actions > [class*="col-"] { display: flex; flex-wrap: wrap; gap: 8px; width: auto; margin: 0 !important; padding: 0 !important; }
+body.zui-app .form-page-host .form-workflow-form > .form-workflow-actions > .form-actions,
+body.zui-app .form-page-global .form-workflow-form > .form-workflow-actions > .form-actions { display: flex; flex-wrap: wrap; gap: 8px; width: auto; margin: 0 !important; padding: 0 !important; }
 
 body.zui-app .host-domain-source__choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 body.zui-app .host-domain-choice { display: block; min-width: 0; margin: 0; cursor: pointer; }
@@ -581,12 +601,12 @@ body.zui-app .platform-cert-status { color: var(--nps-primary) !important; font-
 /* Compact domain table: retain the operational fields without a desktop horizontal scroller. */
 body.zui-app .management-page--host { max-width: 1800px; margin: 0 auto; }
 @media (min-width: 992px) {
-    body.zui-app .management-page--host .fixed-table-body,
-    body.zui-app .management-page--host .fixed-table-header { overflow-x: hidden !important; }
-    body.zui-app .management-page--host .fixed-table-container .table { width: 100% !important; table-layout: fixed; }
-    body.zui-app .management-page--host .fixed-table-container .table th,
-    body.zui-app .management-page--host .fixed-table-container .table td { padding: 11px 9px !important; overflow: hidden; }
-    body.zui-app .management-page--host .fixed-table-container .table td { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+    body.zui-app .management-page--host .nps-table__body,
+    body.zui-app .management-page--host .nps-table__header { overflow-x: hidden !important; }
+    body.zui-app .management-page--host .nps-table__container .table { width: 100% !important; table-layout: fixed; }
+    body.zui-app .management-page--host .nps-table__container .table th,
+    body.zui-app .management-page--host .nps-table__container .table td { padding: 11px 9px !important; overflow: hidden; }
+    body.zui-app .management-page--host .nps-table__container .table td { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
     body.zui-app .management-page--host .host-list__entry { width: 29% !important; }
     body.zui-app .management-page--host .host-list__remark { width: 12% !important; }
     body.zui-app .management-page--host .host-list__client { width: 14% !important; }
@@ -682,6 +702,8 @@ body.zui-app .footer.fixed { margin: 34px 0 0 !important; padding: 16px 0 0 !imp
 body.zui-app .error-page { display: grid; min-height: calc(100vh - 160px); align-items: center; }
 body.zui-app .error-page-card { max-width: 560px; margin: 0 auto !important; text-align: center; }
 body.zui-app .error-page-card__content { padding: 48px 30px !important; }
+body.zui-app .error-page-layout { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; margin: 0; }
+body.zui-app .error-page-column { min-width: 0; }
 
 /* Authentication pages share the same ZUI surface language. */
 body.zui-app.auth-body,
@@ -706,20 +728,110 @@ body.auth-body .auth-page input.form-control { color: var(--nps-ink) !important;
 body.auth-body .auth-page input.form-control:focus { border-color: var(--nps-primary) !important; box-shadow: var(--nps-focus) !important; }
 body.auth-body .auth-captcha__challenge { color: var(--nps-primary); background: var(--nps-primary-soft); border-color: var(--nps-line); }
 body.auth-body .auth-page__footer a, body.auth-body .auth-switch__link { color: var(--nps-primary); }
+body.auth-body .auth-language { position: relative; }
+body.auth-body .auth-language .dropdown-menu {
+    position: absolute;
+    top: calc(100% + 7px);
+    right: 0;
+    left: auto;
+    z-index: 30;
+    min-width: 144px;
+    margin: 0;
+}
 
 /* Layout and table regressions: keep operational workspaces centered without wasting desktop width. */
-body.zui-app .management-page > .row,
-body.zui-app .form-page > .row {
+body.zui-app .management-page > .management-page-grid,
+body.zui-app .form-page > .form-page-grid {
     margin-right: 0 !important;
     margin-left: 0 !important;
 }
-body.zui-app .management-page > .row > [class*="col-"],
-body.zui-app .form-page > .row > [class*="col-"] {
+body.zui-app .management-page > .management-page-grid > .management-page-column,
+body.zui-app .form-page > .form-page-grid > .form-page-column {
     padding-right: 0 !important;
     padding-left: 0 !important;
 }
 /* Keep form headers and their 1320px workflow card on the same visual axis. */
 body.zui-app .form-page { width: 100%; max-width: 1320px; margin: 0 auto; }
+body.zui-app .footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+body.zui-app .footer .float-right { float: none; margin-left: auto; }
+body.zui-app .btn-xs { min-height: 28px; padding: 4px 8px !important; font-size: 12px; border-radius: 5px; }
+body.zui-app .progress-small { height: 6px; }
+body.zui-app .m-b-none { margin-bottom: 0 !important; }
+body.zui-app .float-e-margins { margin-bottom: 17px !important; }
+
+/* Explicit ZUI page grids replace the legacy column contract. Each
+   wrapper owns its tracks and each child can safely shrink without creating a
+   horizontal page scrollbar. */
+body.zui-app .management-page-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    width: 100%;
+}
+body.zui-app .management-page-column,
+body.zui-app .management-page-column > .management-table-card {
+    width: 100%;
+    min-width: 0;
+}
+body.zui-app .dashboard-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    width: 100%;
+    margin: 0 0 16px;
+}
+body.zui-app .dashboard-information-grid,
+body.zui-app .dashboard-chart-grid,
+body.zui-app .dashboard-distribution-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    width: 100%;
+    margin: 0;
+}
+body.zui-app .dashboard-stat-grid > *,
+body.zui-app .dashboard-information-grid > *,
+body.zui-app .dashboard-chart-grid > *,
+body.zui-app .dashboard-distribution-grid > *,
+body.zui-app .help-guide-grid > * {
+    min-width: 0;
+    padding-right: 0 !important;
+    padding-left: 0 !important;
+}
+body.zui-app .dashboard-stat-column,
+body.zui-app .dashboard-half-column,
+body.zui-app .dashboard-full-column,
+body.zui-app .help-guide-column,
+body.zui-app .help-guide-full-column {
+    min-width: 0;
+}
+body.zui-app .dashboard-full-column,
+body.zui-app .help-guide-full-column { grid-column: 1 / -1; }
+body.zui-app .dashboard-data-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+body.zui-app .dashboard-data-label,
+body.zui-app .dashboard-data-value { min-width: 0; }
+body.zui-app .dashboard-data-label { flex: 1 1 auto; }
+body.zui-app .dashboard-data-value {
+    flex: 0 1 58%;
+    margin-left: auto;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.zui-app .help-guide-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    width: 100%;
+    margin: 0;
+}
 
 /* The surrounding auth layout owns the only visible frame. */
 body.auth-body .auth-layout > .auth-panel {
@@ -731,25 +843,25 @@ body.auth-body .auth-layout > .auth-panel {
     box-shadow: none !important;
 }
 
-/* Bootstrap Table injects floats and margins around its toolbar controls. */
-body.zui-app .bootstrap-table .fixed-table-toolbar {
+/* Keep toolbar controls aligned inside the ZUI table surface. */
+body.zui-app .nps-table .nps-table__toolbar {
     display: flex !important;
     align-items: center;
     gap: 8px;
 }
-body.zui-app .bootstrap-table .fixed-table-toolbar > .bs-bars,
-body.zui-app .bootstrap-table .fixed-table-toolbar > .columns,
-body.zui-app .bootstrap-table .fixed-table-toolbar > .search {
+body.zui-app .nps-table .nps-table__toolbar > .nps-table__bars,
+body.zui-app .nps-table .nps-table__toolbar > .nps-table__columns,
+body.zui-app .nps-table .nps-table__toolbar > .nps-table__search {
     float: none !important;
     margin: 0 !important;
 }
-body.zui-app .bootstrap-table .fixed-table-toolbar > .bs-bars .management-table-toolbar {
+body.zui-app .nps-table .nps-table__toolbar > .nps-table__bars .management-table-toolbar {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     padding: 0 !important;
 }
-body.zui-app .bootstrap-table .fixed-table-toolbar > .search { margin-left: auto !important; }
+body.zui-app .nps-table .nps-table__toolbar > .nps-table__search { margin-left: auto !important; }
 
 /* Long client commands reserve a fixed action column and wrap inside their own track. */
 body.zui-app .client-detail__command {
@@ -784,31 +896,31 @@ body.zui-app .client-detail__copy {
 
 /* Dense desktop tunnel tables fit the available workspace instead of creating a horizontal scroller. */
 @media (min-width: 992px) {
-    body.zui-app .management-page--tunnel .fixed-table-body,
-    body.zui-app .management-page--tunnel .fixed-table-header { overflow-x: hidden !important; }
-    body.zui-app .management-page--tunnel .fixed-table-container .table {
+    body.zui-app .management-page--tunnel .nps-table__body,
+    body.zui-app .management-page--tunnel .nps-table__header { overflow-x: hidden !important; }
+    body.zui-app .management-page--tunnel .nps-table__container .table {
         width: 100% !important;
         table-layout: fixed;
     }
-    body.zui-app .management-page--tunnel .fixed-table-container .table th,
-    body.zui-app .management-page--tunnel .fixed-table-container .table td {
+    body.zui-app .management-page--tunnel .nps-table__container .table th,
+    body.zui-app .management-page--tunnel .nps-table__container .table td {
         padding: 10px 7px !important;
         overflow: hidden;
     }
-    body.zui-app .management-page--tunnel .fixed-table-container .table td {
+    body.zui-app .management-page--tunnel .nps-table__container .table td {
         white-space: normal;
         overflow-wrap: anywhere;
         word-break: break-word;
     }
-    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(1),
-    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(1) { width: 42px !important; }
-    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(2),
-    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(2) { width: 42px !important; }
-    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(3),
-    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(3) { width: 54px !important; }
-    body.zui-app .management-page--tunnel .fixed-table-container .table th:last-child,
-    body.zui-app .management-page--tunnel .fixed-table-container .table td:last-child { width: 172px !important; }
-    body.zui-app .management-page--tunnel .fixed-table-container .table td:last-child .btn-group {
+    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(1),
+    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(1) { width: 42px !important; }
+    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(2),
+    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(2) { width: 42px !important; }
+    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(3),
+    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(3) { width: 54px !important; }
+    body.zui-app .management-page--tunnel .nps-table__container .table th:last-child,
+    body.zui-app .management-page--tunnel .nps-table__container .table td:last-child { width: 172px !important; }
+    body.zui-app .management-page--tunnel .nps-table__container .table td:last-child .btn-group {
         display: flex;
         flex-wrap: nowrap;
         justify-content: center;
@@ -817,16 +929,16 @@ body.zui-app .client-detail__copy {
 
 /* On narrower desktop workspaces, retain the operational columns and move secondary data to the detail row. */
 @media (min-width: 992px) and (max-width: 1499px) {
-    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(5),
-    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(5),
-    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(6),
-    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(6),
-    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(11),
-    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(11),
-    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(13),
-    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(13),
-    body.zui-app .management-page--tunnel .fixed-table-container .table th:nth-child(14),
-    body.zui-app .management-page--tunnel .fixed-table-container .table td:nth-child(14) { display: none; }
+    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(5),
+    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(5),
+    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(6),
+    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(6),
+    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(11),
+    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(11),
+    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(13),
+    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(13),
+    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(14),
+    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(14) { display: none; }
 }
 
 @media (max-width: 991px) {
@@ -890,49 +1002,49 @@ body.zui-app .client-detail__copy {
     body.zui-app .form-page-client .form-workflow-form > .form-group > label,
     body.zui-app .form-page-tunnel .form-workflow-form > .form-group > label,
     body.zui-app .form-page-user .form-workflow-form > .form-group > label { padding-top: 0 !important; }
-    body.zui-app .fixed-table-toolbar { padding: 12px !important; }
-    body.zui-app .bootstrap-table .fixed-table-toolbar { flex-wrap: wrap; }
-    body.zui-app .bootstrap-table .fixed-table-toolbar > .search {
+    body.zui-app .nps-table__toolbar { padding: 12px !important; }
+    body.zui-app .nps-table .nps-table__toolbar { flex-wrap: wrap; }
+    body.zui-app .nps-table .nps-table__toolbar > .nps-table__search {
         flex: 0 0 100%;
         order: 3;
         width: 100%;
         margin-left: 0 !important;
     }
-    body.zui-app .fixed-table-toolbar .search input { width: 100% !important; }
-    body.zui-app .fixed-table-toolbar .columns { margin-top: 0 !important; }
-    /* Phone-sized domain lists use Bootstrap Table's card view. It prevents a
+    body.zui-app .nps-table__toolbar .nps-table__search input { width: 100% !important; }
+    body.zui-app .nps-table__toolbar .nps-table__columns { margin-top: 0 !important; }
+    /* Phone-sized domain lists use the NPS table card view. It prevents a
        long hostname or a row expansion from forcing a hidden X-axis. */
-    body.zui-app .management-page--host .fixed-table-body,
-    body.zui-app .management-page--host .fixed-table-header { overflow-x: hidden !important; }
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table {
+    body.zui-app .management-page--host .nps-table__body,
+    body.zui-app .management-page--host .nps-table__header { overflow-x: hidden !important; }
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table {
         width: 100% !important;
         min-width: 0 !important;
         table-layout: auto;
     }
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(4),
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(4),
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(5),
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(5),
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(6),
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(6),
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(7),
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(7) { display: none; }
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(1),
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(1) { width: 36px !important; padding-right: 5px !important; padding-left: 5px !important; }
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(2),
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(2) { width: 40px !important; padding-right: 5px !important; padding-left: 5px !important; }
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table th:nth-child(8),
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .table td:nth-child(8) { width: 104px !important; padding-right: 5px !important; padding-left: 5px !important; }
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .host-entry__name { font-size: 11px; }
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .host-actions { gap: 2px; }
-    body.zui-app .management-page--host .fixed-table-container:not(.has-card-view) .host-actions > .btn { width: 30px; min-width: 30px; height: 30px; }
-    body.zui-app .management-page--host .fixed-table-container.has-card-view .fixed-table-body { overflow: visible !important; }
-    body.zui-app .management-page--host .fixed-table-container.has-card-view .table { width: 100% !important; min-width: 0 !important; }
-    body.zui-app .management-page--host .fixed-table-container.has-card-view .card-view { display: grid; grid-template-columns: minmax(76px, 36%) minmax(0, 1fr); gap: 8px; min-width: 0; }
-    body.zui-app .management-page--host .fixed-table-container.has-card-view .card-view .card-view-title { color: var(--nps-faint); font-size: 11px; font-weight: 700; }
-    body.zui-app .management-page--host .fixed-table-container.has-card-view .card-view .card-view-value { min-width: 0; color: var(--nps-ink); overflow-wrap: anywhere; }
-    body.zui-app .management-page--host .fixed-table-container.has-card-view .host-entry__name { font-size: 12px; }
-    body.zui-app .management-page--host .fixed-table-container.has-card-view .host-actions { justify-content: flex-start; }
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(4),
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(4),
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(5),
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(5),
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(6),
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(6),
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(7),
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(7) { display: none; }
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(1),
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(1) { width: 36px !important; padding-right: 5px !important; padding-left: 5px !important; }
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(2),
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(2) { width: 40px !important; padding-right: 5px !important; padding-left: 5px !important; }
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(8),
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(8) { width: 104px !important; padding-right: 5px !important; padding-left: 5px !important; }
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .host-entry__name { font-size: 11px; }
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .host-actions { gap: 2px; }
+    body.zui-app .management-page--host .nps-table__container:not(.has-card-view) .host-actions > .btn { width: 30px; min-width: 30px; height: 30px; }
+    body.zui-app .management-page--host .nps-table__container.has-card-view .nps-table__body { overflow: visible !important; }
+    body.zui-app .management-page--host .nps-table__container.has-card-view .table { width: 100% !important; min-width: 0 !important; }
+    body.zui-app .management-page--host .nps-table__container.has-card-view .card-view { display: grid; grid-template-columns: minmax(76px, 36%) minmax(0, 1fr); gap: 8px; min-width: 0; }
+    body.zui-app .management-page--host .nps-table__container.has-card-view .card-view .card-view-title { color: var(--nps-faint); font-size: 11px; font-weight: 700; }
+    body.zui-app .management-page--host .nps-table__container.has-card-view .card-view .card-view-value { min-width: 0; color: var(--nps-ink); overflow-wrap: anywhere; }
+    body.zui-app .management-page--host .nps-table__container.has-card-view .host-entry__name { font-size: 12px; }
+    body.zui-app .management-page--host .nps-table__container.has-card-view .host-actions { justify-content: flex-start; }
     body.zui-app .client-detail__command { grid-template-columns: minmax(0, 1fr) 36px; gap: 6px 8px; }
     body.zui-app .client-detail__command-label { grid-column: 1 / -1; padding-top: 0; }
     body.zui-app .table-responsive { border: 0; }
@@ -1000,8 +1112,8 @@ body.zui-app.fullscreen-ibox-mode .animated { animation: none !important; opacit
     body.zui-app .dashboard-pending { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 }
 
-/* Unified ZUI form system. The templates still expose the legacy Bootstrap
-   hooks for compatibility, but the form itself owns the layout and spacing. */
+/* Unified ZUI form system. Forms use semantic ZUI fields and own their
+   layout and spacing instead of depending on a grid framework. */
 body.zui-app .form-page {
     width: 100%;
     max-width: 1440px;
@@ -1017,7 +1129,7 @@ body.zui-app .form-page .form-page-heading p {
 body.zui-app .form-page-grid {
     width: 100%;
 }
-body.zui-app .form-page-grid > [class*="col-"] {
+body.zui-app .form-page-grid > .form-page-column {
     width: 100% !important;
     max-width: none !important;
 }
@@ -1081,7 +1193,7 @@ body.zui-app .form-page .form-workflow-form > .form-group {
     min-width: 0;
     margin: 0 0 22px !important;
 }
-body.zui-app .form-page .form-workflow-form > .form-group > [class*="col-"] {
+body.zui-app .form-page .form-workflow-form > .form-group > .form-group-wrapper {
     float: none !important;
     width: auto !important;
     max-width: none !important;
@@ -1090,7 +1202,7 @@ body.zui-app .form-page .form-workflow-form > .form-group > [class*="col-"] {
     padding: 0 !important;
 }
 body.zui-app .form-page .form-workflow-form > .form-group > label,
-body.zui-app .form-page .form-workflow-form > .form-group > .control-label {
+body.zui-app .form-page .form-workflow-form > .form-group > .form-label {
     min-width: 0;
     margin: 0 !important;
     padding: 9px 0 0 !important;
@@ -1142,7 +1254,7 @@ body.zui-app .form-page .form-workflow-form .form-workflow-actions {
     padding-top: 22px;
     border-top: 1px solid var(--nps-line);
 }
-body.zui-app .form-page .form-workflow-form .form-workflow-actions > [class*="col-"] {
+body.zui-app .form-page .form-workflow-form .form-workflow-actions > .form-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 9px;
@@ -1246,7 +1358,7 @@ body.zui-app .form-page .platform-cert-status {
         row-gap: 6px;
     }
     body.zui-app .form-page .form-workflow-form > .form-group > label,
-    body.zui-app .form-page .form-workflow-form > .form-group > .control-label {
+    body.zui-app .form-page .form-workflow-form > .form-group > .form-label {
         padding-top: 0 !important;
     }
     body.zui-app .form-page .platform-domain-row__fields,
@@ -1275,10 +1387,566 @@ body.zui-app .form-page .platform-cert-status {
     body.zui-app .form-page .platform-domain-health {
         grid-template-columns: minmax(0, 1fr);
     }
-    body.zui-app .form-page .form-workflow-actions > [class*="col-"] {
+    body.zui-app .form-page .form-workflow-actions > .form-actions {
         width: 100% !important;
     }
     body.zui-app .form-page .form-workflow-actions .btn {
         flex: 1 1 auto;
     }
+}
+
+/* Final alignment contract for all ZUI workflow forms. Keep this layer last
+   so page-specific rules cannot reintroduce percentage-based label columns. */
+body.zui-app .form-page {
+    --nps-form-label-width: 148px;
+    --nps-form-column-gap: 32px;
+}
+body.zui-app .form-page .form-workflow-form {
+    column-gap: var(--nps-form-column-gap) !important;
+}
+body.zui-app .form-page.form-page-client .form-workflow-form > .form-group,
+body.zui-app .form-page.form-page-tunnel .form-workflow-form > .form-group,
+body.zui-app .form-page.form-page-user .form-workflow-form > .form-group,
+body.zui-app .form-page.form-page-host .form-workflow-form > .form-group,
+body.zui-app .form-page.form-page-global .form-workflow-form > .form-group {
+    display: grid !important;
+    grid-template-columns: var(--nps-form-label-width) minmax(0, 1fr) !important;
+    align-items: start !important;
+    column-gap: 14px !important;
+    min-width: 0 !important;
+    margin: 0 0 22px !important;
+    text-align: left !important;
+}
+body.zui-app .form-page.form-page-client .form-workflow-form > .form-group > label,
+body.zui-app .form-page.form-page-tunnel .form-workflow-form > .form-group > label,
+body.zui-app .form-page.form-page-user .form-workflow-form > .form-group > label,
+body.zui-app .form-page.form-page-host .form-workflow-form > .form-group > label,
+body.zui-app .form-page.form-page-global .form-workflow-form > .form-group > label,
+body.zui-app .form-page.form-page-client .form-workflow-form > .form-group > .form-label,
+body.zui-app .form-page.form-page-tunnel .form-workflow-form > .form-group > .form-label,
+body.zui-app .form-page.form-page-user .form-workflow-form > .form-group > .form-label,
+body.zui-app .form-page.form-page-host .form-workflow-form > .form-group > .form-label,
+body.zui-app .form-page.form-page-global .form-workflow-form > .form-group > .form-label {
+    display: block !important;
+    width: auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 9px 0 0 !important;
+    color: var(--nps-ink) !important;
+    text-align: left !important;
+    text-align-last: left !important;
+    justify-self: stretch !important;
+    line-height: 1.45 !important;
+}
+body.zui-app .form-page.form-page-client .form-workflow-form > .form-group > .form-group-wrapper,
+body.zui-app .form-page.form-page-tunnel .form-workflow-form > .form-group > .form-group-wrapper,
+body.zui-app .form-page.form-page-user .form-workflow-form > .form-group > .form-group-wrapper,
+body.zui-app .form-page.form-page-host .form-workflow-form > .form-group > .form-group-wrapper,
+body.zui-app .form-page.form-page-global .form-workflow-form > .form-group > .form-group-wrapper {
+    float: none !important;
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-align: left !important;
+}
+body.zui-app .form-page .form-workflow-form > .form-group > .form-group-wrapper > * {
+    max-width: 100%;
+}
+body.zui-app .form-page .form-workflow-form .form-control,
+body.zui-app .form-page .form-workflow-form select,
+body.zui-app .form-page .form-workflow-form textarea,
+body.zui-app .form-page .form-workflow-form input:not([type="checkbox"]):not([type="radio"]),
+body.zui-app .form-page .form-workflow-form .input-group,
+body.zui-app .form-page .form-workflow-form .toggle-field {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin-right: 0 !important;
+    margin-left: 0 !important;
+    text-align: left !important;
+    text-align-last: left !important;
+}
+body.zui-app .form-page .form-workflow-form .input-group {
+    display: flex !important;
+    align-items: stretch;
+}
+body.zui-app .form-page .form-workflow-form .input-group > .form-control {
+    flex: 1 1 auto;
+    width: 1% !important;
+}
+body.zui-app .form-page .form-workflow-form .input-group > .input-group-btn,
+body.zui-app .form-page .form-workflow-form .input-group > .input-group-addon {
+    flex: 0 0 auto;
+    width: auto !important;
+}
+body.zui-app .form-page .form-workflow-form .help-block,
+body.zui-app .form-page .form-workflow-form .form-field-hint {
+    display: block !important;
+    width: 100% !important;
+    margin: 7px 0 0 !important;
+    text-align: left !important;
+}
+body.zui-app .form-page.form-page-client .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page.form-page-tunnel .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page.form-page-user .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page.form-page-host .form-workflow-form > .form-workflow-actions,
+body.zui-app .form-page.form-page-global .form-workflow-form > .form-workflow-actions {
+    display: block !important;
+    width: 100% !important;
+    min-height: 48px !important;
+    margin: 8px 0 0 !important;
+    padding: 22px 0 0 !important;
+    border-top: 1px solid var(--nps-line) !important;
+    text-align: left !important;
+}
+body.zui-app .form-page .form-workflow-form > .form-workflow-actions > .form-actions {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 9px;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+body.zui-app .form-page .form-workflow-form > .form-workflow-actions .btn {
+    min-width: 112px;
+    margin-left: 0 !important;
+}
+
+/* Keep table sizing and checkbox columns stable across all management lists. */
+body.zui-app .nps-table .nps-table__container {
+    overflow: hidden !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__header,
+body.zui-app .nps-table .nps-table__container .nps-table__body {
+    overflow-x: hidden !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__header table,
+body.zui-app .nps-table .nps-table__container .nps-table__body table {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    table-layout: fixed !important;
+    border-spacing: 0;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__header th,
+body.zui-app .nps-table .nps-table__container .nps-table__body td {
+    box-sizing: border-box !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__header th {
+    height: 50px;
+    padding: 0 !important;
+    vertical-align: middle !important;
+    text-align: inherit !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__header th .th-inner {
+    display: block;
+    box-sizing: border-box;
+    min-height: 50px;
+    padding: 0 12px !important;
+    overflow: hidden;
+    color: inherit;
+    line-height: 50px;
+    text-align: inherit !important;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__header th .th-inner > * {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__header .nps-checkbox,
+body.zui-app .nps-table .nps-table__container .nps-table__body .nps-checkbox {
+    width: 48px !important;
+    min-width: 48px !important;
+    max-width: 48px !important;
+    padding: 0 !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__header .nps-checkbox .th-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 50px;
+    padding: 0 !important;
+    line-height: 1;
+    text-align: center !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-checkbox label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 22px;
+    margin: 0 !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-checkbox input[type="checkbox"],
+body.zui-app .nps-table .nps-table__container .nps-checkbox input[type="radio"] {
+    display: block;
+    width: auto !important;
+    min-width: 0 !important;
+    height: auto;
+    margin: 0 auto !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__body td {
+    vertical-align: middle !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__body td:not(.nps-checkbox) {
+    text-align: left;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__body td[style*="text-align: center"],
+body.zui-app .nps-table .nps-table__container .nps-table__body td[style*="text-align:center"] {
+    text-align: center !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__header th[style*="text-align: center"] .th-inner,
+body.zui-app .nps-table .nps-table__container .nps-table__header th[style*="text-align:center"] .th-inner {
+    text-align: center !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__header th[style*="text-align: right"] .th-inner,
+body.zui-app .nps-table .nps-table__container .nps-table__header th[style*="text-align:right"] .th-inner {
+    text-align: right !important;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__body td .btn-group {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    max-width: 100%;
+    vertical-align: middle;
+}
+
+@media (max-width: 991px) {
+    body.zui-app .form-page {
+        --nps-form-label-width: 1fr;
+        --nps-form-column-gap: 0;
+    }
+    body.zui-app .form-page .form-workflow-form {
+        column-gap: 0 !important;
+    }
+    body.zui-app .form-page.form-page-client .form-workflow-form > .form-group,
+    body.zui-app .form-page.form-page-tunnel .form-workflow-form > .form-group,
+    body.zui-app .form-page.form-page-user .form-workflow-form > .form-group,
+    body.zui-app .form-page.form-page-host .form-workflow-form > .form-group,
+    body.zui-app .form-page.form-page-global .form-workflow-form > .form-group {
+        grid-template-columns: minmax(0, 1fr) !important;
+        row-gap: 6px !important;
+    }
+    body.zui-app .form-page.form-page-client .form-workflow-form > .form-group > label,
+    body.zui-app .form-page.form-page-tunnel .form-workflow-form > .form-group > label,
+    body.zui-app .form-page.form-page-user .form-workflow-form > .form-group > label,
+    body.zui-app .form-page.form-page-host .form-workflow-form > .form-group > label,
+    body.zui-app .form-page.form-page-global .form-workflow-form > .form-group > label,
+    body.zui-app .form-page.form-page-client .form-workflow-form > .form-group > .form-label,
+    body.zui-app .form-page.form-page-tunnel .form-workflow-form > .form-group > .form-label,
+    body.zui-app .form-page.form-page-user .form-workflow-form > .form-group > .form-label,
+    body.zui-app .form-page.form-page-host .form-workflow-form > .form-group > .form-label,
+    body.zui-app .form-page.form-page-global .form-workflow-form > .form-group > .form-label {
+        padding-top: 0 !important;
+    }
+    body.zui-app .nps-table .nps-table__container .nps-table__header th .th-inner {
+        padding-right: 9px !important;
+        padding-left: 9px !important;
+    }
+}
+
+/* ZUI data-grid primitives for the existing remote data adapter. The adapter
+   still supplies sorting, paging, and detail rows; these primitives keep its
+   generated DOM self-contained. */
+body.zui-app .nps-table,
+body.zui-app .nps-table .nps-table__container,
+body.zui-app .nps-table .nps-table__body,
+body.zui-app .nps-table .nps-table__header {
+    width: 100%;
+    min-width: 0;
+}
+body.zui-app .nps-table .nps-table__container {
+    position: relative;
+    clear: both;
+}
+body.zui-app .nps-table .nps-table__toolbar::after,
+body.zui-app .nps-table .nps-table__pagination::after {
+    display: none;
+}
+body.zui-app .nps-table .nps-table__toolbar .nps-table__columns,
+body.zui-app .nps-table .nps-table__toolbar .nps-table__search,
+body.zui-app .nps-table .nps-table__toolbar .nps-table__bars {
+    float: none !important;
+    min-width: 0;
+}
+body.zui-app .nps-table .nps-table__toolbar .nps-table__columns .btn-group,
+body.zui-app .nps-table .nps-table__toolbar .nps-table__columns .btn-group > .btn-group {
+    display: inline-flex;
+    align-items: center;
+}
+body.zui-app .nps-table .nps-table__toolbar .nps-table__columns .dropdown-menu {
+    max-height: 300px;
+    overflow-y: auto;
+}
+body.zui-app .nps-table .nps-table__pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 18px;
+}
+body.zui-app .nps-table .nps-table__pagination > .pagination-detail,
+body.zui-app .nps-table .nps-table__pagination > .pagination {
+    float: none !important;
+    margin: 0 !important;
+}
+body.zui-app .nps-table .nps-table__pagination > .pagination-detail {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+body.zui-app .nps-table .nps-table__pagination .page-list,
+body.zui-app .nps-table .nps-table__pagination .btn-group {
+    display: inline-flex;
+    align-items: center;
+}
+body.zui-app .nps-table .nps-table__pagination .pagination {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    margin: 0;
+}
+body.zui-app .nps-table .nps-table__pagination .pagination > li {
+    display: block;
+    margin: 0;
+}
+body.zui-app .nps-table .nps-table__pagination .pagination > li > a,
+body.zui-app .nps-table .nps-table__pagination .pagination > li > span {
+    display: inline-flex;
+    min-width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    border: 1px solid var(--nps-line);
+    border-radius: 5px;
+    line-height: 1;
+}
+body.zui-app .nps-table .nps-table__pagination .pagination > li.disabled > a,
+body.zui-app .nps-table .nps-table__pagination .pagination > li.disabled > span {
+    opacity: .48;
+    pointer-events: none;
+}
+body.zui-app .nps-table .nps-table__container .nps-table__body .nps-table__loading {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    align-items: center;
+    justify-content: center;
+    color: var(--nps-muted);
+    background: var(--nps-surface);
+}
+body.zui-app .nps-table .nps-table__container .nps-table__body .nps-table__loading.show {
+    display: flex;
+}
+
+@media (max-width: 600px) {
+    body.zui-app .nps-table .nps-table__pagination {
+        align-items: stretch;
+    }
+    body.zui-app .nps-table .nps-table__pagination > .pagination-detail,
+    body.zui-app .nps-table .nps-table__pagination > .pagination {
+        width: 100%;
+    }
+    body.zui-app .nps-table .nps-table__pagination > .pagination {
+        justify-content: flex-end;
+    }
+}
+
+@media (max-width: 991px) {
+    body.zui-app .dashboard-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    body.zui-app .dashboard-information-grid,
+    body.zui-app .dashboard-chart-grid,
+    body.zui-app .dashboard-distribution-grid,
+    body.zui-app .help-guide-grid { grid-template-columns: minmax(0, 1fr); }
+    body.zui-app .dashboard-full-column,
+    body.zui-app .help-guide-full-column { grid-column: auto; }
+}
+
+@media (max-width: 600px) {
+    body.zui-app .dashboard-stat-grid { grid-template-columns: minmax(0, 1fr); }
+    body.zui-app .dashboard-data-value { flex-basis: 50%; }
+}
+
+/* Native NPS table surface. The data adapter deliberately uses one table for
+   header and body so every column shares the same sizing context. */
+body.zui-app .nps-table {
+    width: 100%;
+    min-width: 0;
+    color: var(--nps-ink);
+}
+body.zui-app .nps-table__toolbar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 66px;
+    padding: 14px 18px 12px !important;
+    border-bottom: 1px solid var(--nps-line);
+}
+body.zui-app .nps-table__bars,
+body.zui-app .nps-table__columns,
+body.zui-app .nps-table__search { display: flex; align-items: center; min-width: 0; }
+body.zui-app .nps-table__bars { gap: 8px; }
+body.zui-app .nps-table__bars .management-table-toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 !important; }
+body.zui-app .nps-table__bars .management-table-toolbar .btn { min-height: 36px; }
+body.zui-app .nps-table__columns { position: relative; }
+body.zui-app .nps-table__columns-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
+body.zui-app .nps-table__columns-caret { margin-left: 2px; font-size: 10px; }
+body.zui-app .nps-table__columns-menu {
+    position: absolute;
+    top: calc(100% + 7px);
+    right: 0;
+    z-index: 20;
+    display: none;
+    min-width: 180px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 7px;
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line);
+    border-radius: 6px;
+    box-shadow: var(--nps-shadow);
+}
+body.zui-app .nps-table__columns.is-open .nps-table__columns-menu { display: grid; gap: 2px; }
+body.zui-app .nps-table__column-option { display: flex; align-items: center; gap: 8px; padding: 7px 8px; color: var(--nps-ink); border-radius: 4px; cursor: pointer; }
+body.zui-app .nps-table__column-option:hover { background: var(--nps-primary-soft); color: var(--nps-primary); }
+body.zui-app .nps-table__column-option input { margin: 0; }
+body.zui-app .nps-table__search { margin-left: auto; }
+body.zui-app .nps-table__search-field { position: relative; display: flex; align-items: center; margin: 0; }
+body.zui-app .nps-table__search-field > i { position: absolute; left: 12px; z-index: 1; color: var(--nps-faint); font-size: 12px; pointer-events: none; }
+body.zui-app .nps-table__search-input { width: 232px !important; min-height: 36px !important; padding-left: 32px !important; }
+body.zui-app .nps-table__container { width: 100%; min-width: 0; overflow: hidden !important; border: 0 !important; }
+body.zui-app .nps-table__body { width: 100%; min-width: 0; overflow: hidden !important; }
+body.zui-app .nps-table__grid {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    table-layout: fixed !important;
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+body.zui-app .nps-table__grid thead th {
+    height: 50px;
+    padding: 0 !important;
+    color: var(--nps-muted) !important;
+    background: var(--nps-surface-subtle) !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--nps-line) !important;
+    font-size: 11px !important;
+    font-weight: 750 !important;
+    letter-spacing: .04em;
+    text-align: left;
+    vertical-align: middle !important;
+}
+body.zui-app .nps-table__grid thead th[data-sort-field] { cursor: pointer; }
+body.zui-app .nps-table__grid thead th[data-sort-field]:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; }
+body.zui-app .nps-table__header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: inherit;
+    gap: 6px;
+    min-width: 0;
+    min-height: 50px;
+    padding: 0 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.zui-app .nps-table__header-inner > :first-child:not(.nps-table__sort) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+body.zui-app .nps-table__sort { position: relative; flex: 0 0 10px; width: 10px; height: 15px; margin-left: 2px; opacity: .45; }
+body.zui-app .nps-table__sort::before,
+body.zui-app .nps-table__sort::after { position: absolute; left: 2px; content: ""; border-right: 4px solid transparent; border-left: 4px solid transparent; }
+body.zui-app .nps-table__sort::before { top: 1px; border-bottom: 5px solid currentColor; }
+body.zui-app .nps-table__sort::after { bottom: 1px; border-top: 5px solid currentColor; }
+body.zui-app .nps-table__grid tbody td {
+    min-width: 0;
+    padding: 12px !important;
+    color: var(--nps-ink) !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--nps-line) !important;
+    vertical-align: middle !important;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+body.zui-app .nps-table__grid tbody tr:nth-child(odd) { background: var(--nps-surface-subtle); }
+body.zui-app .nps-table__grid tbody tr:hover,
+body.zui-app .nps-table__grid tbody tr.is-selected { background: var(--nps-surface-hover) !important; }
+body.zui-app .nps-table__grid tbody td > * { max-width: 100%; }
+body.zui-app .nps-table__detail-cell,
+body.zui-app .nps-table__grid .nps-checkbox { width: 48px !important; min-width: 48px !important; max-width: 48px !important; padding-right: 5px !important; padding-left: 5px !important; text-align: center !important; }
+body.zui-app .nps-table__detail-toggle { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; color: var(--nps-muted) !important; border-radius: 5px; }
+body.zui-app .nps-table__detail-toggle:hover,
+body.zui-app .nps-table__detail-toggle:focus { color: var(--nps-primary) !important; background: var(--nps-primary-soft); outline: 0; }
+body.zui-app .nps-checkbox__label { display: inline-flex; align-items: center; justify-content: center; min-height: 22px; margin: 0 !important; cursor: pointer; }
+body.zui-app .nps-checkbox__label input { width: 15px; height: 15px; margin: 0; accent-color: var(--nps-primary); }
+body.zui-app .nps-table__grid td[style*="text-align: center"],
+body.zui-app .nps-table__grid td[style*="text-align:center"] { text-align: center !important; }
+body.zui-app .nps-table__grid td[style*="text-align: right"],
+body.zui-app .nps-table__grid td[style*="text-align:right"] { text-align: right !important; }
+body.zui-app .nps-table__grid tbody td .btn-group { display: inline-flex; flex-wrap: nowrap; max-width: 100%; vertical-align: middle; }
+body.zui-app .nps-table__loading-row td,
+body.zui-app .nps-table__empty-row td { height: 174px; padding: 0 !important; text-align: center !important; }
+body.zui-app .nps-table__loading-row .table-loading-state,
+body.zui-app .nps-table__empty-row .table-empty-state { min-height: 174px; }
+body.zui-app .nps-detail-view td { padding: 18px !important; background: var(--nps-surface) !important; }
+body.zui-app .nps-table__pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    padding: 14px 18px !important;
+    color: var(--nps-muted);
+    border-top: 1px solid var(--nps-line);
+}
+body.zui-app .nps-table__pagination-detail { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
+body.zui-app .nps-table__page-size-wrap { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--nps-muted); font-size: 12px; }
+body.zui-app .nps-table__page-size { width: auto !important; min-width: 64px; min-height: 32px !important; padding: 4px 24px 4px 9px !important; }
+body.zui-app .nps-table__page-nav,
+body.zui-app .nps-table__pages { display: inline-flex; align-items: center; gap: 4px; }
+body.zui-app .nps-table__page-button { display: inline-flex; min-width: 32px; height: 32px; align-items: center; justify-content: center; padding: 0 8px; color: var(--nps-muted); background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 5px; cursor: pointer; }
+body.zui-app .nps-table__page-button:hover:not(:disabled) { color: var(--nps-primary); background: var(--nps-primary-soft); border-color: var(--nps-primary-soft); }
+body.zui-app .nps-table__page-button.is-active { color: #fff; background: var(--nps-primary); border-color: var(--nps-primary); }
+body.zui-app .nps-table__page-button:disabled { opacity: .48; cursor: default; }
+
+@media (max-width: 768px) {
+    body.zui-app .nps-table__toolbar { align-items: stretch; padding: 12px !important; }
+    body.zui-app .nps-table__bars { width: 100%; }
+    body.zui-app .nps-table__bars .management-table-toolbar { flex: 1 1 auto; }
+    body.zui-app .nps-table__columns { order: 2; }
+    body.zui-app .nps-table__search { order: 3; width: 100%; margin-left: 0; }
+    body.zui-app .nps-table__search-field,
+    body.zui-app .nps-table__search-input { width: 100% !important; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid { display: block; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid thead { display: none; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tr { display: block; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row { margin: 0; padding: 11px 12px; border-bottom: 1px solid var(--nps-line); }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td { display: grid; grid-template-columns: minmax(82px, 36%) minmax(0, 1fr); gap: 8px; width: 100% !important; min-width: 0; max-width: none; padding: 7px 0 !important; border: 0 !important; text-align: left !important; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td::before { content: attr(data-label); color: var(--nps-faint); font-size: 11px; font-weight: 700; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-table__detail-cell,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-checkbox { display: inline-flex; width: auto !important; min-width: 36px; padding: 0 4px !important; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-table__detail-cell::before,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-checkbox::before { display: none; }
+    body.zui-app .nps-table__pagination { align-items: stretch; padding: 12px !important; }
+    body.zui-app .nps-table__pagination-detail,
+    body.zui-app .nps-table__page-nav { width: 100%; }
+    body.zui-app .nps-table__page-nav { justify-content: flex-end; }
 }

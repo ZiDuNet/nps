@@ -127,7 +127,7 @@
 			$('#languagemenu span').text(' ' + languages['menu'][languages['current']]);
 			if (languages['current'] != getCookie('lang-v2')) setCookie('lang-v2', languages['current']);
 			saveLanguagePreference(languages['current']);
-			if($("#table").length>0) $('#table').bootstrapTable('refreshOptions', { 'locale': languages['current']});
+			if($("#table").length>0) $('#table').npsTable('refreshOptions', { 'locale': languages['current']});
 		}
 		$.each($(dom + ' [langtag]'), function (i, item) {
 			var index = $(item).attr('langtag');
@@ -394,8 +394,9 @@ function npsDecorateDetailControls(scope) {
 
 function npsApplyTableState(table, kind) {
     var apply = function () {
-        var $scope = $(table).closest('.bootstrap-table');
-        if (!$scope.length) $scope = $('#table').closest('.bootstrap-table');
+        var source = table && table.element ? table.element : table;
+        var $scope = $(source).closest('.nps-table');
+        if (!$scope.length) $scope = $('#table').closest('.nps-table');
         var $emptyCell = $scope.find('tbody tr.no-records-found > td');
         if ($emptyCell.length) $emptyCell.html(npsTableState(kind, false));
         npsDecorateDetailControls($scope);
@@ -502,7 +503,7 @@ function submitform(action, url, postdata) {
             postsubmit = true;
         case 'add':
         case 'edit':
-            var form = document.querySelector('form.form-horizontal');
+            var form = document.querySelector('form.form-horz');
             if (!validateNpsForm(form, true)) return;
             $.ajax({
                 type: "POST",
@@ -524,7 +525,7 @@ function submitform(action, url, postdata) {
             });
 			return;
 		case 'global':
-			var formG = document.querySelector('form.form-horizontal');
+			var formG = document.querySelector('form.form-horz');
 			if (!validateNpsForm(formG, true)) return;
 			$.ajax({
 				type: "POST",

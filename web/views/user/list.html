@@ -6,8 +6,8 @@
             <p data-i18n-zh="维护面板账号、资源配额和可用状态。" data-i18n-en="Maintain dashboard accounts, resource limits, and availability.">维护面板账号、资源配额和可用状态。</p>
         </div>
     </header>
-    <div class="row">
-        <div class="col-lg-12">
+    <div class="management-page-grid">
+        <div class="management-page-column">
             <section class="panel ibox float-e-margins management-table-card zui-panel">
                 <div class="ibox-content management-table-content">
                     <div id="toolbar" class="management-table-toolbar">
@@ -23,7 +23,7 @@
 </section>
 
 <script>
-    $('#table').bootstrapTable({
+    $('#table').npsTable({
         toolbar: "#toolbar",
         method: 'post',
         url: "{{.web_base_url}}/user/list",

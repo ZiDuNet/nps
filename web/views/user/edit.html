@@ -9,22 +9,22 @@
             <a class="btn btn-outline btn-primary form-page-back" href="{{.web_base_url}}/user/list"><i class="fa fa-arrow-left"></i><span data-i18n-zh="返回列表" data-i18n-en="Back to list">返回列表</span></a>
         </div>
     </header>
-    <div class="row form-page-grid">
-    <div class="col-md-12 col-md-auto">
+    <div class="form-page-grid">
+    <div class="form-page-column">
         <section class="panel ibox float-e-margins form-workflow-card zui-panel">
             <div class="ibox-content form-workflow-content">
-                <form id="user-form" class="form form-horizontal form-workflow-form zui-form" data-form-workflow="user-edit">
+                <form id="user-form" class="form form-horz form-workflow-form zui-form" data-form-workflow="user-edit">
                     <input type="hidden" name="id" value="{{.u.Id}}">
                     <div class="form-section-title"><i class="fa fa-user" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
                     <div class="form-group">
-                        <label class="col-sm-2 control-label font-bold" for="user-username" data-i18n-zh="用户名" data-i18n-en="Username">用户名</label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="user-username" data-i18n-zh="用户名" data-i18n-en="Username">用户名</label>
+                        <div class="form-group-wrapper">
                             <input id="user-username" class="form-control" value="{{.u.UserName}}" type="text" name="username" autocomplete="username" required>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="col-sm-2 control-label font-bold" for="user-password" data-i18n-zh="新密码" data-i18n-en="New password">新密码</label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="user-password" data-i18n-zh="新密码" data-i18n-en="New password">新密码</label>
+                        <div class="form-group-wrapper">
                             <div class="input-group">
                                 <input id="user-password" class="form-control" type="password" name="password" autocomplete="new-password" spellcheck="false" data-placeholder-zh="留空则保持原密码" data-placeholder-en="Leave blank to keep the current password" placeholder="留空则保持原密码" aria-describedby="user-password-hint">
                                 <span class="input-group-btn">
@@ -35,16 +35,16 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="col-sm-2 control-label font-bold" for="user-remark" data-i18n-zh="备注" data-i18n-en="Remark">备注</label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="user-remark" data-i18n-zh="备注" data-i18n-en="Remark">备注</label>
+                        <div class="form-group-wrapper">
                             <input id="user-remark" class="form-control" value="{{.u.Remark}}" type="text" name="remark" autocomplete="off">
                         </div>
                     </div>
 
                     <div class="form-section-title"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
                     <div class="form-group">
-                        <label class="col-sm-2 control-label font-bold" for="user-max-tunnel" data-i18n-zh="总隧道上限" data-i18n-en="Tunnel limit">总隧道上限</label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="user-max-tunnel" data-i18n-zh="总隧道上限" data-i18n-en="Tunnel limit">总隧道上限</label>
+                        <div class="form-group-wrapper">
                             <input id="user-max-tunnel" class="form-control" value="{{.u.MaxTunnelNum}}" type="number" min="0" step="1" name="max_tunnel" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-max-tunnel-hint">
                             <span id="user-max-tunnel-hint" class="help-block" data-i18n-zh="达到上限后，关联客户端不能再创建隧道。" data-i18n-en="Linked clients cannot create more tunnels after reaching this limit.">达到上限后，关联客户端不能再创建隧道。</span>
                         </div>
@@ -52,8 +52,8 @@
 
                     <div class="form-section-title"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
                     <div class="form-group">
-                        <label class="col-sm-2 control-label font-bold" for="user-expire-time" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</label>
-                        <div class="col-sm-10">
+                        <label class="form-label font-bold" for="user-expire-time" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</label>
+                        <div class="form-group-wrapper">
                             <input id="user-expire-time" class="form-control flatpickr-expire" value="{{.u.ExpireTime}}" type="text" name="expire_time" placeholder="2026-12-31 23:59:59" autocomplete="off" aria-describedby="user-expire-time-hint">
                             <span id="user-expire-time-hint" class="help-block" data-i18n-zh="留空表示长期有效。" data-i18n-en="Leave blank for no expiration.">留空表示长期有效。</span>
                         </div>
@@ -61,7 +61,7 @@
 
                     <div class="hr-line-dashed form-workflow-divider"></div>
                     <div class="form-group form-workflow-actions">
-                        <div class="col-sm-4 col-sm-offset-2">
+                        <div class="form-actions">
                             <button class="btn btn-success" type="submit"><i class="fa fa-fw fa-lg fa-save" aria-hidden="true"></i> <span data-i18n-zh="保存修改" data-i18n-en="Save changes">保存修改</span></button>
                             <a class="btn btn-default" href="{{.web_base_url}}/user/list" data-i18n-zh="取消" data-i18n-en="Cancel">取消</a>
                         </div>

@@ -10,7 +10,7 @@
         </div>
     </header>
 
-    <div class="row"><div class="col-lg-12"><section class="panel ibox float-e-margins management-table-card zui-panel"><div class="ibox-content management-table-content">
+    <div class="management-page-grid"><div class="management-page-column"><section class="panel ibox float-e-margins management-table-card zui-panel"><div class="ibox-content management-table-content">
         <div id="toolbar" class="management-table-toolbar">
             <a href="{{.web_base_url}}/index/addhost?client_id={{.client_id}}" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i><span data-i18n-zh="新增规则" data-i18n-en="New rule">新增规则</span></a>
             <button type="button" onclick="batchDelete('{{.web_base_url}}/index/delhost');" class="btn btn-outline btn-danger"><i class="fa fa-trash" aria-hidden="true"></i><span data-i18n-zh="批量删除" data-i18n-en="Delete selected">批量删除</span></button>
@@ -45,7 +45,7 @@ function hostEndpointLink(label, url) {
     return '<a class="host-endpoint" href="' + safeURL + '" target="_blank" rel="noopener noreferrer"><span>' + label + '</span><i class="fa fa-external-link" aria-hidden="true"></i></a>';
 }
 
-$('#table').bootstrapTable({
+$('#table').npsTable({
     toolbar: '#toolbar', method: 'post', url: window.location,
     queryParams: function (params) { return {offset: params.offset, limit: params.limit, search: params.search, client_id: hostListClientId}; },
     search: true, contentType: 'application/x-www-form-urlencoded', striped: true, showHeader: true, showColumns: false, showRefresh: true,

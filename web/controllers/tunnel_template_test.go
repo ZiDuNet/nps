@@ -193,7 +193,7 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 		{
 			name:      "add",
 			path:      "../views/index/add.html",
-			typeClass: `class="row form-page-grid tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}"`,
+			typeClass: `class="form-page-grid tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}"`,
 			expectedRules: []string{
 				`.tunnel-form.tunnel-type-tcp #server_ip`,
 				`.tunnel-form.tunnel-type-file #server_ip`,
@@ -202,7 +202,7 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 		{
 			name:      "edit",
 			path:      "../views/index/edit.html",
-			typeClass: `class="row form-page-grid tunnel-form tunnel-type-{{.t.Mode}}"`,
+			typeClass: `class="form-page-grid tunnel-form tunnel-type-{{.t.Mode}}"`,
 			forbiddenRules: []string{
 				`.tunnel-form.tunnel-type-tcp #server_ip`,
 				`.tunnel-form.tunnel-type-udp #server_ip`,

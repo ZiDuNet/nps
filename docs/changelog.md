@@ -5,6 +5,7 @@
 ### 发布整理
 
 - 同步控制台 UI、平台泛域名与证书热更新改进，统一 NPS、NPC 和 GUI 发布元数据，准备 GitHub Release 与 Docker 版本标签发布。
+- 控制台运行时移除 Bootstrap、Bootstrap Table、Popper 和 DataTables 静态资源，表格改用 ZUI 主题下的原生 NPS 表格适配器，保留原有服务端分页、排序与筛选接口。
 
 ## v1.1.5 (2026-09-02)
 

@@ -6,8 +6,8 @@
             <p data-i18n-zh="查看、筛选并维护当前客户端的转发规则。" data-i18n-en="Review, filter, and maintain forwarding rules for the selected client.">查看、筛选并维护当前客户端的转发规则。</p>
         </div>
     </header>
-    <div class="row">
-        <div class="col-lg-12">
+    <div class="management-page-grid">
+        <div class="management-page-column">
             <section class="panel ibox float-e-margins management-table-card zui-panel">
                 <div class="ibox-content management-table-content">
                     <div id="toolbar" class="management-table-toolbar">
@@ -45,8 +45,8 @@
         return npsBooleanMarkup(!!value);
     }
 
-    /*bootstrap table*/
-    $('#table').bootstrapTable({
+    /* ZUI-compatible remote table */
+    $('#table').npsTable({
         toolbar: "#toolbar",
         method: 'post', // 服务器数据的请求方式 get or post
         url: "{{.web_base_url}}/index/gettunnel", // 服务器数据的加载地址

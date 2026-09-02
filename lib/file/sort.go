@@ -158,7 +158,7 @@ func lessString(a, b string, asc bool) bool {
 	return strings.ToLower(a) > strings.ToLower(b)
 }
 
-// SortClients sorts clients in-place by the given field (bootstrap-table sort name).
+// SortClients sorts clients in-place by the given field (web table sort name).
 func SortClients(list []*Client, sortField, order string) {
 	snapshots := make(map[*Client]clientSortSnapshot, len(list))
 	for _, client := range list {

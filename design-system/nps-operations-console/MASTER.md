@@ -92,5 +92,5 @@ Status is always expressed with both color and a text label or icon.
 
 - Load `zui-3.0.0.css` and `zui-3.0.0.js` locally before legacy jQuery so ZUI does not overwrite jQuery's `$` alias.
 - Load `zui-console.css` after the legacy visual styles. It provides the token layer and compatibility overrides.
-- Keep legacy Bootstrap table, modal, and controller hooks intact unless the underlying interaction is deliberately migrated and verified.
+- Keep existing NPS data, modal, and controller contracts intact while using ZUI primitives for the rendered controls; do not reintroduce Bootstrap assets or plugins.
 - Retain the ZUI 3 MIT license notice in `web/static/licenses/zui-3.0.0-MIT.txt`.
