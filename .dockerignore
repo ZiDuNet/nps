@@ -22,11 +22,11 @@ cmd/npc/npc-gui/frontend/package-lock.json
 cmd/npc/npc-gui/build/bin
 
 # CLI images only need Go source and embedded web assets
+# Keep conf/ because the server embeds its default nps.conf at build time.
 docs
 docker
 image
 gui
-conf
 README.md
 README_zh.md
 CHANGELOG.md
