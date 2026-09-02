@@ -155,6 +155,7 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 func (s *ClientController) List() {
 	if s.Ctx.Request.Method == "GET" {
 		s.Data["menu"] = "client"
+		s.setOwnerFilterData()
 		s.SetInfo("client")
 		s.display("client/list")
 		return
@@ -165,7 +166,12 @@ func (s *ClientController) List() {
 	var list []*file.Client
 	var cnt int
 	if s.IsAdmin() {
-		list, cnt = server.GetClientList(start, length, search, sort, order, clientId)
+		owner, err := s.getOwnerListFilter()
+		if err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
+		list, cnt = server.GetClientListByOwnerFilter(start, length, search, sort, order, clientId, owner, nil)
 	} else {
 		list, cnt = server.GetClientListForAllowedIds(start, length, search, sort, order, clientId, s.GetAllowedClientIds())
 	}

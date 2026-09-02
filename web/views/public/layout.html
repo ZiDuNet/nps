@@ -49,19 +49,10 @@
             <ul class="nav metismenu zui-nav" id="side-menu">
                 <li class="nav-header">
                     <div class="nps-brand">
-                        <span class="nps-brand-mark"><i class="icon icon-sitemap" aria-hidden="true"></i></span>
-                        <span class="nps-brand-copy"><strong>NPS</strong><small data-i18n-zh="内网穿透控制台" data-i18n-en="Network tunnel control">内网穿透控制台</small></span>
+                        <span class="nps-brand-mark"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt="NPS" class="nps-brand-logo"></span>
+                        <span class="nps-brand-copy"><strong>NPS <span class="nps-pro-badge" aria-label="Pro edition">Pro</span></strong><small data-i18n-zh="内网穿透控制台" data-i18n-en="Network tunnel control">内网穿透控制台</small></span>
                     </div>
-                    <div class="nav-account">
-                    {{if eq true .isAdmin}}
-                        <i class="icon icon-shield" aria-hidden="true"></i>
-                        <span><strong class="font-bold" langtag="word-admin"></strong><small langtag="word-system"></small></span>
-                    {{else}}
-                        <i class="icon icon-user" aria-hidden="true"></i>
-                        <span><strong class="font-bold">{{.username}}</strong><small langtag="word-user"></small></span>
-                    {{end}}
-                    </div>
-                    <div class="logo-element">NPS</div>
+                    <div class="logo-element" aria-label="NPS"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt="NPS"></div>
                     <button type="button" class="close-canvas-menu" aria-label="关闭导航" data-aria-label-zh="关闭导航" data-aria-label-en="Close navigation" data-title-zh="关闭导航" data-title-en="Close navigation"><i class="fa fa-times" aria-hidden="true"></i></button>
                 </li>
                 <li class="{{if eq "index" .menu}}active{{end}}">
@@ -122,6 +113,20 @@
                 <a href="{{.web_base_url}}/index/help"><i class="icon icon-lightbulb" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-help"></span></a>
                 </li>
+                <li class="nav-sidebar-footer">
+                    <div class="nav-account">
+                    {{if eq true .isAdmin}}
+                        <i class="icon icon-shield" aria-hidden="true"></i>
+                        <span><strong class="font-bold" langtag="word-admin"></strong><small langtag="word-system"></small></span>
+                    {{else}}
+                        <i class="icon icon-user" aria-hidden="true"></i>
+                        <span><strong class="font-bold">{{.username}}</strong><small langtag="word-user"></small></span>
+                    {{end}}
+                    </div>
+                    <a class="nav-logout-link" href="{{.web_base_url}}/login/out">
+                        <i class="fa fa-sign-out-alt" aria-hidden="true"></i><span class="nav-label" langtag="word-logout"></span>
+                    </a>
+                </li>
             </ul>
         </div>
     </nav>
@@ -149,11 +154,6 @@
                                 <li lang="en-US"><a href="#" onclick="return switchLanguage('en-US')">English</a></li>
                             </ul>
                         </span>
-                    </li>
-                    <li>
-                        <a href="{{.web_base_url}}/login/out">
-                            <i class="fa fa-sign-out-alt"></i><span langtag="word-logout"></span>
-                        </a>
                     </li>
                 </ul>
             </nav>

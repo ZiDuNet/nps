@@ -24,6 +24,15 @@ type DbUtils struct {
 	JsonDb *JsonDb
 }
 
+// OwnerFilter scopes list queries to a dashboard user. A nil UserID means
+// that no owner filter was requested; a non-nil pointer to zero deliberately
+// selects unassigned resources. Keeping the zero value meaningful lets the
+// admin UI expose an explicit "未分配" option without adding a second query
+// parameter, while preserving the historical nil/no-filter behavior.
+type OwnerFilter struct {
+	UserID *int
+}
+
 var (
 	Db             *DbUtils
 	once           sync.Once
@@ -65,17 +74,20 @@ func GetMapKeys(m *sync.Map, isSort bool, sortKey, order string) (keys []int) {
 }
 
 func (s *DbUtils) GetClientList(start, length int, search, sort, order string, clientId int) ([]*Client, int) {
-	return s.getClientList(start, length, search, sort, order, clientId, nil)
+	return s.GetClientListFiltered(start, length, search, sort, order, clientId, nil, nil)
 }
 
 // GetClientListForAllowedIds returns the visible clients owned by the supplied
 // IDs. Filtering is applied before counting and pagination so a user's page
 // boundaries are independent of other users' clients.
 func (s *DbUtils) GetClientListForAllowedIds(start, length int, search, sort, order string, clientId int, allowedClientIds map[int]struct{}) ([]*Client, int) {
-	return s.getClientList(start, length, search, sort, order, clientId, allowedClientIds)
+	return s.GetClientListFiltered(start, length, search, sort, order, clientId, nil, allowedClientIds)
 }
 
-func (s *DbUtils) getClientList(start, length int, search, sort, order string, clientId int, allowedClientIds map[int]struct{}) ([]*Client, int) {
+// GetClientListFiltered returns clients matching the optional owner filter.
+// Ownership is applied before search, counting, and pagination so totals and
+// page boundaries remain stable for administrator filter combinations.
+func (s *DbUtils) GetClientListFiltered(start, length int, search, sort, order string, clientId int, owner *OwnerFilter, allowedClientIds map[int]struct{}) ([]*Client, int) {
 	list := make([]*Client, 0)
 	var cnt int
 	keys := GetMapKeys(&s.JsonDb.Clients, true, sort, order)
@@ -86,7 +98,7 @@ func (s *DbUtils) getClientList(start, length int, search, sort, order string, c
 				continue
 			}
 			v.RLock()
-			noDisplay, candidateID := v.NoDisplay, v.Id
+			noDisplay, candidateID, candidateUserID := v.NoDisplay, v.Id, v.UserId
 			verifyKey, remark := v.VerifyKey, v.Remark
 			v.RUnlock()
 			if noDisplay {
@@ -98,6 +110,9 @@ func (s *DbUtils) getClientList(start, length int, search, sort, order string, c
 				}
 			}
 			if clientId != 0 && clientId != candidateID {
+				continue
+			}
+			if owner != nil && owner.UserID != nil && candidateUserID != *owner.UserID {
 				continue
 			}
 			if search != "" && !(candidateID == common.GetIntNoErrByStr(search) || strings.Contains(verifyKey, search) || strings.Contains(remark, search)) {
@@ -510,6 +525,14 @@ func (s *DbUtils) ownerUserID(client *Client) int {
 		current.RUnlock()
 	}
 	return userID
+}
+
+// GetClientOwnerID resolves the current owner for a client reference. Runtime
+// tunnels and hosts can retain an older *Client after an edit replaces the
+// record in JsonDb, so callers that enforce ownership should use this helper
+// instead of reading the embedded pointer directly.
+func (s *DbUtils) GetClientOwnerID(client *Client) int {
+	return s.ownerUserID(client)
 }
 
 func (s *DbUtils) IsClientBelongToUser(clientId, userId int) bool {
@@ -1307,10 +1330,17 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 }
 
 func (s *DbUtils) GetHost(start, length int, id int, search string) ([]*Host, int) {
-	return s.GetHostByAllowedClients(start, length, id, search, nil)
+	return s.GetHostByAllowedClientsFiltered(start, length, id, search, nil, nil)
 }
 
 func (s *DbUtils) GetHostByAllowedClients(start, length int, id int, search string, allowedClientIds map[int]struct{}) ([]*Host, int) {
+	return s.GetHostByAllowedClientsFiltered(start, length, id, search, nil, allowedClientIds)
+}
+
+// GetHostByAllowedClientsFiltered applies the optional dashboard owner filter
+// before counting and pagination. Host ownership is inherited from the
+// assigned client, so a zero owner selects hosts whose client is unassigned.
+func (s *DbUtils) GetHostByAllowedClientsFiltered(start, length int, id int, search string, owner *OwnerFilter, allowedClientIds map[int]struct{}) ([]*Host, int) {
 	list := make([]*Host, 0)
 	var cnt int
 	keys := GetMapKeys(&s.JsonDb.Hosts, false, "", "")
@@ -1330,10 +1360,14 @@ func (s *DbUtils) GetHostByAllowedClients(start, length int, id int, search stri
 			client.RLock()
 			clientID, verifyKey := client.Id, client.VerifyKey
 			client.RUnlock()
+			clientUserID := s.GetClientOwnerID(client)
 			if allowedClientIds != nil {
 				if _, ok := allowedClientIds[clientID]; !ok {
 					continue
 				}
+			}
+			if owner != nil && owner.UserID != nil && clientUserID != *owner.UserID {
+				continue
 			}
 			if search != "" && !(hostID == common.GetIntNoErrByStr(search) || strings.Contains(hostName, search) || strings.Contains(remark, search) || strings.Contains(verifyKey, search)) {
 				continue

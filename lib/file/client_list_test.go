@@ -34,6 +34,27 @@ func TestGetClientListForAllowedIdsFiltersBeforePagination(t *testing.T) {
 	}
 }
 
+func TestGetClientListFilteredByOwnerAndRemark(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	db.Clients.Store(1, &Client{Id: 1, UserId: 7, VerifyKey: "alpha", Remark: "production"})
+	db.Clients.Store(2, &Client{Id: 2, UserId: 7, VerifyKey: "beta", Remark: "staging"})
+	db.Clients.Store(3, &Client{Id: 3, UserId: 9, VerifyKey: "gamma", Remark: "production"})
+	db.Clients.Store(4, &Client{Id: 4, UserId: 0, VerifyKey: "delta", Remark: "unassigned"})
+	utils := &DbUtils{JsonDb: db}
+
+	owner := 7
+	clients, total := utils.GetClientListFiltered(0, 20, "stag", "", "", 0, &OwnerFilter{UserID: &owner}, nil)
+	if total != 1 || len(clients) != 1 || clients[0].Id != 2 {
+		t.Fatalf("owner + remark filter = ids=%v total=%d, want [2], 1", clientIDs(clients), total)
+	}
+
+	unassigned := 0
+	clients, total = utils.GetClientListFiltered(0, 20, "", "", "", 0, &OwnerFilter{UserID: &unassigned}, nil)
+	if total != 1 || len(clients) != 1 || clients[0].Id != 4 {
+		t.Fatalf("unassigned filter = ids=%v total=%d, want [4], 1", clientIDs(clients), total)
+	}
+}
+
 func clientIDs(clients []*Client) []int {
 	ids := make([]int, 0, len(clients))
 	for _, client := range clients {

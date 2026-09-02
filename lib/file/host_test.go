@@ -89,6 +89,49 @@ func TestGetHostByAllowedClientsSkipsMalformedRecord(t *testing.T) {
 	}
 }
 
+func TestGetHostByAllowedClientsFilteredByOwnerAndRemark(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	ownerClient := &Client{Id: 1, UserId: 7, VerifyKey: "owner"}
+	otherClient := &Client{Id: 2, UserId: 9, VerifyKey: "other"}
+	unassignedClient := &Client{Id: 3, UserId: 0, VerifyKey: "unassigned"}
+	staleClient := &Client{Id: 4, UserId: 0, VerifyKey: "stale"}
+	db.Clients.Store(ownerClient.Id, ownerClient)
+	db.Clients.Store(otherClient.Id, otherClient)
+	db.Clients.Store(unassignedClient.Id, unassignedClient)
+	db.Clients.Store(staleClient.Id, &Client{Id: 4, UserId: 7, VerifyKey: "stale"})
+	db.Hosts.Store(1, &Host{Id: 1, Host: "one.example.com", Remark: "production", Client: ownerClient})
+	db.Hosts.Store(2, &Host{Id: 2, Host: "two.example.com", Remark: "staging", Client: ownerClient})
+	db.Hosts.Store(3, &Host{Id: 3, Host: "three.example.com", Remark: "production", Client: otherClient})
+	db.Hosts.Store(4, &Host{Id: 4, Host: "four.example.com", Remark: "unassigned", Client: unassignedClient})
+	db.Hosts.Store(5, &Host{Id: 5, Host: "five.example.com", Remark: "stale-owner", Client: staleClient})
+	utils := &DbUtils{JsonDb: db}
+
+	owner := 7
+	hosts, total := utils.GetHostByAllowedClientsFiltered(0, 20, 0, "stag", &OwnerFilter{UserID: &owner}, nil)
+	if total != 1 || len(hosts) != 1 || hosts[0].Id != 2 {
+		t.Fatalf("owner + remark host filter = id=%v total=%d, want [2], 1", hostIDs(hosts), total)
+	}
+	hosts, total = utils.GetHostByAllowedClientsFiltered(0, 20, 0, "stale", &OwnerFilter{UserID: &owner}, nil)
+	if total != 1 || len(hosts) != 1 || hosts[0].Id != 5 {
+		t.Fatalf("stale client owner host filter = id=%v total=%d, want [5], 1", hostIDs(hosts), total)
+	}
+	unassigned := 0
+	hosts, total = utils.GetHostByAllowedClientsFiltered(0, 20, 0, "", &OwnerFilter{UserID: &unassigned}, nil)
+	if total != 1 || len(hosts) != 1 || hosts[0].Id != 4 {
+		t.Fatalf("unassigned host filter = id=%v total=%d, want [4], 1", hostIDs(hosts), total)
+	}
+}
+
+func hostIDs(hosts []*Host) []int {
+	ids := make([]int, 0, len(hosts))
+	for _, host := range hosts {
+		if host != nil {
+			ids = append(ids, host.Id)
+		}
+	}
+	return ids
+}
+
 func TestHostRuleMatchesRejectsInvalidWildcards(t *testing.T) {
 	for _, rule := range []string{"example*.com", "*example.com", "*.*.example.com", "*."} {
 		if hostRuleMatches("api.example.com", rule) {

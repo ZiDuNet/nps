@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"crypto/subtle"
+	"errors"
 	"html"
 	"math"
 	"net/http"
@@ -433,8 +434,40 @@ func (s *BaseController) GetAjaxParams() (start, limit int) {
 	return s.GetIntNoErr("offset"), s.GetIntNoErr("limit")
 }
 
+// getOwnerListFilter parses the optional administrator list filter. The empty
+// value means "all owners"; an explicit user_id=0 selects resources attached
+// to unassigned clients. Controllers call this only after their admin check,
+// so ordinary users cannot widen the ownership scope of their list requests.
+func (s *BaseController) getOwnerListFilter() (*file.OwnerFilter, error) {
+	raw := strings.TrimSpace(s.GetString("user_id"))
+	if raw == "" {
+		if s.GetBoolNoErr("unassigned") {
+			unassigned := 0
+			return &file.OwnerFilter{UserID: &unassigned}, nil
+		}
+		return nil, nil
+	}
+	userID, err := strconv.Atoi(raw)
+	if err != nil || userID < 0 {
+		return nil, errors.New("所属用户筛选无效")
+	}
+	return &file.OwnerFilter{UserID: &userID}, nil
+}
+
 func (s *BaseController) SetInfo(name string) {
 	s.Data["name"] = name
+}
+
+// setOwnerFilterData supplies the administrator-only owner options used by
+// resource list toolbars. Keeping this in the shared controller avoids
+// duplicating the user lookup across client, tunnel, and host list actions;
+// ordinary users never receive the list because their UI is already scoped to
+// their own principal.
+func (s *BaseController) setOwnerFilterData() {
+	if !s.IsAdmin() {
+		return
+	}
+	s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
 }
 
 func (s *BaseController) SetType(name string) {

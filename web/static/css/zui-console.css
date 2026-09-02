@@ -2716,3 +2716,226 @@ body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-section="secu
         margin-top: 8px;
     }
 }
+
+/* List filters share the same compact ZUI toolbar contract as the action
+   buttons.  They remain next to add/delete actions on desktop and wrap as a
+   single row before the search field on smaller screens. */
+body.zui-app .nps-table__bars {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+body.zui-app .nps-table__bar-actions {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+}
+body.zui-app .nps-table__bars .management-table-toolbar {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+body.zui-app .nps-table-filter {
+    display: inline-flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    margin: 0 0 0 auto;
+    color: var(--nps-muted);
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1;
+    white-space: nowrap;
+}
+body.zui-app .nps-table-filter__label {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    color: var(--nps-muted);
+    white-space: nowrap;
+}
+body.zui-app .nps-table-filter__control {
+    flex: 0 1 auto;
+    width: auto !important;
+    min-width: 152px;
+    max-width: 244px;
+    height: 36px;
+    min-height: 36px !important;
+    margin: 0 !important;
+    padding: 6px 28px 6px 10px !important;
+    color: var(--nps-ink) !important;
+    background-color: var(--nps-surface) !important;
+    border-color: var(--nps-line-strong) !important;
+    font-size: 12px;
+    line-height: 1.35;
+}
+body.zui-app .nps-table-filter__control option {
+    color: var(--nps-ink) !important;
+    background: var(--nps-surface) !important;
+}
+body.zui-app .nps-table-filter__control:focus {
+    border-color: var(--nps-primary) !important;
+    box-shadow: var(--nps-focus) !important;
+}
+body.zui-app .nps-table__columns {
+    flex: 0 0 auto;
+}
+body.zui-app .nps-table__search {
+    flex: 0 0 auto;
+    margin-left: 0 !important;
+}
+
+@media (max-width: 1199px) and (min-width: 992px) {
+    body.zui-app .nps-table-filter__control {
+        min-width: 136px;
+        max-width: 200px;
+    }
+}
+
+@media (max-width: 991px) {
+    body.zui-app .nps-table__bars {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+    body.zui-app .nps-table__bars .management-table-toolbar {
+        flex: 1 1 auto;
+    }
+    body.zui-app .nps-table__bar-actions {
+        order: 2;
+    }
+    body.zui-app .nps-table__columns {
+        order: 3;
+    }
+    body.zui-app .nps-table__search {
+        order: 4;
+    }
+    body.zui-app .nps-table-filter {
+        flex: 1 1 220px;
+        max-width: 100%;
+    }
+    body.zui-app .nps-table-filter__control {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: none;
+    }
+}
+
+/* Brand and account rail: keep the identity compact, then pin the account
+   actions to the bottom of the navigation without changing legacy routes. */
+body.zui-app .nps-brand-mark {
+    overflow: hidden;
+    border-radius: 50%;
+    background: #0b1d39;
+}
+body.zui-app .nps-brand-logo,
+body.zui-app .logo-element img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+body.zui-app .logo-element {
+    width: 38px;
+    height: 38px;
+    overflow: hidden;
+    padding: 0 !important;
+    border-radius: 50%;
+}
+body.zui-app .logo-element img { border-radius: 50%; }
+body.zui-app .sidebar-collapse { height: 100%; overflow-y: auto; }
+body.zui-app #side-menu {
+    display: flex !important;
+    min-height: 100%;
+    flex-direction: column;
+}
+body.zui-app .nav-sidebar-footer {
+    margin-top: auto !important;
+    padding: 13px 0 15px;
+    border-top: 1px solid var(--nps-sidebar-line);
+}
+body.zui-app .nav-sidebar-footer .nav-account {
+    margin: 0 20px 9px !important;
+}
+body.zui-app .nav-sidebar-footer .nav-logout-link {
+    margin-top: 0 !important;
+}
+body.zui-app .nps-pro-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 18px;
+    padding: 0 6px;
+    color: #fff;
+    background: var(--nps-primary);
+    border: 1px solid rgba(255, 255, 255, .26);
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    line-height: 1;
+    vertical-align: middle;
+    animation: nps-pro-pulse 2.2s ease-in-out infinite;
+}
+body.zui-app .auth-brand .nps-pro-badge { margin-left: 1px; }
+@keyframes nps-pro-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(37, 99, 235, .18); }
+    50% { opacity: .72; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    body.zui-app .nps-pro-badge { animation: none; }
+}
+
+/* Login and registration use the supplied circular mark as the visual
+   anchor. The panel badge remains above the form title at a readable size. */
+body.auth-body .auth-brand__mark,
+body.auth-body .auth-context__brand-mark {
+    overflow: hidden;
+    border-radius: 50%;
+}
+body.auth-body .auth-brand__mark img,
+body.auth-body .auth-context__brand-mark img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+body.auth-body .auth-context__brand-lockup {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+body.auth-body .auth-context__brand-lockup .auth-context__brand-mark {
+    width: 72px;
+    height: 72px;
+    margin: 0;
+}
+body.auth-body .auth-panel__badge {
+    margin-bottom: 10px;
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+    border-color: var(--nps-line);
+    animation-duration: 2.6s;
+}
+@media (max-width: 768px) {
+    body.zui-app .nav-sidebar-footer .nav-account { margin-right: 18px !important; margin-left: 18px !important; }
+    body.auth-body .auth-context__brand-lockup .auth-context__brand-mark { width: 58px; height: 58px; }
+}
+
+/* Keep the open desktop workspace intentionally narrower than the legacy
+   256px rail so the data area remains the visual focus. */
+@media (min-width: 992px) {
+    body.zui-app:not(.mini-navbar) .navbar-default.navbar-static-side { width: 208px !important; }
+    body.zui-app:not(.mini-navbar) #page-wrapper { margin-left: 208px !important; }
+    body.zui-app:not(.mini-navbar) .navbar-fixed-top,
+    body.zui-app:not(.mini-navbar) .navbar-static-top,
+    body.zui-app:not(.mini-navbar) .white-bg { left: 208px !important; }
+    body.zui-app:not(.mini-navbar) .nav-header { padding-right: 14px !important; padding-left: 14px !important; }
+    body.zui-app:not(.mini-navbar) #side-menu li a { margin-right: 7px; margin-left: 7px; padding-right: 10px !important; padding-left: 10px !important; }
+}

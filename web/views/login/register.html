@@ -21,7 +21,7 @@
     </script>
 
     <title langtag="title-register"></title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232563eb'/%3E%3Cpath d='M15 40V24l17 12 17-12v16' fill='none' stroke='white' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+    <link rel="icon" type="image/png" href="{{.web_base_url}}/static/img/nps-logo.png">
 
     <link href="{{.web_base_url}}/static/css/zui-3.0.0.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
@@ -38,8 +38,9 @@
 <div class="auth-page">
     <header class="auth-page__header">
         <div class="auth-brand" aria-label="NPS">
-            <span class="auth-brand__mark" aria-hidden="true"><i class="fa fa-network-wired"></i></span>
+            <span class="auth-brand__mark" aria-hidden="true"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt="NPS"></span>
             <span class="auth-brand__name" langtag="application"></span>
+            <span class="nps-pro-badge" aria-label="Pro edition">Pro</span>
         </div>
 
         <div class="auth-page__tools">
@@ -62,7 +63,10 @@
     <main class="auth-page__main">
         <div class="auth-layout auth-layout--register">
             <aside class="auth-context" aria-labelledby="auth-context-title">
-                <div class="auth-context__brand-mark" aria-hidden="true"><i class="fa fa-network-wired"></i></div>
+                <div class="auth-context__brand-lockup">
+                    <div class="auth-context__brand-mark" aria-hidden="true"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt="NPS"></div>
+                    <span class="nps-pro-badge" aria-label="Pro edition">Pro</span>
+                </div>
                 <h1 class="auth-context__title" id="auth-context-title" langtag="application"></h1>
                 <p class="auth-context__description" langtag="info-tagline"></p>
 
@@ -108,6 +112,7 @@
 
             <section class="auth-panel login-form-wrap" aria-labelledby="auth-register-title">
                 <header class="auth-panel__header">
+                    <span class="auth-panel__badge nps-pro-badge" aria-label="Pro edition">Pro edition</span>
                     <h2 class="auth-panel__title" id="auth-register-title" langtag="info-register"></h2>
                     <p class="auth-panel__description" langtag="info-createaccount"></p>
                 </header>

@@ -5,6 +5,7 @@
 *.exe~
 .claude/
 *.png
+!web/static/img/nps-logo.png
 conf/clients.json
 conf/tasks.json
 conf/hosts.json

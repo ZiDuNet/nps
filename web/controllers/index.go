@@ -313,6 +313,7 @@ func (s *IndexController) Help() {
 
 func (s *IndexController) Tcp() {
 	s.Data["menu"] = "tcp"
+	s.setOwnerFilterData()
 	s.SetInfo("tcp")
 	s.SetType("tcp")
 	s.display(tunnelTemplatePath("tcp", "list"))
@@ -320,6 +321,7 @@ func (s *IndexController) Tcp() {
 
 func (s *IndexController) Udp() {
 	s.Data["menu"] = "udp"
+	s.setOwnerFilterData()
 	s.SetInfo("udp")
 	s.SetType("udp")
 	s.display(tunnelTemplatePath("udp", "list"))
@@ -327,6 +329,7 @@ func (s *IndexController) Udp() {
 
 func (s *IndexController) Socks5() {
 	s.Data["menu"] = "socks5"
+	s.setOwnerFilterData()
 	s.SetInfo("socks5")
 	s.SetType("socks5")
 	s.display(tunnelTemplatePath("socks5", "list"))
@@ -334,12 +337,14 @@ func (s *IndexController) Socks5() {
 
 func (s *IndexController) Http() {
 	s.Data["menu"] = "http"
+	s.setOwnerFilterData()
 	s.SetInfo("http proxy")
 	s.SetType("httpProxy")
 	s.display(tunnelTemplatePath("httpProxy", "list"))
 }
 func (s *IndexController) File() {
 	s.Data["menu"] = "file"
+	s.setOwnerFilterData()
 	s.SetInfo("file server")
 	s.SetType("file")
 	s.display(tunnelTemplatePath("file", "list"))
@@ -347,12 +352,14 @@ func (s *IndexController) File() {
 
 func (s *IndexController) Secret() {
 	s.Data["menu"] = "secret"
+	s.setOwnerFilterData()
 	s.SetInfo("secret")
 	s.SetType("secret")
 	s.display(tunnelTemplatePath("secret", "list"))
 }
 func (s *IndexController) P2p() {
 	s.Data["menu"] = "p2p"
+	s.setOwnerFilterData()
 	s.SetInfo("p2p")
 	s.SetType("p2p")
 	s.display(tunnelTemplatePath("p2p", "list"))
@@ -360,6 +367,7 @@ func (s *IndexController) P2p() {
 
 func (s *IndexController) Host() {
 	s.Data["menu"] = "host"
+	s.setOwnerFilterData()
 	s.SetInfo("host")
 	s.SetType("hostServer")
 	s.display("index/list")
@@ -367,6 +375,7 @@ func (s *IndexController) Host() {
 
 func (s *IndexController) All() {
 	s.Data["menu"] = "client"
+	s.setOwnerFilterData()
 	clientId := s.getEscapeString("client_id")
 	s.Data["client_id"] = clientId
 	s.SetInfo("client id:" + clientId)
@@ -381,7 +390,16 @@ func (s *IndexController) GetTunnel() {
 	if !s.IsAdmin() {
 		allowed = s.GetAllowedClientIds()
 	}
-	list, cnt := server.GetTunnelByAllowedClients(start, length, taskType, clientId, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"), allowed)
+	var owner *file.OwnerFilter
+	if s.IsAdmin() {
+		var err error
+		owner, err = s.getOwnerListFilter()
+		if err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
+	}
+	list, cnt := server.GetTunnelByOwnerFilter(start, length, taskType, clientId, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"), owner, allowed)
 	s.AjaxTable(list, cnt, cnt, nil)
 }
 
@@ -719,6 +737,7 @@ func (s *IndexController) Start() {
 
 func (s *IndexController) HostList() {
 	if s.Ctx.Request.Method == "GET" {
+		s.setOwnerFilterData()
 		s.Data["client_id"] = s.getEscapeString("client_id")
 		s.Data["menu"] = "host"
 		s.SetInfo("host list")
@@ -730,7 +749,16 @@ func (s *IndexController) HostList() {
 		if !s.IsAdmin() {
 			allowed = s.GetAllowedClientIds()
 		}
-		list, cnt := file.GetDb().GetHostByAllowedClients(start, length, clientId, s.getEscapeString("search"), allowed)
+		var owner *file.OwnerFilter
+		if s.IsAdmin() {
+			var err error
+			owner, err = s.getOwnerListFilter()
+			if err != nil {
+				s.AjaxErr(err.Error())
+				return
+			}
+		}
+		list, cnt := file.GetDb().GetHostByAllowedClientsFiltered(start, length, clientId, s.getEscapeString("search"), owner, allowed)
 		s.AjaxTable(newHostListRows(list), cnt, cnt, nil)
 	}
 }

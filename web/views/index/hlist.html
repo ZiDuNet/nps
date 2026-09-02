@@ -14,6 +14,18 @@
         <div id="toolbar" class="management-table-toolbar">
             <a href="{{.web_base_url}}/index/addhost?client_id={{.client_id}}" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i><span data-i18n-zh="新增规则" data-i18n-en="New rule">新增规则</span></a>
             <button type="button" onclick="batchDelete('{{.web_base_url}}/index/delhost');" class="btn btn-outline btn-danger"><i class="fa fa-trash" aria-hidden="true"></i><span data-i18n-zh="批量删除" data-i18n-en="Delete selected">批量删除</span></button>
+            {{if eq true .isAdmin}}
+            <label class="nps-table-filter" for="host-owner-filter">
+                <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
+                <select id="host-owner-filter" class="form-control nps-table-filter__control" data-nps-table-filter="user_id">
+                    <option value="" data-i18n-zh="全部用户" data-i18n-en="All users">全部用户</option>
+                    <option value="0" data-i18n-zh="未分配" data-i18n-en="Unassigned">未分配</option>
+                    {{range .users}}
+                    <option value="{{.Id}}">{{.Id}} · {{.UserName}}</option>
+                    {{end}}
+                </select>
+            </label>
+            {{end}}
         </div>
         <table id="table"></table>
     </div></section></div></div>

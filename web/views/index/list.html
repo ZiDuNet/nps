@@ -17,6 +17,18 @@
                         <a href="#" onclick="batchDelete('{{.web_base_url}}/index/del');return false;" class="btn btn-danger dim">
                             <i class="fa fa-fw fa-lg fa-trash"></i> <span langtag="word-batchdelete"></span>
                         </a>
+                        {{if eq true .isAdmin}}
+                        <label class="nps-table-filter" for="tunnel-owner-filter">
+                            <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
+                            <select id="tunnel-owner-filter" class="form-control nps-table-filter__control" data-nps-table-filter="user_id">
+                                <option value="" data-i18n-zh="全部用户" data-i18n-en="All users">全部用户</option>
+                                <option value="0" data-i18n-zh="未分配" data-i18n-en="Unassigned">未分配</option>
+                                {{range .users}}
+                                <option value="{{.Id}}">{{.Id}} · {{.UserName}}</option>
+                                {{end}}
+                            </select>
+                        </label>
+                        {{end}}
                     </div>
                     <table id="table"></table>
                 </div>

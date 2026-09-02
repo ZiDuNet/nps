@@ -437,13 +437,21 @@ func DelTask(id int) error {
 
 // get task list by page num
 func GetTunnel(start, length int, typeVal string, clientId int, search string, sortField string, order string) ([]*file.Tunnel, int) {
-	return GetTunnelByAllowedClients(start, length, typeVal, clientId, search, sortField, order, nil)
+	return GetTunnelByOwnerFilter(start, length, typeVal, clientId, search, sortField, order, nil, nil)
 }
 
 func GetTunnelByAllowedClients(start, length int, typeVal string, clientId int, search string, sortField string, order string, allowedClientIds map[int]struct{}) ([]*file.Tunnel, int) {
+	return GetTunnelByOwnerFilter(start, length, typeVal, clientId, search, sortField, order, nil, allowedClientIds)
+}
+
+// GetTunnelByOwnerFilter applies dashboard ownership before sorting, search,
+// counting, and pagination. A zero-valued owner filter intentionally matches
+// tunnels attached to unassigned clients.
+func GetTunnelByOwnerFilter(start, length int, typeVal string, clientId int, search string, sortField string, order string, owner *file.OwnerFilter, allowedClientIds map[int]struct{}) ([]*file.Tunnel, int) {
 	all_list := make([]*file.Tunnel, 0) //store all Tunnel
 	list := make([]*file.Tunnel, 0)
 	var cnt int
+	searchInt, searchIntErr := strconv.Atoi(strings.TrimSpace(search))
 	keys := file.GetMapKeys(&file.GetDb().JsonDb.Tasks, false, "", "")
 
 	//get all Tunnel and sort
@@ -459,6 +467,9 @@ func GetTunnelByAllowedClients(start, length int, typeVal string, clientId int, 
 			}
 			clientID, _ := clientSnapshot(client)
 			if !isClientAllowed(clientID, allowedClientIds) {
+				continue
+			}
+			if !tunnelOwnerMatches(client, owner) {
 				continue
 			}
 			v.RLock()
@@ -518,6 +529,9 @@ func GetTunnelByAllowedClients(start, length int, typeVal string, clientId int, 
 			if !isClientAllowed(clientID, allowedClientIds) {
 				continue
 			}
+			if !tunnelOwnerMatches(client, owner) {
+				continue
+			}
 			v.RLock()
 			mode, password, remark := v.Mode, v.Password, v.Remark
 			v.RUnlock()
@@ -527,7 +541,8 @@ func GetTunnelByAllowedClients(start, length int, typeVal string, clientId int, 
 			v.RLock()
 			taskID, port := v.Id, v.Port
 			v.RUnlock()
-			if search != "" && !(taskID == common.GetIntNoErrByStr(search) || port == common.GetIntNoErrByStr(search) || strings.Contains(password, search) || strings.Contains(remark, search) || strings.Contains(tunnelTargetString(v), search)) {
+			numericMatch := search != "" && searchIntErr == nil && (taskID == searchInt || port == searchInt)
+			if search != "" && !(numericMatch || strings.Contains(password, search) || strings.Contains(remark, search) || strings.Contains(tunnelTargetString(v), search)) {
 				continue
 			}
 			cnt++
@@ -549,9 +564,28 @@ func GetTunnelByAllowedClients(start, length int, typeVal string, clientId int, 
 	return list, cnt
 }
 
+func tunnelOwnerMatches(client *file.Client, owner *file.OwnerFilter) bool {
+	if owner == nil || owner.UserID == nil {
+		return true
+	}
+	if client == nil {
+		return false
+	}
+	userID := file.GetDb().GetClientOwnerID(client)
+	return userID == *owner.UserID
+}
+
 // get client list
 func GetClientList(start, length int, search, sort, order string, clientId int) (list []*file.Client, cnt int) {
-	list, cnt = file.GetDb().GetClientList(start, length, search, sort, order, clientId)
+	list, cnt = GetClientListByOwnerFilter(start, length, search, sort, order, clientId, nil, nil)
+	return
+}
+
+// GetClientListByOwnerFilter keeps the server-side client status refresh used
+// by the historical list endpoint while adding optional admin ownership
+// filtering.
+func GetClientListByOwnerFilter(start, length int, search, sort, order string, clientId int, owner *file.OwnerFilter, allowedClientIds map[int]struct{}) (list []*file.Client, cnt int) {
+	list, cnt = file.GetDb().GetClientListFiltered(start, length, search, sort, order, clientId, owner, allowedClientIds)
 	dealClientData()
 	return
 }
@@ -561,9 +595,11 @@ func GetClientList(start, length int, search, sort, order string, clientId int) 
 // clients while preserving the same sorting and search behavior as the admin
 // list.
 func GetClientListForAllowedIds(start, length int, search, sort, order string, clientId int, allowedClientIds map[int]struct{}) (list []*file.Client, cnt int) {
-	list, cnt = file.GetDb().GetClientListForAllowedIds(start, length, search, sort, order, clientId, allowedClientIds)
-	dealClientData()
-	return
+	return GetClientListByOwnerAndAllowedIds(start, length, search, sort, order, clientId, nil, allowedClientIds)
+}
+
+func GetClientListByOwnerAndAllowedIds(start, length int, search, sort, order string, clientId int, owner *file.OwnerFilter, allowedClientIds map[int]struct{}) (list []*file.Client, cnt int) {
+	return GetClientListByOwnerFilter(start, length, search, sort, order, clientId, owner, allowedClientIds)
 }
 
 func FilterClientsByUserId(clients []*file.Client, userId int) []*file.Client {

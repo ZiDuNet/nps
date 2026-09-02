@@ -131,7 +131,10 @@
         this.$bars = $('<div class="nps-table__bars"></div>');
         this.$columns = $('<div class="nps-table__columns"></div>');
         this.$search = $('<div class="nps-table__search"></div>');
-        this.$toolbar.append(this.$bars, this.$columns, this.$search);
+        this.$barActions = $('<div class="nps-table__bar-actions"></div>');
+        // Keep record actions/filters on the left and the utility controls
+        // (columns, refresh, search) in a separate right-aligned group.
+        this.$toolbar.append(this.$bars, this.$columns, this.$barActions, this.$search);
         this.$root.prepend(this.$toolbar);
 
         if (toolbarSelector) {
@@ -139,7 +142,7 @@
             if ($source.length) this.$bars.append($source.detach());
         }
         if (this.options.showRefresh) {
-            this.$bars.append('<button type="button" class="btn btn-outline nps-table__refresh" title="'
+            this.$barActions.append('<button type="button" class="btn btn-outline nps-table__refresh" title="'
                 + localText('刷新', 'Refresh') + '" aria-label="' + localText('刷新', 'Refresh') + '"><i class="fa fa-sync-alt" aria-hidden="true"></i></button>');
         }
         if (this.options.showColumns) this.renderColumnsMenu();
@@ -195,6 +198,9 @@
                 self.pageNumber = 1;
                 self.load();
             }, 220);
+        }).on('change.npsTable', '[data-nps-table-filter]', function () {
+            self.pageNumber = 1;
+            self.load();
         }).on('click.npsTable', 'th[data-sort-field]', function () {
             var field = $(this).attr('data-sort-field');
             if (self.sortField === field) self.sortOrder = self.sortOrder === 'asc' ? 'desc' : 'asc';
@@ -412,6 +418,23 @@
         };
         var query = typeof this.options.queryParams === 'function' ? this.options.queryParams(params) : params;
         if (query == null) query = params;
+        // Page-specific filters live in the toolbar so every list shares the
+        // same request contract. Merge them after queryParams to ensure a
+        // filter cannot be dropped by a custom table query builder.
+        var filterParams = {};
+        this.$root.find('[data-nps-table-filter]').each(function () {
+            var $field = $(this);
+            var name = $.trim($field.attr('data-nps-table-filter') || '');
+            if (!name) return;
+            var value;
+            if ($field.is(':checkbox')) {
+                value = $field.prop('checked') ? ($field.attr('data-filter-value') || '1') : '';
+            } else {
+                value = $field.val();
+            }
+            if (value !== undefined && value !== null && String(value) !== '') filterParams[name] = value;
+        });
+        query = $.extend({}, query, filterParams);
         this.loading = true;
         this.renderBody();
         $.ajax({

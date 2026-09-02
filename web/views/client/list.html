@@ -15,6 +15,16 @@
                         <a href="{{.web_base_url}}/client/add" class="btn btn-primary dim">
                             <i class="fa fa-fw fa-lg fa-plus"></i> <span langtag="word-add"></span>
                         </a>
+                        <label class="nps-table-filter" for="client-owner-filter">
+                            <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
+                            <select id="client-owner-filter" class="form-control nps-table-filter__control" data-nps-table-filter="user_id">
+                                <option value="" data-i18n-zh="全部用户" data-i18n-en="All users">全部用户</option>
+                                <option value="0" data-i18n-zh="未分配" data-i18n-en="Unassigned">未分配</option>
+                                {{range .users}}
+                                <option value="{{.Id}}">{{.Id}} · {{.UserName}}</option>
+                                {{end}}
+                            </select>
+                        </label>
                     </div>
                     {{end}}
                     <table id="table"></table>
