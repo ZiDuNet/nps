@@ -161,10 +161,13 @@ func (s *ClientController) List() {
 	}
 	start, length := s.GetAjaxParams()
 	clientId := 0
-	list, cnt := server.GetClientList(start, length, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"), clientId)
-	if !s.IsAdmin() {
-		list = server.FilterClientsByAllowedIds(list, s.GetAllowedClientIds())
-		cnt = len(list)
+	search, sort, order := s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order")
+	var list []*file.Client
+	var cnt int
+	if s.IsAdmin() {
+		list, cnt = server.GetClientList(start, length, search, sort, order, clientId)
+	} else {
+		list, cnt = server.GetClientListForAllowedIds(start, length, search, sort, order, clientId, s.GetAllowedClientIds())
 	}
 	cmd := make(map[string]interface{})
 	ip := s.Ctx.Request.Host

@@ -159,7 +159,9 @@
             </nav>
         </div>
 
-    {{.LayoutContent}}
+        <main id="nps-content" class="nps-content" tabindex="-1" aria-live="polite" aria-busy="false">
+            {{.LayoutContent}}
+        </main>
 
         <div class="footer fixed">
             <div class="float-right">
@@ -269,6 +271,202 @@
             document.documentElement.setAttribute('data-theme', saved);
             updateThemeIcon(saved);
             applyChartTheme(saved);
+        }
+    })();
+
+    // Keep the console shell mounted while menu navigation swaps only the page
+    // content. The server still renders a complete document, so this remains
+    // compatible with direct links, refreshes, and non-JavaScript clients.
+    (function () {
+        var content = document.getElementById('nps-content');
+        var menu = document.getElementById('side-menu');
+        if (!content || !menu || !window.fetch || !window.DOMParser) return;
+
+        var navigationBusy = false;
+
+        function normalizeURL(value) {
+            try {
+                var url = new URL(value, window.location.href);
+                return url.origin + url.pathname + url.search;
+            } catch (error) {
+                return '';
+            }
+        }
+
+        function normalizeMenuPath(value) {
+            try {
+                var url = new URL(value, window.location.href);
+                var path = url.pathname.replace(/\/+$/, '');
+                return path || '/';
+            } catch (error) {
+                return '';
+            }
+        }
+
+        function sameOriginURL(value) {
+            try {
+                var url = new URL(value, window.location.href);
+                return url.origin === window.location.origin && (url.protocol === 'http:' || url.protocol === 'https:') ? url : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function setActiveMenu(href) {
+            var target = normalizeMenuPath(href);
+            var items = menu.getElementsByTagName('li');
+            for (var i = 0; i < items.length; i++) {
+                var link = items[i].querySelector('a[href]');
+                if (!link) continue;
+                var active = normalizeMenuPath(link.href) === target;
+                items[i].classList.toggle('active', active);
+                if (active) link.setAttribute('aria-current', 'page');
+                else link.removeAttribute('aria-current');
+            }
+        }
+
+        function setLoading(loading) {
+            content.classList.toggle('is-loading', loading);
+            content.setAttribute('aria-busy', loading ? 'true' : 'false');
+        }
+
+        function disposePageRuntime() {
+            // Content-only navigation does not trigger the browser's native
+            // pagehide event. Replay it through jQuery so page modules can
+            // release timers and other transient resources before replacement.
+            if (window.$) {
+                try { $(window).triggerHandler('pagehide'); } catch (error) {}
+                $(content).find('table').each(function () {
+                    var table = $(this).data('nps.table');
+                    if (!table || typeof table.destroy !== 'function') return;
+                    // Ignore responses already in flight once the table is
+                    // detached; this keeps a slow list request from touching
+                    // a page that the operator has already left.
+                    if (typeof table._requestSerial === 'number') table._requestSerial++;
+                    try { table.destroy(); } catch (error) {}
+                });
+            }
+            // ClipboardJS installs a document-level listener. Destroy the
+            // previous page instance before its DOM is removed to avoid stacked
+            // listeners after repeated menu navigation.
+            if (window.clipboard && typeof window.clipboard.destroy === 'function') {
+                try { window.clipboard.destroy(); } catch (error) {}
+            }
+            if (window.charts && typeof window.charts === 'object') {
+                for (var key in window.charts) {
+                    if (!Object.prototype.hasOwnProperty.call(window.charts, key)) continue;
+                    var chart = window.charts[key];
+                    if (chart && typeof chart.dispose === 'function') {
+                        try { chart.dispose(); } catch (error) {}
+                    }
+                }
+                window.charts = {};
+            }
+            if (typeof window.npsPageCleanup === 'function') {
+                try { window.npsPageCleanup(); } catch (error) {}
+                window.npsPageCleanup = null;
+            }
+        }
+
+        function executeContentScripts(root) {
+            var scripts = Array.prototype.slice.call(root.querySelectorAll('script'));
+            scripts.forEach(function (oldScript) {
+                var script = document.createElement('script');
+                for (var i = 0; i < oldScript.attributes.length; i++) {
+                    var attribute = oldScript.attributes[i];
+                    script.setAttribute(attribute.name, attribute.value);
+                }
+                if (!oldScript.src) script.text = oldScript.textContent || '';
+                oldScript.parentNode.replaceChild(script, oldScript);
+            });
+        }
+
+        function focusNewPage() {
+            window.scrollTo(0, 0);
+            var heading = content.querySelector('h1, [data-page-title]');
+            if (!heading) return;
+            if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+            try { heading.focus({ preventScroll: true }); } catch (error) { heading.focus(); }
+        }
+
+        function refreshLanguage() {
+            if (window.$ && typeof $('body').setLang === 'function') {
+                try { $('body').setLang('#nps-content'); } catch (error) {}
+            }
+        }
+
+        function extractContent(html) {
+            var parsed = new DOMParser().parseFromString(html, 'text/html');
+            var next = parsed.querySelector('#nps-content');
+            return { document: parsed, content: next };
+        }
+
+        function navigate(target, pushHistory) {
+            if (navigationBusy) return;
+            var url = sameOriginURL(target);
+            if (!url) return;
+            var current = normalizeURL(window.location.href);
+            if (pushHistory && current === normalizeURL(url.href)) return;
+            navigationBusy = true;
+            setLoading(true);
+            setActiveMenu(url.href);
+
+            window.fetch(url.href, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' }
+            }).then(function (response) {
+                if (!response.ok) throw new Error('navigation request failed');
+                return response.text();
+            }).then(function (html) {
+                var extracted = extractContent(html);
+                // An expired session normally returns the login document, which
+                // has no console content container. Let the browser handle that
+                // redirect so the authentication page gets its own assets.
+                if (!extracted.content) {
+                    window.location.assign(url.href);
+                    return;
+                }
+                disposePageRuntime();
+                content.innerHTML = extracted.content.innerHTML;
+                executeContentScripts(content);
+                var active = extracted.document.querySelector('#side-menu > li.active > a[href]');
+                setActiveMenu(active ? active.href : url.href);
+                if (pushHistory) history.pushState({ npsConsole: true }, '', url.href);
+                refreshLanguage();
+                focusNewPage();
+            }).catch(function () {
+                // Keep the current page usable when the asynchronous request
+                // fails; a full navigation is the reliable fallback.
+                if (!pushHistory) window.location.reload();
+                else {
+                    setActiveMenu(current);
+                    if (typeof npsNotify === 'function') npsNotify('error', npsIsEnglish() ? 'Page load failed' : '页面加载失败');
+                }
+            }).finally(function () {
+                navigationBusy = false;
+                setLoading(false);
+            });
+        }
+
+        menu.addEventListener('click', function (event) {
+            if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            var anchor = event.target.closest ? event.target.closest('a[href]') : null;
+            if (!anchor || !menu.contains(anchor) || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+            var url = sameOriginURL(anchor.href);
+            if (!url || (url.hash && normalizeURL(url.href) === normalizeURL(window.location.href))) return;
+            event.preventDefault();
+            navigate(url.href, true);
+        });
+
+        window.addEventListener('popstate', function () {
+            navigate(window.location.href, false);
+        });
+
+        var initialState = history.state || {};
+        if (!initialState.npsConsole) {
+            initialState.npsConsole = true;
+            history.replaceState(initialState, '', window.location.href);
         }
     })();
 </script>

@@ -556,6 +556,16 @@ func GetClientList(start, length int, search, sort, order string, clientId int) 
 	return
 }
 
+// GetClientListForAllowedIds applies ownership filtering before pagination.
+// This keeps ordinary-user page counts and offsets independent of other users'
+// clients while preserving the same sorting and search behavior as the admin
+// list.
+func GetClientListForAllowedIds(start, length int, search, sort, order string, clientId int, allowedClientIds map[int]struct{}) (list []*file.Client, cnt int) {
+	list, cnt = file.GetDb().GetClientListForAllowedIds(start, length, search, sort, order, clientId, allowedClientIds)
+	dealClientData()
+	return
+}
+
 func FilterClientsByUserId(clients []*file.Client, userId int) []*file.Client {
 	list := make([]*file.Client, 0, len(clients))
 	for _, client := range clients {

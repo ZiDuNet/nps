@@ -30,7 +30,7 @@ func TestExtractWebFilesSyncsEmbeddedViews(t *testing.T) {
 	if !strings.Contains(got, `display: none !important;`) {
 		t.Fatal("synced template does not contain robust hide rule")
 	}
-	if !strings.Contains(got, `.tunnel-form.tunnel-type-file #local_path`) {
-		t.Fatal("synced template does not contain scoped tunnel field rule")
+	if !strings.Contains(got, `.tunnel-form .tunnel-field-hidden`) || !strings.Contains(got, `data-tunnel-field="local_path"`) {
+		t.Fatal("synced template does not contain the mode-aware tunnel field rule")
 	}
 }

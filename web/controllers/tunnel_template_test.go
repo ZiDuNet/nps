@@ -8,24 +8,142 @@ import (
 	"testing"
 )
 
+func TestTunnelSidebarMenu(t *testing.T) {
+	tests := []struct {
+		mode string
+		want string
+	}{
+		{mode: "tcp", want: "tcp"},
+		{mode: "udp", want: "udp"},
+		{mode: "httpProxy", want: "http"},
+		{mode: "socks5", want: "socks5"},
+		{mode: "secret", want: "secret"},
+		{mode: "p2p", want: "p2p"},
+		{mode: "file", want: "file"},
+		{mode: "", want: "tcp"},
+		{mode: "unknown", want: "tcp"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.mode, func(t *testing.T) {
+			if got := tunnelSidebarMenu(tt.mode); got != tt.want {
+				t.Fatalf("tunnelSidebarMenu(%q) = %q, want %q", tt.mode, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTunnelModeTemplateEntrypointsIncludeSharedViews(t *testing.T) {
+	tests := []struct {
+		mode   string
+		action string
+		parent string
+	}{
+		{mode: "tcp", action: "add", parent: "index/add.html"},
+		{mode: "tcp", action: "edit", parent: "index/edit.html"},
+		{mode: "tcp", action: "list", parent: "index/list.html"},
+		{mode: "udp", action: "add", parent: "index/add.html"},
+		{mode: "udp", action: "edit", parent: "index/edit.html"},
+		{mode: "udp", action: "list", parent: "index/list.html"},
+		{mode: "httpProxy", action: "add", parent: "index/add.html"},
+		{mode: "httpProxy", action: "edit", parent: "index/edit.html"},
+		{mode: "httpProxy", action: "list", parent: "index/list.html"},
+		{mode: "socks5", action: "add", parent: "index/add.html"},
+		{mode: "socks5", action: "edit", parent: "index/edit.html"},
+		{mode: "socks5", action: "list", parent: "index/list.html"},
+		{mode: "secret", action: "add", parent: "index/add.html"},
+		{mode: "secret", action: "edit", parent: "index/edit.html"},
+		{mode: "secret", action: "list", parent: "index/list.html"},
+		{mode: "p2p", action: "add", parent: "index/add.html"},
+		{mode: "p2p", action: "edit", parent: "index/edit.html"},
+		{mode: "p2p", action: "list", parent: "index/list.html"},
+		{mode: "file", action: "add", parent: "index/add.html"},
+		{mode: "file", action: "edit", parent: "index/edit.html"},
+		{mode: "file", action: "list", parent: "index/list.html"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.mode+"/"+tt.action, func(t *testing.T) {
+			path := "../views/index/tunnel/" + tt.mode + "/" + tt.action + ".html"
+			content := readTemplateForTest(t, path)
+			want := `{{template "` + tt.parent + `" .}}`
+			if strings.TrimSpace(content) != want {
+				t.Fatalf("%s must include shared view %s, got %q", path, tt.parent, strings.TrimSpace(content))
+			}
+		})
+	}
+}
+
+func TestTunnelListIdentificationKeyScopedToCredentialModes(t *testing.T) {
+	content := readTemplateForTest(t, "../views/index/list.html")
+	if !strings.Contains(content, "row.Mode === 'secret' || row.Mode === 'p2p'") {
+		t.Fatal("tunnel detail should gate identification key on secret/p2p modes")
+	}
+	if strings.Contains(content, `+ '<div><b langtag="word-identificationkey"></b><span>' + tunnelText(row.Password || '-') + '</span></div>'`) {
+		t.Fatal("tunnel detail must not render identification key unconditionally")
+	}
+}
+
+func TestTunnelModeFieldStylesAvoidFirstPaintFlash(t *testing.T) {
+	content := readTemplateForTest(t, "../static/css/zui-console.css")
+	for _, marker := range []string{
+		`.tunnel-form.tunnel-type-tcp [data-tunnel-field="password"]`,
+		`.tunnel-form.tunnel-type-httpProxy [data-tunnel-field="target"]`,
+		`.tunnel-form.tunnel-type-secret [data-tunnel-field="port"]`,
+		`.tunnel-form.tunnel-type-file [data-tunnel-field="target"]`,
+		`.tunnel-form.tunnel-type-udp [data-tunnel-section="security"]`,
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("mode-aware CSS misses first-paint rule %s", marker)
+		}
+	}
+}
+
+func TestSidebarTemplateContainsAddEditMenuBindings(t *testing.T) {
+	content := readTemplateForTest(t, "../views/public/layout.html")
+	for _, menu := range []string{"index", "client", "user", "host", "tcp", "udp", "http", "socks5", "secret", "p2p", "file", "global", "help"} {
+		marker := `{{if eq "` + menu + `" .menu}}active{{end}}`
+		if !strings.Contains(content, marker) {
+			t.Fatalf("sidebar template misses active binding for menu %q", menu)
+		}
+	}
+}
+
+func TestLayoutSupportsContentOnlyNavigation(t *testing.T) {
+	content := readTemplateForTest(t, "../views/public/layout.html")
+	for _, marker := range []string{
+		`<main id="nps-content"`,
+		`menu.addEventListener('click'`,
+		`window.fetch(url.href`,
+		`history.pushState({ npsConsole: true }`,
+		`window.addEventListener('popstate'`,
+		`X-Requested-With`,
+		`content.classList.toggle('is-loading'`,
+		`$(window).triggerHandler('pagehide')`,
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("layout misses content-only navigation marker: %s", marker)
+		}
+	}
+}
+
 func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 	addExpected := map[string]string{
-		"tcp":       `tcp: ["port", "target", "local_proxy", "client_id", "server_ip", "proto_version"]`,
-		"udp":       `udp: ["port", "target", "local_proxy", "client_id", "server_ip"]`,
-		"socks5":    `socks5: ["port", "client_id", "server_ip"]`,
-		"httpProxy": `httpProxy: ["port", "client_id", "server_ip"]`,
-		"secret":    `secret: ["target", "password", "client_id", "server_ip"]`,
-		"p2p":       `p2p: ["target", "password", "client_id", "server_ip"]`,
-		"file":      `file: ["port", "local_path", "strip_pre", "client_id", "server_ip"]`,
+		"tcp":       `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "proto_version"]`,
+		"udp":       `udp: ["client_id", "server_ip", "port", "target", "local_proxy"]`,
+		"socks5":    `socks5: ["client_id", "server_ip", "port"]`,
+		"httpProxy": `httpProxy: ["client_id", "server_ip", "port"]`,
+		"secret":    `secret: ["client_id", "server_ip", "target", "password"]`,
+		"p2p":       `p2p: ["client_id", "server_ip", "target", "password"]`,
+		"file":      `file: ["client_id", "server_ip", "port", "local_path", "strip_pre"]`,
 	}
 	editExpected := map[string]string{
-		"tcp":       `tcp: ["client_id", "port", "target", "local_proxy", "proto_version"]`,
-		"udp":       `udp: ["client_id", "port", "target", "local_proxy"]`,
-		"socks5":    `socks5: ["client_id", "port"]`,
-		"httpProxy": `httpProxy: ["client_id", "port"]`,
-		"secret":    `secret: ["client_id", "target", "password"]`,
-		"p2p":       `p2p: ["client_id", "target", "password"]`,
-		"file":      `file: ["client_id", "port", "local_path", "strip_pre"]`,
+		"tcp":       `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "proto_version"]`,
+		"udp":       `udp: ["client_id", "server_ip", "port", "target", "local_proxy"]`,
+		"socks5":    `socks5: ["client_id", "server_ip", "port"]`,
+		"httpProxy": `httpProxy: ["client_id", "server_ip", "port"]`,
+		"secret":    `secret: ["client_id", "server_ip", "target", "password"]`,
+		"p2p":       `p2p: ["client_id", "server_ip", "target", "password"]`,
+		"file":      `file: ["client_id", "server_ip", "port", "local_path", "strip_pre"]`,
 	}
 
 	tests := []struct {
@@ -36,18 +154,10 @@ func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 	}{
 		{name: "add", path: "../views/index/add.html", expected: addExpected},
 		{
-			name:     "edit",
-			path:     "../views/index/edit.html",
-			expected: editExpected,
-			forbidden: []string{
-				addExpected["tcp"],
-				addExpected["udp"],
-				addExpected["socks5"],
-				addExpected["httpProxy"],
-				addExpected["secret"],
-				addExpected["p2p"],
-				addExpected["file"],
-			},
+			name:      "edit",
+			path:      "../views/index/edit.html",
+			expected:  editExpected,
+			forbidden: nil,
 		},
 	}
 
@@ -166,6 +276,8 @@ func TestHostFormTemplatesRenderPlatformDomainFields(t *testing.T) {
 			for _, marker := range []string{
 				"platform_domain_id",
 				"platform_prefix",
+				`<input id="platform-prefix"`,
+				`<select id="platform-domain-id"`,
 				"data-certificate-configured",
 				"platformhostavailable",
 				"custom-domain-server-host",
@@ -191,43 +303,29 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 		forbiddenRules []string
 	}{
 		{
-			name:      "add",
-			path:      "../views/index/add.html",
-			typeClass: `class="form-page-grid tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}"`,
-			expectedRules: []string{
-				`.tunnel-form.tunnel-type-tcp #server_ip`,
-				`.tunnel-form.tunnel-type-file #server_ip`,
-			},
+			name:          "add",
+			path:          "../views/index/add.html",
+			typeClass:     `class="form-page-grid tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}"`,
+			expectedRules: nil,
 		},
 		{
-			name:      "edit",
-			path:      "../views/index/edit.html",
-			typeClass: `class="form-page-grid tunnel-form tunnel-type-{{.t.Mode}}"`,
-			forbiddenRules: []string{
-				`.tunnel-form.tunnel-type-tcp #server_ip`,
-				`.tunnel-form.tunnel-type-udp #server_ip`,
-				`.tunnel-form.tunnel-type-httpProxy #server_ip`,
-				`.tunnel-form.tunnel-type-socks5 #server_ip`,
-				`.tunnel-form.tunnel-type-secret #server_ip`,
-				`.tunnel-form.tunnel-type-p2p #server_ip`,
-				`.tunnel-form.tunnel-type-file #server_ip`,
-			},
+			name:           "edit",
+			path:           "../views/index/edit.html",
+			typeClass:      `class="form-page-grid tunnel-form tunnel-type-{{.t.Mode}}"`,
+			forbiddenRules: nil,
 		},
 	}
 
 	requiredCSS := []string{
-		`.tunnel-form .form-group[id] {`,
-		`display: none !important;`,
-		`.tunnel-form #remark_group`,
-		`.tunnel-form.tunnel-type-tcp #port`,
-		`.tunnel-form.tunnel-type-udp #port`,
-		`.tunnel-form.tunnel-type-httpProxy #port`,
-		`.tunnel-form.tunnel-type-socks5 #client_id`,
-		`.tunnel-form.tunnel-type-secret #password`,
-		`.tunnel-form.tunnel-type-p2p #password`,
-		`.tunnel-form.tunnel-type-file #local_path`,
-		`.tunnel-form.tunnel-type-file #strip_pre`,
-		`display: var(--tunnel-field-display, flex) !important;`,
+		`.tunnel-form .tunnel-field-hidden`,
+		`.tunnel-form .tunnel-section-hidden`,
+		`data-tunnel-field`,
+		`data-tunnel-section`,
+		`data-tunnel-case`,
+		`tunnelSectionFields`,
+		`setTunnelFieldVisibility(fieldID, visible)`,
+		`.prop("disabled", !visible)`,
+		`fields.indexOf(fieldID)`,
 		`tunnelTypeClasses`,
 		`applyTypeClass(type);`,
 	}
@@ -254,7 +352,7 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 				}
 			}
 			if strings.Contains(content, `.css("display"`) {
-				t.Fatalf("%s template directly mutates display instead of type class", tt.name)
+				t.Fatalf("%s template directly mutates display instead of state classes", tt.name)
 			}
 		})
 	}
@@ -325,6 +423,82 @@ func TestTunnelFormTemplatesExecuteWithInitialTypeClass(t *testing.T) {
 				t.Fatalf("rendered template misses %s", tt.wantClass)
 			}
 		})
+	}
+}
+
+func TestDedicatedTunnelFormsRenderOnlyModeFields(t *testing.T) {
+	type modeCase struct {
+		mode      string
+		present   []string
+		forbidden []string
+	}
+	cases := []modeCase{
+		{mode: "tcp", present: []string{"tunnel-port", "tunnel-target", "ProtoVersion"}, forbidden: []string{"tunnel-local-path", "tunnel-password"}},
+		{mode: "udp", present: []string{"tunnel-port", "tunnel-target"}, forbidden: []string{"tunnel-local-path", "tunnel-password", "ProtoVersion"}},
+		{mode: "httpProxy", present: []string{"tunnel-port"}, forbidden: []string{"tunnel-target", "tunnel-password", "ProtoVersion"}},
+		{mode: "socks5", present: []string{"tunnel-port"}, forbidden: []string{"tunnel-target", "tunnel-password", "ProtoVersion"}},
+		{mode: "secret", present: []string{"tunnel-target", "tunnel-password"}, forbidden: []string{"tunnel-port", "tunnel-local-path", "ProtoVersion"}},
+		{mode: "p2p", present: []string{"tunnel-target", "tunnel-password"}, forbidden: []string{"tunnel-port", "tunnel-local-path", "ProtoVersion"}},
+		{mode: "file", present: []string{"tunnel-port", "tunnel-local-path", "tunnel-strip-pre"}, forbidden: []string{"tunnel-target", "tunnel-password", "ProtoVersion"}},
+	}
+	for _, tc := range cases {
+		t.Run("add/"+tc.mode, func(t *testing.T) {
+			tpl := template.Must(template.ParseFiles("../views/index/add.html"))
+			var rendered bytes.Buffer
+			data := map[string]interface{}{
+				"type":              tc.mode,
+				"dedicated":         true,
+				"allow_multi_ip":    true,
+				"allow_local_proxy": true,
+				"web_base_url":      "",
+			}
+			if err := tpl.Execute(&rendered, data); err != nil {
+				t.Fatalf("execute dedicated add template: %v", err)
+			}
+			assertTemplateFieldPresence(t, rendered.String(), tc.present, tc.forbidden)
+		})
+
+		t.Run("edit/"+tc.mode, func(t *testing.T) {
+			tpl := template.Must(template.ParseFiles("../views/index/edit.html"))
+			var rendered bytes.Buffer
+			data := map[string]interface{}{
+				"dedicated":         true,
+				"allow_multi_ip":    true,
+				"allow_local_proxy": true,
+				"web_base_url":      "",
+				"t": map[string]interface{}{
+					"Mode":         tc.mode,
+					"Id":           1,
+					"Remark":       "test",
+					"ServerIp":     "0.0.0.0",
+					"Port":         8080,
+					"Password":     "secret",
+					"LocalPath":    "/tmp",
+					"StripPre":     "",
+					"ProtoVersion": "",
+					"Client":       map[string]interface{}{"Id": 1, "Remark": "client"},
+					"Target":       map[string]interface{}{"TargetStr": "127.0.0.1:8080", "LocalProxy": false},
+				},
+			}
+			if err := tpl.Execute(&rendered, data); err != nil {
+				t.Fatalf("execute dedicated edit template: %v", err)
+			}
+			assertTemplateFieldPresence(t, rendered.String(), tc.present, tc.forbidden)
+		})
+	}
+}
+
+func assertTemplateFieldPresence(t *testing.T, content string, present, forbidden []string) {
+	t.Helper()
+	for _, field := range present {
+		if !strings.Contains(content, `id="`+field+`"`) {
+			t.Errorf("rendered template misses expected field %q", field)
+		}
+	}
+	for _, field := range forbidden {
+		if strings.Contains(content, `id="`+field+`"`) {
+			t.Errorf("rendered template contains forbidden field %q", field)
+		}
 	}
 }
 

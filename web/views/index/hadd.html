@@ -16,7 +16,7 @@
         <div class="form-page-column">
             <section class="panel ibox float-e-margins form-workflow-card zui-panel">
                 <div class="ibox-content form-workflow-content">
-                    <form id="host-form" class="form form-horz form-workflow-form zui-form" data-form-workflow="host-create">
+                    <form id="host-form" class="form form-horz form-workflow-form zui-form" data-form-workflow="host-create" autocomplete="off">
                         <div class="form-section-title"><i class="fa fa-sitemap" aria-hidden="true"></i><span data-i18n-zh="归属与域名" data-i18n-en="Ownership and domain">归属与域名</span></div>
 
                         <div class="form-group">
@@ -51,11 +51,11 @@
                             <label class="form-label font-bold" data-i18n-zh="平台子域名" data-i18n-en="Platform subdomain">平台子域名</label>
                             <div class="form-group-wrapper">
                                 <div class="host-platform-domain-fields">
+                                    <input id="platform-prefix" class="form-control" type="text" name="platform_prefix" value="{{.platformDefaultPrefix}}" autocomplete="off" disabled aria-describedby="platform-host-status">
                                     <select id="platform-domain-id" class="form-control" name="platform_domain_id" disabled>
                                         <option value="" data-i18n-zh="选择泛域名" data-i18n-en="Choose a wildcard">选择泛域名</option>
                                         {{range .platformDomains}}<option value="{{.ID}}" data-wildcard="{{.Wildcard}}" data-certificate-configured="{{if .CertificateConfigured}}true{{else}}false{{end}}">{{.Wildcard}}</option>{{end}}
                                     </select>
-                                    <input id="platform-prefix" class="form-control" type="text" name="platform_prefix" value="{{.platformDefaultPrefix}}" autocomplete="off" disabled aria-describedby="platform-host-status">
                                 </div>
                                 <div id="platform-host-preview" class="host-domain-preview" aria-live="polite"></div>
                                 <span id="platform-host-status" class="help-block" data-i18n-zh="前缀可修改；保存时服务端会再次原子校验，不允许重复。" data-i18n-en="The prefix is editable. The server checks uniqueness again atomically on save.">前缀可修改；保存时服务端会再次原子校验，不允许重复。</span>
@@ -156,8 +156,14 @@ $(function () {
         var platform = $mode.filter(':checked').val() === 'platform';
         var configured = String($platformID.find('option:selected').attr('data-certificate-configured') || 'false') === 'true';
         var restricted = platform && !configured;
-        $scheme.find('option[value="all"], option[value="https"]').prop('disabled', restricted);
-        if (restricted && $scheme.val() !== 'http') $scheme.val('http');
+        // Reset before applying the current platform selection. This avoids
+        // a disabled option remaining disabled after switching back to a
+        // wildcard that has a certificate.
+        $scheme.find('option').prop('disabled', false);
+        if (restricted) {
+            $scheme.find('option[value="all"], option[value="https"]').prop('disabled', true);
+            if ($scheme.val() !== 'http') $scheme.val('http');
+        }
     }
     function updateCertificateFields() {
         updatePlatformCertificateAvailability();
@@ -172,7 +178,7 @@ $(function () {
         });
     }
     form.on('submit', function (event) { event.preventDefault(); submitform('add', '{{.web_base_url}}/index/addhost', form.serializeArray()); });
-    $mode.on('change', updateDomainMode); $scheme.on('change', updateCertificateFields); $platformID.on('change', checkPlatformAvailability); $platformPrefix.on('input blur', checkPlatformAvailability);
+    $mode.on('change', updateDomainMode); $scheme.on('change', updateCertificateFields); $platformID.on('change', function () { updateCertificateFields(); checkPlatformAvailability(); }); $platformPrefix.on('input blur', checkPlatformAvailability);
     form.find('.toggle-switch input[type="checkbox"]').on('change', function () { npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked); });
     updateDomainMode(); updateCertificateFields(); getClientList();
 });

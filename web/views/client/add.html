@@ -16,7 +16,7 @@
     <div class="form-page-column">
         <section class="panel ibox float-e-margins form-workflow-card zui-panel">
             <div class="ibox-content form-workflow-content">
-                <form class="form form-horz form-workflow-form zui-form" data-form-workflow="client-create">
+                <form class="form form-horz form-workflow-form zui-form" data-form-workflow="client-create" autocomplete="off">
                     <div class="form-section-title"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
                     <div class="form-group" id="remark">
                         <label class="form-label font-bold" for="client-remark" langtag="word-remark"></label>
@@ -83,7 +83,7 @@
                     <div class="form-group" id="u">
                         <label class="form-label font-bold" for="client-basic-username" langtag="word-basicusername"></label>
                         <div class="form-group-wrapper">
-                            <input id="client-basic-username" class="form-control" type="text" name="u" placeholder="" langtag="info-unrestricted">
+                            <input id="client-basic-username" class="form-control" type="text" name="u" autocomplete="off" placeholder="" langtag="info-unrestricted">
                             <span class="help-block m-b-none" langtag="info-onlyproxy"></span>
                         </div>
                     </div>
@@ -126,7 +126,7 @@
                             <div class="legacy-client-login-grid">
                                 <div class="legacy-client-login-field" id="web_username">
                                     <label class="form-label font-bold" for="client-web-username" data-i18n-zh="旧版客户端用户名" data-i18n-en="Legacy client username">旧版客户端用户名</label>
-                                    <input id="client-web-username" class="form-control" type="text" name="web_username" autocomplete="username" placeholder="可留空" data-placeholder-zh="可留空" data-placeholder-en="Optional">
+                                    <input id="client-web-username" class="form-control" type="text" name="web_username" autocomplete="off" placeholder="可留空" data-placeholder-zh="可留空" data-placeholder-en="Optional">
                                 </div>
                                 <div class="legacy-client-login-field" id="web_password">
                                     <label class="form-label font-bold" for="client-web-password" data-i18n-zh="旧版客户端密码" data-i18n-en="Legacy client password">旧版客户端密码</label>

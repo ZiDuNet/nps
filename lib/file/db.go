@@ -65,6 +65,17 @@ func GetMapKeys(m *sync.Map, isSort bool, sortKey, order string) (keys []int) {
 }
 
 func (s *DbUtils) GetClientList(start, length int, search, sort, order string, clientId int) ([]*Client, int) {
+	return s.getClientList(start, length, search, sort, order, clientId, nil)
+}
+
+// GetClientListForAllowedIds returns the visible clients owned by the supplied
+// IDs. Filtering is applied before counting and pagination so a user's page
+// boundaries are independent of other users' clients.
+func (s *DbUtils) GetClientListForAllowedIds(start, length int, search, sort, order string, clientId int, allowedClientIds map[int]struct{}) ([]*Client, int) {
+	return s.getClientList(start, length, search, sort, order, clientId, allowedClientIds)
+}
+
+func (s *DbUtils) getClientList(start, length int, search, sort, order string, clientId int, allowedClientIds map[int]struct{}) ([]*Client, int) {
 	list := make([]*Client, 0)
 	var cnt int
 	keys := GetMapKeys(&s.JsonDb.Clients, true, sort, order)
@@ -80,6 +91,11 @@ func (s *DbUtils) GetClientList(start, length int, search, sort, order string, c
 			v.RUnlock()
 			if noDisplay {
 				continue
+			}
+			if allowedClientIds != nil {
+				if _, allowed := allowedClientIds[candidateID]; !allowed {
+					continue
+				}
 			}
 			if clientId != 0 && clientId != candidateID {
 				continue

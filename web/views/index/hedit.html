@@ -11,7 +11,7 @@
     <div class="form-page-grid">
         <div class="form-page-column">
             <section class="panel ibox float-e-margins form-workflow-card zui-panel"><div class="ibox-content form-workflow-content">
-                <form id="host-form" class="form form-horz form-workflow-form zui-form" data-form-workflow="host-edit">
+                <form id="host-form" class="form form-horz form-workflow-form zui-form" data-form-workflow="host-edit" autocomplete="off">
                     <input type="hidden" name="id" value="{{.h.Id}}">
                     <div class="form-section-title"><i class="fa fa-sitemap" aria-hidden="true"></i><span data-i18n-zh="归属与域名" data-i18n-en="Ownership and domain">归属与域名</span></div>
 
@@ -27,7 +27,7 @@
                     </div>
 
                     <div id="custom-domain-group" class="form-group"><label class="form-label font-bold" for="custom-host" data-i18n-zh="完整域名" data-i18n-en="Full domain">完整域名</label><div class="form-group-wrapper"><input id="custom-host" class="form-control" type="text" name="host" value="{{.h.Host}}" autocomplete="off" required placeholder="app.example.com"><span class="help-block"><span data-i18n-zh="请将 A/AAAA 或 CNAME 解析到当前面板服务器：" data-i18n-en="Point an A/AAAA or CNAME record to this panel server: ">请将 A/AAAA 或 CNAME 解析到当前面板服务器：</span><code class="custom-domain-server-host">-</code><span data-i18n-zh="。DNS 只解析主机名，不包含面板端口。" data-i18n-en=". DNS uses the hostname only, not the panel port.">。DNS 只解析主机名，不包含面板端口。</span></span></div></div>
-                    <div id="platform-domain-group" class="form-group form-group--wide"{{if not .hostIsPlatform}} style="display:none"{{end}}><label class="form-label font-bold" data-i18n-zh="平台子域名" data-i18n-en="Platform subdomain">平台子域名</label><div class="form-group-wrapper"><div class="host-platform-domain-fields"><select id="platform-domain-id" class="form-control" name="platform_domain_id"><option value="" data-i18n-zh="选择泛域名" data-i18n-en="Choose a wildcard">选择泛域名</option>{{range .platformDomains}}<option value="{{.ID}}" data-wildcard="{{.Wildcard}}" data-certificate-configured="{{if .CertificateConfigured}}true{{else}}false{{end}}"{{if eq .ID $.h.PlatformDomainID}} selected{{end}}>{{.Wildcard}}</option>{{end}}</select><input id="platform-prefix" class="form-control" type="text" name="platform_prefix" value="{{.platformPrefix}}" autocomplete="off" aria-describedby="platform-host-status"></div><div id="platform-host-preview" class="host-domain-preview" aria-live="polite"></div><span id="platform-host-status" class="help-block" data-i18n-zh="前缀可修改；保存时服务端会再次原子校验，不允许重复。" data-i18n-en="The prefix is editable. The server checks uniqueness again atomically on save.">前缀可修改；保存时服务端会再次原子校验，不允许重复。</span></div></div>
+                    <div id="platform-domain-group" class="form-group form-group--wide"{{if not .hostIsPlatform}} style="display:none"{{end}}><label class="form-label font-bold" data-i18n-zh="平台子域名" data-i18n-en="Platform subdomain">平台子域名</label><div class="form-group-wrapper"><div class="host-platform-domain-fields"><input id="platform-prefix" class="form-control" type="text" name="platform_prefix" value="{{.platformPrefix}}" autocomplete="off" aria-describedby="platform-host-status"><select id="platform-domain-id" class="form-control" name="platform_domain_id"><option value="" data-i18n-zh="选择泛域名" data-i18n-en="Choose a wildcard">选择泛域名</option>{{range .platformDomains}}<option value="{{.ID}}" data-wildcard="{{.Wildcard}}" data-certificate-configured="{{if .CertificateConfigured}}true{{else}}false{{end}}"{{if eq .ID $.h.PlatformDomainID}} selected{{end}}>{{.Wildcard}}</option>{{end}}</select></div><div id="platform-host-preview" class="host-domain-preview" aria-live="polite"></div><span id="platform-host-status" class="help-block" data-i18n-zh="前缀可修改；保存时服务端会再次原子校验，不允许重复。" data-i18n-en="The prefix is editable. The server checks uniqueness again atomically on save.">前缀可修改；保存时服务端会再次原子校验，不允许重复。</span></div></div>
 
                     <div class="form-section-title"><i class="fa fa-route" aria-hidden="true"></i><span data-i18n-zh="访问与路由" data-i18n-en="Access and routing">访问与路由</span></div>
                     <div class="form-group"><label class="form-label font-bold" for="host-scheme" data-i18n-zh="协议" data-i18n-en="Protocol">协议</label><div class="form-group-wrapper"><select id="host-scheme" class="form-control" name="scheme"><option value="all"{{if eq .h.Scheme "all"}} selected{{end}} data-i18n-zh="HTTP + HTTPS" data-i18n-en="HTTP + HTTPS">HTTP + HTTPS</option><option value="http"{{if eq .h.Scheme "http"}} selected{{end}}>HTTP</option><option value="https"{{if eq .h.Scheme "https"}} selected{{end}}>HTTPS</option></select></div></div>
@@ -67,13 +67,18 @@ $(function () {
                         var platform = $mode.filter(':checked').val() === 'platform';
                         var configured = String($platformID.find('option:selected').attr('data-certificate-configured') || 'false') === 'true';
                         var restricted = platform && !configured;
-                        $scheme.find('option[value="all"], option[value="https"]').prop('disabled', restricted);
-                        if (restricted && $scheme.val() !== 'http') $scheme.val('http');
+                        // Always clear the previous selection's restrictions
+                        // before applying the current platform certificate state.
+                        $scheme.find('option').prop('disabled', false);
+                        if (restricted) {
+                            $scheme.find('option[value="all"], option[value="https"]').prop('disabled', true);
+                            if ($scheme.val() !== 'http') $scheme.val('http');
+                        }
                     }
                     function updateCertificateFields() { updatePlatformCertificateAvailability(); var needsCertificate = $scheme.val() !== 'http', platform = $mode.filter(':checked').val() === 'platform'; $('#auto-https-group').toggle(needsCertificate); $('#platform-certificate-note').toggle(platform); $('#custom-certificate-fields').toggle(needsCertificate && !platform).find('textarea').prop('disabled', !needsCertificate || platform); }
     function updateDomainMode() { var platform = $mode.filter(':checked').val() === 'platform'; setChoiceState(); $customGroup.toggle(!platform).find('input').prop('disabled', platform).prop('required', !platform); $platformGroup.toggle(platform); $platformID.prop('disabled', !platform); $platformPrefix.prop('disabled', !platform).prop('required', platform); updateCertificateFields(); checkPlatformAvailability(); }
     form.on('submit', function (event) { event.preventDefault(); submitform('edit', '{{.web_base_url}}/index/edithost', form.serializeArray()); });
-    $mode.on('change', updateDomainMode); $scheme.on('change', updateCertificateFields); $platformID.on('change', checkPlatformAvailability); $platformPrefix.on('input blur', checkPlatformAvailability); form.find('.toggle-switch input[type="checkbox"]').on('change', function () { npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked); });
+    $mode.on('change', updateDomainMode); $scheme.on('change', updateCertificateFields); $platformID.on('change', function () { updateCertificateFields(); checkPlatformAvailability(); }); $platformPrefix.on('input blur', checkPlatformAvailability); form.find('.toggle-switch input[type="checkbox"]').on('change', function () { npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked); });
     updateDomainMode(); updateCertificateFields();
 });
 </script>

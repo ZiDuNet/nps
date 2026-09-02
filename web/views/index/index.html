@@ -888,21 +888,37 @@
                 .always(function () { $button.removeClass('is-refreshing').prop('disabled', false); });
         }
 
+        var dashboardRefreshTimer = null;
+        var dashboardResizeHandler = null;
+        var dashboardPageCleanup = function () {
+            if (dashboardRefreshTimer) {
+                window.clearInterval(dashboardRefreshTimer);
+                dashboardRefreshTimer = null;
+            }
+            $('#dashboard-refresh').off('.dashboard');
+            $(window).off('pagehide.dashboard');
+            if (dashboardResizeHandler) {
+                window.removeEventListener('resize', dashboardResizeHandler);
+                dashboardResizeHandler = null;
+            }
+        };
+        window.npsPageCleanup = dashboardPageCleanup;
+
         $(function () {
             if (!$('#dashboard-runtime-panel').length && !$('#dashboard-refresh').length) return;
             dashboardRefresh();
-            var dashboardRefreshTimer = window.setInterval(function () {
+            dashboardRefreshTimer = window.setInterval(function () {
                 if (!document.hidden) dashboardRefresh();
             }, 15000);
-            $('#dashboard-refresh').on('click', dashboardRefresh);
-            $(window).on('pagehide', function () { window.clearInterval(dashboardRefreshTimer); });
+            $('#dashboard-refresh').off('click.dashboard').on('click.dashboard', dashboardRefresh);
+            $(window).off('pagehide.dashboard').on('pagehide.dashboard', dashboardPageCleanup);
+            dashboardResizeHandler = function () {
+                for (var key in charts) {
+                    if (charts[key] && typeof charts[key].resize === 'function') {
+                        charts[key].resize();
+                    }
+                }
+            };
+            window.addEventListener('resize', dashboardResizeHandler);
         });
-
-		window.addEventListener('resize', () => {
-	        for(var key in charts){
-	            if (charts[key] && typeof charts[key].resize === 'function') {
-	                charts[key].resize();
-	            }
-	        }
-	    });
 </script>

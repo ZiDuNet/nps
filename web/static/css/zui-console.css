@@ -248,6 +248,35 @@ body.zui-app.mini-navbar .nav-group-title { display: none; }
 
 /* ZUI panels and page headers. */
 body.zui-app .wrapper-content { width: 100%; max-width: 1760px; margin: 0 auto; padding: 0 !important; }
+/* The shell stays mounted during menu navigation; keep the active content
+   readable while its same-origin document is fetched and rehydrated. */
+body.zui-app #nps-content {
+    position: relative;
+    min-height: calc(100vh - 132px);
+    outline: 0;
+    transition: opacity .14s ease;
+}
+body.zui-app #nps-content.is-loading {
+    pointer-events: none;
+    opacity: .72;
+}
+body.zui-app #nps-content.is-loading::before {
+    position: absolute;
+    top: -14px;
+    left: 0;
+    z-index: 1;
+    width: 34%;
+    height: 2px;
+    content: "";
+    background: var(--nps-primary);
+    border-radius: 2px;
+    animation: nps-content-progress 1.05s ease-in-out infinite;
+}
+@keyframes nps-content-progress {
+    0% { opacity: .35; transform: translateX(0) scaleX(.55); transform-origin: left center; }
+    50% { opacity: 1; transform: translateX(165%) scaleX(1); transform-origin: left center; }
+    100% { opacity: .35; transform: translateX(300%) scaleX(.55); transform-origin: right center; }
+}
 body.zui-app .dashboard-page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin: 1px 0 23px; }
 body.zui-app .dashboard-page-kicker { margin-bottom: 5px; color: var(--nps-primary); font-size: 10px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 body.zui-app .dashboard-page-header h1 { margin: 0; color: var(--nps-ink); font-size: 25px; font-weight: 750; line-height: 1.2; }
@@ -2537,4 +2566,153 @@ body.zui-app .tunnel-detail-summary .badge {
 }
 @media (max-width: 600px) {
     body.zui-app .tunnel-detail-summary { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Platform subdomains read as one value: the editable prefix sits directly
+   beside the administrator-managed wildcard selector. Keeping the controls
+   joined makes the resulting host obvious without adding another card. */
+body.zui-app .form-page .host-platform-domain-fields {
+    display: flex !important;
+    align-items: stretch;
+    gap: 0 !important;
+}
+body.zui-app .form-page .host-platform-domain-fields #platform-prefix {
+    flex: 1 1 auto;
+    width: 1% !important;
+    min-width: 0 !important;
+    border-radius: 6px 0 0 6px !important;
+    border-right: 0 !important;
+}
+body.zui-app .form-page .host-platform-domain-fields #platform-domain-id {
+    flex: 0 0 min(240px, 42%);
+    width: auto !important;
+    min-width: 150px !important;
+    border-radius: 0 6px 6px 0 !important;
+}
+body.zui-app .form-page .host-platform-domain-fields #platform-prefix:focus {
+    position: relative;
+    z-index: 1;
+    border-right: 1px solid var(--nps-primary) !important;
+}
+
+/* Mode guidance sits above the form so it reads as context, not as a field
+   value. It uses ZUI's alert treatment and stays readable on narrow screens. */
+body.zui-app .form-page .tunnel-usecase-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    max-width: none;
+    margin: 0 0 18px;
+    padding: 14px 16px;
+    color: var(--nps-info);
+    background: var(--nps-info-soft) !important;
+    border: 1px solid var(--nps-line) !important;
+    border-left: 3px solid var(--nps-info) !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+}
+body.zui-app .form-page .tunnel-usecase-card > i {
+    flex: 0 0 auto;
+    margin-top: 3px;
+    color: var(--nps-info);
+    font-size: 16px;
+}
+body.zui-app .form-page .tunnel-usecase-card > div {
+    min-width: 0;
+}
+body.zui-app .form-page .tunnel-usecase-card strong {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--nps-ink);
+    font-size: 13px;
+    font-weight: 750;
+}
+body.zui-app .form-page .tunnel-usecase-card p {
+    margin: 0;
+    color: var(--nps-muted);
+    font-size: 12px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+body.zui-app .form-page .tunnel-usecase-card [data-tunnel-case] {
+    display: none !important;
+}
+body.zui-app .form-page .tunnel-usecase-card [data-tunnel-case].is-active {
+    display: inline !important;
+}
+body.zui-app .form-page .tunnel-mode-readonly {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 9px 12px;
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+    border: 1px solid var(--nps-line);
+    border-radius: 6px;
+    font-weight: 700;
+}
+body.zui-app .form-page .tunnel-mode-readonly i { color: var(--nps-primary); }
+
+/* Apply the same mode field contract before the form script runs. This keeps
+   dedicated add/edit entry points from flashing irrelevant controls on first
+   paint; the script still disables hidden inputs before submit. */
+body.zui-app .form-page .tunnel-form.tunnel-type-tcp [data-tunnel-field="local_path"],
+body.zui-app .form-page .tunnel-form.tunnel-type-tcp [data-tunnel-field="strip_pre"],
+body.zui-app .form-page .tunnel-form.tunnel-type-tcp [data-tunnel-field="password"],
+body.zui-app .form-page .tunnel-form.tunnel-type-udp [data-tunnel-field="local_path"],
+body.zui-app .form-page .tunnel-form.tunnel-type-udp [data-tunnel-field="strip_pre"],
+body.zui-app .form-page .tunnel-form.tunnel-type-udp [data-tunnel-field="password"],
+body.zui-app .form-page .tunnel-form.tunnel-type-udp [data-tunnel-field="proto_version"],
+body.zui-app .form-page .tunnel-form.tunnel-type-httpProxy [data-tunnel-field="target"],
+body.zui-app .form-page .tunnel-form.tunnel-type-httpProxy [data-tunnel-field="local_proxy"],
+body.zui-app .form-page .tunnel-form.tunnel-type-httpProxy [data-tunnel-field="local_path"],
+body.zui-app .form-page .tunnel-form.tunnel-type-httpProxy [data-tunnel-field="strip_pre"],
+body.zui-app .form-page .tunnel-form.tunnel-type-httpProxy [data-tunnel-field="password"],
+body.zui-app .form-page .tunnel-form.tunnel-type-httpProxy [data-tunnel-field="proto_version"],
+body.zui-app .form-page .tunnel-form.tunnel-type-socks5 [data-tunnel-field="target"],
+body.zui-app .form-page .tunnel-form.tunnel-type-socks5 [data-tunnel-field="local_proxy"],
+body.zui-app .form-page .tunnel-form.tunnel-type-socks5 [data-tunnel-field="local_path"],
+body.zui-app .form-page .tunnel-form.tunnel-type-socks5 [data-tunnel-field="strip_pre"],
+body.zui-app .form-page .tunnel-form.tunnel-type-socks5 [data-tunnel-field="password"],
+body.zui-app .form-page .tunnel-form.tunnel-type-socks5 [data-tunnel-field="proto_version"],
+body.zui-app .form-page .tunnel-form.tunnel-type-secret [data-tunnel-field="port"],
+body.zui-app .form-page .tunnel-form.tunnel-type-secret [data-tunnel-field="local_proxy"],
+body.zui-app .form-page .tunnel-form.tunnel-type-secret [data-tunnel-field="local_path"],
+body.zui-app .form-page .tunnel-form.tunnel-type-secret [data-tunnel-field="strip_pre"],
+body.zui-app .form-page .tunnel-form.tunnel-type-secret [data-tunnel-field="proto_version"],
+body.zui-app .form-page .tunnel-form.tunnel-type-p2p [data-tunnel-field="port"],
+body.zui-app .form-page .tunnel-form.tunnel-type-p2p [data-tunnel-field="local_proxy"],
+body.zui-app .form-page .tunnel-form.tunnel-type-p2p [data-tunnel-field="local_path"],
+body.zui-app .form-page .tunnel-form.tunnel-type-p2p [data-tunnel-field="strip_pre"],
+body.zui-app .form-page .tunnel-form.tunnel-type-p2p [data-tunnel-field="proto_version"],
+body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-field="target"],
+body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-field="local_proxy"],
+body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-field="password"],
+body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-field="proto_version"],
+body.zui-app .form-page .tunnel-form.tunnel-type-udp [data-tunnel-section="security"],
+body.zui-app .form-page .tunnel-form.tunnel-type-httpProxy [data-tunnel-section="target"],
+body.zui-app .form-page .tunnel-form.tunnel-type-httpProxy [data-tunnel-section="security"],
+body.zui-app .form-page .tunnel-form.tunnel-type-socks5 [data-tunnel-section="target"],
+body.zui-app .form-page .tunnel-form.tunnel-type-socks5 [data-tunnel-section="security"],
+body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-section="security"] {
+    display: none !important;
+}
+@media (max-width: 600px) {
+    body.zui-app .form-page .host-platform-domain-fields {
+        display: flex !important;
+        flex-direction: column;
+    }
+    body.zui-app .form-page .host-platform-domain-fields #platform-prefix,
+    body.zui-app .form-page .host-platform-domain-fields #platform-domain-id {
+        flex: 1 1 auto;
+        width: 100% !important;
+        min-width: 0 !important;
+        border-radius: 6px !important;
+        border-right: 1px solid var(--nps-line-strong) !important;
+    }
+    body.zui-app .form-page .host-platform-domain-fields #platform-domain-id {
+        margin-top: 8px;
+    }
 }

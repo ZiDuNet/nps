@@ -48,6 +48,30 @@
         return npsBooleanMarkup(!!value);
     }
 
+    // Keep the table focused on fields that belong to the selected tunnel
+    // mode.  The detail row remains the source for secondary values, so the
+    // desktop table does not grow wider just because a mode has a different
+    // connection model.
+    var tunnelListModeColumns = {
+        tcp:       {port: true,  address: true,  target: true,  password: false},
+        udp:       {port: true,  address: true,  target: true,  password: false},
+        httpProxy: {port: true,  address: true,  target: false, password: false},
+        socks5:    {port: true,  address: true,  target: false, password: false},
+        file:      {port: true,  address: true,  target: false, password: false},
+        secret:    {port: false, address: false, target: true,  password: true},
+        p2p:       {port: false, address: false, target: true,  password: true}
+    };
+    var tunnelListColumns = tunnelListModeColumns[tunnelListMode] || {
+        port: true,
+        address: true,
+        target: true,
+        password: true
+    };
+    function tunnelListColumnVisible(name, secondary) {
+        if (tunnelListColumns[name] === false) return false;
+        return !secondary || !tunnelListCompact;
+    }
+
     /* ZUI-compatible remote table */
     $('#table').npsTable({
         toolbar: "#toolbar",
@@ -93,10 +117,16 @@
             var client = row.Client || {};
             var config = client.Cnf || {};
             var target = row.Target || {};
+            // The identification key is only part of secret/p2p tunnel
+            // credentials. Keep it out of the expanded detail for modes that
+            // never consume it (tcp, udp, http proxy, socks5, and file).
+            var identificationMarkup = (row.Mode === 'secret' || row.Mode === 'p2p')
+                    ? '<div><b langtag="word-identificationkey"></b><span>' + tunnelText(row.Password || '-') + '</span></div>'
+                    : '';
             var tmp = '<div class="tunnel-detail-summary">'
                     + '<div><b langtag="word-remark"></b><span>' + tunnelText(row.Remark || '-') + '</span></div>'
                     + '<div><b langtag="word-verifykey"></b><span>' + tunnelText(client.VerifyKey || '-') + '</span></div>'
-                    + '<div><b langtag="word-identificationkey"></b><span>' + tunnelText(row.Password || '-') + '</span></div>'
+                    + identificationMarkup
                     + '<div><b langtag="word-exportflow"></b><span>' + tunnelText(changeunit(flow.ExportFlow)) + '</span></div>'
                     + '<div><b langtag="word-inletflow"></b><span>' + tunnelText(changeunit(flow.InletFlow)) + '</span></div>'
                     + '<div><b langtag="word-crypt"></b><span>' + tunnelBoolean(config.Crypt) + '</span></div>'
@@ -170,7 +200,7 @@
                 title: '<span langtag="word-remark"></span>',//标题
                 halign: 'center',
                 sortable: true,
-                visible: !tunnelListCompact,//false表示不显示
+                visible: tunnelListColumnVisible('remark', true),//false表示不显示
                 escape: true
             },
             {
@@ -178,7 +208,7 @@
                 title: '<span langtag="word-verifykey"></span>',//标题
                 halign: 'center',
                 sortable: true, //启用排序
-                visible: !tunnelListCompact,//false表示不显示
+                visible: tunnelListColumnVisible('verifykey', true),//false表示不显示
                 escape: true
             },
             {
@@ -197,14 +227,14 @@
                 title: '<span langtag="word-port"></span>',//标题
                 halign: 'center',
                 sortable: true, //启用排序
-                visible: true//false表示不显示
+                visible: tunnelListColumnVisible('port')//false表示不显示
             },
             {
                 field: 'address',//域值
                 title: '<span langtag="word-accessaddress"></span>',//标题
                 halign: 'center',
                 sortable: false, //计算列，按 Port 排序即可
-                visible: true,//false表示不显示
+                visible: tunnelListColumnVisible('address'),//false表示不显示
                 formatter: function (value, row, index) {
                     var address = "{{.ip}}" + ":" + Number(row.Port);
                     var safeAddress = tunnelText(address);
@@ -215,7 +245,7 @@
                 field: 'Target',//域值
                 title: '<span langtag="word-target"></span>',//标题
                 halign: 'center',
-                visible: true,//false表示不显示
+                visible: tunnelListColumnVisible('target'),//false表示不显示
                 sortable: true, //启用排序
                 formatter: function (value, row, index) {
                     return tunnelText((row.Target || {}).TargetStr);
@@ -226,7 +256,7 @@
                 title: '<span langtag="word-identificationkey"></span>',//标题
                 halign: 'center',
                 sortable: true,
-                visible: !tunnelListCompact,//false表示不显示
+                visible: tunnelListColumnVisible('password', true),//false表示不显示
                 escape: true
             },
             {
@@ -249,7 +279,7 @@
                 title: '<span langtag="word-runstatus"></span>',//内容
                 align: 'center',
                 halign: 'center',
-                visible: !tunnelListCompact,//false表示不显示
+                visible: tunnelListColumnVisible('runstatus', true),//false表示不显示
                 sortable: true,
                 formatter: function (value, row, index) {
                     if (value) {
@@ -264,7 +294,7 @@
                 title: '<span langtag="word-clientstatus"></span>',//内容
                 align: 'center',
                 halign: 'center',
-                visible: !tunnelListCompact,//false表示不显示
+                visible: tunnelListColumnVisible('clientstatus', true),//false表示不显示
                 sortable: true,
                 formatter: function (value, row, index) {
                     if (row.Client && row.Client.IsConnect) {

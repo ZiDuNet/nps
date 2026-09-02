@@ -50,6 +50,47 @@ func TestConsoleTemplatesUseZUIWithoutBootstrap(t *testing.T) {
 	}
 }
 
+func TestPublicLayoutKeepsShellAndNavigatesContentOnly(t *testing.T) {
+	content, err := os.ReadFile("../views/public/layout.html")
+	if err != nil {
+		t.Fatalf("read public layout: %v", err)
+	}
+	template := string(content)
+	for _, marker := range []string{
+		`id="side-menu"`,
+		`id="nps-content"`,
+		`window.fetch(url.href`,
+		`history.pushState`,
+		`window.addEventListener('popstate'`,
+		`executeContentScripts(content)`,
+		`X-Requested-With`,
+	} {
+		if !strings.Contains(template, marker) {
+			t.Fatalf("public layout misses content navigation marker %q", marker)
+		}
+	}
+	if strings.Contains(template, `window.location.href = url.href`) {
+		t.Fatal("menu navigation must not replace the complete console document")
+	}
+}
+
+func TestConsoleContentNavigationStylesKeepPreviousContentVisible(t *testing.T) {
+	content, err := os.ReadFile("../static/css/zui-console.css")
+	if err != nil {
+		t.Fatalf("read console stylesheet: %v", err)
+	}
+	stylesheet := string(content)
+	for _, marker := range []string{
+		`#nps-content.is-loading`,
+		`#nps-content.is-loading::before`,
+		`@keyframes nps-content-progress`,
+	} {
+		if !strings.Contains(stylesheet, marker) {
+			t.Fatalf("console stylesheet misses navigation loading marker %q", marker)
+		}
+	}
+}
+
 func TestBootstrapAssetsAreNotShipped(t *testing.T) {
 	assets := []string{
 		"../static/css/bootstrap.min.css",

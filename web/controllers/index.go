@@ -20,6 +20,34 @@ type IndexController struct {
 	BaseController
 }
 
+func normalizedTunnelMode(mode string) string {
+	switch mode {
+	case "tcp", "udp", "socks5", "secret", "p2p", "file":
+		return mode
+	case "httpProxy":
+		return mode
+	default:
+		return "tcp"
+	}
+}
+
+// tunnelSidebarMenu maps the internal proxy mode to the sidebar destination.
+// httpProxy is shown as "HTTP 代理" in the navigation, while the remaining
+// modes use their own route names.
+func tunnelSidebarMenu(mode string) string {
+	if normalizedTunnelMode(mode) == "httpProxy" {
+		return "http"
+	}
+	return normalizedTunnelMode(mode)
+}
+
+// tunnelTemplatePath keeps the mode-specific view entry points in one place.
+// Each entry includes the shared form/list implementation, so old URLs remain
+// compatible while the rendered page can be scoped to a single proxy mode.
+func tunnelTemplatePath(mode, action string) string {
+	return "index/tunnel/" + normalizedTunnelMode(mode) + "/" + action
+}
+
 // hostListRow is intentionally narrower than file.Host. The management list
 // must never serialize filesystem certificate paths, private keys, or client
 // credentials to the browser.
@@ -239,6 +267,7 @@ func clientTunnelLimitReached(client *file.Client) (bool, int) {
 }
 
 func (s *IndexController) Index() {
+	s.Data["menu"] = "index"
 	s.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
 	s.Data["data"] = s.dashboardSnapshot()
 	s.SetInfo("dashboard")
@@ -265,51 +294,60 @@ func (s *IndexController) dashboardSnapshot() map[string]interface{} {
 }
 
 func (s *IndexController) Help() {
+	s.Data["menu"] = "help"
 	s.SetInfo("about")
 	s.display("index/help")
 }
 
 func (s *IndexController) Tcp() {
+	s.Data["menu"] = "tcp"
 	s.SetInfo("tcp")
 	s.SetType("tcp")
-	s.display("index/list")
+	s.display(tunnelTemplatePath("tcp", "list"))
 }
 
 func (s *IndexController) Udp() {
+	s.Data["menu"] = "udp"
 	s.SetInfo("udp")
 	s.SetType("udp")
-	s.display("index/list")
+	s.display(tunnelTemplatePath("udp", "list"))
 }
 
 func (s *IndexController) Socks5() {
+	s.Data["menu"] = "socks5"
 	s.SetInfo("socks5")
 	s.SetType("socks5")
-	s.display("index/list")
+	s.display(tunnelTemplatePath("socks5", "list"))
 }
 
 func (s *IndexController) Http() {
+	s.Data["menu"] = "http"
 	s.SetInfo("http proxy")
 	s.SetType("httpProxy")
-	s.display("index/list")
+	s.display(tunnelTemplatePath("httpProxy", "list"))
 }
 func (s *IndexController) File() {
+	s.Data["menu"] = "file"
 	s.SetInfo("file server")
 	s.SetType("file")
-	s.display("index/list")
+	s.display(tunnelTemplatePath("file", "list"))
 }
 
 func (s *IndexController) Secret() {
+	s.Data["menu"] = "secret"
 	s.SetInfo("secret")
 	s.SetType("secret")
-	s.display("index/list")
+	s.display(tunnelTemplatePath("secret", "list"))
 }
 func (s *IndexController) P2p() {
+	s.Data["menu"] = "p2p"
 	s.SetInfo("p2p")
 	s.SetType("p2p")
-	s.display("index/list")
+	s.display(tunnelTemplatePath("p2p", "list"))
 }
 
 func (s *IndexController) Host() {
+	s.Data["menu"] = "host"
 	s.SetInfo("host")
 	s.SetType("hostServer")
 	s.display("index/list")
@@ -337,10 +375,20 @@ func (s *IndexController) GetTunnel() {
 
 func (s *IndexController) Add() {
 	if s.Ctx.Request.Method == "GET" {
-		s.Data["type"] = s.getEscapeString("type")
+		rawTunnelType := strings.TrimSpace(s.getEscapeString("type"))
+		tunnelType := normalizedTunnelMode(rawTunnelType)
+		s.Data["type"] = tunnelType
+		s.Data["menu"] = tunnelSidebarMenu(tunnelType)
+		// A typed URL is one of the dedicated mode pages. Keep the historical
+		// /index/add URL without a type as the mode-picker fallback.
+		s.Data["dedicated"] = rawTunnelType != ""
 		s.Data["client_id"] = s.getEscapeString("client_id")
 		s.SetInfo("add tunnel")
-		s.display()
+		if rawTunnelType == "" {
+			s.display("index/add")
+		} else {
+			s.display(tunnelTemplatePath(tunnelType, "add"))
+		}
 	} else {
 		if !s.RequirePost() {
 			return
@@ -502,14 +550,21 @@ func (s *IndexController) Edit() {
 		return
 	}
 	if s.Ctx.Request.Method == "GET" {
+		tunnelMode := "tcp"
 		if t, err := s.authorizedTask(id); err != nil {
 			s.error()
 			return
 		} else {
 			s.Data["t"] = t
+			t.RLock()
+			tunnelMode = normalizedTunnelMode(t.Mode)
+			s.Data["type"] = tunnelMode
+			s.Data["menu"] = tunnelSidebarMenu(tunnelMode)
+			t.RUnlock()
+			s.Data["dedicated"] = true
 		}
 		s.SetInfo("edit tunnel")
-		s.display()
+		s.display(tunnelTemplatePath(tunnelMode, "edit"))
 	} else {
 		if !s.RequirePost() {
 			return
