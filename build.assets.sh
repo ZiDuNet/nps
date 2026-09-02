@@ -178,3 +178,7 @@ tar -czvf windows_386_server.tar.gz nps.exe
 CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/nps/nps.go
 
 tar -czvf windows_arm64_server.tar.gz nps.exe
+
+# Publish deployment examples separately from the binary archives. Runtime
+# JSON data, certificates and private keys intentionally stay out of releases.
+tar -czvf config-examples.tar.gz conf/nps.conf conf/npc.conf conf/multi_account.conf conf/README.md

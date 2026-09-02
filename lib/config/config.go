@@ -93,7 +93,7 @@ func NewConfig(path string) (c *Config, err error) {
 					c.CommonConfig.Client.Cnf = new(file.Config)
 				}
 			default:
-				if strings.Index(nowContent, "host") > -1 {
+				if hasConfigKey(nowContent, "host") {
 					h := dealHost(nowContent)
 					h.Remark = getTitleContent(c.title[i])
 					c.Hosts = append(c.Hosts, h)
@@ -106,6 +106,23 @@ func NewConfig(path string) (c *Config, err error) {
 		}
 	}
 	return
+}
+
+// hasConfigKey checks actual key/value lines and ignores comments. A plain
+// substring search can classify a tunnel as a Host rule when a comment
+// happens to contain the word "host".
+func hasConfigKey(content, key string) bool {
+	for _, line := range splitStr(content) {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 && strings.TrimSpace(parts[0]) == key {
+			return true
+		}
+	}
+	return false
 }
 
 func getTitleContent(s string) string {

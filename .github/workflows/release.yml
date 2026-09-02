@@ -117,6 +117,7 @@ jobs:
             *_client.tar.gz
             *_server.tar.gz
             npc_sdk.tar.gz
+            config-examples.tar.gz
           if-no-files-found: error
           retention-days: 14
 

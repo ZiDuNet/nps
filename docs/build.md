@@ -99,6 +99,7 @@ docker build -f Dockerfile.npc -t npc .
 `.github/workflows/release.yml` 包含：
 
 - 跨平台 `nps` / `npc` 二进制打包
+- `config-examples.tar.gz` 配置示例包（不含运行数据、证书和私钥）
 - Android APK 打包
 - Docker 多架构镜像构建与推送
 - Windows/macOS/Linux GUI 客户端打包

@@ -2,6 +2,8 @@ package config
 
 import (
 	"log"
+	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 )
@@ -77,5 +79,42 @@ tls_fingerprint=sha256:AA
 tls_insecure_skip_verify=true`)
 	if c == nil || !c.TlsEnable || c.TLSCAFile != "/etc/nps/ca.pem" || c.TLSServerName != "bridge.example.com" || c.TLSFingerprint != "sha256:AA" || !c.TLSInsecureSkipVerify {
 		t.Fatalf("TLS options were not parsed: %#v", c)
+	}
+}
+
+func TestHasConfigKeyIgnoresComments(t *testing.T) {
+	content := `# host=comment.example
+; host=another-comment.example
+mode=tcp
+target_addr=127.0.0.1:22`
+	if hasConfigKey(content, "host") {
+		t.Fatal("commented host key should not classify a tunnel as a Host rule")
+	}
+	if !hasConfigKey("host = app.example.com\n", "host") {
+		t.Fatal("active host key was not detected")
+	}
+}
+
+func TestNewConfigKeepsCommentedHostInTunnel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "npc.conf")
+	content := `[common]
+server_addr=127.0.0.1:8024
+vkey=replace-with-verify-key
+
+[tcp_ssh]
+# host=comment.example.com
+mode=tcp
+target_addr=127.0.0.1:22
+server_port=10022
+`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("write test config: %v", err)
+	}
+	c, err := NewConfig(path)
+	if err != nil {
+		t.Fatalf("parse test config: %v", err)
+	}
+	if len(c.Hosts) != 0 || len(c.Tasks) != 1 {
+		t.Fatalf("commented host should remain a tunnel: hosts=%d tasks=%d", len(c.Hosts), len(c.Tasks))
 	}
 }

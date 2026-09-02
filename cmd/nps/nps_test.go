@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -30,5 +33,20 @@ func TestRotateInsecureConfigPreservesExplicitEmptyValues(t *testing.T) {
 	}
 	if len(secrets) != 0 {
 		t.Fatalf("unexpected rotations for explicit values: %#v", secrets)
+	}
+}
+
+func TestDefaultNpsConfMatchesCheckedInTemplate(t *testing.T) {
+	_, sourcePath, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate nps test source")
+	}
+	templatePath := filepath.Join(filepath.Dir(sourcePath), "..", "..", "conf", "nps.conf")
+	content, err := os.ReadFile(templatePath)
+	if err != nil {
+		t.Fatalf("read checked-in nps.conf: %v", err)
+	}
+	if string(content) != defaultNpsConf {
+		t.Fatalf("embedded default config differs from %s", templatePath)
 	}
 }
