@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.5</sub>
+﻿# NPS <sub>v1.1.6</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -194,6 +194,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.6** (2026-09-02) - 同步清新 ZUI 控制台、平台泛域名、证书热更新和 GitHub 发布元数据
 - **v1.1.5** (2026-09-02) - 仪表盘权限隔离、代理速率与运行状态、无闪局部刷新、流式转发回归保护
 - **v1.1.4** (2026-09-02) - 平台泛域名池、证书热更新加固、规则诊断和控制台表单改版
 - **v1.1.3** (2026-09-01) - 修复发布流水线、内置更新兼容性和运维控制台布局

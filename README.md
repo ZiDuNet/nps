@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.5</sub>
+﻿# NPS <sub>v1.1.6</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -179,6 +179,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.6** (2026-09-02) - Release metadata synchronized for the refreshed console UI, platform domains, certificate hot reload, and GitHub publishing
 - **v1.1.5** (2026-09-02) - Scoped runtime dashboard, proxy rates, quota and health status, flicker-free refresh, and streaming regression fixes
 - **v1.1.4** (2026-09-02) - Platform wildcard domain pools, resilient certificate reload, route diagnostics, and console form refresh
 - **v1.1.3** (2026-09-01) - Release pipeline, updater compatibility, and console layout fixes

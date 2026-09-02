@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const VERSION = "1.1.5"
+const VERSION = "1.1.6"
 
 // GitHubRepository is the canonical source for release metadata and binaries.
 const GitHubRepository = "ZiDuNet/nps"
