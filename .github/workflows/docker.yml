@@ -1,0 +1,76 @@
+name: Docker images
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOCKER_BUILD_RECORD_UPLOAD: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }} images
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: nps
+            file: Dockerfile.nps
+            scope: nps-master
+            readme: docker/DOCKERHUB_NPS.md
+          - name: npc
+            file: Dockerfile.npc
+            scope: npc-master
+            readme: docker/DOCKERHUB_NPC.md
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set immutable Docker tag
+        run: printf 'IMAGE_TAG=sha-%s\n' "${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./${{ matrix.file }}
+          platforms: linux/amd64,linux/arm/v7,linux/arm64
+          push: true
+          build-args: |
+            GOPROXY=https://proxy.golang.org,direct
+          cache-from: type=gha,scope=${{ matrix.scope }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.scope }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.name }}:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.name }}:${{ env.IMAGE_TAG }}
+
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/${{ matrix.name }}
+          readme-filepath: ./${{ matrix.readme }}

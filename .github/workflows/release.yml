@@ -2,8 +2,6 @@ name: Release
 
 on:
   push:
-    branches:
-      - master
     tags:
       - 'v*'
   workflow_dispatch:
@@ -94,6 +92,7 @@ jobs:
   # ==================== 跨平台服务端/客户端打包 ====================
   build_assets:
     needs: validate_release
+    if: github.ref_type == 'tag' || inputs.release_tag != ''
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -124,6 +123,7 @@ jobs:
   # ==================== Android APK ====================
   build_android:
     needs: validate_release
+    if: github.ref_type == 'tag' || inputs.release_tag != ''
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -144,7 +144,7 @@ jobs:
   # ==================== Docker 镜像 ====================
   build_docker:
     needs: validate_release
-    if: github.ref == 'refs/heads/master' || github.ref_type == 'tag' || inputs.release_tag != ''
+    if: github.ref_type == 'tag' || inputs.release_tag != ''
     runs-on: ubuntu-latest
     env:
       DOCKER_BUILD_RECORD_UPLOAD: false
@@ -198,7 +198,6 @@ jobs:
           cache-from: type=gha,scope=nps
           cache-to: type=gha,mode=max,scope=nps
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/nps:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/nps:${{ env.RELEASE_VERSION }}
       - name: Build and push npc
         uses: docker/build-push-action@v6
@@ -212,7 +211,6 @@ jobs:
           cache-from: type=gha,scope=npc
           cache-to: type=gha,mode=max,scope=npc
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/npc:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/npc:${{ env.RELEASE_VERSION }}
       - name: Update Docker Hub description for nps
         uses: peter-evans/dockerhub-description@v4
@@ -232,6 +230,7 @@ jobs:
   # ==================== Windows GUI ====================
   build_windows_gui:
     needs: validate_release
+    if: github.ref_type == 'tag' || inputs.release_tag != ''
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -294,6 +293,7 @@ jobs:
   # ==================== macOS GUI ====================
   build_macos_gui:
     needs: validate_release
+    if: github.ref_type == 'tag' || inputs.release_tag != ''
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -352,6 +352,7 @@ jobs:
   # ==================== Linux GUI ====================
   build_linux_gui:
     needs: validate_release
+    if: github.ref_type == 'tag' || inputs.release_tag != ''
     runs-on: ubuntu-latest
     env:
       WAILS_TAGS: webkit2_41
