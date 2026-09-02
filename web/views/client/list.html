@@ -1,4 +1,4 @@
-<section class="wrapper wrapper-content animated fadeInRight management-page" aria-labelledby="client-list-title">
+<section class="wrapper wrapper-content animated fadeInRight management-page management-page--client" aria-labelledby="client-list-title">
     <header class="dashboard-page-header management-page-header">
         <div>
             <div class="dashboard-page-kicker" data-i18n-zh="客户端管理" data-i18n-en="Client management">客户端管理</div>
@@ -26,6 +26,7 @@
 
 <script>
     /* ZUI-compatible remote table */
+    var clientListCompact = window.matchMedia && window.matchMedia('(min-width: 992px) and (max-width: 1599px)').matches;
     $('#table').npsTable({
         toolbar: "#toolbar",
         method: 'post', // 服务器数据的请求方式 get or post
@@ -65,6 +66,8 @@
                 return text(Array.isArray(value) ? value.join(', ') : value);
             };
             var expireDisplay = row.ExpireTime ? text(row.ExpireTime) : '<span langtag="info-unrestricted"></span>';
+            var inletFlow = changeunit(flow.InletFlow || 0);
+            var exportFlow = changeunit(flow.ExportFlow || 0);
             var kv = function(label, value) {
                 return '<div class="client-detail__item">'
                     + '<span class="client-detail__label">' + label + '</span>'
@@ -89,6 +92,12 @@
                     + kv('<span langtag="word-ratelimit"></span>', text(row.RateLimit, 0) + ' KB/s')
                     + kv('<span langtag="word-maxtunnels"></span>', text(row.MaxTunnelNum, 0))
                     + kv('<span langtag="word-connectbyconfig"></span>', npsBooleanMarkup(!!row.ConfigConnAllow)))
+                + section('info-circle', english ? 'Client details' : '客户端信息',
+                    kv('<span langtag="word-version"></span>', text(row.Version, '-'))
+                    + kv('<span langtag="word-verifykey"></span>', text(row.VerifyKey, '-'))
+                    + kv('<span langtag="word-address"></span>', text(row.Addr, '-'))
+                    + kv('<span langtag="word-inletflow"></span>', text(inletFlow))
+                    + kv('<span langtag="word-exportflow"></span>', text(exportFlow)))
                 + '<div class="client-detail__columns">'
                 + '<div class="client-detail__column">'
                 + section('key', english ? 'Authentication' : '认证信息',
@@ -120,6 +129,8 @@
                 field: 'Id',//域值
                 title: '<span langtag="word-id"></span>',//标题
                 halign: 'center',
+                class: 'client-list__id',
+                width: '56px',
                 visible: true//false表示不显示
             },
             {
@@ -142,14 +153,16 @@
                 field: 'Version',//域值
                 title: '<span langtag="word-version"></span>',//标题
                 halign: 'center',
-                visible: true,//false表示不显示
+                class: 'client-list__version',
+                visible: !clientListCompact,//较窄桌面中在详情行保留，避免表头拥挤
                 escape: true
             },
             {
                 field: 'VerifyKey',//域值
                 title: '<span langtag="word-verifykey"></span>',//标题
                 halign: 'center',
-                visible: true,//false表示不显示
+                class: 'client-list__verify-key',
+                visible: !clientListCompact,//较窄桌面中在详情行保留，避免表头拥挤
                 formatter: function (value, row, index) {
                     if (!row.NoStore) {
                         return npsEscapeHtml(value)
@@ -169,7 +182,8 @@
                 field: 'InletFlow',//域值
                 title: '<span langtag="word-inletflow"></span>',//标题
                 halign: 'center',
-                visible: true,//false表示不显示
+                class: 'client-list__inlet-flow',
+                visible: !clientListCompact,//较窄桌面中在详情行保留，避免表头拥挤
                 sortable: true,//启用排序
                 formatter: function (value, row, index) {
                     return changeunit((row.Flow || {}).InletFlow)
@@ -179,7 +193,8 @@
                 field: 'ExportFlow',//域值
                 title: '<span langtag="word-exportflow"></span>',//标题
                 halign: 'center',
-                visible: true,//false表示不显示
+                class: 'client-list__export-flow',
+                visible: !clientListCompact,//较窄桌面中在详情行保留，避免表头拥挤
                 sortable: true,//启用排序
                 formatter: function (value, row, index) {
                     return changeunit((row.Flow || {}).ExportFlow)
@@ -228,11 +243,13 @@
                 title: '<span langtag="word-option"></span>',//内容
                 align: 'center',
                 halign: 'center',
+                class: 'client-list__option',
+                width: '132px',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
                     var clientId = Number(row.Id);
                     if (!isFinite(clientId) || Math.floor(clientId) !== clientId || clientId <= 0) return '';
-                    var btn_group = '<div class="btn-group">'
+                    var btn_group = '<div class="client-actions client-actions--manage">'
 
                     {{if eq true .isAdmin}}
                     if (row.Status) {
@@ -247,7 +264,7 @@
                     {{end}}
 
                     btn_group += '<a href="{{.web_base_url}}/client/edit?id=' + clientId
-                    btn_group += '" class="btn btn-outline btn-success" data-title-zh="编辑客户端" data-title-en="Edit client" data-aria-label-zh="编辑客户端" data-aria-label-en="Edit client"><i class="fa fa-edit" aria-hidden="true"></i></a></div>'
+                    btn_group += '" class="btn btn-outline btn-success client-action-btn" data-title-zh="编辑客户端" data-title-en="Edit client" data-aria-label-zh="编辑客户端" data-aria-label-en="Edit client"><i class="fa fa-edit" aria-hidden="true"></i></a></div>'
                     return btn_group
                 }
             },
@@ -256,14 +273,17 @@
                 title: '<span langtag="word-show"></span>',//内容
                 align: 'center',
                 halign: 'center',
+                class: 'client-list__view',
+                width: '96px',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
                     var clientId = Number(row.Id);
                     if (!isFinite(clientId) || Math.floor(clientId) !== clientId || clientId <= 0) return '';
-                    return '<div class="btn-group"><a href="{{.web_base_url}}/index/all?client_id=' + clientId
-                        + '" class="btn btn-outline btn-primary" data-title-zh="查看隧道" data-title-en="View tunnels" data-aria-label-zh="查看隧道" data-aria-label-en="View tunnels"><i class="fa fa-retweet" aria-hidden="true"></i> <span langtag="word-tunnel"></span></a>'
+                    return '<div class="client-actions client-actions--view">'
+                        + '<a href="{{.web_base_url}}/index/all?client_id=' + clientId
+                        + '" class="btn btn-outline btn-primary client-action-btn" data-title-zh="查看隧道" data-title-en="View tunnels" data-aria-label-zh="查看隧道" data-aria-label-en="View tunnels"><i class="fa fa-retweet" aria-hidden="true"></i><span class="sr-only" langtag="word-tunnel"></span></a>'
                         + '<a href="{{.web_base_url}}/index/hostlist?client_id=' + clientId
-                        + '" class="btn btn-outline btn-success" data-title-zh="查看主机" data-title-en="View hosts" data-aria-label-zh="查看主机" data-aria-label-en="View hosts"><i class="fa fa-globe" aria-hidden="true"></i> <span langtag="word-host"></span></a></div>'
+                        + '" class="btn btn-outline btn-success client-action-btn" data-title-zh="查看主机" data-title-en="View hosts" data-aria-label-zh="查看主机" data-aria-label-en="View hosts"><i class="fa fa-globe" aria-hidden="true"></i><span class="sr-only" langtag="word-host"></span></a></div>'
                 }
             }
         ]

@@ -607,10 +607,11 @@ body.zui-app .management-page--host { max-width: 1800px; margin: 0 auto; }
     body.zui-app .management-page--host .nps-table__container .table th,
     body.zui-app .management-page--host .nps-table__container .table td { padding: 11px 9px !important; overflow: hidden; }
     body.zui-app .management-page--host .nps-table__container .table td { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
-    body.zui-app .management-page--host .host-list__entry { width: 29% !important; }
-    body.zui-app .management-page--host .host-list__remark { width: 12% !important; }
-    body.zui-app .management-page--host .host-list__client { width: 14% !important; }
-    body.zui-app .management-page--host .host-list__target { width: 20% !important; }
+    body.zui-app .management-page--host .host-list__entry { width: 27% !important; }
+    body.zui-app .management-page--host .host-list__remark { width: 11% !important; }
+    body.zui-app .management-page--host .host-list__client { width: 13% !important; }
+    body.zui-app .management-page--host .host-list__target { width: 16% !important; }
+    body.zui-app .management-page--host .host-list__status { width: 80px !important; min-width: 80px !important; max-width: 80px !important; white-space: nowrap; text-align: center !important; }
     body.zui-app .management-page--host .host-list__actions { width: 148px !important; overflow: visible !important; }
 }
 body.zui-app .host-entry { display: grid; gap: 7px; min-width: 0; }
@@ -1987,7 +1988,68 @@ body.zui-app .nps-table__grid td[style*="text-align: center"],
 body.zui-app .nps-table__grid td[style*="text-align:center"] { text-align: center !important; }
 body.zui-app .nps-table__grid td[style*="text-align: right"],
 body.zui-app .nps-table__grid td[style*="text-align:right"] { text-align: right !important; }
-body.zui-app .nps-table__grid tbody td .btn-group { display: inline-flex; flex-wrap: nowrap; max-width: 100%; vertical-align: middle; }
+/* Keep the client identifier compact so descriptive columns retain room. */
+body.zui-app .management-page--client .nps-table__grid th.client-list__id,
+body.zui-app .management-page--client .nps-table__grid td.client-list__id {
+    width: 56px !important;
+    min-width: 56px !important;
+    max-width: 56px !important;
+    padding-right: 8px !important;
+    padding-left: 8px !important;
+    white-space: nowrap;
+}
+/* Client rows have two action tracks. Give them enough room for their icon
+   buttons so fixed-layout tables never clip the controls at the right edge. */
+body.zui-app .management-page--client .nps-table__grid th.client-list__option,
+body.zui-app .management-page--client .nps-table__grid td.client-list__option {
+    width: 132px !important;
+    min-width: 132px !important;
+    max-width: 132px !important;
+    padding-right: 9px !important;
+    padding-left: 9px !important;
+    text-align: center !important;
+    white-space: nowrap;
+    overflow: visible !important;
+}
+body.zui-app .management-page--client .nps-table__grid th.client-list__view,
+body.zui-app .management-page--client .nps-table__grid td.client-list__view {
+    width: 96px !important;
+    min-width: 96px !important;
+    max-width: 96px !important;
+    padding-right: 9px !important;
+    padding-left: 9px !important;
+    text-align: center !important;
+    white-space: nowrap;
+    overflow: visible !important;
+}
+body.zui-app .nps-table__grid tbody td .btn-group,
+body.zui-app .nps-table__grid tbody td .client-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+    max-width: none;
+    vertical-align: middle;
+}
+body.zui-app .nps-table__grid tbody td .client-action-btn,
+body.zui-app .nps-table__grid tbody td .client-actions > .btn {
+    display: inline-flex;
+    flex: 0 0 32px;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    line-height: 1;
+}
+body.zui-app .management-page--client .nps-table__grid th.client-list__option .nps-table__header-inner,
+body.zui-app .management-page--client .nps-table__grid th.client-list__view .nps-table__header-inner {
+    justify-content: center !important;
+    padding-right: 9px;
+    padding-left: 9px;
+}
 body.zui-app .nps-table__loading-row td,
 body.zui-app .nps-table__empty-row td { height: 174px; padding: 0 !important; text-align: center !important; }
 body.zui-app .nps-table__loading-row .table-loading-state,
@@ -2036,4 +2098,231 @@ body.zui-app .nps-table__page-button:disabled { opacity: .48; cursor: default; }
     body.zui-app .nps-table__pagination-detail,
     body.zui-app .nps-table__page-nav { width: 100%; }
     body.zui-app .nps-table__page-nav { justify-content: flex-end; }
+}
+
+/* Final console layout contract.
+   ZUI 3's form-horz preset reserves a left label gutter and absolutely
+   positions labels. The workflow forms use their own grid, so those legacy
+   offsets must be neutralized at the last cascade layer. */
+body.zui-app .form-page .form-workflow-form > .form-group {
+    padding-left: 0 !important;
+    position: static !important;
+    box-sizing: border-box !important;
+}
+body.zui-app .form-page .form-workflow-form > .form-group > label,
+body.zui-app .form-page .form-workflow-form > .form-group > .form-label {
+    position: static !important;
+    left: auto !important;
+    float: none !important;
+    box-sizing: border-box !important;
+}
+body.zui-app .form-page .form-workflow-form > .form-group > .form-group-wrapper {
+    position: static !important;
+    box-sizing: border-box !important;
+    justify-self: stretch !important;
+    align-self: start !important;
+}
+body.zui-app .form-page .form-workflow-form .form-control,
+body.zui-app .form-page .form-workflow-form .input-group,
+body.zui-app .form-page .form-workflow-form .readonly-client,
+body.zui-app .form-page .form-workflow-form .host-certificate-lock,
+body.zui-app .form-page .form-workflow-form .toggle-field {
+    box-sizing: border-box !important;
+}
+body.zui-app .form-page .form-workflow-form .toggle-field {
+    display: inline-flex !important;
+    width: auto !important;
+    max-width: 100% !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+}
+body.zui-app .form-page .form-workflow-form .toggle-label {
+    white-space: nowrap;
+}
+body.zui-app .form-page .host-domain-choice > span {
+    min-width: 0;
+    word-break: normal;
+}
+body.zui-app .form-page .host-domain-choice strong,
+body.zui-app .form-page .host-domain-choice small {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+body.zui-app .form-page .platform-domain-row__fields input,
+body.zui-app .form-page .platform-domain-row__fields select {
+    width: 100% !important;
+    min-width: 0 !important;
+}
+
+/* Keep the desktop shell compact while preserving the collapsed 68px mode. */
+@media (min-width: 992px) {
+    body.zui-app:not(.mini-navbar) .navbar-default.navbar-static-side {
+        width: 216px !important;
+    }
+    body.zui-app:not(.mini-navbar) #page-wrapper {
+        margin-left: 216px !important;
+        padding-right: clamp(20px, 2vw, 36px) !important;
+        padding-left: clamp(20px, 2vw, 36px) !important;
+    }
+    body.zui-app:not(.mini-navbar) .navbar-fixed-top,
+    body.zui-app:not(.mini-navbar) .navbar-static-top,
+    body.zui-app:not(.mini-navbar) .white-bg {
+        left: 216px !important;
+    }
+    body.zui-app:not(.mini-navbar) .nav-header {
+        min-height: 112px;
+        padding: 19px 17px 16px !important;
+    }
+    body.zui-app:not(.mini-navbar) .nav-header .logo-element {
+        display: none !important;
+    }
+    body.zui-app:not(.mini-navbar) .nav-account {
+        margin-top: 12px;
+    }
+    body.zui-app:not(.mini-navbar) #side-menu {
+        padding-top: 11px;
+    }
+    body.zui-app:not(.mini-navbar) #side-menu li a,
+    body.zui-app:not(.mini-navbar) #side-menu .zui-nav-item {
+        min-height: 39px;
+        margin: 2px 8px;
+        padding: 8px 10px !important;
+        font-size: 13px;
+    }
+    body.zui-app:not(.mini-navbar) #side-menu li a i {
+        width: 18px;
+        margin-right: 8px;
+        font-size: 14px !important;
+    }
+    body.zui-app:not(.mini-navbar) .nav-group-title {
+        margin: 15px 17px 5px;
+        padding-bottom: 6px !important;
+    }
+}
+
+/* Dense table headers remain horizontal and ellipsize before characters can
+   collapse into vertical text. Action groups retain a stable icon track. */
+body.zui-app .nps-table__grid thead th {
+    height: 56px;
+}
+body.zui-app .nps-table__header-inner {
+    min-height: 56px;
+    padding: 8px 9px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.25;
+    word-break: keep-all;
+}
+body.zui-app .nps-table__header-inner > :first-child:not(.nps-table__sort) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: keep-all;
+}
+body.zui-app .nps-table__grid th.client-list__id .nps-table__header-inner,
+body.zui-app .nps-table__grid th.tunnel-list__id .nps-table__header-inner,
+body.zui-app .nps-table__grid th.user-list__id .nps-table__header-inner {
+    justify-content: center !important;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+    word-break: normal;
+}
+body.zui-app .nps-table__grid tbody td .btn-group,
+body.zui-app .nps-table__grid tbody td .client-actions,
+body.zui-app .nps-table__grid tbody td .host-actions,
+body.zui-app .nps-table__grid tbody td .tunnel-actions,
+body.zui-app .nps-table__grid tbody td .user-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+    max-width: none;
+    vertical-align: middle;
+}
+body.zui-app .nps-table__grid tbody td .host-actions > .btn,
+body.zui-app .nps-table__grid tbody td .tunnel-actions > .btn,
+body.zui-app .nps-table__grid tbody td .user-actions > .btn,
+body.zui-app .nps-table__grid tbody td .user-actions > a,
+body.zui-app .nps-table__grid tbody td .host-actions > a,
+body.zui-app .nps-table__grid tbody td .tunnel-actions > a {
+    display: inline-flex;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    line-height: 1;
+}
+body.zui-app .management-page--client .nps-table__grid th.client-list__id,
+body.zui-app .management-page--client .nps-table__grid td.client-list__id,
+body.zui-app .management-page--tunnel .nps-table__grid th.tunnel-list__id,
+body.zui-app .management-page--tunnel .nps-table__grid td.tunnel-list__id,
+body.zui-app .management-page--user .nps-table__grid th.user-list__id,
+body.zui-app .management-page--user .nps-table__grid td.user-list__id {
+    width: 56px !important;
+    min-width: 56px !important;
+    max-width: 56px !important;
+    padding-right: 8px !important;
+    padding-left: 8px !important;
+    white-space: nowrap;
+}
+body.zui-app .management-page--host .nps-table__grid th.host-list__actions,
+body.zui-app .management-page--host .nps-table__grid td.host-list__actions,
+body.zui-app .management-page--user .nps-table__grid th.user-list__actions,
+body.zui-app .management-page--user .nps-table__grid td.user-list__actions {
+    width: 132px !important;
+    min-width: 132px !important;
+    max-width: 132px !important;
+    padding-right: 9px !important;
+    padding-left: 9px !important;
+    text-align: center !important;
+    white-space: nowrap;
+    overflow: visible !important;
+}
+body.zui-app .management-page--host .nps-table__grid th.host-list__status,
+body.zui-app .management-page--host .nps-table__grid td.host-list__status {
+    width: 80px !important;
+    min-width: 80px !important;
+    max-width: 80px !important;
+    padding-right: 8px !important;
+    padding-left: 8px !important;
+    text-align: center !important;
+    white-space: nowrap;
+    overflow: visible !important;
+}
+body.zui-app .management-page--tunnel .nps-table__grid th.tunnel-list__actions,
+body.zui-app .management-page--tunnel .nps-table__grid td.tunnel-list__actions {
+    width: 188px !important;
+    min-width: 188px !important;
+    max-width: 188px !important;
+    padding-right: 9px !important;
+    padding-left: 9px !important;
+    text-align: center !important;
+    white-space: nowrap;
+    overflow: visible !important;
+}
+body.zui-app .management-page--host .nps-table__grid th.host-list__actions .nps-table__header-inner,
+body.zui-app .management-page--user .nps-table__grid th.user-list__actions .nps-table__header-inner,
+body.zui-app .management-page--tunnel .nps-table__grid th.tunnel-list__actions .nps-table__header-inner {
+    justify-content: center !important;
+}
+
+@media (max-width: 991px) {
+    body.zui-app .form-page .form-workflow-form > .form-group {
+        padding-left: 0 !important;
+    }
+    body.zui-app .nps-table__grid thead th {
+        height: 50px;
+    }
+    body.zui-app .nps-table__header-inner {
+        min-height: 50px;
+        padding-right: 7px;
+        padding-left: 7px;
+    }
 }

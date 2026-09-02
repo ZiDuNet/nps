@@ -139,6 +139,8 @@
                 field: 'Id',//域值
                 title: '<span langtag="word-id"></span>',//标题
                 halign: 'center',
+                class: 'tunnel-list__id',
+                width: '56px',
                 visible: true,//false表示不显示
                 sortable: true,//启用排序
             },
@@ -267,12 +269,13 @@
                 title: '<span langtag="word-option"></span>',//内容
                 align: 'center',
                 halign: 'center',
-                width: '200px',
+                class: 'tunnel-list__actions',
+                width: '188px',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
                     var tunnelId = Number(row.Id);
                     if (!isFinite(tunnelId) || Math.floor(tunnelId) !== tunnelId || tunnelId <= 0) return '';
-                    var btn_group = '<div class="btn-group">'
+                    var btn_group = '<div class="btn-group tunnel-actions">'
                     if (row.Status) {
                         btn_group += "<button type=\"button\" onclick=\"submitform('stop', '{{.web_base_url}}/index/stop', {'id':" + tunnelId
                         btn_group += '})" class="btn btn-outline btn-warning" data-title-zh="停止隧道" data-title-en="Stop tunnel" data-aria-label-zh="停止隧道" data-aria-label-en="Stop tunnel"><i class="fa fa-pause" aria-hidden="true"></i></button>'

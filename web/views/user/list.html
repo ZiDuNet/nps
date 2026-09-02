@@ -1,4 +1,4 @@
-<section class="wrapper wrapper-content animated fadeInRight management-page" aria-labelledby="user-list-title">
+<section class="wrapper wrapper-content animated fadeInRight management-page management-page--user" aria-labelledby="user-list-title">
     <header class="dashboard-page-header management-page-header">
         <div>
             <div class="dashboard-page-kicker" data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</div>
@@ -45,7 +45,7 @@
             npsApplyTableState(this, 'user');
         },
         columns: [
-            { field: 'Id', title: 'ID', halign: 'center' },
+            { field: 'Id', title: 'ID', halign: 'center', class: 'user-list__id', width: '56px' },
             { field: 'UserName', title: '<span data-i18n-zh="用户名" data-i18n-en="Username">用户名</span>', halign: 'center', escape: true },
             { field: 'Remark', title: '<span data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', halign: 'center', escape: true },
             { field: 'ClientCount', title: '<span data-i18n-zh="客户端数" data-i18n-en="Clients">客户端数</span>', align: 'center', halign: 'center', formatter: function(value) { return userTableText(Number(value) || 0); } },
@@ -68,10 +68,12 @@
                 title: '<span data-i18n-zh="操作" data-i18n-en="Actions">操作</span>',
                 align: 'center',
                 halign: 'center',
+                class: 'user-list__actions',
+                width: '132px',
                 formatter: function(value, row) {
                     var userId = Number(row.Id);
                     if (!isFinite(userId) || Math.floor(userId) !== userId || userId <= 0) return '';
-                    var btn = '<div class="btn-group">';
+                    var btn = '<div class="btn-group user-actions">';
                     if (row.Status) {
                         btn += '<button type="button" onclick="submitform(\'stop\', \'{{.web_base_url}}/user/changestatus\', {\'id\':' + userId + ', \'status\': 0})" class="btn btn-outline btn-warning" title="' + (npsIsEnglish() ? 'Disable user' : '停用用户') + '" aria-label="' + (npsIsEnglish() ? 'Disable user' : '停用用户') + '"><i class="fa fa-pause" aria-hidden="true"></i></button>';
                     } else {

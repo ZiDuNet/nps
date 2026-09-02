@@ -92,7 +92,7 @@ $('#table').npsTable({
             return '<div class="host-client"><span>' + npsEscapeHtml(name) + '</span><small class="' + (client.IsConnect ? 'is-online' : 'is-offline') + '">' + state + '</small></div>';
         }},
         {field: 'Target', title: '<span data-i18n-zh="内网目标" data-i18n-en="Internal target">内网目标</span>', class: 'host-list__target', formatter: function (value, row) { return '<code class="host-target-cell">' + npsEscapeHtml((row.Target || {}).TargetStr || '-') + '</code>'; }},
-        {field: 'IsClose', title: '<span data-i18n-zh="状态" data-i18n-en="Status">状态</span>', align: 'center', formatter: function (value) { return value ? '<span class="badge badge-warning" data-i18n-zh="已停用" data-i18n-en="Disabled">已停用</span>' : '<span class="badge badge-success" data-i18n-zh="运行中" data-i18n-en="Active">运行中</span>'; }},
+        {field: 'IsClose', title: '<span data-i18n-zh="状态" data-i18n-en="Status">状态</span>', align: 'center', class: 'host-list__status', formatter: function (value) { return value ? '<span class="badge badge-warning" data-i18n-zh="已停用" data-i18n-en="Disabled">已停用</span>' : '<span class="badge badge-success" data-i18n-zh="运行中" data-i18n-en="Active">运行中</span>'; }},
         {field: 'option', title: '<span data-i18n-zh="操作" data-i18n-en="Actions">操作</span>', align: 'center', class: 'host-list__actions', formatter: function (value, row) {
             var id = Number(row.Id); if (!isFinite(id) || Math.floor(id) !== id || id <= 0) return '';
             var button = '<div class="btn-group host-actions">';
