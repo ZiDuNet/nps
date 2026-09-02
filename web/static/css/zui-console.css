@@ -928,20 +928,6 @@ body.zui-app .client-detail__copy {
     }
 }
 
-/* On narrower desktop workspaces, retain the operational columns and move secondary data to the detail row. */
-@media (min-width: 992px) and (max-width: 1499px) {
-    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(5),
-    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(5),
-    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(6),
-    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(6),
-    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(11),
-    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(11),
-    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(13),
-    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(13),
-    body.zui-app .management-page--tunnel .nps-table__container .table th:nth-child(14),
-    body.zui-app .management-page--tunnel .nps-table__container .table td:nth-child(14) { display: none; }
-}
-
 @media (max-width: 991px) {
     body.zui-app .navbar-default.navbar-static-side { width: 220px !important; }
     body.zui-app #page-wrapper { margin-left: 220px !important; padding-right: 20px !important; padding-left: 20px !important; }
@@ -2075,7 +2061,7 @@ body.zui-app .nps-table__page-button:hover:not(:disabled) { color: var(--nps-pri
 body.zui-app .nps-table__page-button.is-active { color: #fff; background: var(--nps-primary); border-color: var(--nps-primary); }
 body.zui-app .nps-table__page-button:disabled { opacity: .48; cursor: default; }
 
-@media (max-width: 768px) {
+@media (max-width: 991px) {
     body.zui-app .nps-table__toolbar { align-items: stretch; padding: 12px !important; }
     body.zui-app .nps-table__bars { width: 100%; }
     body.zui-app .nps-table__bars .management-table-toolbar { flex: 1 1 auto; }
@@ -2090,6 +2076,7 @@ body.zui-app .nps-table__page-button:disabled { opacity: .48; cursor: default; }
     body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row { margin: 0; padding: 11px 12px; border-bottom: 1px solid var(--nps-line); }
     body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td { display: grid; grid-template-columns: minmax(82px, 36%) minmax(0, 1fr); gap: 8px; width: 100% !important; min-width: 0; max-width: none; padding: 7px 0 !important; border: 0 !important; text-align: left !important; }
     body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td::before { content: attr(data-label); color: var(--nps-faint); font-size: 11px; font-weight: 700; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td .badge { display: inline-flex; width: max-content; max-width: 100%; align-items: center; }
     body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-table__detail-cell,
     body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-checkbox { display: inline-flex; width: auto !important; min-width: 36px; padding: 0 4px !important; }
     body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-table__detail-cell::before,
@@ -2325,4 +2312,229 @@ body.zui-app .management-page--tunnel .nps-table__grid th.tunnel-list__actions .
         padding-right: 7px;
         padding-left: 7px;
     }
+}
+
+/* Desktop navigation uses a compact three-level rhythm: identity, account,
+   then grouped destinations. Keep the legacy markup so Inspinia's collapse
+   behaviour remains unchanged. */
+@media (min-width: 992px) {
+    body.zui-app:not(.mini-navbar) .navbar-default.navbar-static-side {
+        width: 208px !important;
+    }
+    body.zui-app:not(.mini-navbar) #page-wrapper {
+        margin-left: 208px !important;
+    }
+    body.zui-app:not(.mini-navbar) .navbar-fixed-top,
+    body.zui-app:not(.mini-navbar) .navbar-static-top,
+    body.zui-app:not(.mini-navbar) .white-bg {
+        left: 208px !important;
+    }
+    body.zui-app:not(.mini-navbar) .nav-header {
+        min-height: 106px;
+        padding: 16px 14px 13px !important;
+        border-bottom-color: rgba(211, 227, 247, .1) !important;
+    }
+    body.zui-app:not(.mini-navbar) .nps-brand {
+        gap: 9px;
+    }
+    body.zui-app:not(.mini-navbar) .nps-brand-mark {
+        width: 34px;
+        height: 34px;
+        border-color: rgba(159, 194, 255, .32);
+        border-radius: 7px;
+    }
+    body.zui-app:not(.mini-navbar) .nps-brand-mark i {
+        font-size: 15px !important;
+    }
+    body.zui-app:not(.mini-navbar) .nps-brand-copy strong {
+        font-size: 17px;
+        line-height: 1.2;
+    }
+    body.zui-app:not(.mini-navbar) .nps-brand-copy small {
+        font-size: 10px;
+        line-height: 1.35;
+    }
+    body.zui-app:not(.mini-navbar) .nav-account {
+        gap: 7px;
+        margin-top: 11px;
+        padding-left: 1px;
+    }
+    body.zui-app:not(.mini-navbar) .nav-account > i {
+        width: 14px;
+        font-size: 12px;
+    }
+    body.zui-app:not(.mini-navbar) .nav-account strong {
+        font-size: 11px;
+        line-height: 1.25;
+    }
+    body.zui-app:not(.mini-navbar) .nav-account small {
+        font-size: 10px;
+    }
+    body.zui-app:not(.mini-navbar) #side-menu {
+        padding: 9px 0 20px;
+    }
+    body.zui-app:not(.mini-navbar) #side-menu li a,
+    body.zui-app:not(.mini-navbar) #side-menu .zui-nav-item {
+        min-height: 37px;
+        margin: 1px 7px;
+        padding: 7px 10px !important;
+        border-radius: 6px;
+        line-height: 1.35;
+    }
+    body.zui-app:not(.mini-navbar) #side-menu li a i {
+        flex: 0 0 17px;
+        width: 17px;
+        margin-right: 9px;
+        font-size: 13px !important;
+    }
+    body.zui-app:not(.mini-navbar) #side-menu .nav-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    body.zui-app:not(.mini-navbar) #side-menu li.active > a {
+        background: #1e4d8a !important;
+        box-shadow: inset 2px 0 #a9c8ff, 0 1px 0 rgba(0, 0, 0, .1);
+    }
+    body.zui-app:not(.mini-navbar) .nav-group-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 14px 0 4px;
+        padding: 0 14px !important;
+        color: #8fa6c4 !important;
+        border: 0 !important;
+        font-size: 9px !important;
+        letter-spacing: .08em;
+        line-height: 1.5;
+    }
+    body.zui-app:not(.mini-navbar) .nav-group-title::after {
+        display: block;
+        flex: 1 1 auto;
+        height: 1px;
+        content: "";
+        background: rgba(211, 227, 247, .12);
+    }
+}
+
+/* Treat 769-991px as a compact desktop workspace. The legacy responsive
+   preset uses a 220px rail here, which leaves too little room for tables. */
+@media (min-width: 769px) and (max-width: 991px) {
+    body.zui-app:not(.mini-navbar) .navbar-default.navbar-static-side {
+        width: 200px !important;
+    }
+    body.zui-app:not(.mini-navbar) #page-wrapper {
+        margin-left: 200px !important;
+        padding-right: 18px !important;
+        padding-left: 18px !important;
+    }
+    body.zui-app:not(.mini-navbar) .navbar-fixed-top,
+    body.zui-app:not(.mini-navbar) .navbar-static-top,
+    body.zui-app:not(.mini-navbar) .white-bg {
+        left: 200px !important;
+    }
+    body.zui-app:not(.mini-navbar) .nav-group-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 14px 0 4px;
+        padding: 0 12px !important;
+        color: #8fa6c4 !important;
+        border: 0 !important;
+        font-size: 9px !important;
+        letter-spacing: .08em;
+        line-height: 1.5;
+    }
+    body.zui-app:not(.mini-navbar) .nav-group-title::after {
+        display: block;
+        flex: 1 1 auto;
+        height: 1px;
+        content: "";
+        background: rgba(211, 227, 247, .12);
+    }
+}
+
+/* Keep compact form units together; the surrounding help-block is otherwise
+   intentionally full width for multiline guidance. */
+body.zui-app .form-page .form-workflow-form .form-unit-hint {
+    display: inline-flex !important;
+    width: max-content !important;
+    max-width: 100% !important;
+    align-items: center;
+    gap: 3px;
+    margin: 7px 0 0 !important;
+    white-space: nowrap !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+}
+body.zui-app .form-page .form-workflow-form .form-unit-hint > [langtag],
+body.zui-app .form-page .form-workflow-form .form-unit-hint .form-unit-suffix {
+    display: inline !important;
+    width: auto !important;
+    white-space: nowrap !important;
+}
+
+/* Column filters are native controls, but must retain a readable label in
+   both themes even when the source title is a translated span. */
+body.zui-app .nps-table__columns-menu,
+body.zui-app .nps-table__columns-menu .nps-table__column-option,
+body.zui-app .nps-table__columns-menu .nps-table__column-option > span {
+    color: var(--nps-ink) !important;
+}
+body.zui-app .nps-table__columns-menu .nps-table__column-option {
+    min-height: 32px;
+    line-height: 1.35;
+    white-space: nowrap;
+}
+body.zui-app .nps-table__columns-menu .nps-table__column-option:hover {
+    color: var(--nps-primary) !important;
+}
+body.zui-app .nps-table__columns-menu input[type="checkbox"] {
+    flex: 0 0 auto;
+    accent-color: var(--nps-primary);
+}
+
+/* Expanded tunnel rows carry secondary fields in a calm, scannable grid
+   rather than an inline string that collides with command controls. */
+body.zui-app .tunnel-detail-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px 18px;
+    margin: 0 0 14px;
+    padding: 0 0 14px;
+    border-bottom: 1px solid var(--nps-line);
+}
+body.zui-app .tunnel-detail-summary > div {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 6px;
+    line-height: 1.45;
+}
+body.zui-app .tunnel-detail-summary b {
+    flex: 0 0 auto;
+    color: var(--nps-muted);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+body.zui-app .tunnel-detail-summary > div > span {
+    min-width: 0;
+    color: var(--nps-ink);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+body.zui-app .tunnel-detail-summary .badge {
+    font-size: 11px;
+    line-height: 1.35;
+}
+@media (max-width: 1199px) and (min-width: 992px) {
+    body.zui-app .tunnel-detail-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 991px) {
+    body.zui-app .tunnel-detail-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+    body.zui-app .tunnel-detail-summary { grid-template-columns: minmax(0, 1fr); }
 }

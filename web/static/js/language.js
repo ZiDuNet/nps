@@ -167,6 +167,12 @@
 		npsRefreshToggleLabels(dom);
 		npsDecorateForms(dom);
 		npsDecorateDetailControls(dom);
+		// Column titles are generated before the asynchronous language file may
+		// finish loading; rebuild the filter menu after labels are translated.
+		var tableInstance = $('#table').data('nps.table');
+		if (tableInstance && tableInstance.options.showColumns && typeof tableInstance.renderColumnsMenu === 'function') {
+			tableInstance.renderColumnsMenu();
+		}
 
 		if ( !$.isEmptyObject(chartdatas) ) {
 			setchartlang(languages['content']['charts'],chartdatas);

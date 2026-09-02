@@ -52,6 +52,33 @@
         return holder.textContent || holder.innerText || '';
     }
 
+    function columnTitle(column) {
+        var raw = column && (column.title || column.field || '');
+        var title = $.trim(plainText(raw));
+        if (title) return title;
+        var holder = document.createElement('div');
+        holder.innerHTML = raw == null ? '' : String(raw);
+        var marker = holder.querySelector('[langtag], [data-i18n-zh]');
+        if (marker) {
+            var languageKey = marker.getAttribute('langtag');
+            var language = typeof languages !== 'undefined' ? languages : null;
+            if (languageKey && language && language.content) {
+                var translated = language.content[languageKey.toLowerCase()];
+                if ($.isArray(translated)) translated = translated[0];
+                if (translated && typeof translated === 'object') {
+                    translated = translated[language.current] || translated[language.default];
+                }
+                if (translated) return String(translated);
+            }
+            var zh = marker.getAttribute('data-i18n-zh');
+            var en = marker.getAttribute('data-i18n-en');
+            if (language && language.current === 'en-US' && en) return en;
+            if (zh) return zh;
+            if (languageKey) return languageKey;
+        }
+        return String(column && column.field || '');
+    }
+
     function callback(instance, name) {
         var fn = instance.options[name];
         if (typeof fn !== 'function') return;
@@ -71,7 +98,7 @@
         });
         // Smart tables switch to labelled cards on narrow screens so dense
         // operational data remains readable without introducing page scroll.
-        if (this.options.smartDisplay && window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+        if (this.options.smartDisplay && window.matchMedia && window.matchMedia('(max-width: 991px)').matches) {
             this.options.cardView = true;
         }
         this.pageNumber = Number(this.options.pageNumber) > 0 ? Number(this.options.pageNumber) : 1;
@@ -221,7 +248,10 @@
             + localText('列', 'Columns') + '</span><i class="fa fa-chevron-down nps-table__columns-caret" aria-hidden="true"></i></button>');
         var menu = $('<div class="nps-table__columns-menu" role="menu"></div>');
         this.options.columns.forEach(function (column, index) {
-            var title = plainText(column.title || column.field || '');
+            // Selection columns are structural and should not appear as an
+            // empty toggle in the user-facing column picker.
+            if (column.checkbox) return;
+            var title = columnTitle(column);
             var id = 'nps-column-' + Math.random().toString(36).slice(2);
             var $label = $('<label class="nps-table__column-option" role="menuitemcheckbox"></label>');
             var $input = $('<input type="checkbox" class="nps-table__column-toggle">').attr({

@@ -64,7 +64,7 @@
                         <div class="form-group-wrapper">
                             <input id="client-flow-limit" class="form-control" value="{{.c.Flow.FlowLimit}}" type="text" name="flow_limit"
                                 placeholder="" langtag="info-unrestricted">
-                            <span class="help-block m-b-none" langtag="word-unit"></span>: M
+                            <span class="help-block m-b-none form-unit-hint"><span langtag="word-unit"></span><span class="form-unit-suffix">: M</span></span>
                         </div>
                     </div>
                     {{end}}
@@ -74,7 +74,7 @@
                         <div class="form-group-wrapper">
                             <input id="client-rate-limit" class="form-control" value="{{.c.RateLimit}}" type="text" name="rate_limit"
                                 placeholder="" langtag="info-unrestricted">
-                            <span class="help-block m-b-none" langtag="word-unit"></span>: KB/S
+                            <span class="help-block m-b-none form-unit-hint"><span langtag="word-unit"></span><span class="form-unit-suffix">: KB/S</span></span>
                         </div>
                     </div>
                     {{end}}
