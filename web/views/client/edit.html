@@ -136,24 +136,33 @@
                         </div>
                     </div>
                     {{if eq true .allow_user_login}}
-                    {{if or (eq true .allow_user_change_username) (eq true .isAdmin)}}
-                    <div class="form-group" id="web_username">
-                        <label class="form-label font-bold" for="client-web-username" langtag="word-webusername"></label>
-                        <div class="form-group-wrapper">
-                            <input id="client-web-username" class="form-control" value="{{.c.WebUserName}}" type="text" name="web_username"
-                                placeholder="" langtag="info-unrestricted">
-                        </div>
-                    </div>
-                    {{end}}
-                    <div class="form-group" id="web_password">
-                        <label class="form-label font-bold" for="client-web-password" langtag="word-webpassword"></label>
-                        <div class="form-group-wrapper">
-                            <div class="input-group">
-                                <input id="client-web-password" class="form-control" value="{{.c.WebPassword}}" type="password" name="web_password" autocomplete="off" spellcheck="false" placeholder="" langtag="info-unrestricted">
-                                <span class="input-group-btn"><button class="btn btn-default credential-password-toggle" type="button" data-password-target="client-web-password" aria-controls="client-web-password" aria-label="显示密码" data-aria-label-zh="显示密码" data-aria-label-en="Show password" aria-pressed="false" title="显示密码" data-title-zh="显示密码" data-title-en="Show password"><i class="fa fa-eye" aria-hidden="true"></i></button></span>
+                    <details class="form-workflow-advanced legacy-client-login-settings" {{if or .c.WebUserName .c.WebPassword}}open{{end}}>
+                        <summary>
+                            <span class="form-workflow-advanced__title"><i class="fa fa-history" aria-hidden="true"></i><span data-i18n-zh="旧版客户端登录兼容" data-i18n-en="Legacy client login compatibility">旧版客户端登录兼容</span></span>
+                            <span class="form-workflow-advanced__badge" data-i18n-zh="可选" data-i18n-en="Optional">可选</span>
+                        </summary>
+                        <div class="form-workflow-advanced__body">
+                            <p class="form-field-hint" data-i18n-zh="当前面板使用“所属用户”管理权限。这里只为旧版按客户端账号登录的部署保留兼容字段；密码不会回显，留空则保持现有密码。用户名和密码需要同时存在。" data-i18n-en="The assigned user now controls dashboard access. These fields only support legacy client-account login; the password is never shown and stays unchanged when blank. A username and password must exist together.">当前面板使用“所属用户”管理权限。这里只为旧版按客户端账号登录的部署保留兼容字段；密码不会回显，留空则保持现有密码。用户名和密码需要同时存在。</p>
+                            <div class="legacy-client-login-grid">
+                                {{if or (eq true .allow_user_change_username) (eq true .isAdmin)}}
+                                <div class="legacy-client-login-field" id="web_username">
+                                    <label class="form-label font-bold" for="client-web-username" data-i18n-zh="旧版客户端用户名" data-i18n-en="Legacy client username">旧版客户端用户名</label>
+                                    <input id="client-web-username" class="form-control" value="{{.c.WebUserName}}" type="text" name="web_username" autocomplete="username" placeholder="留空则保持" data-placeholder-zh="留空则保持" data-placeholder-en="Leave blank to keep">
+                                </div>
+                                {{end}}
+                                <div class="legacy-client-login-field" id="web_password">
+                                    <label class="form-label font-bold" for="client-web-password" data-i18n-zh="旧版客户端密码" data-i18n-en="Legacy client password">旧版客户端密码</label>
+                                    <div class="input-group">
+                                        <input id="client-web-password" class="form-control" type="password" name="web_password" autocomplete="new-password" spellcheck="false" placeholder="留空则保持现有密码" data-placeholder-zh="留空则保持现有密码" data-placeholder-en="Leave blank to keep current password">
+                                        <span class="input-group-btn"><button class="btn btn-default credential-password-toggle" type="button" data-password-target="client-web-password" aria-controls="client-web-password" aria-label="显示密码" data-aria-label-zh="显示密码" data-aria-label-en="Show password" aria-pressed="false" title="显示密码" data-title-zh="显示密码" data-title-en="Show password"><i class="fa fa-eye" aria-hidden="true"></i></button></span>
+                                    </div>
+                                </div>
                             </div>
+                            {{if or (eq true .allow_user_change_username) (eq true .isAdmin)}}
+                            <label class="legacy-client-login-clear"><input type="checkbox" name="clear_legacy_web_login" value="1"> <span data-i18n-zh="清除旧版客户端登录凭据" data-i18n-en="Clear legacy client login credentials">清除旧版客户端登录凭据</span></label>
+                            {{end}}
                         </div>
-                    </div>
+                    </details>
                     {{end}}
 
                     <div class="form-section-title"><i class="fa fa-shield-alt" aria-hidden="true"></i><span data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</span></div>

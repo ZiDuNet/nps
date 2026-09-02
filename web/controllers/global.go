@@ -114,6 +114,9 @@ func platformDomainStatuses() []platformDomainStatus {
 }
 
 func (s *GlobalController) Index() {
+	if !s.RequireAdmin() {
+		return
+	}
 	s.Data["menu"] = "global"
 	s.SetInfo("global")
 

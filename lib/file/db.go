@@ -236,6 +236,24 @@ func (s *DbUtils) GetUserByName(username string) (*User, error) {
 	return user, nil
 }
 
+// ValidateClientOwner keeps the client-to-user relationship referentially
+// valid. UserId zero intentionally means that a client is not assigned to a
+// dashboard user; every other value must point at a persisted user record.
+// Keeping this check in DbUtils prevents Web, API and internal callers from
+// creating clients that no user can ever see.
+func (s *DbUtils) ValidateClientOwner(userID int) error {
+	if userID < 0 {
+		return errors.New("所属用户无效")
+	}
+	if userID == 0 {
+		return nil
+	}
+	if _, err := s.GetUser(userID); err != nil {
+		return errors.New("所属用户不存在")
+	}
+	return nil
+}
+
 func (s *DbUtils) VerifyUserLoginName(username string, id int) bool {
 	res := true
 	s.JsonDb.Users.Range(func(key, value interface{}) bool {
@@ -261,9 +279,10 @@ func (s *DbUtils) MigrateUsersFromClients() error {
 		password string
 	}
 	// Older releases persisted the dashboard credentials on each client but
-	// did not have users.json. Recover only when that whole file is absent. If
-	// it exists, a missing user is treated as an intentional revocation and the
-	// bridge continues to fail closed.
+	// did not have users.json. Existing matching credentials are always allowed
+	// to repair an ownership link; creating a new user is only allowed when the
+	// users file is absent. This keeps revoked accounts from being resurrected
+	// merely because an old client record still contains its credentials.
 	recoverMissingOwners := !common.FileExists(s.JsonDb.UserFilePath)
 	byName := make(map[string]credential)
 	byID := make(map[int]struct{})
@@ -291,10 +310,23 @@ func (s *DbUtils) MigrateUsersFromClients() error {
 		clientUserID, webUserName, webPassword, remark, clientID := c.UserId, c.WebUserName, c.WebPassword, c.Remark, c.Id
 		c.RUnlock()
 		if clientUserID != 0 {
-			if !recoverMissingOwners || webUserName == "" || webPassword == "" {
+			if _, exists := byID[clientUserID]; exists {
 				return true
 			}
-			if _, exists := byID[clientUserID]; exists {
+			// A client can retain an old numeric UserId after users.json was
+			// rebuilt or imported. If its legacy credentials identify an
+			// existing user, repair the relationship instead of leaving the
+			// client invisible to every dashboard account.
+			if webUserName != "" && webPassword != "" {
+				if cred, exists := byName[webUserName]; exists && cred.password == webPassword {
+					c.Lock()
+					c.UserId = cred.userId
+					c.Unlock()
+					changedClients = true
+					return true
+				}
+			}
+			if !recoverMissingOwners || webUserName == "" || webPassword == "" {
 				return true
 			}
 			name := webUserName
@@ -321,8 +353,20 @@ func (s *DbUtils) MigrateUsersFromClients() error {
 		if webUserName == "" || webPassword == "" {
 			return true
 		}
+		cred, ok := byName[webUserName]
+		if ok && cred.password == webPassword {
+			// A legacy client without UserId can still be safely attached to
+			// the existing user when both credentials match.
+			c.Lock()
+			c.UserId = cred.userId
+			c.Unlock()
+			changedClients = true
+			return true
+		}
+		if !recoverMissingOwners {
+			return true
+		}
 		name := webUserName
-		cred, ok := byName[name]
 		if ok && cred.password != webPassword {
 			name = fmt.Sprintf("%s_%d", webUserName, clientID)
 			ok = false
@@ -372,6 +416,84 @@ func (s *DbUtils) UserClientIds(userId int) map[int]struct{} {
 		return true
 	})
 	return ids
+}
+
+// UserResourceCounts is the compact resource summary shown in the user
+// management table. TunnelCount follows the same accounting as the user's
+// tunnel quota and therefore includes both ordinary tunnels and HTTP hosts.
+type UserResourceCounts struct {
+	ClientCount int
+	TunnelCount int
+}
+
+// GetUserResourceCounts returns current ownership counts without exposing any
+// credentials. Runtime task/host objects can outlive a client replacement, so
+// ownerUserID resolves the latest client record by ID before counting.
+func (s *DbUtils) GetUserResourceCounts() map[int]UserResourceCounts {
+	counts := make(map[int]UserResourceCounts)
+	s.JsonDb.Clients.Range(func(_, value interface{}) bool {
+		client, ok := value.(*Client)
+		if !ok || client == nil {
+			return true
+		}
+		client.RLock()
+		userID := client.UserId
+		client.RUnlock()
+		if userID > 0 {
+			entry := counts[userID]
+			entry.ClientCount++
+			counts[userID] = entry
+		}
+		return true
+	})
+
+	countTunnel := func(client *Client) {
+		userID := s.ownerUserID(client)
+		if userID <= 0 {
+			return
+		}
+		entry := counts[userID]
+		entry.TunnelCount++
+		counts[userID] = entry
+	}
+	s.JsonDb.Tasks.Range(func(_, value interface{}) bool {
+		tunnel, ok := value.(*Tunnel)
+		if !ok || tunnel == nil {
+			return true
+		}
+		tunnel.RLock()
+		client := tunnel.Client
+		tunnel.RUnlock()
+		countTunnel(client)
+		return true
+	})
+	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.RLock()
+		client := host.Client
+		host.RUnlock()
+		countTunnel(client)
+		return true
+	})
+	return counts
+}
+
+func (s *DbUtils) ownerUserID(client *Client) int {
+	if client == nil {
+		return 0
+	}
+	client.RLock()
+	clientID, userID := client.Id, client.UserId
+	client.RUnlock()
+	if current, err := s.GetClient(clientID); err == nil && current != nil && current != client {
+		current.RLock()
+		userID = current.UserId
+		current.RUnlock()
+	}
+	return userID
 }
 
 func (s *DbUtils) IsClientBelongToUser(clientId, userId int) bool {
@@ -1233,6 +1355,9 @@ func (s *DbUtils) NewClient(c *Client) error {
 	if c == nil {
 		return errors.New("客户端记录无效")
 	}
+	if err := s.ValidateClientOwner(c.UserId); err != nil {
+		return err
+	}
 	var isNotSet bool
 reset:
 	if c.VerifyKey == "" || isNotSet {
@@ -1303,6 +1428,9 @@ func (s *DbUtils) VerifyUserName(username string, id int) (res bool) {
 func (s *DbUtils) UpdateClient(t *Client) error {
 	if t == nil {
 		return errors.New("客户端记录无效")
+	}
+	if err := s.ValidateClientOwner(t.UserId); err != nil {
+		return err
 	}
 	// 先 Stop 旧的 Rate，防止内存泄漏
 	if old, ok := s.JsonDb.Clients.Load(t.Id); ok {

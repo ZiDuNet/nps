@@ -23,12 +23,18 @@ type userListRow struct {
 	Password     string
 	Status       bool
 	Remark       string
+	ClientCount  int
+	TunnelCount  int
 	MaxTunnelNum int
 	ExpireTime   string
 	CreateTime   string
 }
 
 func newUserListRows(users []*file.User) []*userListRow {
+	return newUserListRowsWithResourceCounts(users, nil)
+}
+
+func newUserListRowsWithResourceCounts(users []*file.User, counts map[int]file.UserResourceCounts) []*userListRow {
 	rows := make([]*userListRow, 0, len(users))
 	for _, user := range users {
 		if user == nil {
@@ -38,12 +44,15 @@ func newUserListRows(users []*file.User) []*userListRow {
 		id, userName, status := user.Id, user.UserName, user.Status
 		remark, maxTunnelNum, expireTime, createTime := user.Remark, user.MaxTunnelNum, user.ExpireTime, user.CreateTime
 		user.RUnlock()
+		resourceCounts := counts[id]
 		rows = append(rows, &userListRow{
 			Id:           id,
 			UserName:     html.UnescapeString(userName),
 			Password:     "",
 			Status:       status,
 			Remark:       html.UnescapeString(remark),
+			ClientCount:  resourceCounts.ClientCount,
+			TunnelCount:  resourceCounts.TunnelCount,
 			MaxTunnelNum: maxTunnelNum,
 			ExpireTime:   expireTime,
 			CreateTime:   createTime,
@@ -111,7 +120,7 @@ func (s *UserController) List() {
 	}
 	start, length := s.GetAjaxParams()
 	list, cnt := file.GetDb().GetUserList(start, length, s.getEscapeString("search"))
-	s.AjaxTable(newUserListRows(list), cnt, cnt, nil)
+	s.AjaxTable(newUserListRowsWithResourceCounts(list, file.GetDb().GetUserResourceCounts()), cnt, cnt, nil)
 }
 
 func (s *UserController) Add() {

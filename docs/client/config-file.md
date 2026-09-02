@@ -44,7 +44,7 @@ server_port=9001
 | `tls_fingerprint` | 服务端证书 SHA-256 指纹，适合自签名证书。 |
 | `tls_insecure_skip_verify` | 显式跳过证书校验，仅用于旧部署兼容，生产环境不要开启。 |
 | `basic_username` / `basic_password` | HTTP 正向代理、SOCKS5 和域名代理共用的 Basic 认证账号。 |
-| `web_username` / `web_password` | 此客户端的 Web 登录账号；仅在普通用户登录场景使用。 |
+| `web_username` / `web_password` | 旧版客户端 Web 登录兼容账号。当前面板应优先使用客户端的“所属用户”；配置文件模式只有在需要兼容旧客户端账号登录时才填写这两个字段，二者必须成对出现。 |
 | `max_conn` | 此客户端最大数据连接数。 |
 | `rate_limit` | 此客户端带宽上限，单位 KiB/s。 |
 | `flow_limit` | 此客户端累计流量上限，单位 MiB，入口与出口相加计算。 |

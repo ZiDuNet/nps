@@ -1002,6 +1002,7 @@ body.zui-app .client-detail__copy {
     body.zui-app .form-page-client .form-workflow-form > .form-group > label,
     body.zui-app .form-page-tunnel .form-workflow-form > .form-group > label,
     body.zui-app .form-page-user .form-workflow-form > .form-group > label { padding-top: 0 !important; }
+    body.zui-app .legacy-client-login-grid { grid-template-columns: minmax(0, 1fr); }
     body.zui-app .nps-table__toolbar { padding: 12px !important; }
     body.zui-app .nps-table .nps-table__toolbar { flex-wrap: wrap; }
     body.zui-app .nps-table .nps-table__toolbar > .nps-table__search {
@@ -1292,6 +1293,92 @@ body.zui-app .readonly-client small {
     font-size: 11px;
     font-weight: 700;
 }
+/* Legacy client-account login is intentionally progressive disclosure: the
+   assigned User remains the primary ownership control, while old credentials
+   stay available for migrations without competing with the main form. */
+body.zui-app .form-workflow-advanced {
+    grid-column: 1 / -1;
+    min-width: 0;
+    margin: 4px 0 22px;
+    border: 1px solid var(--nps-line);
+    border-radius: 7px;
+    background: var(--nps-surface-subtle);
+}
+body.zui-app .form-workflow-advanced > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+    padding: 10px 13px;
+    color: var(--nps-ink);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+body.zui-app .form-workflow-advanced > summary::-webkit-details-marker { display: none; }
+body.zui-app .form-workflow-advanced > summary::after {
+    content: "\f078";
+    margin-left: auto;
+    color: var(--nps-muted);
+    font-family: FontAwesome;
+    font-size: 11px;
+    transition: transform .15s ease;
+}
+body.zui-app .form-workflow-advanced[open] > summary::after { transform: rotate(180deg); }
+body.zui-app .form-workflow-advanced > summary:focus-visible {
+    outline: 2px solid var(--nps-primary);
+    outline-offset: -2px;
+}
+body.zui-app .form-workflow-advanced__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 700;
+}
+body.zui-app .form-workflow-advanced__title i { color: var(--nps-primary); }
+body.zui-app .form-workflow-advanced__badge {
+    flex: 0 0 auto;
+    padding: 3px 7px;
+    color: var(--nps-muted);
+    border: 1px solid var(--nps-line-strong);
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+}
+body.zui-app .form-workflow-advanced__body {
+    padding: 0 13px 14px;
+    border-top: 1px solid var(--nps-line);
+}
+body.zui-app .form-workflow-advanced__body > .form-field-hint { margin: 12px 0 14px !important; }
+body.zui-app .legacy-client-login-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+body.zui-app .legacy-client-login-field { min-width: 0; }
+body.zui-app .legacy-client-login-field .form-label {
+    display: block;
+    margin: 0 0 7px !important;
+    padding: 0 !important;
+    color: var(--nps-ink) !important;
+    font-size: 12px !important;
+    line-height: 1.45;
+}
+body.zui-app .legacy-client-login-field .form-control,
+body.zui-app .legacy-client-login-field .input-group { width: 100%; min-width: 0; }
+body.zui-app .legacy-client-login-clear {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 13px 0 0;
+    color: var(--nps-muted);
+    font-size: 11px;
+    cursor: pointer;
+}
+body.zui-app .legacy-client-login-clear input { margin: 0; accent-color: var(--nps-primary); }
 body.zui-app .form-page .host-domain-source,
 body.zui-app .form-page .host-domain-source > div {
     min-width: 0;

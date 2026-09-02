@@ -3,7 +3,7 @@
         <div>
             <div class="dashboard-page-kicker" data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</div>
             <h1 id="user-list-title" data-i18n-zh="用户管理" data-i18n-en="User management">用户管理</h1>
-            <p data-i18n-zh="维护面板账号、资源配额和可用状态。" data-i18n-en="Maintain dashboard accounts, resource limits, and availability.">维护面板账号、资源配额和可用状态。</p>
+            <p data-i18n-zh="维护面板账号、资源配额和可用状态；资源统计与配额口径保持一致。" data-i18n-en="Maintain dashboard accounts, resource limits, and availability with quota-aligned resource counts.">维护面板账号、资源配额和可用状态；资源统计与配额口径保持一致。</p>
         </div>
     </header>
     <div class="management-page-grid">
@@ -48,6 +48,8 @@
             { field: 'Id', title: 'ID', halign: 'center' },
             { field: 'UserName', title: '<span data-i18n-zh="用户名" data-i18n-en="Username">用户名</span>', halign: 'center', escape: true },
             { field: 'Remark', title: '<span data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', halign: 'center', escape: true },
+            { field: 'ClientCount', title: '<span data-i18n-zh="客户端数" data-i18n-en="Clients">客户端数</span>', align: 'center', halign: 'center', formatter: function(value) { return userTableText(Number(value) || 0); } },
+            { field: 'TunnelCount', title: '<span data-i18n-zh="隧道数" data-i18n-en="Tunnels">隧道数</span>', align: 'center', halign: 'center', formatter: function(value) { return userTableText(Number(value) || 0); } },
             { field: 'MaxTunnelNum', title: '<span data-i18n-zh="总隧道上限" data-i18n-en="Tunnel limit">总隧道上限</span>', halign: 'center', formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedText()); } },
             { field: 'ExpireTime', title: '<span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span>', halign: 'center', formatter: function(value) { return userTableText(value || userUnlimitedText()); } },
             {

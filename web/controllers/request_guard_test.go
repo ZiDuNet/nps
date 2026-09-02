@@ -43,6 +43,13 @@ func TestAdministrativeClientActionsRequireAdmin(t *testing.T) {
 			t.Errorf("client.go.%s must require administrator authorization", action)
 		}
 	}
+	global, err := parser.ParseFile(token.NewFileSet(), "global.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !functionCalls(global, "Index", "RequireAdmin") {
+		t.Fatal("global.go.Index must require administrator authorization")
+	}
 }
 
 func functionCalls(file *ast.File, functionName, methodName string) bool {

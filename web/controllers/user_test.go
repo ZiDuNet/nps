@@ -40,6 +40,22 @@ func TestUserListRowsRedactPasswords(t *testing.T) {
 	}
 }
 
+func TestUserListRowsExposeResourceCounts(t *testing.T) {
+	rows := newUserListRowsWithResourceCounts([]*file.User{{Id: 7, UserName: "alice"}}, map[int]file.UserResourceCounts{
+		7: {ClientCount: 2, TunnelCount: 5},
+	})
+	if len(rows) != 1 || rows[0].ClientCount != 2 || rows[0].TunnelCount != 5 {
+		t.Fatalf("user list row did not expose ownership counts: %#v", rows)
+	}
+
+	content := readUserTemplateForTest(t, "../views/user/list.html")
+	for _, marker := range []string{"field: 'ClientCount'", "field: 'TunnelCount'", "客户端数", "隧道数"} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("user list template misses resource count marker: %s", marker)
+		}
+	}
+}
+
 func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 	existing := &file.User{
 		Id:           7,

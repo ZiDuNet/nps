@@ -84,6 +84,70 @@ func TestClientFormTemplatesExposeUserSelect(t *testing.T) {
 	}
 }
 
+func TestLegacyClientLoginMergePreservesAndClearsExplicitly(t *testing.T) {
+	username, password, err := mergeLegacyClientLogin("legacy-user", "legacy-pass", "", "", false)
+	if err != nil || username != "legacy-user" || password != "legacy-pass" {
+		t.Fatalf("blank edit should preserve legacy credentials: username=%q password=%q err=%v", username, password, err)
+	}
+	username, password, err = mergeLegacyClientLogin("legacy-user", "legacy-pass", "", "replacement", false)
+	if err != nil || username != "legacy-user" || password != "replacement" {
+		t.Fatalf("password-only edit should retain the username: username=%q password=%q err=%v", username, password, err)
+	}
+	username, password, err = mergeLegacyClientLogin("legacy-user", "legacy-pass", "", "", true)
+	if err != nil || username != "" || password != "" {
+		t.Fatalf("explicit clear should remove both legacy credentials: username=%q password=%q err=%v", username, password, err)
+	}
+	if _, _, err := mergeLegacyClientLogin("", "", "only-user", "", false); err == nil {
+		t.Fatal("partial legacy credentials should be rejected")
+	}
+	if username, password, err := mergeLegacyClientLogin("legacy-user", "", "", "", false); err != nil || username != "legacy-user" || password != "" {
+		t.Fatalf("unrelated edits should preserve an incomplete historical pair: username=%q password=%q err=%v", username, password, err)
+	}
+}
+
+func TestRequestedClientOwnerIDRejectsMalformedValues(t *testing.T) {
+	for _, value := range []string{"abc", "-1", "1.5"} {
+		if _, err := parseClientOwnerID(value); err == nil {
+			t.Fatalf("malformed owner %q should be rejected", value)
+		}
+	}
+	for _, value := range []string{"", "0", "7"} {
+		want := 0
+		if value == "7" {
+			want = 7
+		}
+		if got, err := parseClientOwnerID(value); err != nil || got != want {
+			t.Fatalf("owner %q should be accepted as id %d, got %d err=%v", value, want, got, err)
+		}
+	}
+}
+
+func TestClientFormTemplatesKeepLegacyLoginSecondaryAndMasked(t *testing.T) {
+	add := readClientTemplateForTest(t, "../views/client/add.html")
+	edit := readClientTemplateForTest(t, "../views/client/edit.html")
+	for name, content := range map[string]string{"add": add, "edit": edit} {
+		if !strings.Contains(content, `class="form-workflow-advanced legacy-client-login-settings"`) {
+			t.Fatalf("%s template must keep legacy login in a progressive disclosure section", name)
+		}
+		if !strings.Contains(content, "旧版客户端登录兼容") {
+			t.Fatalf("%s template misses the legacy login explanation", name)
+		}
+	}
+	if strings.Contains(edit, `value="{{.c.WebPassword}}"`) {
+		t.Fatal("edit template must never render the stored legacy password")
+	}
+	for _, marker := range []string{"留空则保持现有密码", "clear_legacy_web_login"} {
+		if !strings.Contains(edit, marker) {
+			t.Fatalf("edit template misses safe legacy password handling marker: %s", marker)
+		}
+	}
+	for _, path := range []string{"../views/client/add.html", "../views/client/edit.html"} {
+		if _, err := template.ParseFiles(path); err != nil {
+			t.Fatalf("client form template %s must remain valid Go template: %v", path, err)
+		}
+	}
+}
+
 func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
 	content := readClientTemplateForTest(t, "../views/client/list.html")
 	for _, marker := range []string{

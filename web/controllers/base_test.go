@@ -1,7 +1,10 @@
 package controllers
 
 import (
+	"bytes"
+	"html/template"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -121,5 +124,31 @@ func TestClearAuthenticationSessionRemovesEveryIdentityValue(t *testing.T) {
 		if !removed[key] {
 			t.Fatalf("session key %q was not cleared", key)
 		}
+	}
+}
+
+func TestPublicLayoutHidesAdministratorNavigationForOrdinaryUsers(t *testing.T) {
+	tpl := template.Must(template.ParseFiles("../views/public/layout.html"))
+	data := map[string]interface{}{
+		"isAdmin":       false,
+		"web_base_url":  "",
+		"version":       "test",
+		"LayoutContent": "",
+	}
+	var rendered bytes.Buffer
+	if err := tpl.Execute(&rendered, data); err != nil {
+		t.Fatalf("execute public layout: %v", err)
+	}
+	if strings.Contains(rendered.String(), "/global/index") {
+		t.Fatal("ordinary user navigation must not contain the global settings link")
+	}
+
+	data["isAdmin"] = true
+	rendered.Reset()
+	if err := tpl.Execute(&rendered, data); err != nil {
+		t.Fatalf("execute administrator layout: %v", err)
+	}
+	if !strings.Contains(rendered.String(), "/global/index") {
+		t.Fatal("administrator navigation must retain the global settings link")
 	}
 }

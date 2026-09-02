@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"errors"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -52,6 +54,58 @@ type clientListRate struct {
 	NowRate int64
 }
 
+// mergeLegacyClientLogin keeps the old per-client dashboard credentials
+// available without letting an edit form accidentally clear them. The current
+// User model is the primary account boundary; these fields are only a
+// deliberate compatibility escape hatch for older deployments.
+func mergeLegacyClientLogin(currentUsername, currentPassword, submittedUsername, submittedPassword string, clear bool) (string, string, error) {
+	if clear {
+		return "", "", nil
+	}
+	if strings.TrimSpace(submittedUsername) == "" && strings.TrimSpace(submittedPassword) == "" {
+		// Do not turn an unrelated edit into a migration failure when an old
+		// record already contains an incomplete legacy pair. It remains usable
+		// through the current User binding and can be repaired explicitly later.
+		return currentUsername, currentPassword, nil
+	}
+	nextUsername, nextPassword := currentUsername, currentPassword
+	if strings.TrimSpace(submittedUsername) != "" {
+		nextUsername = submittedUsername
+	}
+	if strings.TrimSpace(submittedPassword) != "" {
+		nextPassword = submittedPassword
+	}
+	if (strings.TrimSpace(nextUsername) == "") != (strings.TrimSpace(nextPassword) == "") {
+		return nextUsername, nextPassword, errors.New("旧版客户端登录用户名和密码必须同时填写")
+	}
+	return nextUsername, nextPassword, nil
+}
+
+func parseClientOwnerID(value string) (int, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, nil
+	}
+	userID, err := strconv.Atoi(value)
+	if err != nil || userID < 0 {
+		return 0, errors.New("所属用户无效")
+	}
+	return userID, nil
+}
+
+func requestedClientOwnerID(s *ClientController) (int, error) {
+	return parseClientOwnerID(s.GetString("user_id"))
+}
+
+func clientOwnerFieldSubmitted(s *ClientController) bool {
+	if s == nil || s.Ctx == nil || s.Ctx.Request == nil {
+		return false
+	}
+	_ = s.Ctx.Request.ParseForm()
+	_, submitted := s.Ctx.Request.Form["user_id"]
+	return submitted
+}
+
 func newClientListRows(clients []*file.Client) []*clientListRow {
 	rows := make([]*clientListRow, 0, len(clients))
 	for _, client := range clients {
@@ -59,10 +113,10 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 			continue
 		}
 		client.RLock()
-		flow, clientRate := client.Flow, client.Rate
+		flow, clientRate, userID, userName := client.Flow, client.Rate, client.UserId, client.UserName
 		row := &clientListRow{
 			Id:              client.Id,
-			UserName:        client.UserName,
+			UserName:        userName,
 			VerifyKey:       client.VerifyKey,
 			Addr:            client.Addr,
 			LocalAddr:       client.LocalAddr,
@@ -84,6 +138,13 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 			ExpireTime:      client.ExpireTime,
 		}
 		client.RUnlock()
+		if userID > 0 {
+			if user, err := file.GetDb().GetUser(userID); err == nil && user != nil {
+				user.RLock()
+				row.UserName = user.UserName
+				user.RUnlock()
+			}
+		}
 		row.Flow.InletFlow, row.Flow.ExportFlow, row.Flow.FlowLimit = flow.Snapshot()
 		row.Rate.NowRate = clientRate.CurrentRate()
 		rows = append(rows, row)
@@ -124,11 +185,26 @@ func (s *ClientController) Add() {
 		if !s.RequirePost() {
 			return
 		}
+		userID, err := requestedClientOwnerID(s)
+		if err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
+		if err := file.GetDb().ValidateClientOwner(userID); err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
+		webUsername := s.getEscapeString("web_username")
+		webPassword := s.getEscapeString("web_password")
+		if _, _, err := mergeLegacyClientLogin("", "", webUsername, webPassword, false); err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
 		id := int(file.GetDb().JsonDb.GetClientId())
 		t := &file.Client{
 			VerifyKey: s.getEscapeString("vkey"),
 			Id:        id,
-			UserId:    s.GetIntNoErr("user_id"),
+			UserId:    userID,
 			Status:    true,
 			Remark:    s.getEscapeString("remark"),
 			Cnf: &file.Config{
@@ -140,8 +216,8 @@ func (s *ClientController) Add() {
 			ConfigConnAllow: s.GetBoolNoErr("config_conn_allow"),
 			RateLimit:       s.GetIntNoErr("rate_limit"),
 			MaxConn:         s.GetIntNoErr("max_conn"),
-			WebUserName:     s.getEscapeString("web_username"),
-			WebPassword:     s.getEscapeString("web_password"),
+			WebUserName:     webUsername,
+			WebPassword:     webPassword,
 			MaxTunnelNum:    s.GetIntNoErr("max_tunnel"),
 			Flow: &file.Flow{
 				ExportFlow: 0,
@@ -220,8 +296,8 @@ func (s *ClientController) Edit() {
 			}
 			isAdmin := s.IsAdmin()
 			remark := s.getEscapeString("remark")
-			username := s.getEscapeString("web_username")
-			password := s.getEscapeString("web_password")
+			submittedUsername := s.getEscapeString("web_username")
+			submittedPassword := s.getEscapeString("web_password")
 			cnfUser := s.getEscapeString("u")
 			cnfPassword := s.getEscapeString("p")
 			compress := common.GetBoolByStr(s.getEscapeString("compress"))
@@ -233,6 +309,42 @@ func (s *ClientController) Edit() {
 			blackIPList := RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n"))
 			expireTime := normalizeExpireTime(s.getEscapeString("expire_time"))
 			b, err := beego.AppConfig.Bool("allow_user_change_username")
+			canChangeLegacyUsername := isAdmin || (err == nil && b)
+			c.RLock()
+			currentWebUsername, currentWebPassword := c.WebUserName, c.WebPassword
+			c.RUnlock()
+			if !canChangeLegacyUsername {
+				submittedUsername = ""
+			}
+			legacyUsername, legacyPassword, legacyErr := mergeLegacyClientLogin(
+				currentWebUsername,
+				currentWebPassword,
+				submittedUsername,
+				submittedPassword,
+				s.GetBoolNoErr("clear_legacy_web_login") && canChangeLegacyUsername,
+			)
+			if legacyErr != nil {
+				s.AjaxErr(legacyErr.Error())
+				return
+			}
+			selectedUserID := 0
+			if isAdmin {
+				if clientOwnerFieldSubmitted(s) {
+					selectedUserID, err = requestedClientOwnerID(s)
+					if err != nil {
+						s.AjaxErr(err.Error())
+						return
+					}
+					if err := file.GetDb().ValidateClientOwner(selectedUserID); err != nil {
+						s.AjaxErr(err.Error())
+						return
+					}
+				} else {
+					c.RLock()
+					selectedUserID = c.UserId
+					c.RUnlock()
+				}
+			}
 			oldRate := (*rate.Rate)(nil)
 			c.Lock()
 			if c.Cnf == nil {
@@ -243,7 +355,7 @@ func (s *ClientController) Edit() {
 			}
 			if isAdmin {
 				c.VerifyKey = s.getEscapeString("vkey")
-				c.UserId = s.GetIntNoErr("user_id")
+				c.UserId = selectedUserID
 				c.Flow.SetLimit(int64(s.GetIntNoErr("flow_limit")))
 				c.RateLimit = s.GetIntNoErr("rate_limit")
 				c.MaxConn = s.GetIntNoErr("max_conn")
@@ -254,10 +366,8 @@ func (s *ClientController) Edit() {
 			c.Cnf.P = cnfPassword
 			c.Cnf.Compress = compress
 			c.Cnf.Crypt = cryptEnabled
-			if isAdmin || (err == nil && b) {
-				c.WebUserName = username
-			}
-			c.WebPassword = password
+			c.WebUserName = legacyUsername
+			c.WebPassword = legacyPassword
 			c.ConfigConnAllow = configConnAllow
 			c.IpWhite = ipWhite
 			c.IpWhitePass = ipWhitePass

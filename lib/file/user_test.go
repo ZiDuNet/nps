@@ -142,6 +142,76 @@ func TestMigrateUsersFromClientsDoesNotRecreateDeletedOwnerWhenFileExists(t *tes
 	}
 }
 
+func TestMigrateUsersFromClientsRepairsExistingOwnerByLegacyCredentials(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	user := &User{Id: 8, UserName: "alice", Password: "secret", Status: true}
+	client := &Client{Id: 11, UserId: 99, WebUserName: "alice", WebPassword: "secret"}
+	db.Users.Store(user.Id, user)
+	db.Clients.Store(client.Id, client)
+	if err := os.WriteFile(db.UserFilePath, []byte("[]"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	utils := &DbUtils{JsonDb: db}
+	if err := utils.MigrateUsersFromClients(); err != nil {
+		t.Fatal(err)
+	}
+	if client.UserId != user.Id {
+		t.Fatalf("expected stale client owner to be repaired to user %d, got %d", user.Id, client.UserId)
+	}
+}
+
+func TestMigrateUsersFromClientsDoesNotRecreateUnassignedOwnerWhenUsersFileExists(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	client := &Client{Id: 12, WebUserName: "removed", WebPassword: "secret"}
+	db.Clients.Store(client.Id, client)
+	if err := os.WriteFile(db.UserFilePath, []byte("[]"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	utils := &DbUtils{JsonDb: db}
+	if err := utils.MigrateUsersFromClients(); err != nil {
+		t.Fatal(err)
+	}
+	if got := countUsers(db); got != 0 {
+		t.Fatalf("expected revoked legacy credentials not to recreate a user, got %d users", got)
+	}
+	if client.UserId != 0 {
+		t.Fatalf("unassigned client was unexpectedly rebound to user %d", client.UserId)
+	}
+}
+
+func TestClientOwnerValidationAndResourceCounts(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	user := &User{Id: 7, UserName: "alice", Status: true}
+	clientA := &Client{Id: 1, UserId: user.Id, VerifyKey: "client-a", Status: true}
+	clientB := &Client{Id: 2, UserId: user.Id, VerifyKey: "client-b", Status: true}
+	otherClient := &Client{Id: 3, UserId: 9, VerifyKey: "client-c", Status: true}
+	db.Users.Store(user.Id, user)
+	db.Clients.Store(clientA.Id, clientA)
+	db.Clients.Store(clientB.Id, clientB)
+	db.Clients.Store(otherClient.Id, otherClient)
+	db.Tasks.Store(1, &Tunnel{Id: 1, Client: clientA})
+	db.Hosts.Store(1, &Host{Id: 1, Client: clientB})
+	db.Tasks.Store(2, &Tunnel{Id: 2, Client: otherClient})
+	utils := &DbUtils{JsonDb: db}
+
+	if err := utils.ValidateClientOwner(0); err != nil {
+		t.Fatalf("unassigned client should be valid: %v", err)
+	}
+	if err := utils.ValidateClientOwner(user.Id); err != nil {
+		t.Fatalf("existing user should be a valid owner: %v", err)
+	}
+	if err := utils.ValidateClientOwner(999); err == nil {
+		t.Fatal("missing user should not be a valid client owner")
+	}
+
+	counts := utils.GetUserResourceCounts()[user.Id]
+	if counts.ClientCount != 2 || counts.TunnelCount != 2 {
+		t.Fatalf("unexpected resource counts: %#v", counts)
+	}
+}
+
 func TestUserTunnelLimitCountsClientsTunnelsAndHosts(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	user := &User{Id: 1, UserName: "alice", Status: true, MaxTunnelNum: 2}

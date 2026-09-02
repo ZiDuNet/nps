@@ -116,21 +116,28 @@
                         </div>
                     </div>
                 {{if eq true .allow_user_login}}
-                    <div class="form-group" id="web_username">
-                        <label class="form-label font-bold" for="client-web-username" langtag="word-webusername"></label>
-                        <div class="form-group-wrapper">
-                            <input id="client-web-username" class="form-control" type="text" name="web_username" placeholder="" langtag="info-unrestricted">
-                        </div>
-                    </div>
-                    <div class="form-group" id="web_password">
-                        <label class="form-label font-bold" for="client-web-password" langtag="word-webpassword"></label>
-                        <div class="form-group-wrapper">
-                            <div class="input-group">
-                                <input id="client-web-password" class="form-control" type="password" name="web_password" autocomplete="new-password" spellcheck="false" placeholder="" langtag="info-unrestricted">
-                                <span class="input-group-btn"><button class="btn btn-default credential-password-toggle" type="button" data-password-target="client-web-password" aria-controls="client-web-password" aria-label="显示密码" data-aria-label-zh="显示密码" data-aria-label-en="Show password" aria-pressed="false" title="显示密码" data-title-zh="显示密码" data-title-en="Show password"><i class="fa fa-eye" aria-hidden="true"></i></button></span>
+                    <details class="form-workflow-advanced legacy-client-login-settings">
+                        <summary>
+                            <span class="form-workflow-advanced__title"><i class="fa fa-history" aria-hidden="true"></i><span data-i18n-zh="旧版客户端登录兼容" data-i18n-en="Legacy client login compatibility">旧版客户端登录兼容</span></span>
+                            <span class="form-workflow-advanced__badge" data-i18n-zh="可选" data-i18n-en="Optional">可选</span>
+                        </summary>
+                        <div class="form-workflow-advanced__body">
+                            <p class="form-field-hint" data-i18n-zh="当前面板使用“所属用户”管理权限。这里只为旧版按客户端账号登录的部署保留兼容字段，新客户端通常无需填写。用户名和密码需要同时填写。" data-i18n-en="The assigned user now controls dashboard access. Keep these fields only for legacy deployments that sign in with a client account; new clients usually do not need them. Username and password must be provided together.">当前面板使用“所属用户”管理权限。这里只为旧版按客户端账号登录的部署保留兼容字段，新客户端通常无需填写。用户名和密码需要同时填写。</p>
+                            <div class="legacy-client-login-grid">
+                                <div class="legacy-client-login-field" id="web_username">
+                                    <label class="form-label font-bold" for="client-web-username" data-i18n-zh="旧版客户端用户名" data-i18n-en="Legacy client username">旧版客户端用户名</label>
+                                    <input id="client-web-username" class="form-control" type="text" name="web_username" autocomplete="username" placeholder="可留空" data-placeholder-zh="可留空" data-placeholder-en="Optional">
+                                </div>
+                                <div class="legacy-client-login-field" id="web_password">
+                                    <label class="form-label font-bold" for="client-web-password" data-i18n-zh="旧版客户端密码" data-i18n-en="Legacy client password">旧版客户端密码</label>
+                                    <div class="input-group">
+                                        <input id="client-web-password" class="form-control" type="password" name="web_password" autocomplete="new-password" spellcheck="false" placeholder="可留空" data-placeholder-zh="可留空" data-placeholder-en="Optional">
+                                        <span class="input-group-btn"><button class="btn btn-default credential-password-toggle" type="button" data-password-target="client-web-password" aria-controls="client-web-password" aria-label="显示密码" data-aria-label-zh="显示密码" data-aria-label-en="Show password" aria-pressed="false" title="显示密码" data-title-zh="显示密码" data-title-en="Show password"><i class="fa fa-eye" aria-hidden="true"></i></button></span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </details>
                 {{end}}
 
                     <div class="form-section-title"><i class="fa fa-shield-alt" aria-hidden="true"></i><span data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</span></div>
