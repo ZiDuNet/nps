@@ -282,7 +282,11 @@
         var menu = document.getElementById('side-menu');
         if (!content || !menu || !window.fetch || !window.DOMParser) return;
 
-        var navigationBusy = false;
+        // Navigation is latest-request-wins. A user can click several menu
+        // items before a slow page response arrives; stale responses must not
+        // replace the page or clear the loading state for the current target.
+        var navigationSerial = 0;
+        var navigationRequest = null;
 
         function normalizeURL(value) {
             try {
@@ -402,23 +406,31 @@
         }
 
         function navigate(target, pushHistory) {
-            if (navigationBusy) return;
             var url = sameOriginURL(target);
             if (!url) return;
             var current = normalizeURL(window.location.href);
             if (pushHistory && current === normalizeURL(url.href)) return;
-            navigationBusy = true;
-            setLoading(true);
-            setActiveMenu(url.href);
-
-            window.fetch(url.href, {
+            var serial = ++navigationSerial;
+            if (navigationRequest && typeof navigationRequest.abort === 'function') {
+                try { navigationRequest.abort(); } catch (error) {}
+            }
+            var controller = window.AbortController ? new AbortController() : null;
+            navigationRequest = controller;
+            var requestOptions = {
                 method: 'GET',
                 credentials: 'same-origin',
                 headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' }
-            }).then(function (response) {
+            };
+            if (controller) requestOptions.signal = controller.signal;
+            setLoading(true);
+            setActiveMenu(url.href);
+
+            window.fetch(url.href, requestOptions).then(function (response) {
+                if (serial !== navigationSerial) return null;
                 if (!response.ok) throw new Error('navigation request failed');
                 return response.text();
             }).then(function (html) {
+                if (serial !== navigationSerial || html === null) return;
                 var extracted = extractContent(html);
                 // An expired session normally returns the login document, which
                 // has no console content container. Let the browser handle that
@@ -435,7 +447,8 @@
                 if (pushHistory) history.pushState({ npsConsole: true }, '', url.href);
                 refreshLanguage();
                 focusNewPage();
-            }).catch(function () {
+            }).catch(function (error) {
+                if (serial !== navigationSerial || (error && error.name === 'AbortError')) return;
                 // Keep the current page usable when the asynchronous request
                 // fails; a full navigation is the reliable fallback.
                 if (!pushHistory) window.location.reload();
@@ -444,7 +457,8 @@
                     if (typeof npsNotify === 'function') npsNotify('error', npsIsEnglish() ? 'Page load failed' : '页面加载失败');
                 }
             }).finally(function () {
-                navigationBusy = false;
+                if (serial !== navigationSerial) return;
+                if (navigationRequest === controller) navigationRequest = null;
                 setLoading(false);
             });
         }

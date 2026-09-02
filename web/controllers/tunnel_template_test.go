@@ -33,6 +33,19 @@ func TestTunnelSidebarMenu(t *testing.T) {
 	}
 }
 
+func TestSupportedTunnelModeRejectsUnknownModes(t *testing.T) {
+	for _, mode := range []string{"tcp", "udp", "httpProxy", "socks5", "secret", "p2p", "file"} {
+		if !supportedTunnelMode(mode) {
+			t.Fatalf("supportedTunnelMode(%q) = false", mode)
+		}
+	}
+	for _, mode := range []string{"", "unknown", "tcpTrans", "httpHostServer", "file-server"} {
+		if supportedTunnelMode(mode) {
+			t.Fatalf("supportedTunnelMode(%q) = true, want false", mode)
+		}
+	}
+}
+
 func TestTunnelModeTemplateEntrypointsIncludeSharedViews(t *testing.T) {
 	tests := []struct {
 		mode   string
@@ -114,6 +127,9 @@ func TestLayoutSupportsContentOnlyNavigation(t *testing.T) {
 		`<main id="nps-content"`,
 		`menu.addEventListener('click'`,
 		`window.fetch(url.href`,
+		`var navigationSerial = 0;`,
+		`navigationRequest && typeof navigationRequest.abort`,
+		`serial !== navigationSerial`,
 		`history.pushState({ npsConsole: true }`,
 		`window.addEventListener('popstate'`,
 		`X-Requested-With`,
@@ -122,6 +138,20 @@ func TestLayoutSupportsContentOnlyNavigation(t *testing.T) {
 	} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("layout misses content-only navigation marker: %s", marker)
+		}
+	}
+}
+
+func TestGenericTunnelAddBackLinkTracksSelectedMode(t *testing.T) {
+	content := readTemplateForTest(t, "../views/index/add.html")
+	for _, marker := range []string{
+		`id="tunnel-back-link"`,
+		`function updateBackLink(type)`,
+		`type === "httpProxy" ? "http"`,
+		`updateBackLink(type);`,
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("generic tunnel add page misses back-link marker: %s", marker)
 		}
 	}
 }

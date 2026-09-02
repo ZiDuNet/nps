@@ -10,11 +10,11 @@
         <key>CFBundleIdentifier</key>
             <string>com.nps.client</string>
         <key>CFBundleVersion</key>
-            <string>1.1.6</string>
+            <string>1.1.7</string>
         <key>CFBundleGetInfoString</key>
             <string>NPS 客户端</string>
         <key>CFBundleShortVersionString</key>
-            <string>1.1.6</string>
+            <string>1.1.7</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>CFBundleIconName</key>

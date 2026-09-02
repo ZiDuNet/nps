@@ -22,7 +22,7 @@ Unicode true
 ## !define INFO_PROJECTNAME    "my-project" # Default "npc-gui"
 ## !define INFO_COMPANYNAME    "My Company" # Default "NPS"
 ## !define INFO_PRODUCTNAME    "My Product Name" # Default "NPS Client"
-## !define INFO_PRODUCTVERSION "1.0.0"     # Default "1.1.6"
+## !define INFO_PRODUCTVERSION "1.0.0"     # Default "1.1.7"
 ## !define INFO_COPYRIGHT      "(c) Now, My Company" # Default "Copyright © 2026 NPS"
 ###
 ## !define PRODUCT_EXECUTABLE  "Application.exe"      # Default "${INFO_PROJECTNAME}.exe"

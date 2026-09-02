@@ -31,6 +31,18 @@ func normalizedTunnelMode(mode string) string {
 	}
 }
 
+// supportedTunnelMode validates the mode received from a form before any
+// task state is generated or persisted. Unknown modes cannot be handed to
+// server.NewMode because that would leave an unusable task in the database.
+func supportedTunnelMode(mode string) bool {
+	switch strings.TrimSpace(mode) {
+	case "tcp", "udp", "httpProxy", "socks5", "secret", "p2p", "file":
+		return true
+	default:
+		return false
+	}
+}
+
 // tunnelSidebarMenu maps the internal proxy mode to the sidebar destination.
 // httpProxy is shown as "HTTP 代理" in the navigation, while the remaining
 // modes use their own route names.
@@ -393,11 +405,16 @@ func (s *IndexController) Add() {
 		if !s.RequirePost() {
 			return
 		}
+		tunnelMode := strings.TrimSpace(s.getEscapeString("type"))
+		if !supportedTunnelMode(tunnelMode) {
+			s.AjaxErr("unsupported tunnel mode")
+			return
+		}
 		id := int(file.GetDb().JsonDb.GetTaskId())
 		t := &file.Tunnel{
 			Port:         s.GetIntNoErr("port"),
 			ServerIp:     s.getEscapeString("server_ip"),
-			Mode:         s.getEscapeString("type"),
+			Mode:         tunnelMode,
 			Target:       &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))},
 			Id:           id,
 			Status:       true,
@@ -581,10 +598,18 @@ func (s *IndexController) Edit() {
 				return
 			}
 			desiredPort := s.GetIntNoErr("port")
-			desiredMode := s.getEscapeString("type")
+			desiredMode := strings.TrimSpace(s.getEscapeString("type"))
+			if !supportedTunnelMode(desiredMode) {
+				s.AjaxErr("unsupported tunnel mode")
+				return
+			}
 			t.RLock()
 			currentPort, currentMode := t.Port, t.Mode
 			t.RUnlock()
+			if desiredMode != currentMode {
+				s.AjaxErr("tunnel mode cannot be changed")
+				return
+			}
 			if desiredPort <= 0 {
 				desiredPort = tool.GenerateServerPort(desiredMode)
 			}

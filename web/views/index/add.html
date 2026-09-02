@@ -17,7 +17,7 @@
             <p data-i18n-zh="选择代理模式并填写连接目标，完成后即可开始转发流量。" data-i18n-en="Choose a proxy mode and connection target to start forwarding traffic.">选择代理模式并填写连接目标，完成后即可开始转发流量。</p>
         </div>
         <div class="dashboard-page-actions form-page-actions">
-            <a class="btn btn-outline btn-primary form-page-back" href="{{.web_base_url}}/index/{{if eq .type "httpProxy"}}http{{else if .type}}{{.type}}{{else}}tcp{{end}}">
+            <a id="tunnel-back-link" class="btn btn-outline btn-primary form-page-back" href="{{.web_base_url}}/index/{{if eq .type "httpProxy"}}http{{else if .type}}{{.type}}{{else}}tcp{{end}}">
                 <i class="fa fa-arrow-left" aria-hidden="true"></i>
                 <span data-i18n-zh="返回列表" data-i18n-en="Back to list">返回列表</span>
             </a>
@@ -203,6 +203,12 @@
         $(".tunnel-form").removeClass(tunnelTypeClasses).addClass("tunnel-type-" + type);
     }
 
+    function updateBackLink(type) {
+        var destination = type === "httpProxy" ? "http" : (fieldMap[type] ? type : "tcp");
+        var link = document.getElementById("tunnel-back-link");
+        if (link) link.href = "{{.web_base_url}}/index/" + destination;
+    }
+
     function setTunnelFieldVisibility(fieldID, visible) {
         var field = $("[data-tunnel-field='" + fieldID + "']");
         if (!field.length) return;
@@ -217,6 +223,7 @@
         if (!fieldMap[type]) {
             type = "tcp";
         }
+        updateBackLink(type);
         applyTypeClass(type);
         var fields = fieldMap[type];
         $("[data-tunnel-field]").each(function () {
