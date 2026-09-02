@@ -233,6 +233,7 @@ func TestHostListTemplateUsesSafeDynamicOutput(t *testing.T) {
 		`rel="noopener noreferrer"`,
 		`npsEscapeHtml((row.Target || {}).TargetStr || '-')`,
 		`type="button"`,
+		`url: '{{.web_base_url}}/index/hostlist'`,
 		`$('body').setLang('#table');`,
 		`PlatformManaged`,
 		`cardView: window.matchMedia && window.matchMedia('(max-width: 768px)').matches`,

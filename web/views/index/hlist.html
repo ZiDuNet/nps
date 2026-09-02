@@ -46,7 +46,11 @@ function hostEndpointLink(label, url) {
 }
 
 $('#table').npsTable({
-    toolbar: '#toolbar', method: 'post', url: window.location,
+    // Content-only sidebar navigation executes this script before
+    // history.pushState updates window.location. Keep the data request
+    // anchored to the host-list endpoint so the first visit cannot post to
+    // the page that was previously open.
+    toolbar: '#toolbar', method: 'post', url: '{{.web_base_url}}/index/hostlist',
     queryParams: function (params) { return {offset: params.offset, limit: params.limit, search: params.search, client_id: hostListClientId}; },
     search: true, contentType: 'application/x-www-form-urlencoded', striped: true, showHeader: true, showColumns: false, showRefresh: true,
     pagination: true, sidePagination: 'server', pageNumber: 1, pageList: [10, 20, 50], detailView: true, smartDisplay: true,
