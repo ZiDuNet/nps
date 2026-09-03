@@ -92,7 +92,8 @@ $(document).ready(function() {
     initUserExpirePicker();
 
     function ensureUserExpireFallback(host, value) {
-        if (!host || host.querySelector('input[name="expire_time"]')) return;
+        if (!host) return;
+        if (cleanupUserExpireFallback(host)) return;
         var fallback = document.createElement('input');
         fallback.id = 'user-expire-picker-fallback';
         fallback.className = 'form-control';
@@ -104,6 +105,15 @@ $(document).ready(function() {
         host.appendChild(fallback);
     }
 
+    function cleanupUserExpireFallback(host) {
+        if (!host) return false;
+        var input = host.querySelector('input[type="hidden"][name="expire_time"]');
+        if (!input) return false;
+        var fallback = host.querySelector('#user-expire-picker-fallback');
+        if (fallback) fallback.remove();
+        return true;
+    }
+
     function initUserExpirePicker() {
         var host = document.getElementById('user-expire-time-picker');
         if (!host) return;
@@ -112,7 +122,10 @@ $(document).ready(function() {
             ensureUserExpireFallback(host, defaultValue);
             return;
         }
-        if (typeof zui.DatetimePicker.get === 'function' && zui.DatetimePicker.get(host)) return;
+        if (typeof zui.DatetimePicker.get === 'function' && zui.DatetimePicker.get(host)) {
+            cleanupUserExpireFallback(host);
+            return;
+        }
         try {
             zui.DatetimePicker.ensure(host, {
                 id: 'user-expire-picker',
@@ -122,9 +135,11 @@ $(document).ready(function() {
                 minuteStep: 5,
                 required: false,
                 placeholder: npsIsEnglish() ? 'Select expiration date and time' : '请选择到期时间',
-                icon: true
+                icon: true,
+                afterRender: function() {
+                    cleanupUserExpireFallback(host);
+                }
             });
-            if (!host.querySelector('input[name="expire_time"]')) ensureUserExpireFallback(host, defaultValue);
         } catch (error) {
             ensureUserExpireFallback(host, defaultValue);
         }

@@ -276,7 +276,8 @@ $(document).ready(function () {
     initClientExpirePicker();
 
     function ensureClientExpireFallback(host, value) {
-        if (!host || host.querySelector('input[name="expire_time"]')) return;
+        if (!host) return;
+        if (cleanupClientExpireFallback(host)) return;
         var fallback = document.createElement('input');
         fallback.id = 'client-expire-picker-fallback';
         fallback.className = 'form-control';
@@ -288,6 +289,15 @@ $(document).ready(function () {
         host.appendChild(fallback);
     }
 
+    function cleanupClientExpireFallback(host) {
+        if (!host) return false;
+        var input = host.querySelector('input[type="hidden"][name="expire_time"]');
+        if (!input) return false;
+        var fallback = host.querySelector('#client-expire-picker-fallback');
+        if (fallback) fallback.remove();
+        return true;
+    }
+
     function initClientExpirePicker() {
         var host = document.getElementById('client-expire-time-picker');
         if (!host) return;
@@ -296,7 +306,10 @@ $(document).ready(function () {
             ensureClientExpireFallback(host, defaultValue);
             return;
         }
-        if (typeof zui.DatetimePicker.get === 'function' && zui.DatetimePicker.get(host)) return;
+        if (typeof zui.DatetimePicker.get === 'function' && zui.DatetimePicker.get(host)) {
+            cleanupClientExpireFallback(host);
+            return;
+        }
         try {
             zui.DatetimePicker.ensure(host, {
                 id: 'client-expire-picker',
@@ -306,9 +319,11 @@ $(document).ready(function () {
                 minuteStep: 5,
                 required: false,
                 placeholder: npsIsEnglish() ? 'Select expiration date and time' : '请选择到期时间',
-                icon: true
+                icon: true,
+                afterRender: function() {
+                    cleanupClientExpireFallback(host);
+                }
             });
-            if (!host.querySelector('input[name="expire_time"]')) ensureClientExpireFallback(host, defaultValue);
         } catch (error) {
             ensureClientExpireFallback(host, defaultValue);
         }
