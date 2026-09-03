@@ -18,6 +18,16 @@ func TestLanguageSubmitUsesSameOriginReturnUrl(t *testing.T) {
 	if strings.Contains(script, "window.location.href = document.referrer") {
 		t.Fatal("language script must not redirect directly to an arbitrary referrer")
 	}
+	for _, marker := range []string{
+		"function resolveLanguageCode (value)",
+		"function lookupLanguageValue (index, current)",
+		"Missing or malformed entries must not erase existing",
+		"click.npsLanguage",
+	} {
+		if !strings.Contains(script, marker) {
+			t.Fatalf("language script misses regression guard %q", marker)
+		}
+	}
 }
 
 func TestConsoleTemplatesUseZUIWithoutBootstrap(t *testing.T) {
@@ -46,6 +56,27 @@ func TestConsoleTemplatesUseZUIWithoutBootstrap(t *testing.T) {
 			if strings.Contains(template, token) {
 				t.Fatalf("console template %s still references removed Bootstrap asset %q", path, token)
 			}
+		}
+		if strings.Contains(template, `onclick="return switchLanguage(`) {
+			t.Fatalf("console template %s must use the namespaced delegated language handler", path)
+		}
+	}
+}
+
+func TestLanguageDropdownKeepsCompactViewportBoundaries(t *testing.T) {
+	content, err := os.ReadFile("../static/css/zui-console.css")
+	if err != nil {
+		t.Fatalf("read console stylesheet: %v", err)
+	}
+	stylesheet := string(content)
+	for _, marker := range []string{
+		"#languagemenu + .dropdown-menu",
+		"width: max-content !important",
+		"left: auto !important",
+		"max-width: calc(100vw - 24px) !important",
+	} {
+		if !strings.Contains(stylesheet, marker) {
+			t.Fatalf("console stylesheet misses language dropdown guard %q", marker)
 		}
 	}
 }

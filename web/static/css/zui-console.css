@@ -2903,6 +2903,27 @@ body.zui-app .nav-sidebar-footer .nav-logout-link {
     }
 }
 
+/* ZUI computes dropdown dimensions inline from the available viewport. Keep
+   the language menu compact and anchored to its trigger instead of allowing
+   that calculation to stretch it across the page. */
+body.zui-app .navbar-top-links #languagemenu + .dropdown-menu,
+body.auth-body .auth-language #languagemenu + .dropdown-menu {
+    position: absolute !important;
+    top: calc(100% + 6px) !important;
+    right: 0 !important;
+    left: auto !important;
+    width: max-content !important;
+    min-width: min(144px, calc(100vw - 24px)) !important;
+    max-width: calc(100vw - 24px) !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+}
+body.zui-app .navbar-top-links #languagemenu + .dropdown-menu > li > a,
+body.auth-body .auth-language #languagemenu + .dropdown-menu > li > a {
+    display: block;
+    white-space: nowrap;
+}
+
 /* Account status belongs to the footer action cluster rather than the menu
    body.  The extra top padding creates a clear pause after the divider, and
    the expiry pill gives the user a quick answer without competing with the

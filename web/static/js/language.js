@@ -1,8 +1,42 @@
 (function ($) {
+	function resolveLanguageCode (value) {
+		var requested = String(value || '').trim().toLowerCase();
+		var menu = languages && languages['menu'];
+		if (menu) {
+			for (var key in menu) {
+				if (Object.prototype.hasOwnProperty.call(menu, key) && key.toLowerCase() == requested) return key;
+			}
+			if (requested == 'en') {
+				for (var englishKey in menu) {
+					if (Object.prototype.hasOwnProperty.call(menu, englishKey) && englishKey.toLowerCase().indexOf('en-') == 0) return englishKey;
+				}
+			}
+			if (menu[languages['default']]) return languages['default'];
+			for (var firstKey in menu) {
+				if (Object.prototype.hasOwnProperty.call(menu, firstKey)) return firstKey;
+			}
+		}
+		return requested.indexOf('en') == 0 ? 'en-US' : 'zh-CN';
+	}
+
+	function lookupLanguageValue (index, current) {
+		if (!languages || !languages['content']) return null;
+		var value = languages['content'][String(index || '').toLowerCase()];
+		if ($.type(value) == 'array') {
+			if (!value.length) return null;
+			value = value[Math.floor((Math.random() * value.length))];
+		}
+		if ($.type(value) == 'object') {
+			value = value[current] || value[languages['default']];
+		}
+		return $.type(value) == 'string' && value.trim() !== '' ? value : null;
+	}
+
 	window.switchLanguage = function (lang) {
 		var menu = $('#languagemenu');
 		if (!menu.length) return false;
-		menu.attr('lang', lang);
+		var current = resolveLanguageCode(lang);
+		menu.attr('lang', current);
 		if (languages && languages.content) $('body').setLang('');
 		return false;
 	};
@@ -106,8 +140,9 @@
 				languages['menu'] = languages['content']['languages'];
 				languages['default'] = languages['content']['default'];
 				// Keep Chinese as the first-run default; only an explicit user cookie
-				// overrides it.
-					languages['navigator'] = (getCookie ('lang-v2') || getLanguagePreference() || languages['default']);
+				// overrides it. Match the requested value to the XML key so an old
+				// browser preference cannot leave the page without a valid locale.
+				languages['navigator'] = resolveLanguageCode(getCookie ('lang-v2') || getLanguagePreference() || languages['default']);
 					for(var key in languages['menu']){
 						if (!Object.prototype.hasOwnProperty.call(languages['menu'], key)) continue;
 						if (key.toLowerCase() == languages['navigator'].toLowerCase()) languages['current'] = key;
@@ -122,47 +157,51 @@
 
 	$.fn.setLang = function (dom) {
 		if (!languages || !languages['content']) return false;
-		languages['current'] = $('#languagemenu').attr('lang');
+		dom = typeof dom == 'string' ? dom : '';
+		languages['current'] = resolveLanguageCode($('#languagemenu').attr('lang') || languages['current'] || languages['default']);
+		$('#languagemenu').attr('lang', languages['current']);
 		if ( dom == '' ) {
-			$('#languagemenu span').text(' ' + languages['menu'][languages['current']]);
+			var menuLabel = (languages['menu'] && languages['menu'][languages['current']]) || languages['current'];
+			$('#languagemenu span').text(' ' + menuLabel);
 			if (languages['current'] != getCookie('lang-v2')) setCookie('lang-v2', languages['current']);
 			saveLanguagePreference(languages['current']);
 			if($("#table").length>0) $('#table').npsTable('refreshOptions', { 'locale': languages['current']});
 		}
-		$.each($(dom + ' [langtag]'), function (i, item) {
+		var langtagSelector = dom ? dom + ' [langtag]' : '[langtag]';
+		$.each($(langtagSelector), function (i, item) {
 			var index = $(item).attr('langtag');
-			var string = languages['content'][index.toLowerCase()];
-			switch ($.type(string)) {
-				case 'string':
-					break;
-				case 'array':
-					string = string[Math.floor((Math.random()*string.length))];
-				case 'object':
-					string = (string[languages['current']] || string[languages['default']] || null);
-					break;
-				default:
-					string = 'Missing language string "' + index + '"';
-					$(item).css('background-color','#ffeeba');
-			}
-			if($.type($(item).attr('placeholder')) == 'undefined') {
-				$(item).text(string);
-			} else {
+			var string = lookupLanguageValue(index, languages['current']);
+			// Missing or malformed entries must not erase existing server-rendered
+			// content. This is especially important for asynchronously generated
+			// table/detail rows.
+			if (string === null) return;
+			if ($(item).is('input, textarea') && item.hasAttribute('placeholder')) {
 				$(item).attr('placeholder', string);
+			} else {
+				$(item).text(string);
 			}
 		});
-		$.each($(dom + ' [data-i18n-zh]'), function (i, item) {
+		var i18nSelector = dom ? dom + ' [data-i18n-zh]' : '[data-i18n-zh]';
+		$.each($(i18nSelector), function (i, item) {
 			var language = languages['current'] === 'en-US' ? 'en' : 'zh';
-			$(item).text($(item).attr('data-i18n-' + language));
+			var string = $(item).attr('data-i18n-' + language);
+			if ($.type(string) == 'string' && string.trim() !== '') $(item).text(string);
 		});
 		var language = languages['current'] === 'en-US' ? 'en' : 'zh';
-		$.each($(dom + ' [data-placeholder-zh]'), function (i, item) {
-			$(item).attr('placeholder', $(item).attr('data-placeholder-' + language));
+		var placeholderSelector = dom ? dom + ' [data-placeholder-zh]' : '[data-placeholder-zh]';
+		$.each($(placeholderSelector), function (i, item) {
+			var string = $(item).attr('data-placeholder-' + language);
+			if ($.type(string) == 'string' && string.trim() !== '') $(item).attr('placeholder', string);
 		});
-		$.each($(dom + ' [data-aria-label-zh]'), function (i, item) {
-			$(item).attr('aria-label', $(item).attr('data-aria-label-' + language));
+		var ariaSelector = dom ? dom + ' [data-aria-label-zh]' : '[data-aria-label-zh]';
+		$.each($(ariaSelector), function (i, item) {
+			var string = $(item).attr('data-aria-label-' + language);
+			if ($.type(string) == 'string' && string.trim() !== '') $(item).attr('aria-label', string);
 		});
-		$.each($(dom + ' [data-title-zh]'), function (i, item) {
-			$(item).attr('title', $(item).attr('data-title-' + language));
+		var titleSelector = dom ? dom + ' [data-title-zh]' : '[data-title-zh]';
+		$.each($(titleSelector), function (i, item) {
+			var string = $(item).attr('data-title-' + language);
+			if ($.type(string) == 'string' && string.trim() !== '') $(item).attr('title', string);
 		});
 		npsRefreshToggleLabels(dom);
 		npsDecorateForms(dom);
@@ -198,7 +237,7 @@
 
 $(document).ready(function () {
 	$('body').cloudLang();
-	$('body').on('click','li[lang] a',function(e){
+	$(document).off('click.npsLanguage', 'li[lang] a').on('click.npsLanguage', 'li[lang] a', function(e){
 		e.preventDefault();
 		window.switchLanguage($(this).closest('li').attr('lang'));
 	});
