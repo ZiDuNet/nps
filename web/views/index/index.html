@@ -921,4 +921,7 @@
             };
             window.addEventListener('resize', dashboardResizeHandler);
         });
+        $(document).off('npsLanguageChanged.dashboard').on('npsLanguageChanged.dashboard', function () {
+            if ($('#dashboard-runtime-panel').length || $('#dashboard-refresh').length) dashboardRefresh();
+        });
 </script>

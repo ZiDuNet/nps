@@ -22,6 +22,9 @@ func TestLanguageSubmitUsesSameOriginReturnUrl(t *testing.T) {
 		"function resolveLanguageCode (value)",
 		"function lookupLanguageValue (index, current)",
 		"Missing or malformed entries must not erase existing",
+		"var runtime = window.nps || {};",
+		"var pendingLanguage = null;",
+		"npsLanguageChanged",
 		"click.npsLanguage",
 	} {
 		if !strings.Contains(script, marker) {
@@ -90,6 +93,7 @@ func TestPublicLayoutKeepsShellAndNavigatesContentOnly(t *testing.T) {
 	for _, marker := range []string{
 		`id="side-menu"`,
 		`id="nps-content"`,
+		`window.nps = { "web_base_url": "{{.web_base_url}}"`,
 		`window.fetch(url.href`,
 		`history.pushState`,
 		`window.addEventListener('popstate'`,
@@ -102,6 +106,9 @@ func TestPublicLayoutKeepsShellAndNavigatesContentOnly(t *testing.T) {
 	}
 	if strings.Contains(template, `window.location.href = url.href`) {
 		t.Fatal("menu navigation must not replace the complete console document")
+	}
+	if !strings.Contains(template, `"repository": "{{.github_repository}}" };`) {
+		t.Fatal("public layout must terminate the runtime config statement before the version check")
 	}
 	for _, marker := range []string{
 		`id="nps-version-indicator"`,

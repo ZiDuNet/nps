@@ -19,14 +19,20 @@
         })();
     </script>
 
-    <title langtag="title-admin"></title>
+    <title langtag="title-admin">NPS - 管理</title>
+
+    <script>
+        // The language loader runs from the document-ready queue, so expose
+        // the console runtime before any page scripts can schedule it.
+        window.nps = { "web_base_url": "{{.web_base_url}}", "version": "{{.version}}", "repository": "{{.github_repository}}" };
+    </script>
 
     <link href="{{.web_base_url}}/static/css/zui-3.0.0.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/toastr.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20260904-1" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/zui-console.css?v={{.version}}&ui=20260904-1" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20260904-3" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/zui-console.css?v={{.version}}&ui=20260904-3" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/zui-3.0.0.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
@@ -35,7 +41,7 @@
     <script src="{{.web_base_url}}/static/js/nps-table.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/echarts.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/inspinia.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20260904-1" type="text/javascript"></script>
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20260904-3" type="text/javascript"></script>
 
 </head>
 
@@ -54,11 +60,11 @@
                 </li>
                 <li class="{{if eq "index" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/"><i class="icon icon-dashboard" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="word-dashboard"></span></a>
+                    <span class="nav-label" langtag="word-dashboard">仪表盘</span></a>
                 </li>
                 <li class="{{if eq "client" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/client/list"><i class="icon icon-desktop" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="word-client"></span></a>
+                    <span class="nav-label" langtag="word-client">客户端</span></a>
                 </li>
                 {{if eq true .isAdmin}}
                 <li class="{{if eq "user" .menu}}active{{end}}">
@@ -69,57 +75,57 @@
                 <li class="nav-group-title"><span data-i18n-zh="隧道管理" data-i18n-en="Tunnels">隧道管理</span></li>
                 <li class="{{if eq "host" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/index/hostlist"><i class="icon icon-globe" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="scheme-host"></span></a>
+                    <span class="nav-label" langtag="scheme-host">域名解析</span></a>
                 </li>
                 <li class="{{if eq "tcp" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/index/tcp"><i class="icon icon-exchange" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="scheme-tcp"></span></a>
+                    <span class="nav-label" langtag="scheme-tcp">TCP 隧道</span></a>
                 </li>
                 <li class="{{if eq "udp" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/index/udp"><i class="icon icon-random" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="scheme-udp"></span></a>
+                    <span class="nav-label" langtag="scheme-udp">UDP 隧道</span></a>
                 </li>
                 <li class="{{if eq "http" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/index/http"><i class="icon icon-server" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="scheme-httpproxy"></span></a>
+                    <span class="nav-label" langtag="scheme-httpproxy">HTTP 代理</span></a>
                 </li>
                 <li class="{{if eq "socks5" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/index/socks5"><i class="icon icon-cubes" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="scheme-socks5"></span></a>
+                    <span class="nav-label" langtag="scheme-socks5">SOCKS 代理</span></a>
                 </li>
                 <li class="{{if eq "secret" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/index/secret"><i class="icon icon-eye-close" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="scheme-secret"></span></a>
+                    <span class="nav-label" langtag="scheme-secret">私密代理</span></a>
                 </li>
                 <li class="{{if eq "p2p" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/index/p2p"><i class="icon icon-share-alt" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="scheme-p2p"></span></a>
+                    <span class="nav-label" langtag="scheme-p2p">P2P 连接</span></a>
                 </li>
                 <li class="{{if eq "file" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/index/file"><i class="icon icon-file" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="scheme-file"></span></a>
+                    <span class="nav-label" langtag="scheme-file">文件访问</span></a>
                 </li>
                 <li class="nav-group-title"><span data-i18n-zh="系统" data-i18n-en="System">系统</span></li>
                 {{if eq true .isAdmin}}
                 <li class="{{if eq "global" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/global/index"><i class="icon icon-cog" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="word-globalparam"></span></a>
+                    <span class="nav-label" langtag="word-globalparam">全局参数</span></a>
                 </li>
                 {{end}}
                 <li class="{{if eq "help" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/index/help"><i class="icon icon-lightbulb" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="word-help"></span></a>
+                    <span class="nav-label" langtag="word-help">使用说明</span></a>
                 </li>
                 <li class="nav-sidebar-footer">
                     {{if eq true .isAdmin}}
                     <div class="nav-account">
                         <i class="icon icon-shield" aria-hidden="true"></i>
-                        <span><strong class="font-bold" langtag="word-admin"></strong><small langtag="word-system"></small></span>
+                        <span><strong class="font-bold" langtag="word-admin">管理员</strong><small langtag="word-system">系统</small></span>
                     </div>
                     {{else}}
                     <button type="button" class="nav-account nav-account--button" data-toggle="modal" data-target="#change-password-modal" aria-haspopup="dialog" title="修改密码" data-title-zh="修改密码" data-title-en="Change password">
                         <i class="icon icon-user" aria-hidden="true"></i>
-                        <span><strong class="font-bold">{{.username}}</strong><small langtag="word-user"></small></span>
+                        <span><strong class="font-bold">{{.username}}</strong><small langtag="word-user">用户</small></span>
                     </button>
                     {{end}}
                     <div class="nav-account-expiry{{if .accountExpireTime}} nav-account-expiry--dated{{else}} nav-account-expiry--unlimited{{end}}" role="status">
@@ -134,7 +140,7 @@
                     </div>
                     {{end}}
                     <a class="nav-logout-link" href="{{.web_base_url}}/login/out">
-                        <i class="fa fa-sign-out-alt" aria-hidden="true"></i><span class="nav-label" langtag="word-logout"></span>
+                        <i class="fa fa-sign-out-alt" aria-hidden="true"></i><span class="nav-label" langtag="word-logout">退出</span>
                     </a>
                 </li>
             </ul>
@@ -148,8 +154,8 @@
                 </div>
                 <ul class="nav navbar-top-links navbar-right">
                     <li>
-                        <span class="m-r-sm text-muted welcome-message"><span langtag="word-welcome"></span>
-                        <a href="https://github.com/ZiDuNet/nps" langtag="application"></a></span>
+                        <span class="m-r-sm text-muted welcome-message"><span langtag="word-welcome">欢迎使用</span>
+                        <a href="https://github.com/ZiDuNet/nps" langtag="application">NPS</a></span>
                     </li>
                     <li class="nps-topbar-version-item">
                         <a id="nps-version-indicator" class="nps-topbar-version" href="https://github.com/{{.github_repository}}/releases/latest" target="_blank" rel="noopener noreferrer" aria-live="polite" title="查看版本发布" data-title-zh="查看版本发布" data-title-en="View release notes">
@@ -183,9 +189,9 @@
 
         <div class="footer fixed">
             <div class="float-right">
-                <span langtag="word-readmore"></span> <strong><a href="https://github.com/ZiDuNet/nps" langtag="word-go"></a></strong>
+                <span langtag="word-readmore">更多说明</span> <strong><a href="https://github.com/ZiDuNet/nps" langtag="word-go">进入</a></strong>
             </div>
-            <div><strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2026</div>
+            <div><strong langtag="word-copyright">版权所有</strong> <span langtag="application">NPS</span> &copy; 2018-2026</div>
         </div>
     </div>
 </div>
@@ -229,7 +235,7 @@
 {{end}}
 
 <script>
-    window.nps = { "web_base_url": "{{.web_base_url}}", "version": "{{.version}}", "repository": "{{.github_repository}}" }
+    window.nps = { "web_base_url": "{{.web_base_url}}", "version": "{{.version}}", "repository": "{{.github_repository}}" };
 
     // The console always shows the server version. A release check is
     // intentionally best-effort: an unavailable GitHub API must never block

@@ -1,4 +1,6 @@
 (function ($) {
+	var pendingLanguage = null;
+
 	function resolveLanguageCode (value) {
 		var requested = String(value || '').trim().toLowerCase();
 		var menu = languages && languages['menu'];
@@ -37,7 +39,11 @@
 		if (!menu.length) return false;
 		var current = resolveLanguageCode(lang);
 		menu.attr('lang', current);
-		if (languages && languages.content) $('body').setLang('');
+		if (languages && languages.content) {
+			$('body').setLang('');
+		} else {
+			pendingLanguage = current;
+		}
 		return false;
 	};
 
@@ -131,9 +137,12 @@
 	}
 
 	$.fn.cloudLang = function () {
+		var runtime = window.nps || {};
+		var baseURL = typeof runtime.web_base_url == 'string' ? runtime.web_base_url : '';
+		var version = runtime.version || Date.now();
 		$.ajax({
 			type: 'GET',
-			url: window.nps.web_base_url + '/static/page/languages.xml?v=' + (window.nps.version || Date.now()),
+			url: baseURL + '/static/page/languages.xml?v=' + version,
 			dataType: 'xml',
 			success: function (xml) {
 				languages['content'] = xml2json($(xml).children())['content'];
@@ -142,7 +151,8 @@
 				// Keep Chinese as the first-run default; only an explicit user cookie
 				// overrides it. Match the requested value to the XML key so an old
 				// browser preference cannot leave the page without a valid locale.
-				languages['navigator'] = resolveLanguageCode(getCookie ('lang-v2') || getLanguagePreference() || languages['default']);
+				languages['navigator'] = resolveLanguageCode(pendingLanguage || getCookie ('lang-v2') || getLanguagePreference() || languages['default']);
+				pendingLanguage = null;
 					for(var key in languages['menu']){
 						if (!Object.prototype.hasOwnProperty.call(languages['menu'], key)) continue;
 						if (key.toLowerCase() == languages['navigator'].toLowerCase()) languages['current'] = key;
@@ -231,6 +241,7 @@
 				applyChartTheme(document.documentElement.getAttribute('data-theme') || 'light');
 			}
 		}
+		if (dom == '') $(document).trigger('npsLanguageChanged', [languages['current']]);
 	}
 
 })(jQuery);
