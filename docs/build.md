@@ -109,7 +109,7 @@ docker build -f Dockerfile.npc -t npc .
 
 每次推送到 `master` 都会执行 CI 和独立的 Docker 工作流。Docker 工作流只构建并推送多架构 `latest` 与不可变的 `sha-<短提交号>` 标签，并会取消同一分支上较旧的镜像构建；master 提交不会生成正式 GitHub Release，也不会产生供软件更新器读取的版本资产。
 
-推送与源码版本严格一致的标签（例如源码为 `1.1.7` 时推送 `v1.1.7`）才会运行 Release 工作流并创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；CLI/GUI 自动更新仍只读取经过完整校验的 Release，版本标签、平台资产名称和 `checksums.txt` 格式保持不变。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`，避免并行任务争抢同一个 Release；标签工作流只推送对应的 Docker 版本标签（如 `1.1.7`），`latest` 由 master 的 Docker 工作流唯一维护。也可以在 Actions 页面手动执行 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.7`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
+推送与源码版本严格一致的标签（例如源码为 `1.1.8` 时推送 `v1.1.8`）才会运行 Release 工作流并创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；CLI/GUI 自动更新仍只读取经过完整校验的 Release，版本标签、平台资产名称和 `checksums.txt` 格式保持不变。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`，避免并行任务争抢同一个 Release；标签工作流只推送对应的 Docker 版本标签（如 `1.1.8`），`latest` 由 master 的 Docker 工作流唯一维护。也可以在 Actions 页面手动执行 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.8`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
 
 GUI 构建由 Wails 3 调用 `wails.json` 中配置的 Yarn 前端流程：
 

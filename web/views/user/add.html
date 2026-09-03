@@ -42,18 +42,25 @@
 
                     <div class="form-section-title"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
                     <div class="form-group">
+                        <label class="form-label font-bold" for="user-max-client" data-i18n-zh="最大客户端数" data-i18n-en="Client limit">最大客户端数</label>
+                        <div class="form-group-wrapper">
+                            <input id="user-max-client" class="form-control" type="number" min="0" step="1" name="max_client" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-max-client-hint">
+                            <span id="user-max-client-hint" class="help-block" data-i18n-zh="限制该用户可拥有的客户端数量；管理员分配和用户自建都会占用此配额。" data-i18n-en="Limits the clients this user can own. Both admin assignments and self-created clients consume it.">限制该用户可拥有的客户端数量；管理员分配和用户自建都会占用此配额。</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <label class="form-label font-bold" for="user-max-tunnel" data-i18n-zh="总隧道上限" data-i18n-en="Tunnel limit">总隧道上限</label>
                         <div class="form-group-wrapper">
                             <input id="user-max-tunnel" class="form-control" type="number" min="0" step="1" name="max_tunnel" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-max-tunnel-hint">
-                            <span id="user-max-tunnel-hint" class="help-block" data-i18n-zh="达到上限后，关联客户端不能再创建隧道。" data-i18n-en="Linked clients cannot create more tunnels after reaching this limit.">达到上限后，关联客户端不能再创建隧道。</span>
+                            <span id="user-max-tunnel-hint" class="help-block" data-i18n-zh="所有名下客户端共享此上限，普通隧道和域名规则都会计入。" data-i18n-en="All owned clients share this limit. Both tunnels and host rules count toward it.">所有名下客户端共享此上限，普通隧道和域名规则都会计入。</span>
                         </div>
                     </div>
 
                     <div class="form-section-title"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
                     <div class="form-group">
-                        <label class="form-label font-bold" for="user-expire-time" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</label>
+                        <label class="form-label font-bold" for="date-picker-user-expire-picker" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</label>
                         <div class="form-group-wrapper">
-                            <input id="user-expire-time" class="form-control flatpickr-expire" type="text" name="expire_time" placeholder="2026-12-31 23:59:59" autocomplete="off" aria-describedby="user-expire-time-hint">
+                            <div id="user-expire-time-picker" class="nps-datetime-picker" aria-describedby="user-expire-time-hint"></div>
                             <span id="user-expire-time-hint" class="help-block" data-i18n-zh="留空表示长期有效。" data-i18n-en="Leave blank for no expiration.">留空表示长期有效。</span>
                         </div>
                     </div>
@@ -81,16 +88,45 @@ $(document).ready(function() {
         submitform('add', '{{.web_base_url}}/user/add', $(this).serializeArray());
     });
 
-    if (typeof flatpickr !== 'undefined') {
-        flatpickr('.flatpickr-expire', {
-            enableTime: true,
-            enableSeconds: true,
-            time_24hr: true,
-            dateFormat: 'Y-m-d H:i:S',
-            minDate: 'today',
-            allowInput: true,
-            locale: (flatpickr.l10ns && flatpickr.l10ns.zh) ? 'zh' : 'default'
-        });
+    initUserExpirePicker();
+
+    function ensureUserExpireFallback(host, value) {
+        if (!host || host.querySelector('input[name="expire_time"]')) return;
+        var fallback = document.createElement('input');
+        fallback.id = 'user-expire-picker-fallback';
+        fallback.className = 'form-control';
+        fallback.type = 'text';
+        fallback.name = 'expire_time';
+        fallback.value = value || '';
+        fallback.autocomplete = 'off';
+        fallback.placeholder = 'YYYY-MM-DD HH:MM';
+        host.appendChild(fallback);
+    }
+
+    function initUserExpirePicker() {
+        var host = document.getElementById('user-expire-time-picker');
+        if (!host) return;
+        if (!window.zui || !zui.DatetimePicker) {
+            ensureUserExpireFallback(host, '');
+            return;
+        }
+        if (typeof zui.DatetimePicker.get === 'function' && zui.DatetimePicker.get(host)) return;
+        try {
+            zui.DatetimePicker.ensure(host, {
+                id: 'user-expire-picker',
+                name: 'expire_time',
+                defaultValue: '',
+                format: 'yyyy-MM-dd hh:mm',
+                minDate: 'today',
+                minuteStep: 5,
+                required: false,
+                placeholder: npsIsEnglish() ? 'Select expiration date and time' : '请选择到期时间',
+                icon: true
+            });
+            if (!host.querySelector('input[name="expire_time"]')) ensureUserExpireFallback(host, '');
+        } catch (error) {
+            ensureUserExpireFallback(host, '');
+        }
     }
 
     function bindUserPasswordToggle() {

@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"crypto/subtle"
 	"errors"
 	"html"
 	"strconv"
@@ -25,6 +26,7 @@ type userListRow struct {
 	Remark       string
 	ClientCount  int
 	TunnelCount  int
+	MaxClientNum int
 	MaxTunnelNum int
 	ExpireTime   string
 	CreateTime   string
@@ -42,7 +44,7 @@ func newUserListRowsWithResourceCounts(users []*file.User, counts map[int]file.U
 		}
 		user.RLock()
 		id, userName, status := user.Id, user.UserName, user.Status
-		remark, maxTunnelNum, expireTime, createTime := user.Remark, user.MaxTunnelNum, user.ExpireTime, user.CreateTime
+		remark, maxClientNum, maxTunnelNum, expireTime, createTime := user.Remark, user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime
 		user.RUnlock()
 		resourceCounts := counts[id]
 		rows = append(rows, &userListRow{
@@ -53,6 +55,7 @@ func newUserListRowsWithResourceCounts(users []*file.User, counts map[int]file.U
 			Remark:       html.UnescapeString(remark),
 			ClientCount:  resourceCounts.ClientCount,
 			TunnelCount:  resourceCounts.TunnelCount,
+			MaxClientNum: maxClientNum,
 			MaxTunnelNum: maxTunnelNum,
 			ExpireTime:   expireTime,
 			CreateTime:   createTime,
@@ -62,6 +65,13 @@ func newUserListRowsWithResourceCounts(users []*file.User, counts map[int]file.U
 }
 
 func normalizeUserTunnelLimit(limit int) int {
+	if limit < 0 {
+		return 0
+	}
+	return limit
+}
+
+func normalizeUserClientLimit(limit int) int {
 	if limit < 0 {
 		return 0
 	}
@@ -91,7 +101,7 @@ func parseUserStatus(value string) (bool, error) {
 	return strconv.ParseBool(value)
 }
 
-func newUserUpdateCandidate(existing *file.User, username, password, remark string, maxTunnelNum int, expireTime string) *file.User {
+func newUserUpdateCandidate(existing *file.User, username, password, remark string, maxClientNum, maxTunnelNum int, expireTime string) *file.User {
 	existing.RLock()
 	id, existingPassword, status, createTime := existing.Id, existing.Password, existing.Status, existing.CreateTime
 	existing.RUnlock()
@@ -101,6 +111,7 @@ func newUserUpdateCandidate(existing *file.User, username, password, remark stri
 		Password:     existingPassword,
 		Status:       status,
 		Remark:       remark,
+		MaxClientNum: maxClientNum,
 		MaxTunnelNum: maxTunnelNum,
 		ExpireTime:   expireTime,
 		CreateTime:   createTime,
@@ -109,6 +120,28 @@ func newUserUpdateCandidate(existing *file.User, username, password, remark stri
 		updated.Password = password
 	}
 	return updated
+}
+
+// parsePasswordChangeInput accepts the descriptive account-popover field
+// names as well as the existing user-form names. A confirmation is optional
+// for administrator resets, but when supplied it must match exactly.
+func parsePasswordChangeInput(newPassword, password, confirmation, passwordConfirmation string) (string, error) {
+	if newPassword == "" {
+		newPassword = password
+	}
+	if strings.TrimSpace(newPassword) == "" {
+		return "", errors.New("新密码不能为空")
+	}
+	if len([]byte(newPassword)) < 6 {
+		return "", errors.New("密码至少需要 6 个字符")
+	}
+	if confirmation == "" {
+		confirmation = passwordConfirmation
+	}
+	if confirmation != "" && confirmation != newPassword {
+		return "", errors.New("两次输入的密码不一致")
+	}
+	return newPassword, nil
 }
 
 func (s *UserController) List() {
@@ -143,6 +176,7 @@ func (s *UserController) Add() {
 		Password:     s.GetString("password"),
 		Status:       true,
 		Remark:       s.getEscapeString("remark"),
+		MaxClientNum: normalizeUserClientLimit(s.GetIntNoErr("max_client")),
 		MaxTunnelNum: normalizeUserTunnelLimit(s.GetIntNoErr("max_tunnel")),
 		ExpireTime:   expireTime,
 		CreateTime:   time.Now().Format("2006-01-02 15:04:05"),
@@ -186,6 +220,7 @@ func (s *UserController) Edit() {
 		s.getEscapeString("username"),
 		s.GetString("password"),
 		s.getEscapeString("remark"),
+		normalizeUserClientLimit(s.GetIntNoErr("max_client")),
 		normalizeUserTunnelLimit(s.GetIntNoErr("max_tunnel")),
 		expireTime,
 	)
@@ -194,6 +229,89 @@ func (s *UserController) Edit() {
 		return
 	}
 	s.AjaxOk("save success")
+}
+
+// ChangePassword updates a dashboard user's password without exposing the
+// existing credential to the browser. Ordinary users may only change their
+// own password and must prove knowledge of the current one; administrators
+// may reset any user account by supplying its id. The dedicated endpoint is
+// used by the account popover so users do not need to leave the current page.
+func (s *UserController) ChangePassword() {
+	if !s.RequirePost() {
+		return
+	}
+
+	targetID := s.GetIntNoErr("id")
+	if !s.IsAdmin() {
+		principal, _ := s.GetSession(sessionPrincipalKey).(string)
+		sessionUserID, _ := sessionInt(s.GetSession("userId"))
+		if principal != sessionPrincipalUser || sessionUserID <= 0 {
+			s.AjaxErr("当前会话不是用户账号")
+			return
+		}
+		if targetID != 0 && targetID != sessionUserID {
+			s.AjaxErr("无权修改其他用户密码")
+			return
+		}
+		targetID = sessionUserID
+	}
+	if targetID <= 0 {
+		s.AjaxErr("user ID not found")
+		return
+	}
+
+	user, err := file.GetDb().GetUser(targetID)
+	if err != nil || user == nil {
+		s.AjaxErr("user ID not found")
+		return
+	}
+
+	// Accept both the descriptive field names used by the account popover and
+	// the shorter names used by the existing user form. Preserve the submitted
+	// password bytes (including intentional spaces); only blank values are
+	// rejected.
+	newPassword, passwordErr := parsePasswordChangeInput(
+		s.GetString("new_password"),
+		s.GetString("password"),
+		s.GetString("confirm_password"),
+		s.GetString("password_confirm"),
+	)
+	if passwordErr != nil {
+		s.AjaxErr(passwordErr.Error())
+		return
+	}
+
+	user.RLock()
+	username, currentPassword, status, remark := user.UserName, user.Password, user.Status, user.Remark
+	maxClientNum, maxTunnelNum, expireTime, createTime := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime
+	user.RUnlock()
+	if !s.IsAdmin() {
+		current := s.GetString("current_password")
+		if current == "" {
+			current = s.GetString("old_password")
+		}
+		if current == "" || subtle.ConstantTimeCompare([]byte(currentPassword), []byte(current)) != 1 {
+			s.AjaxErr("当前密码不正确")
+			return
+		}
+	}
+
+	updated := &file.User{
+		Id:           targetID,
+		UserName:     username,
+		Password:     newPassword,
+		Status:       status,
+		Remark:       remark,
+		MaxClientNum: maxClientNum,
+		MaxTunnelNum: maxTunnelNum,
+		ExpireTime:   expireTime,
+		CreateTime:   createTime,
+	}
+	if err := file.GetDb().UpdateUser(updated); err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
+	s.AjaxOk("密码修改成功")
 }
 
 func (s *UserController) ChangeStatus() {

@@ -72,6 +72,15 @@ func TestPublicLayoutKeepsShellAndNavigatesContentOnly(t *testing.T) {
 	if strings.Contains(template, `window.location.href = url.href`) {
 		t.Fatal("menu navigation must not replace the complete console document")
 	}
+	for _, marker := range []string{
+		`id="nps-version-indicator"`,
+		`releases/latest`,
+		`function checkConsoleVersion()`,
+	} {
+		if !strings.Contains(template, marker) {
+			t.Fatalf("public layout misses console version marker %q", marker)
+		}
+	}
 }
 
 func TestConsoleContentNavigationStylesKeepPreviousContentVisible(t *testing.T) {

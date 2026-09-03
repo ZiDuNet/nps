@@ -28,12 +28,13 @@ open_captcha=true
 | 控制项 | 作用 | 前提 |
 | --- | --- | --- |
 | 最大连接数 | 限制客户端名下同时转发的数据连接。 | `allow_connection_num_limit=true` |
+| 最大客户端数 | 限制普通用户可拥有的客户端数量；管理员分配和用户自建共用。`0` 表示不限制。 | 用户字段 `MaxClientNum` |
 | 最大隧道数 | 限制普通隧道和 Host 域名规则的总数。 | `allow_tunnel_num_limit=true` |
 | 带宽限制 | 限制客户端总传输速率，单位 KiB/s。 | `allow_rate_limit=true` |
 | 流量限制 | 限制入口和出口累计流量，单位 MiB。 | `allow_flow_limit=true` |
 | 到期时间 | 到期后暂停客户端或用户及其资源。 | 无额外开关 |
 
-普通用户的 `MaxTunnelNum` 会统计其全部客户端下的普通隧道和 Host 规则。客户端级限制只统计该单个客户端。详细归属关系见[用户体系](../user.md)。
+普通用户的 `MaxClientNum` 会统计其名下所有客户端，`MaxTunnelNum` 会统计这些客户端下的普通隧道和 Host 规则。管理员分配客户端与普通用户自建客户端都占用同一 `MaxClientNum`；客户端级限制只统计该单个客户端。详细归属关系和到期边界见[用户体系](../user.md)。
 
 ## IP 白名单与黑名单
 

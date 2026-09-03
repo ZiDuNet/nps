@@ -27,7 +27,6 @@
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20260902-3" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/zui-console.css?v={{.version}}&ui=20260902-3" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/flatpickr.min.css?v={{.version}}" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/zui-3.0.0.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
@@ -36,8 +35,6 @@
     <script src="{{.web_base_url}}/static/js/nps-table.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/echarts.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/inspinia.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/flatpickr.min.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/flatpickr-l10n-zh.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20260902-3" type="text/javascript"></script>
 
 </head>
@@ -114,15 +111,28 @@
                     <span class="nav-label" langtag="word-help"></span></a>
                 </li>
                 <li class="nav-sidebar-footer">
-                    <div class="nav-account">
                     {{if eq true .isAdmin}}
+                    <div class="nav-account">
                         <i class="icon icon-shield" aria-hidden="true"></i>
                         <span><strong class="font-bold" langtag="word-admin"></strong><small langtag="word-system"></small></span>
+                    </div>
                     {{else}}
+                    <button type="button" class="nav-account nav-account--button" data-toggle="modal" data-target="#change-password-modal" aria-haspopup="dialog" title="修改密码" data-title-zh="修改密码" data-title-en="Change password">
                         <i class="icon icon-user" aria-hidden="true"></i>
                         <span><strong class="font-bold">{{.username}}</strong><small langtag="word-user"></small></span>
+                    </button>
                     {{end}}
+                    <div class="nav-account-expiry{{if .accountExpireTime}} nav-account-expiry--dated{{else}} nav-account-expiry--unlimited{{end}}" role="status">
+                        <i class="fa fa-clock" aria-hidden="true"></i>
+                        <span class="nav-account-expiry__label" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span>
+                        <strong class="nav-account-expiry__value">{{if .accountExpireTime}}{{.accountExpireTime}}{{else}}<span data-i18n-zh="永不过期" data-i18n-en="Unlimited">永不过期</span>{{end}}</strong>
                     </div>
+                    {{if .accountQuota.Visible}}
+                    <div class="nav-account-quota" role="status" aria-label="资源配额" data-aria-label-zh="资源配额" data-aria-label-en="Resource quota">
+                        <span class="nav-account-quota__item"><i class="fa fa-desktop" aria-hidden="true"></i><span data-i18n-zh="客户端" data-i18n-en="Clients">客户端</span><strong>{{.accountQuota.ClientUsed}} / {{if .accountQuota.ClientLimit}}{{.accountQuota.ClientLimit}}{{else}}<span data-i18n-zh="不限" data-i18n-en="Unlimited">不限</span>{{end}}</strong></span>
+                        <span class="nav-account-quota__item"><i class="fa fa-random" aria-hidden="true"></i><span data-i18n-zh="隧道" data-i18n-en="Tunnels">隧道</span><strong>{{.accountQuota.TunnelUsed}} / {{if .accountQuota.TunnelLimit}}{{.accountQuota.TunnelLimit}}{{else}}<span data-i18n-zh="不限" data-i18n-en="Unlimited">不限</span>{{end}}</strong></span>
+                    </div>
+                    {{end}}
                     <a class="nav-logout-link" href="{{.web_base_url}}/login/out">
                         <i class="fa fa-sign-out-alt" aria-hidden="true"></i><span class="nav-label" langtag="word-logout"></span>
                     </a>
@@ -140,6 +150,14 @@
                     <li>
                         <span class="m-r-sm text-muted welcome-message"><span langtag="word-welcome"></span>
                         <a href="https://github.com/ZiDuNet/nps" langtag="application"></a></span>
+                    </li>
+                    <li class="nps-topbar-version-item">
+                        <a id="nps-version-indicator" class="nps-topbar-version" href="https://github.com/{{.github_repository}}/releases/latest" target="_blank" rel="noopener noreferrer" aria-live="polite" title="查看版本发布" data-title-zh="查看版本发布" data-title-en="View release notes">
+                            <i class="fa fa-tag" aria-hidden="true"></i>
+                            <span class="nps-topbar-version__label" data-i18n-zh="版本" data-i18n-en="Version">版本</span>
+                            <strong id="nps-current-version">v{{.version}}</strong>
+                            <span id="nps-version-update" class="nps-topbar-version__update" hidden></span>
+                        </a>
                     </li>
                     <li>
                         <button type="button" onclick="toggleTheme()" class="theme-toggle" id="theme-toggle" aria-label="切换主题" data-aria-label-zh="切换主题" data-aria-label-en="Toggle theme" data-title-zh="切换主题" data-title-en="Toggle theme" aria-pressed="false">
@@ -172,8 +190,92 @@
     </div>
 </div>
 
+{{if eq false .isAdmin}}
+<div id="change-password-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="change-password-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document" data-size="sm">
+        <div class="modal-content nps-password-modal">
+            <div class="modal-header">
+                <div>
+                    <div class="nps-modal-kicker" data-i18n-zh="账号安全" data-i18n-en="Account security">账号安全</div>
+                    <h2 id="change-password-title" class="modal-title" data-i18n-zh="修改密码" data-i18n-en="Change password">修改密码</h2>
+                </div>
+                <button type="button" class="nps-modal-close" data-dismiss="modal" aria-label="关闭" data-aria-label-zh="关闭" data-aria-label-en="Close"><i class="fa fa-times" aria-hidden="true"></i><span class="sr-only" data-i18n-zh="关闭" data-i18n-en="Close">关闭</span></button>
+            </div>
+            <div class="modal-body">
+                <p class="nps-password-modal__account"><span data-i18n-zh="当前账号" data-i18n-en="Current account">当前账号</span><strong>{{.username}}</strong></p>
+                <form id="change-password-form" class="form form-vertical zui-form" autocomplete="off" novalidate>
+                    <div class="form-group">
+                        <label class="form-label" for="change-password-current" data-i18n-zh="当前密码" data-i18n-en="Current password">当前密码</label>
+                        <input id="change-password-current" class="form-control" type="password" name="current_password" autocomplete="current-password" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="change-password-new" data-i18n-zh="新密码" data-i18n-en="New password">新密码</label>
+                        <input id="change-password-new" class="form-control" type="password" name="new_password" autocomplete="new-password" minlength="6" required aria-describedby="change-password-hint">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="change-password-confirm" data-i18n-zh="确认新密码" data-i18n-en="Confirm new password">确认新密码</label>
+                        <input id="change-password-confirm" class="form-control" type="password" name="confirm_password" autocomplete="new-password" minlength="6" required>
+                    </div>
+                    <p id="change-password-hint" class="help-block nps-password-modal__hint" data-i18n-zh="密码至少需要 6 个字符。保存后当前会话仍保持有效。" data-i18n-en="Use at least 6 characters. Your current session stays active after saving.">密码至少需要 6 个字符。保存后当前会话仍保持有效。</p>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" data-dismiss="modal" data-i18n-zh="取消" data-i18n-en="Cancel">取消</button>
+                <button type="submit" form="change-password-form" class="btn btn-primary" data-i18n-zh="保存密码" data-i18n-en="Save password">保存密码</button>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
 <script>
-    window.nps = { "web_base_url": "{{.web_base_url}}", "version": "{{.version}}" }
+    window.nps = { "web_base_url": "{{.web_base_url}}", "version": "{{.version}}", "repository": "{{.github_repository}}" }
+
+    // The console always shows the server version. A release check is
+    // intentionally best-effort: an unavailable GitHub API must never block
+    // or make the management panel noisy.
+    (function checkConsoleVersion() {
+        var indicator = document.getElementById('nps-version-indicator');
+        var update = document.getElementById('nps-version-update');
+        var config = window.nps || {};
+        if (!indicator || !update || !config.version || !config.repository || !window.fetch) return;
+
+        function parseStableVersion(value) {
+            var text = String(value || '').trim().replace(/^v/, '');
+            var parts = text.split('.');
+            if (parts.length !== 3 || parts.some(function (part) { return !/^\d+$/.test(part); })) return null;
+            return parts.map(function (part) { return parseInt(part, 10); });
+        }
+
+        function compareVersions(left, right) {
+            for (var index = 0; index < left.length; index++) {
+                if (left[index] !== right[index]) return left[index] < right[index] ? -1 : 1;
+            }
+            return 0;
+        }
+
+        function applyLatestRelease(release) {
+            if (!release || !release.tag_name) return;
+            var current = parseStableVersion(config.version);
+            var latest = parseStableVersion(release.tag_name);
+            if (!current || !latest || compareVersions(current, latest) >= 0) return;
+            var latestLabel = String(release.tag_name).trim();
+            var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
+            update.textContent = english ? 'New ' + latestLabel : '有新版本 ' + latestLabel;
+            update.hidden = false;
+            indicator.classList.add('is-update');
+            indicator.setAttribute('title', english ? 'A newer release is available' : '有新版本，点击查看发布说明');
+        }
+
+        var repositoryPath = String(config.repository).split('/').map(function (part) { return encodeURIComponent(part); }).join('/');
+        window.fetch('https://api.github.com/repos/' + repositoryPath + '/releases/latest', {
+            method: 'GET',
+            headers: { 'Accept': 'application/vnd.github+json' },
+            credentials: 'omit'
+        }).then(function (response) {
+            return response.ok ? response.json() : null;
+        }).then(applyLatestRelease).catch(function () {});
+    })();
 
     function getThemePreference() {
         try {
@@ -213,6 +315,49 @@
             .attr('aria-label', label)
             .attr('title', label)
             .find('i').toggleClass('fa-eye fa-eye-slash');
+    });
+
+    // Ordinary users can rotate their own dashboard password without leaving
+    // the current page. The endpoint enforces the session ownership again;
+    // this handler only owns the ZUI modal interaction and feedback.
+    $(document).off('submit.npsChangePassword', '#change-password-form').on('submit.npsChangePassword', '#change-password-form', function (event) {
+        event.preventDefault();
+        var form = this;
+        var current = form.querySelector('[name="current_password"]');
+        var next = form.querySelector('[name="new_password"]');
+        var confirm = form.querySelector('[name="confirm_password"]');
+        if (!current || !next || !confirm) return;
+        if (!form.checkValidity()) {
+            if (typeof form.reportValidity === 'function') form.reportValidity();
+            return;
+        }
+        if (next.value !== confirm.value) {
+            npsNotify('warning', npsIsEnglish() ? 'The two new passwords do not match.' : '两次输入的新密码不一致。');
+            confirm.focus();
+            return;
+        }
+        var submit = document.querySelector('[form="change-password-form"]');
+        if (submit) submit.disabled = true;
+        $.ajax({
+            type: 'POST',
+            url: (window.nps && window.nps.web_base_url ? window.nps.web_base_url : '') + '/user/changepassword',
+            data: $(form).serializeArray(),
+            dataType: 'json'
+        }).done(function (response) {
+            if (response && response.status) {
+                npsNotify('success', response.msg || (npsIsEnglish() ? 'Password changed.' : '密码修改成功。'));
+                form.reset();
+                if (window.zui && zui.Modal && typeof zui.Modal.hide === 'function') zui.Modal.hide('#change-password-modal');
+                else $('[data-dismiss="modal"]').first().trigger('click');
+                return;
+            }
+            npsNotify('error', (response && response.msg) || npsRequestErrorMessage());
+        }).fail(function (xhr) {
+            var response = xhr && xhr.responseJSON;
+            npsNotify('error', (response && response.msg) || npsRequestErrorMessage());
+        }).always(function () {
+            if (submit) submit.disabled = false;
+        });
     });
 
     function toggleTheme() {

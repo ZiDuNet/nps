@@ -15,7 +15,7 @@ func TestMutatingControllerActionsRequirePost(t *testing.T) {
 	}{
 		{file: "index.go", actions: []string{"Add", "Copy", "Edit", "Stop", "Del", "Start", "DelHost", "HostStop", "HostStart", "AddHost", "EditHost"}, guard: "RequirePost"},
 		{file: "client.go", actions: []string{"Add", "Edit", "ChangeStatus", "Del"}, guard: "RequirePost"},
-		{file: "user.go", actions: []string{"Add", "Edit", "ChangeStatus", "Del"}, guard: "RequirePost"},
+		{file: "user.go", actions: []string{"Add", "Edit", "ChangePassword", "ChangeStatus", "Del"}, guard: "RequirePost"},
 		{file: "global.go", actions: []string{"Save"}, guard: "RequirePost"},
 		{file: "login.go", actions: []string{"Verify", "Register"}, guard: "requirePost"},
 	}

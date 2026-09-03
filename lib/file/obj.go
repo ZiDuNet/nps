@@ -138,11 +138,15 @@ type Client struct {
 }
 
 type User struct {
-	Id           int
-	UserName     string
-	Password     string
-	Status       bool
-	Remark       string
+	Id       int
+	UserName string
+	Password string
+	Status   bool
+	Remark   string
+	// MaxClientNum limits the number of clients owned by this user. A zero
+	// value intentionally means unlimited so records written by older NPS
+	// versions remain compatible when decoded from JSON.
+	MaxClientNum int
 	MaxTunnelNum int
 	ExpireTime   string
 	CreateTime   string

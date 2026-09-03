@@ -314,6 +314,7 @@ func (s *IndexController) Help() {
 func (s *IndexController) Tcp() {
 	s.Data["menu"] = "tcp"
 	s.setOwnerFilterData()
+	s.setClientFilterData()
 	s.SetInfo("tcp")
 	s.SetType("tcp")
 	s.display(tunnelTemplatePath("tcp", "list"))
@@ -322,6 +323,7 @@ func (s *IndexController) Tcp() {
 func (s *IndexController) Udp() {
 	s.Data["menu"] = "udp"
 	s.setOwnerFilterData()
+	s.setClientFilterData()
 	s.SetInfo("udp")
 	s.SetType("udp")
 	s.display(tunnelTemplatePath("udp", "list"))
@@ -330,6 +332,7 @@ func (s *IndexController) Udp() {
 func (s *IndexController) Socks5() {
 	s.Data["menu"] = "socks5"
 	s.setOwnerFilterData()
+	s.setClientFilterData()
 	s.SetInfo("socks5")
 	s.SetType("socks5")
 	s.display(tunnelTemplatePath("socks5", "list"))
@@ -338,6 +341,7 @@ func (s *IndexController) Socks5() {
 func (s *IndexController) Http() {
 	s.Data["menu"] = "http"
 	s.setOwnerFilterData()
+	s.setClientFilterData()
 	s.SetInfo("http proxy")
 	s.SetType("httpProxy")
 	s.display(tunnelTemplatePath("httpProxy", "list"))
@@ -345,6 +349,7 @@ func (s *IndexController) Http() {
 func (s *IndexController) File() {
 	s.Data["menu"] = "file"
 	s.setOwnerFilterData()
+	s.setClientFilterData()
 	s.SetInfo("file server")
 	s.SetType("file")
 	s.display(tunnelTemplatePath("file", "list"))
@@ -353,6 +358,7 @@ func (s *IndexController) File() {
 func (s *IndexController) Secret() {
 	s.Data["menu"] = "secret"
 	s.setOwnerFilterData()
+	s.setClientFilterData()
 	s.SetInfo("secret")
 	s.SetType("secret")
 	s.display(tunnelTemplatePath("secret", "list"))
@@ -360,6 +366,7 @@ func (s *IndexController) Secret() {
 func (s *IndexController) P2p() {
 	s.Data["menu"] = "p2p"
 	s.setOwnerFilterData()
+	s.setClientFilterData()
 	s.SetInfo("p2p")
 	s.SetType("p2p")
 	s.display(tunnelTemplatePath("p2p", "list"))
@@ -376,6 +383,7 @@ func (s *IndexController) Host() {
 func (s *IndexController) All() {
 	s.Data["menu"] = "client"
 	s.setOwnerFilterData()
+	s.setClientFilterData()
 	clientId := s.getEscapeString("client_id")
 	s.Data["client_id"] = clientId
 	s.SetInfo("client id:" + clientId)
@@ -386,6 +394,20 @@ func (s *IndexController) GetTunnel() {
 	start, length := s.GetAjaxParams()
 	taskType := s.getEscapeString("type")
 	clientId := s.GetIntNoErr("client_id")
+	// A client-scoped list (opened from the client page) keeps its explicit
+	// client_id. The administrator-only toolbar uses a separate filter key so
+	// its default "all clients" value cannot accidentally widen that scope.
+	if clientId == 0 {
+		filterClientID := strings.TrimSpace(s.GetString("filter_client_id"))
+		if filterClientID != "" {
+			parsed, err := strconv.Atoi(filterClientID)
+			if err != nil || parsed < 0 {
+				s.AjaxErr("客户端筛选无效")
+				return
+			}
+			clientId = parsed
+		}
+	}
 	var allowed map[int]struct{}
 	if !s.IsAdmin() {
 		allowed = s.GetAllowedClientIds()

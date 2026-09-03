@@ -49,8 +49,9 @@
             { field: 'UserName', title: '<span data-i18n-zh="用户名" data-i18n-en="Username">用户名</span>', halign: 'center', escape: true },
             { field: 'Remark', title: '<span data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', halign: 'center', escape: true },
             { field: 'ClientCount', title: '<span data-i18n-zh="客户端数" data-i18n-en="Clients">客户端数</span>', align: 'center', halign: 'center', formatter: function(value) { return userTableText(Number(value) || 0); } },
+            { field: 'MaxClientNum', title: '<span data-i18n-zh="客户端上限" data-i18n-en="Client limit">客户端上限</span>', halign: 'center', formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedQuotaText()); } },
             { field: 'TunnelCount', title: '<span data-i18n-zh="隧道数" data-i18n-en="Tunnels">隧道数</span>', align: 'center', halign: 'center', formatter: function(value) { return userTableText(Number(value) || 0); } },
-            { field: 'MaxTunnelNum', title: '<span data-i18n-zh="总隧道上限" data-i18n-en="Tunnel limit">总隧道上限</span>', halign: 'center', formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedText()); } },
+            { field: 'MaxTunnelNum', title: '<span data-i18n-zh="总隧道上限" data-i18n-en="Tunnel limit">总隧道上限</span>', halign: 'center', formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedQuotaText()); } },
             { field: 'ExpireTime', title: '<span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span>', halign: 'center', formatter: function(value) { return userTableText(value || userUnlimitedText()); } },
             {
                 field: 'Status',
@@ -93,6 +94,10 @@
     }
 
     function userUnlimitedText() {
+        return npsIsEnglish() ? 'Unlimited' : '永不过期';
+    }
+
+    function userUnlimitedQuotaText() {
         return npsIsEnglish() ? 'Unlimited' : '不限';
     }
 </script>

@@ -16,7 +16,7 @@
     <div class="form-page-column">
         <section class="panel ibox float-e-margins form-workflow-card zui-panel">
             <div class="ibox-content form-workflow-content">
-                <form class="form form-horz form-workflow-form zui-form" data-form-workflow="client-edit" autocomplete="off">
+                <form id="client-form" class="form form-horz form-workflow-form zui-form" data-form-workflow="client-edit" autocomplete="off">
                     <input type="hidden" name="id" value="{{.c.Id}}">
 
                     <div class="form-section-title"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
@@ -49,15 +49,29 @@
                             <select id="client-user-id" class="form-control" name="user_id">
                                 <option value="0" data-i18n-zh="未分配" data-i18n-en="Unassigned">未分配</option>
                                 {{range .users}}
-                                <option value="{{.Id}}" {{if eq $.c.UserId .Id}}selected{{end}}>{{.UserName}}</option>
+                                <option value="{{.Id}}" data-expire-time="{{.ExpireTime}}" {{if eq $.c.UserId .Id}}selected{{end}}>{{.Id}} · {{.UserName}}</option>
                                 {{end}}
                             </select>
                         </div>
                     </div>
+                    {{else}}
+                    <div class="form-group" id="vkey">
+                        <label class="form-label font-bold" for="client-vkey-readonly" langtag="word-verifyKey"></label>
+                        <div class="form-group-wrapper">
+                            <input id="client-vkey-readonly" class="form-control" value="{{.c.VerifyKey}}" type="text" readonly aria-describedby="client-vkey-readonly-hint" onclick="this.select()">
+                            <span id="client-vkey-readonly-hint" class="help-block m-b-none" data-i18n-zh="访问密钥由系统分配；可选择并复制，普通用户不可修改。" data-i18n-en="The system assigns this access key. You can select and copy it, but cannot change it.">访问密钥由系统分配；可选择并复制，普通用户不可修改。</span>
+                        </div>
+                    </div>
+                    <div class="form-group" id="user_id">
+                        <label class="form-label font-bold" data-i18n-zh="所属用户" data-i18n-en="Assigned user">所属用户</label>
+                        <div class="form-group-wrapper">
+                            <div class="readonly-client"><strong>{{.username}}</strong><small data-i18n-zh="客户端始终归属当前账号。" data-i18n-en="This client remains assigned to your account.">客户端始终归属当前账号。</small></div>
+                        </div>
+                    </div>
                     {{end}}
 
-                    <div class="form-section-title"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
                     {{if eq true .isAdmin}}
+                    <div class="form-section-title"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
                     {{if eq true .allow_flow_limit}}
                     <div class="form-group" id="flow_limit">
                         <label class="form-label font-bold" for="client-flow-limit" langtag="word-flowlimit"></label>
@@ -111,10 +125,10 @@
                         <label class="form-label font-bold" for="client-basic-password" langtag="word-basicpassword"></label>
                         <div class="form-group-wrapper">
                             <div class="input-group">
-                                <input id="client-basic-password" class="form-control" value="{{.c.Cnf.P}}" type="password" name="p" autocomplete="new-password" spellcheck="false" placeholder="" langtag="info-unrestricted">
+                                <input id="client-basic-password" class="form-control" type="password" name="p" autocomplete="new-password" spellcheck="false" placeholder="留空则保持现有密码" data-placeholder-zh="留空则保持现有密码" data-placeholder-en="Leave blank to keep the current password" aria-describedby="client-basic-password-hint">
                                 <span class="input-group-btn"><button class="btn btn-default credential-password-toggle" type="button" data-password-target="client-basic-password" aria-controls="client-basic-password" aria-label="显示密码" data-aria-label-zh="显示密码" data-aria-label-en="Show password" aria-pressed="false" title="显示密码" data-title-zh="显示密码" data-title-en="Show password"><i class="fa fa-eye" aria-hidden="true"></i></button></span>
                             </div>
-                            <span class="help-block m-b-none" langtag="info-onlyproxy"></span>
+                            <span id="client-basic-password-hint" class="help-block m-b-none" data-i18n-zh="留空不会覆盖现有 Basic 密码；Basic 认证仅用于 HTTP 正向代理、SOCKS5 和域名代理。" data-i18n-en="Leaving this blank keeps the current Basic password. Basic authentication applies to HTTP, SOCKS5, and host proxies.">留空不会覆盖现有 Basic 密码；Basic 认证仅用于 HTTP 正向代理、SOCKS5 和域名代理。</span>
                         </div>
                     </div>
                     <div class="form-group" id="compress">
@@ -135,7 +149,7 @@
                             </select>
                         </div>
                     </div>
-                    {{if eq true .allow_user_login}}
+                    {{if and (eq true .allow_user_login) (eq true .isAdmin)}}
                     <details class="form-workflow-advanced legacy-client-login-settings" {{if or .c.WebUserName .c.WebPassword}}open{{end}}>
                         <summary>
                             <span class="form-workflow-advanced__title"><i class="fa fa-history" aria-hidden="true"></i><span data-i18n-zh="旧版客户端登录兼容" data-i18n-en="Legacy client login compatibility">旧版客户端登录兼容</span></span>
@@ -166,6 +180,7 @@
                     {{end}}
 
                     <div class="form-section-title"><i class="fa fa-shield-alt" aria-hidden="true"></i><span data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</span></div>
+                    {{if eq true .isAdmin}}
                     <div class="form-group" id="config_conn_allow">
                         <label class="form-label font-bold" for="client-config-conn-allow" langtag="word-connectbyconfig"></label>
                         <div class="form-group-wrapper">
@@ -176,6 +191,7 @@
                             </div>
                         </div>
                     </div>
+                    {{end}}
                     <div class="form-group" id="ip_white">
                         <label class="form-label font-bold" for="client-ip-white" langtag="word-ipwhite"></label>
                         <div class="form-group-wrapper">
@@ -189,7 +205,7 @@
                     <div class="form-group is-hidden" id="ip_white_pass">
                         <label class="form-label font-bold" for="client-ip-white-pass" langtag="word-ipwhitepass"></label>
                         <div class="form-group-wrapper">
-                            <input id="client-ip-white-pass" class="form-control" type="text" name="ipwhitepass" placeholder=""
+                            <input id="client-ip-white-pass" class="form-control" type="text" name="ipwhitepass" autocomplete="off" placeholder=""
                                 langtag="info-input-whitepass" value="{{.c.IpWhitePass}}">
                             <span class="help-block m-b-none" langtag="info-ipwhitepass"></span>
                         </div>
@@ -211,21 +227,23 @@
                         </div>
                     </div>
 
+                    {{if eq true .isAdmin}}
                     <div class="form-section-title"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
                     <div class="form-group" id="expire_time">
-                        <label class="form-label font-bold" for="client-expire-time" langtag="word-expiretime"></label>
+                        <label class="form-label font-bold" for="date-picker-client-expire-picker" data-i18n-zh="客户端独立到期时间" data-i18n-en="Client-specific expiration">客户端独立到期时间</label>
                         <div class="form-group-wrapper">
-                            <input id="client-expire-time" class="form-control flatpickr-expire" value="{{.c.ExpireTime}}" type="text" name="expire_time"
-                                placeholder="2026-12-31 23:59:59" autocomplete="off">
-                            <span class="help-block m-b-none" langtag="info-expiretime"></span>
+                            <div id="client-expire-time-picker" class="nps-datetime-picker" data-default-value="{{.c.ExpireTime}}" aria-describedby="client-expire-time-hint"></div>
+                            <div id="client-expire-policy" class="client-expire-policy" role="status"></div>
+                            <span id="client-expire-time-hint" class="help-block m-b-none" data-i18n-zh="留空表示跟随所属用户；如果所属用户设置了有效期，独立到期时间不得晚于它。" data-i18n-en="Leave blank to follow the assigned user. A client-specific expiry cannot be later than the user's expiry.">留空表示跟随所属用户；如果所属用户设置了有效期，独立到期时间不得晚于它。</span>
                         </div>
                     </div>
+                    {{end}}
 
                     <div class="hr-line-dashed"></div>
                     <div class="form-group form-workflow-actions">
                         <div class="form-actions">
                             <button class="btn btn-success" type="button"
-                                onclick="submitform('add', '{{.web_base_url}}/client/edit', $('form').serializeArray())">
+                                onclick="submitClientForm('edit', '{{.web_base_url}}/client/edit')">
                                 <i class="fa fa-fw fa-lg fa-save"></i><span langtag="word-save"></span>
                             </button>
                         </div>
@@ -255,15 +273,101 @@ $(document).ready(function () {
         npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked);
     });
 
-    if (typeof flatpickr !== 'undefined') {
-        flatpickr('.flatpickr-expire', {
-            enableTime: true,
-            enableSeconds: true,
-            time_24hr: true,
-            dateFormat: 'Y-m-d H:i:S',
-            allowInput: true,
-            locale: (flatpickr.l10ns && flatpickr.l10ns.zh) ? 'zh' : 'default'
-        });
+    initClientExpirePicker();
+
+    function ensureClientExpireFallback(host, value) {
+        if (!host || host.querySelector('input[name="expire_time"]')) return;
+        var fallback = document.createElement('input');
+        fallback.id = 'client-expire-picker-fallback';
+        fallback.className = 'form-control';
+        fallback.type = 'text';
+        fallback.name = 'expire_time';
+        fallback.value = value || '';
+        fallback.autocomplete = 'off';
+        fallback.placeholder = npsIsEnglish() ? 'YYYY-MM-DD HH:MM' : 'YYYY-MM-DD HH:MM';
+        host.appendChild(fallback);
     }
+
+    function initClientExpirePicker() {
+        var host = document.getElementById('client-expire-time-picker');
+        if (!host) return;
+        var defaultValue = host.getAttribute('data-default-value') || '';
+        if (!window.zui || !zui.DatetimePicker) {
+            ensureClientExpireFallback(host, defaultValue);
+            return;
+        }
+        if (typeof zui.DatetimePicker.get === 'function' && zui.DatetimePicker.get(host)) return;
+        try {
+            zui.DatetimePicker.ensure(host, {
+                id: 'client-expire-picker',
+                name: 'expire_time',
+                defaultValue: defaultValue,
+                format: 'yyyy-MM-dd hh:mm',
+                minuteStep: 5,
+                required: false,
+                placeholder: npsIsEnglish() ? 'Select expiration date and time' : '请选择到期时间',
+                icon: true
+            });
+            if (!host.querySelector('input[name="expire_time"]')) ensureClientExpireFallback(host, defaultValue);
+        } catch (error) {
+            ensureClientExpireFallback(host, defaultValue);
+        }
+    }
+
+    function clientDateValue(value) {
+        var match = String(value || '').trim().match(/^(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (!match) return NaN;
+        return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]), Number(match[6] || 0)).getTime();
+    }
+
+    function selectedClientOwnerExpiry() {
+        var option = $('#client-user-id option:selected');
+        return option.length ? (option.attr('data-expire-time') || '') : '';
+    }
+
+    function clientExpiryInput() {
+        return $('#client-expire-time-picker input[name="expire_time"]');
+    }
+
+    function updateClientExpiryPolicy() {
+        var policy = document.getElementById('client-expire-policy');
+        if (!policy) return;
+        var ownerExpiry = selectedClientOwnerExpiry();
+        var clientInput = clientExpiryInput();
+        var clientExpiry = clientInput.length ? clientInput.val() : '';
+        var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
+        var effective = clientExpiry || ownerExpiry || (english ? 'Unlimited' : '永不过期');
+        var ownerText = ownerExpiry
+            ? (english ? 'Owner expiry: ' + ownerExpiry : '所属用户有效期：' + ownerExpiry)
+            : (english ? 'Owner has no expiry; a client date is optional.' : '所属用户未设置有效期；客户端日期可选。');
+        policy.textContent = ownerText + '  ' + (english ? 'Effective: ' : '实际生效：') + effective;
+        if (clientInput.length && ownerExpiry) clientInput.attr('data-owner-max', ownerExpiry);
+    }
+
+    function validateClientExpiry() {
+        var ownerExpiry = selectedClientOwnerExpiry();
+        var clientInput = clientExpiryInput();
+        var clientExpiry = clientInput.length ? clientInput.val() : '';
+        if (!ownerExpiry || !clientExpiry) return true;
+        var ownerValue = clientDateValue(ownerExpiry);
+        var clientValue = clientDateValue(clientExpiry);
+        if (!isNaN(ownerValue) && !isNaN(clientValue) && clientValue > ownerValue) {
+            clientInput.addClass('is-invalid').trigger('focus');
+            npsNotify('error', npsIsEnglish() ? 'Client expiry cannot be later than the assigned user.' : '客户端到期时间不能晚于所属用户到期时间');
+            return false;
+        }
+        clientInput.removeClass('is-invalid');
+        return true;
+    }
+
+    $('#client-user-id').on('change', updateClientExpiryPolicy);
+    $(document).on('input change', '#client-expire-time-picker input[name="expire_time"]', updateClientExpiryPolicy);
+    window.setTimeout(updateClientExpiryPolicy, 0);
+
+    window.submitClientForm = function(action, url) {
+        if (!validateClientExpiry()) return false;
+        submitform(action, url, $('#client-form').serializeArray());
+        return false;
+    };
 });
 </script>

@@ -33,6 +33,17 @@ const (
 	sessionPrincipalClient = "client"
 )
 
+// accountQuotaSummary is presentation data for a normal dashboard User. It
+// intentionally excludes legacy client-login principals because their single
+// client credential is not a user-owned account with self-service quotas.
+type accountQuotaSummary struct {
+	Visible     bool
+	ClientUsed  int
+	ClientLimit int
+	TunnelUsed  int
+	TunnelLimit int
+}
+
 // 初始化参数
 func (s *BaseController) Prepare() {
 	s.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
@@ -86,13 +97,20 @@ func (s *BaseController) Prepare() {
 		}
 		s.Data["isAdmin"] = false
 		s.Data["username"] = s.GetSession("username")
-		if s.controllerName == "user" || s.controllerName == "global" {
+		s.Data["accountExpireTime"] = s.accountExpireTime()
+		s.Data["accountQuota"] = s.accountQuota()
+		// Ordinary users cannot browse the administrative user/global pages,
+		// but they may call the narrowly-scoped password endpoint to rotate
+		// their own dashboard credential from the account popover.
+		if s.controllerName == "global" || (s.controllerName == "user" && s.actionName != "changepassword") {
 			s.StopRun()
 			return
 		}
 		s.CheckUserAuth()
 	} else {
 		s.Data["isAdmin"] = true
+		s.Data["accountExpireTime"] = ""
+		s.Data["accountQuota"] = accountQuotaSummary{}
 	}
 	s.Data["allow_user_login"], _ = beego.AppConfig.Bool("allow_user_login")
 	s.Data["allow_flow_limit"], _ = beego.AppConfig.Bool("allow_flow_limit")
@@ -158,6 +176,97 @@ func activeNonAdminPrincipal(principal string, userID, clientID int, userActive,
 		// previous login and cannot be attributed safely.
 		return false
 	}
+}
+
+// accountExpireTime returns the effective expiry that applies to the signed-in
+// non-admin principal. A normal dashboard user is governed by the User
+// record. Legacy client-logins can also be bounded by their assigned user, so
+// the earlier valid expiry is shown instead of incorrectly claiming that the
+// account never expires.
+func (s *BaseController) accountExpireTime() string {
+	principal, _ := s.GetSession(sessionPrincipalKey).(string)
+	userID, _ := sessionInt(s.GetSession("userId"))
+	clientID, _ := sessionInt(s.GetSession("clientId"))
+
+	var userExpire, clientExpire string
+	if userID > 0 {
+		if user, err := file.GetDb().GetUser(userID); err == nil && user != nil {
+			user.RLock()
+			userExpire = user.ExpireTime
+			user.RUnlock()
+		}
+	}
+	if clientID > 0 {
+		if client, err := file.GetDb().GetClient(clientID); err == nil && client != nil {
+			client.RLock()
+			clientExpire = client.ExpireTime
+			if userID == 0 {
+				userID = client.UserId
+			}
+			client.RUnlock()
+		}
+		if userID > 0 && userExpire == "" {
+			if user, err := file.GetDb().GetUser(userID); err == nil && user != nil {
+				user.RLock()
+				userExpire = user.ExpireTime
+				user.RUnlock()
+			}
+		}
+	}
+
+	if principal == sessionPrincipalUser {
+		return strings.TrimSpace(userExpire)
+	}
+	if principal != sessionPrincipalClient {
+		return ""
+	}
+	return earliestExpireTime(clientExpire, userExpire)
+}
+
+// accountQuota returns the same allocation counters the server uses when a
+// user creates resources. Disabled or expired clients are still counted: they
+// remain allocated credentials until an administrator deletes or reassigns
+// them, so the sidebar cannot imply that a new slot is available prematurely.
+func (s *BaseController) accountQuota() accountQuotaSummary {
+	userID, ok := s.currentUserPrincipalID()
+	if !ok {
+		return accountQuotaSummary{}
+	}
+	user, err := file.GetDb().GetUser(userID)
+	if err != nil || user == nil {
+		return accountQuotaSummary{}
+	}
+	user.RLock()
+	clientLimit, tunnelLimit := user.MaxClientNum, user.MaxTunnelNum
+	user.RUnlock()
+	return accountQuotaSummary{
+		Visible:     true,
+		ClientUsed:  file.GetDb().GetUserClientNum(userID),
+		ClientLimit: clientLimit,
+		TunnelUsed:  file.GetDb().GetUserTunnelNum(userID),
+		TunnelLimit: tunnelLimit,
+	}
+}
+
+func earliestExpireTime(values ...string) string {
+	var earliest time.Time
+	var fallback string
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if fallback == "" {
+			fallback = value
+		}
+		if parsed, ok := ParseExpireTime(value); ok && (earliest.IsZero() || parsed.Before(earliest)) {
+			earliest = parsed
+		}
+	}
+	if !earliest.IsZero() {
+		return earliest.Format("2006-01-02 15:04:05")
+	}
+	return fallback
 }
 
 func clearAuthenticationSession(deleteSession func(interface{})) {
@@ -326,6 +435,7 @@ func (s *BaseController) display(tpl ...string) {
 
 	s.Data["p"] = strconv.Itoa(server.Bridge.TunnelPort)
 	s.Data["version"] = version.VERSION
+	s.Data["github_repository"] = version.GitHubRepository
 
 	if bridge.ServerTlsEnable {
 		tlsPort := strconv.Itoa(beego.AppConfig.DefaultInt("tls_bridge_port", 8025))
@@ -470,6 +580,16 @@ func (s *BaseController) setOwnerFilterData() {
 	s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
 }
 
+// setClientFilterData supplies the administrator-only client options used by
+// tunnel list toolbars. The list endpoint still enforces ownership and status
+// on every request; these options are only presentation data for the filter.
+func (s *BaseController) setClientFilterData() {
+	if !s.IsAdmin() {
+		return
+	}
+	s.Data["clients"], _ = file.GetDb().GetClientList(0, 10000, "", "", "", 0)
+}
+
 func (s *BaseController) SetType(name string) {
 	s.Data["type"] = name
 }
@@ -478,7 +598,12 @@ func (s *BaseController) CheckUserAuth() {
 	allowedClientIds := s.GetAllowedClientIds()
 	if s.controllerName == "client" {
 		if s.actionName == "add" {
-			s.StopRun()
+			// A dashboard User may create an additional client for itself. A
+			// legacy client-login principal only represents one existing client
+			// and must never be able to mint another one.
+			if _, ok := s.currentUserPrincipalID(); !ok {
+				s.StopRun()
+			}
 			return
 		}
 		if id := s.GetIntNoErr("id"); id != 0 {
@@ -531,6 +656,18 @@ func (s *BaseController) CheckUserAuth() {
 			}
 		}
 	}
+}
+
+// currentUserPrincipalID returns the persisted dashboard User identity for
+// the current session. It deliberately excludes the legacy per-client login
+// principal, which has a client ID but no authority to create new clients.
+func (s *BaseController) currentUserPrincipalID() (int, bool) {
+	principal, _ := s.GetSession(sessionPrincipalKey).(string)
+	userID, _ := sessionInt(s.GetSession("userId"))
+	if principal != sessionPrincipalUser || userID <= 0 {
+		return 0, false
+	}
+	return userID, true
 }
 
 func (s *BaseController) GetAllowedClientIds() map[int]struct{} {

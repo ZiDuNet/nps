@@ -130,10 +130,11 @@ func TestClearAuthenticationSessionRemovesEveryIdentityValue(t *testing.T) {
 func TestPublicLayoutHidesAdministratorNavigationForOrdinaryUsers(t *testing.T) {
 	tpl := template.Must(template.ParseFiles("../views/public/layout.html"))
 	data := map[string]interface{}{
-		"isAdmin":       false,
-		"web_base_url":  "",
-		"version":       "test",
-		"LayoutContent": "",
+		"isAdmin":           false,
+		"web_base_url":      "",
+		"version":           "test",
+		"github_repository": "ZiDuNet/nps",
+		"LayoutContent":     "",
 	}
 	var rendered bytes.Buffer
 	if err := tpl.Execute(&rendered, data); err != nil {
@@ -141,6 +142,9 @@ func TestPublicLayoutHidesAdministratorNavigationForOrdinaryUsers(t *testing.T) 
 	}
 	if strings.Contains(rendered.String(), "/global/index") {
 		t.Fatal("ordinary user navigation must not contain the global settings link")
+	}
+	if !strings.Contains(rendered.String(), "https://github.com/ZiDuNet/nps/releases/latest") {
+		t.Fatal("console layout must link the version indicator to the canonical release page")
 	}
 
 	data["isAdmin"] = true

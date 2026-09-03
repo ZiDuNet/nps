@@ -34,9 +34,10 @@ type OwnerFilter struct {
 }
 
 var (
-	Db             *DbUtils
-	once           sync.Once
-	hostMutationMu sync.Mutex
+	Db               *DbUtils
+	once             sync.Once
+	hostMutationMu   sync.Mutex
+	clientMutationMu sync.Mutex
 )
 
 // init csv from file
@@ -173,6 +174,16 @@ func (s *DbUtils) NewUser(u *User) error {
 	if !s.VerifyUserLoginName(u.UserName, u.Id) {
 		return errors.New("username duplicate, please reset")
 	}
+	if u.MaxClientNum < 0 {
+		return errors.New("最大客户端数不能小于 0")
+	}
+	expireTime, err := NormalizeExpiryTime(u.ExpireTime)
+	if err != nil {
+		return err
+	}
+	u.ExpireTime = expireTime
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
 	if u.Id == 0 {
 		u.Id = int(s.JsonDb.GetUserId())
 	}
@@ -198,6 +209,30 @@ func (s *DbUtils) UpdateUser(u *User) error {
 	if !s.VerifyUserLoginName(u.UserName, u.Id) {
 		return errors.New("username duplicate, please reset")
 	}
+	if u.MaxClientNum < 0 {
+		return errors.New("最大客户端数不能小于 0")
+	}
+	expireTime, err := NormalizeExpiryTime(u.ExpireTime)
+	if err != nil {
+		return err
+	}
+	u.ExpireTime = expireTime
+
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	if existing, getErr := s.GetUser(u.Id); getErr == nil && existing != nil {
+		existing.RLock()
+		existingMaxClientNum, existingExpireTime := existing.MaxClientNum, existing.ExpireTime
+		existing.RUnlock()
+		if u.MaxClientNum != existingMaxClientNum && u.MaxClientNum > 0 && s.getUserClientNumLocked(u.Id, 0) > u.MaxClientNum {
+			return errors.New("最大客户端数不能低于已分配客户端数量")
+		}
+		if u.ExpireTime != existingExpireTime {
+			if err := s.validateUserExpiryForClientsLocked(u.Id, u.ExpireTime); err != nil {
+				return err
+			}
+		}
+	}
 	s.JsonDb.Users.Store(u.Id, u)
 	s.JsonDb.StoreUsersToJsonFile()
 	return nil
@@ -207,6 +242,8 @@ func (s *DbUtils) DelUser(id int) error {
 	if id <= 0 {
 		return errors.New("用户 ID 无效")
 	}
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
 	if user, err := s.GetUser(id); err == nil && user != nil {
 		user.Lock()
 		user.Status = false
@@ -283,6 +320,267 @@ func (s *DbUtils) ValidateClientOwner(userID int) error {
 		return errors.New("所属用户不存在")
 	}
 	return nil
+}
+
+const canonicalExpireTimeLayout = "2006-01-02 15:04:05"
+
+var expiryTimeFormats = []string{
+	canonicalExpireTimeLayout,
+	"2006-01-02 15:04",
+	"2006-01-02",
+	"2006/01/02 15:04:05",
+	"2006/01/02 15:04",
+	"2006/01/02",
+	time.RFC3339,
+}
+
+// ParseExpiryTime accepts the historical expiry formats used by NPS. Empty
+// values are deliberately not dates: callers use an empty value to mean that
+// no independent expiry is set.
+func ParseExpiryTime(value string) (time.Time, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range expiryTimeFormats {
+		if parsed, err := time.ParseInLocation(layout, value, time.Local); err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// NormalizeExpiryTime turns a user supplied expiry into the persisted NPS
+// format. An empty input is valid and represents no independent expiry.
+func NormalizeExpiryTime(value string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", nil
+	}
+	parsed, ok := ParseExpiryTime(value)
+	if !ok {
+		return "", errors.New("到期时间格式无效")
+	}
+	return parsed.Format(canonicalExpireTimeLayout), nil
+}
+
+// GetUserClientNum returns the number of clients currently assigned to a
+// user. The count intentionally includes disabled and expired clients: they
+// are still allocated credentials and must be deleted or reassigned before a
+// new device can consume the slot.
+func (s *DbUtils) GetUserClientNum(userID int) int {
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	return s.getUserClientNumLocked(userID, 0)
+}
+
+// GetUserClientNumExcluding is useful when editing an existing client. It
+// counts the target owner's other clients, so retaining the same assignment at
+// the quota limit remains valid.
+func (s *DbUtils) GetUserClientNumExcluding(userID, excludedClientID int) int {
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	return s.getUserClientNumLocked(userID, excludedClientID)
+}
+
+func (s *DbUtils) getUserClientNumLocked(userID, excludedClientID int) int {
+	if userID <= 0 {
+		return 0
+	}
+	count := 0
+	s.JsonDb.Clients.Range(func(_, value interface{}) bool {
+		client, ok := value.(*Client)
+		if !ok || client == nil {
+			return true
+		}
+		client.RLock()
+		clientID, ownerID := client.Id, client.UserId
+		client.RUnlock()
+		if ownerID == userID && (excludedClientID <= 0 || clientID != excludedClientID) {
+			count++
+		}
+		return true
+	})
+	return count
+}
+
+// ValidateClientOwnerQuota validates a prospective client assignment. Passing
+// the current client ID as excludedClientID makes the helper safe for an
+// ownership-preserving edit or a reassignment operation.
+func (s *DbUtils) ValidateClientOwnerQuota(userID, excludedClientID int) error {
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	return s.validateClientOwnerQuotaLocked(userID, excludedClientID)
+}
+
+func (s *DbUtils) validateClientOwnerQuotaLocked(userID, excludedClientID int) error {
+	if err := s.ValidateClientOwner(userID); err != nil {
+		return err
+	}
+	if userID == 0 {
+		return nil
+	}
+	user, err := s.GetUser(userID)
+	if err != nil || user == nil {
+		return errors.New("所属用户不存在")
+	}
+	user.RLock()
+	maxClientNum := user.MaxClientNum
+	user.RUnlock()
+	if maxClientNum < 0 {
+		return errors.New("所属用户的最大客户端数无效")
+	}
+	if maxClientNum > 0 && s.getUserClientNumLocked(userID, excludedClientID) >= maxClientNum {
+		return errors.New("客户端数量已达到所属用户的配额上限")
+	}
+	return nil
+}
+
+// ValidateClientExpiryForOwner verifies that a client's independent expiry is
+// valid and does not extend past its owner's expiry. An empty client expiry is
+// valid and means that the client follows the user expiry.
+func (s *DbUtils) ValidateClientExpiryForOwner(userID int, clientExpireTime string) error {
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	return s.validateClientExpiryForOwnerLocked(userID, clientExpireTime)
+}
+
+func (s *DbUtils) validateClientExpiryForOwnerLocked(userID int, clientExpireTime string) error {
+	clientExpiry, err := NormalizeExpiryTime(clientExpireTime)
+	if err != nil {
+		return err
+	}
+	if userID == 0 {
+		return nil
+	}
+	if err := s.ValidateClientOwner(userID); err != nil {
+		return err
+	}
+	user, err := s.GetUser(userID)
+	if err != nil || user == nil {
+		return errors.New("所属用户不存在")
+	}
+	user.RLock()
+	userExpireTime := user.ExpireTime
+	user.RUnlock()
+	return validateClientExpiryBounds(clientExpiry, userExpireTime)
+}
+
+func validateClientExpiryBounds(clientExpireTime, userExpireTime string) error {
+	clientExpiry, err := NormalizeExpiryTime(clientExpireTime)
+	if err != nil {
+		return err
+	}
+	userExpiry, err := NormalizeExpiryTime(userExpireTime)
+	if err != nil {
+		return errors.New("所属用户到期时间无效")
+	}
+	if clientExpiry == "" || userExpiry == "" {
+		return nil
+	}
+	clientAt, _ := ParseExpiryTime(clientExpiry)
+	userAt, _ := ParseExpiryTime(userExpiry)
+	if clientAt.After(userAt) {
+		return errors.New("客户端到期时间不能晚于所属用户到期时间")
+	}
+	return nil
+}
+
+// ValidateClientAssignment combines referential integrity, client quota, and
+// expiry-bound checks. NewClient and UpdateClient use the locked counterpart
+// so concurrent creates and owner transfers cannot oversubscribe a user.
+func (s *DbUtils) ValidateClientAssignment(client *Client, excludedClientID int) error {
+	if client == nil {
+		return errors.New("客户端记录无效")
+	}
+	client.RLock()
+	userID, expireTime := client.UserId, client.ExpireTime
+	client.RUnlock()
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	return s.validateClientAssignmentLocked(userID, expireTime, excludedClientID)
+}
+
+func (s *DbUtils) validateClientAssignmentLocked(userID int, clientExpireTime string, excludedClientID int) error {
+	if err := s.validateClientOwnerQuotaLocked(userID, excludedClientID); err != nil {
+		return err
+	}
+	return s.validateClientExpiryForOwnerLocked(userID, clientExpireTime)
+}
+
+// EffectiveClientExpireTime returns the date that actually governs a client.
+// A blank result means that neither the client nor its owner expires. The
+// helper takes the earlier date defensively so legacy records that predate the
+// owner-bound validation remain safe at runtime.
+func (s *DbUtils) EffectiveClientExpireTime(client *Client) (string, error) {
+	if client == nil {
+		return "", errors.New("客户端记录无效")
+	}
+	client.RLock()
+	userID, clientExpireTime := client.UserId, client.ExpireTime
+	client.RUnlock()
+	clientExpiry, err := NormalizeExpiryTime(clientExpireTime)
+	if err != nil {
+		return "", err
+	}
+	if userID == 0 {
+		return clientExpiry, nil
+	}
+	user, err := s.GetUser(userID)
+	if err != nil || user == nil {
+		return "", errors.New("所属用户不存在")
+	}
+	user.RLock()
+	userExpireTime := user.ExpireTime
+	user.RUnlock()
+	userExpiry, err := NormalizeExpiryTime(userExpireTime)
+	if err != nil {
+		return "", errors.New("所属用户到期时间无效")
+	}
+	if clientExpiry == "" {
+		return userExpiry, nil
+	}
+	if userExpiry == "" {
+		return clientExpiry, nil
+	}
+	clientAt, _ := ParseExpiryTime(clientExpiry)
+	userAt, _ := ParseExpiryTime(userExpiry)
+	if userAt.Before(clientAt) {
+		return userExpiry, nil
+	}
+	return clientExpiry, nil
+}
+
+// validateUserExpiryForClientsLocked prevents an administrator from saving a
+// user expiry that would leave existing independently-expiring clients with a
+// later, misleading date. Empty client expiry values are intentionally valid:
+// those clients follow the user's new expiry automatically.
+func (s *DbUtils) validateUserExpiryForClientsLocked(userID int, userExpireTime string) error {
+	var validationErr error
+	s.JsonDb.Clients.Range(func(_, value interface{}) bool {
+		if validationErr != nil {
+			return false
+		}
+		client, ok := value.(*Client)
+		if !ok || client == nil {
+			return true
+		}
+		client.RLock()
+		clientID, ownerID, clientExpireTime := client.Id, client.UserId, client.ExpireTime
+		client.RUnlock()
+		if ownerID != userID {
+			return true
+		}
+		if err := validateClientExpiryBounds(clientExpireTime, userExpireTime); err != nil {
+			if err.Error() == "客户端到期时间不能晚于所属用户到期时间" {
+				validationErr = fmt.Errorf("用户到期时间不能早于客户端 %d 的到期时间", clientID)
+			} else {
+				validationErr = err
+			}
+			return false
+		}
+		return true
+	})
+	return validationErr
 }
 
 func (s *DbUtils) VerifyUserLoginName(username string, id int) bool {
@@ -563,16 +861,17 @@ func (s *DbUtils) IsUserActive(userId int) bool {
 	if expireTime == "" {
 		return true
 	}
-	t, err := time.ParseInLocation("2006-01-02 15:04:05", expireTime, time.Local)
+	t, ok := ParseExpiryTime(expireTime)
 	// A malformed expiry is safer to treat as expired than to let it bypass the
-	// bridge authentication check.
-	return err == nil && time.Now().Before(t)
+	// bridge authentication check. ParseExpiryTime also keeps older persisted
+	// date formats compatible with the normalized format used by new writes.
+	return ok && time.Now().Before(t)
 }
 
-// IsClientActive applies both the client's own status and the status of its
-// owning user. A client with a missing owner is treated as inactive when it
-// still carries a non-zero UserId, which fails closed after user deletion or
-// malformed persistence data.
+// IsClientActive applies the client's status and effective expiry. A client
+// with a missing owner or malformed expiry fails closed, which keeps manual
+// JSON edits from bypassing the expiration model between periodic cleanup
+// passes.
 func (s *DbUtils) IsClientActive(client *Client) bool {
 	if client == nil {
 		return false
@@ -583,7 +882,15 @@ func (s *DbUtils) IsClientActive(client *Client) bool {
 	if !status {
 		return false
 	}
-	return userID == 0 || s.IsUserActive(userID)
+	if userID != 0 && !s.IsUserActive(userID) {
+		return false
+	}
+	effectiveExpiry, err := s.EffectiveClientExpireTime(client)
+	if err != nil || effectiveExpiry == "" {
+		return err == nil
+	}
+	expiresAt, ok := ParseExpiryTime(effectiveExpiry)
+	return ok && time.Now().Before(expiresAt)
 }
 
 func (s *DbUtils) GetUserTunnelNum(userId int) int {
@@ -649,7 +956,7 @@ func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error)
 			return true
 		}
 		v.RLock()
-		verifyKey, status, userID, clientID := v.VerifyKey, v.Status, v.UserId, v.Id
+		verifyKey, status, clientID := v.VerifyKey, v.Status, v.Id
 		v.RUnlock()
 		if common.Getverifyval(verifyKey) != vKey {
 			return true
@@ -658,18 +965,11 @@ func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error)
 			rejectReason = errors.New("client disabled")
 			return true
 		}
-		// A user expiry stops and removes current resources, but the NPC can
-		// otherwise reconnect immediately and recreate its config-backed tunnels.
-		// Check the owning user at the bridge authentication boundary as well.
-		if userID != 0 {
-			if _, userErr := s.GetUser(userID); userErr != nil {
-				rejectReason = errors.New("client owner not found")
-				return true
-			}
-			if !s.IsUserActive(userID) {
-				rejectReason = errors.New("client owner inactive or expired")
-				return true
-			}
+		// Periodic expiry cleanup revokes current resources, while this check
+		// closes the reconnect window and also rejects malformed expiry data.
+		if !s.IsClientActive(v) {
+			rejectReason = errors.New("client owner inactive or client expired")
+			return true
 		}
 		v.Lock()
 		v.Addr = normalizedAddr
@@ -1386,6 +1686,8 @@ func (s *DbUtils) GetHostByAllowedClientsFiltered(start, length int, id int, sea
 }
 
 func (s *DbUtils) DelClient(id int) error {
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
 	if old, ok := s.JsonDb.Clients.Load(id); ok {
 		if client, valid := old.(*Client); valid && client != nil {
 			client.RLock()
@@ -1405,7 +1707,14 @@ func (s *DbUtils) NewClient(c *Client) error {
 	if c == nil {
 		return errors.New("客户端记录无效")
 	}
-	if err := s.ValidateClientOwner(c.UserId); err != nil {
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+
+	userID, expireTime, err := normalizeClientExpiry(c)
+	if err != nil {
+		return err
+	}
+	if err := s.validateClientAssignmentLocked(userID, expireTime, 0); err != nil {
 		return err
 	}
 	var isNotSet bool
@@ -1479,10 +1788,19 @@ func (s *DbUtils) UpdateClient(t *Client) error {
 	if t == nil {
 		return errors.New("客户端记录无效")
 	}
-	if err := s.ValidateClientOwner(t.UserId); err != nil {
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+
+	userID, expireTime, err := normalizeClientExpiry(t)
+	if err != nil {
 		return err
 	}
-	// 先 Stop 旧的 Rate，防止内存泄漏
+	if err := s.validateClientAssignmentLocked(userID, expireTime, t.Id); err != nil {
+		return err
+	}
+	// Stop the previous limiter before publishing the replacement. A client may
+	// be updated repeatedly from the management console, so retaining an old
+	// limiter would leak its refill goroutine.
 	if old, ok := s.JsonDb.Clients.Load(t.Id); ok {
 		if oldClient, valid := old.(*Client); valid && oldClient != nil {
 			oldClient.RLock()
@@ -1493,12 +1811,32 @@ func (s *DbUtils) UpdateClient(t *Client) error {
 			}
 		}
 	}
-	s.JsonDb.Clients.Store(t.Id, t)
-	if t.RateLimit == 0 {
-		t.Rate = rate.NewRate(int64((2 << 23) * 1024))
-		t.Rate.Start()
+	if t.Flow == nil {
+		t.Flow = new(Flow)
 	}
+	limit := int64((2 << 23) * 1024)
+	if t.RateLimit > 0 {
+		limit = int64(t.RateLimit) * 1024
+	}
+	newRate := rate.NewRate(limit)
+	t.Lock()
+	t.Rate = newRate
+	t.Unlock()
+	newRate.Start()
+	s.JsonDb.Clients.Store(t.Id, t)
+	s.JsonDb.StoreClientsToJsonFile()
 	return nil
+}
+
+func normalizeClientExpiry(client *Client) (userID int, expireTime string, err error) {
+	client.Lock()
+	defer client.Unlock()
+	normalized, err := NormalizeExpiryTime(client.ExpireTime)
+	if err != nil {
+		return 0, "", err
+	}
+	client.ExpireTime = normalized
+	return client.UserId, normalized, nil
 }
 
 func (s *DbUtils) IsPubClient(id int) bool {

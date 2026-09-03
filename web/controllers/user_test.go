@@ -68,7 +68,7 @@ func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 		CreateTime:   "2025-01-01 00:00:00",
 	}
 
-	updated := newUserUpdateCandidate(existing, "alice-updated", "", "after", 6, "2027-01-01 00:00:00")
+	updated := newUserUpdateCandidate(existing, "alice-updated", "", "after", 0, 6, "2027-01-01 00:00:00")
 	if updated == existing {
 		t.Fatal("update candidate must not mutate the stored user in place")
 	}
@@ -79,7 +79,7 @@ func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 		t.Fatalf("building an update candidate mutated the existing user: %#v", existing)
 	}
 
-	updated = newUserUpdateCandidate(existing, "alice", "replacement<password>&", "before", 3, existing.ExpireTime)
+	updated = newUserUpdateCandidate(existing, "alice", "replacement<password>&", "before", 0, 3, existing.ExpireTime)
 	if updated.Password != "replacement<password>&" {
 		t.Fatalf("supplied password should replace the credential, got %q", updated.Password)
 	}
@@ -102,6 +102,31 @@ func TestNormalizeUserInput(t *testing.T) {
 	}
 	if empty, err := normalizeUserExpireTime("   "); err != nil || empty != "" {
 		t.Fatalf("empty expiration should mean no expiry: value=%q err=%v", empty, err)
+	}
+}
+
+func TestParsePasswordChangeInputSupportsPopoverAndFormNames(t *testing.T) {
+	if got, err := parsePasswordChangeInput("new-secret", "", "new-secret", ""); err != nil || got != "new-secret" {
+		t.Fatalf("popover password fields = %q, %v; want new-secret, nil", got, err)
+	}
+	if got, err := parsePasswordChangeInput("", "form-secret", "", "form-secret"); err != nil || got != "form-secret" {
+		t.Fatalf("legacy form password fields = %q, %v; want form-secret, nil", got, err)
+	}
+	for _, test := range []struct {
+		name string
+		new  string
+		old  string
+		want string
+	}{
+		{name: "blank", new: "   ", want: "新密码不能为空"},
+		{name: "too short", new: "12345", want: "密码至少需要 6 个字符"},
+		{name: "mismatch", new: "secret1", old: "secret2", want: "两次输入的密码不一致"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := parsePasswordChangeInput(test.new, "", test.old, ""); err == nil || err.Error() != test.want {
+				t.Fatalf("parsePasswordChangeInput() error = %v, want %q", err, test.want)
+			}
+		})
 	}
 }
 
@@ -157,7 +182,7 @@ func TestUserListTemplateLocalizesUnlimitedValues(t *testing.T) {
 	content := readUserTemplateForTest(t, "../views/user/list.html")
 	for _, marker := range []string{
 		`userUnlimitedText()`,
-		`return npsIsEnglish() ? 'Unlimited' : '不限';`,
+		`return npsIsEnglish() ? 'Unlimited' : '永不过期';`,
 	} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("user list misses localized unlimited marker: %s", marker)

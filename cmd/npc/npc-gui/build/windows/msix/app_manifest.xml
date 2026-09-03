@@ -10,7 +10,7 @@
   <Identity 
     Name="com.nps.client"
     Publisher="CN=NPS"
-    Version="1.1.7.0"
+    Version="1.1.8.0"
     ProcessorArchitecture="x64" />
   
   <Properties>

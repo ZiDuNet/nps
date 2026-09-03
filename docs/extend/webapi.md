@@ -66,6 +66,7 @@ POST /client/add/
 | flow_limit | 流量限制，单位 M，留空不限制 |
 | max_conn | 最大连接数，留空不限制 |
 | max_tunnel | 最大隧道数，留空不限制 |
+| user_id | 所属用户 ID（仅管理员可指定；普通用户由服务端自动绑定当前账号） |
 | web_username | web 用户登录用户名 |
 | web_password | web 用户登录密码 |
 | blackiplist | 黑名单 IP 列表，`\r\n` 分隔 |
@@ -73,6 +74,8 @@ POST /client/add/
 | ipwhitepass | IP 白名单授权密码 |
 | ipwhitelist | 白名单 IP 列表，`\r\n` 分隔 |
 | expire_time | 到期时间，留空表示永不过期。支持格式：`2006-01-02 15:04:05`、`2006-01-02 15:04`、`2006-01-02T15:04:05`、`2006-01-02T15:04`、`2006-01-02` |
+
+普通用户调用新增接口时，服务端忽略请求中的 `vkey`、`user_id`、客户端级配额、`web_username`、`web_password` 和 `expire_time`，并自动将新客户端绑定到当前用户。普通用户可以提交 `remark`、`u`/`p`（Basic 认证）、`compress`、`crypt`、`ipwhite`、`ipwhitepass`、`ipwhitelist` 和 `blackiplist`；服务端会原子校验 `MaxClientNum`，达到上限时返回错误。
 
 ---
 
@@ -103,6 +106,8 @@ POST /client/edit/
 | ipwhitepass | IP 白名单授权密码 |
 | ipwhitelist | 白名单 IP 列表，`\r\n` 分隔 |
 | expire_time | 到期时间，格式同新增接口 |
+
+编辑接口中的 `id` 只用于定位客户端，客户端 ID 本身不可修改。普通用户只能修改备注、Basic 认证、压缩、加密和 IP 访问控制；将 `p` 留空表示保留现有 Basic 密码。管理员可以调整归属、配额、验证密钥、旧版 Web 登录和客户端独立到期时间，但独立到期时间不得晚于所属用户到期时间。
 
 ---
 
@@ -161,6 +166,7 @@ POST /user/add/
 | password | 登录密码 |
 | remark | 管理备注 |
 | max_tunnel | 该用户全部客户端可创建的最大隧道数，`0` 为不限制 |
+| max_client | 该用户可拥有的最大客户端数，`0` 为不限制；管理员分配和用户自建共用 |
 | expire_time | 到期时间；留空表示永不过期 |
 
 ### 修改用户
@@ -176,7 +182,16 @@ POST /user/edit/
 | password | 新密码；留空时保留原密码 |
 | remark | 管理备注 |
 | max_tunnel | 最大隧道数，`0` 为不限制 |
+| max_client | 最大客户端数，`0` 为不限制；不能调低到当前已分配客户端数量以下 |
 | expire_time | 到期时间；留空表示永不过期 |
+
+### 修改登录密码
+
+```
+POST /user/changepassword/
+```
+
+管理员提交 `id`、`new_password` 和 `confirm_password` 可重置指定普通用户密码。普通用户不需要提交 `id`（也可提交自己的 ID），必须同时提交 `current_password`、`new_password` 和 `confirm_password`，且不能修改其他用户；密码至少 6 个字符。接口不会返回或回显旧密码。
 
 ### 更改用户状态与删除
 
@@ -188,7 +203,7 @@ POST /user/del/
 | 接口 | 参数 | 含义 |
 | --- | --- | --- |
 | `/user/changestatus/` | `id`、`status` | 启用或停用用户。停用时会撤销其名下客户端的在线连接。 |
-| `/user/del/` | `id` | 删除用户，并停用其名下客户端。 |
+| `/user/del/` | `id` | 删除用户，并停用、解绑其名下客户端；管理员重新分配后才能恢复使用。 |
 
 ---
 

@@ -110,6 +110,8 @@ POST /client/add
 | `ipwhitelist` | IP 白名单列表 |
 | `blackiplist` | 黑名单列表 |
 
+普通用户调用此接口时，客户端会自动归属当前登录用户，`vkey`、`user_id`、客户端级配额、旧版 Web 登录凭据和独立到期时间等管理字段不会从请求体采纳。普通用户可设置备注、Basic 认证（`u`/`p`）、压缩、加密、IP 白名单/黑名单及 IP 授权密码；创建前会原子校验用户的 `MaxClientNum`。管理员可通过 `user_id` 指定归属用户。
+
 ### 修改客户端
 
 ```http
@@ -121,6 +123,8 @@ POST /client/edit
 | 参数 | 说明 |
 |------|------|
 | `id` | 客户端 ID |
+
+编辑时客户端 ID 只用于定位记录，不能修改。普通用户只能编辑自己客户端的备注、Basic 认证、压缩、加密和 IP 访问控制；密码留空表示保持原值。管理员可修改归属、配额、验证密钥、旧版 Web 登录和独立到期时间，但客户端到期时间不能晚于所属用户到期时间。
 
 ### 删除客户端
 
@@ -152,6 +156,7 @@ POST /user/add
 | `password` | 密码 |
 | `remark` | 备注 |
 | `max_tunnel` | 用户最大隧道数 |
+| `max_client` | 用户最大客户端数，`0` 为不限制。管理员分配和用户自建客户端共用此配额。 |
 | `expire_time` | 到期时间 |
 
 ### 修改用户
@@ -167,7 +172,16 @@ POST /user/edit
 | `password` | 密码 |
 | `remark` | 备注 |
 | `max_tunnel` | 用户最大隧道数 |
+| `max_client` | 用户最大客户端数，`0` 为不限制；不能调低到当前已分配数量以下。 |
 | `expire_time` | 到期时间 |
+
+### 修改登录密码
+
+```http
+POST /user/changepassword
+```
+
+管理员提交 `id`、`new_password` 和 `confirm_password` 可重置指定普通用户密码。普通用户不需要提交 `id`（也可提交自己的 ID），必须同时提交 `current_password`、`new_password` 和 `confirm_password`，且不能修改其他用户；密码至少 6 个字符。该接口不会返回或回显旧密码。
 
 ### 删除用户
 
@@ -175,7 +189,7 @@ POST /user/edit
 POST /user/del
 ```
 
-删除用户不会删除客户端，会将其名下客户端的 `UserId` 置空。
+删除用户不会删除客户端，但会停用并解绑其名下客户端（`UserId` 置空）；管理员重新分配后才能恢复使用。
 
 ## 隧道接口
 

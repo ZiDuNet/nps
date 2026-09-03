@@ -225,6 +225,56 @@ body.zui-app .navbar-top-links .dropdown { position: relative; }
 body.zui-app .navbar-top-links .dropdown-menu { right: 0; left: auto; min-width: 144px; margin-top: 0; list-style: none; }
 body.zui-app .welcome-message, body.zui-app .welcome-message a { color: var(--nps-faint) !important; }
 body.zui-app .welcome-message a { color: var(--nps-primary) !important; font-weight: 650; }
+body.zui-app .navbar-top-links > li > a.nps-topbar-version {
+    display: inline-flex;
+    align-items: center;
+    align-self: center;
+    gap: 6px;
+    width: auto;
+    height: 34px !important;
+    min-height: 34px !important;
+    margin: 0 4px;
+    padding: 0 9px !important;
+    color: var(--nps-muted) !important;
+    background: var(--nps-surface-subtle);
+    border: 1px solid var(--nps-line);
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+    transition: color .15s ease, border-color .15s ease, background-color .15s ease;
+}
+body.zui-app .navbar-top-links > li > a.nps-topbar-version:hover {
+    color: var(--nps-primary) !important;
+    background: var(--nps-primary-soft);
+    border-color: var(--nps-primary);
+}
+body.zui-app .nps-topbar-version > i { color: var(--nps-primary); font-size: 11px; }
+body.zui-app .nps-topbar-version strong { color: var(--nps-ink); font-size: 11px; font-weight: 750; }
+body.zui-app .nps-topbar-version__update {
+    padding: 4px 6px;
+    color: var(--nps-warning);
+    background: var(--nps-warning-soft);
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 750;
+}
+body.zui-app .nps-topbar-version.is-update {
+    color: var(--nps-warning) !important;
+    border-color: var(--nps-warning);
+    animation: nps-version-pulse 1.8s ease-in-out infinite;
+}
+@media (max-width: 991px) {
+    body.zui-app .nps-topbar-version__label { display: none; }
+    body.zui-app .navbar-top-links > li > a.nps-topbar-version { margin-right: 2px; margin-left: 2px; padding-right: 7px !important; padding-left: 7px !important; }
+}
+@keyframes nps-version-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(182, 106, 6, 0); }
+    50% { box-shadow: 0 0 0 4px rgba(182, 106, 6, .16); }
+}
+@media (prefers-reduced-motion: reduce) {
+    body.zui-app .nps-topbar-version.is-update { animation: none; }
+}
 body.zui-app .theme-toggle { width: 36px; height: 36px; padding: 0 !important; color: var(--nps-muted) !important; background: transparent; border: 0; border-radius: 6px; }
 body.zui-app .theme-toggle:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft); }
 body.zui-app #languagemenu { min-width: 40px; height: 36px; padding: 0 10px; color: var(--nps-muted) !important; background: var(--nps-surface-subtle) !important; border: 1px solid var(--nps-line) !important; border-radius: 6px !important; }
@@ -2825,6 +2875,341 @@ body.zui-app .nps-table__search {
     }
 }
 
+/* Give the account block breathing room from the last navigation section.
+   The footer is a flex child pinned to the bottom of the rail; its own top
+   padding, rather than an extra pseudo-row, keeps the divider continuous and
+   avoids the account text appearing glued to it. */
+body.zui-app .nav-sidebar-footer {
+    margin-top: auto !important;
+    padding: 22px 0 18px !important;
+    border-top: 1px solid var(--nps-sidebar-line) !important;
+}
+body.zui-app .nav-sidebar-footer .nav-account {
+    min-height: 34px;
+    margin: 0 16px 10px !important;
+    padding: 0 3px;
+}
+body.zui-app .nav-sidebar-footer .nav-logout-link {
+    margin: 0 7px !important;
+}
+@media (max-width: 991px) {
+    body.zui-app .nav-sidebar-footer {
+        padding-top: 18px !important;
+        padding-bottom: 15px !important;
+    }
+    body.zui-app .nav-sidebar-footer .nav-account {
+        margin-right: 18px !important;
+        margin-left: 18px !important;
+    }
+}
+
+/* Account status belongs to the footer action cluster rather than the menu
+   body.  The extra top padding creates a clear pause after the divider, and
+   the expiry pill gives the user a quick answer without competing with the
+   navigation labels. */
+body.zui-app .nav-sidebar-footer {
+    padding-top: 22px !important;
+    padding-bottom: 18px !important;
+}
+body.zui-app .nav-sidebar-footer .nav-account {
+    margin-bottom: 10px !important;
+}
+body.zui-app .nav-account-expiry {
+    display: inline-flex;
+    min-width: 0;
+    max-width: calc(100% - 32px);
+    align-items: center;
+    gap: 6px;
+    margin: 0 16px 14px;
+    padding: 5px 8px;
+    color: var(--nps-sidebar-muted);
+    background: rgba(255, 255, 255, .055);
+    border: 1px solid rgba(211, 227, 247, .15);
+    border-radius: 999px;
+    font-size: 10px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+body.zui-app .nav-account-expiry > i {
+    flex: 0 0 auto;
+    color: #9ec1ff;
+    font-size: 10px;
+}
+body.zui-app .nav-account-expiry__label {
+    flex: 0 0 auto;
+    color: var(--nps-sidebar-muted);
+}
+body.zui-app .nav-account-expiry__value {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--nps-sidebar-ink);
+    font-size: 10px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+}
+body.zui-app .nav-account-expiry--unlimited {
+    background: rgba(22, 132, 91, .14);
+    border-color: rgba(102, 213, 161, .24);
+}
+body.zui-app .nav-account-expiry--unlimited > i,
+body.zui-app .nav-account-expiry--unlimited .nav-account-expiry__value { color: #8ce4ba; }
+body.zui-app .nav-account-expiry--dated {
+    background: rgba(37, 99, 235, .14);
+    border-color: rgba(158, 193, 255, .24);
+}
+body.zui-app .nav-account-quota {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0 16px 14px;
+}
+body.zui-app .nav-account-quota__item {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 7px;
+    color: var(--nps-sidebar-muted);
+    background: rgba(255, 255, 255, .045);
+    border: 1px solid rgba(211, 227, 247, .12);
+    border-radius: 6px;
+    font-size: 10px;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+body.zui-app .nav-account-quota__item > i {
+    flex: 0 0 auto;
+    color: #9ec1ff;
+    font-size: 10px;
+}
+body.zui-app .nav-account-quota__item > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+body.zui-app .nav-account-quota__item > strong {
+    margin-left: auto;
+    color: var(--nps-sidebar-ink);
+    font-size: 10px;
+    font-weight: 700;
+}
+@media (max-width: 600px) {
+    body.zui-app .nav-account-quota { grid-template-columns: 1fr 1fr; margin-right: 18px; margin-left: 18px; }
+}
+body.zui-app .nps-password-modal .nps-modal-close {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    margin: -5px -8px 0 0;
+    padding: 0;
+    color: var(--nps-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1;
+}
+body.zui-app .nps-password-modal .nps-modal-close:hover,
+body.zui-app .nps-password-modal .nps-modal-close:focus-visible {
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+}
+@media (max-width: 991px) {
+    body.zui-app .nav-sidebar-footer { padding-top: 18px !important; }
+}
+
+/* The account action is a real button for ordinary users. Reset browser
+   button chrome while keeping the same compact row rhythm as the admin
+   account label, and make the affordance discoverable on hover/focus. */
+body.zui-app .nav-sidebar-footer .nav-account--button {
+    display: flex;
+    width: calc(100% - 32px);
+    align-items: center;
+    appearance: none;
+    border: 0;
+    border-radius: 7px;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    background: transparent;
+    transition: color .15s ease, background-color .15s ease;
+}
+body.zui-app .nav-sidebar-footer .nav-account--button:hover,
+body.zui-app .nav-sidebar-footer .nav-account--button:focus-visible {
+    color: var(--nps-sidebar-ink);
+    background: var(--nps-sidebar-hover);
+}
+body.zui-app .nav-sidebar-footer .nav-account--button:focus-visible {
+    outline: 2px solid #9ec1ff;
+    outline-offset: 2px;
+    box-shadow: none !important;
+}
+
+/* ZUI DatetimePicker wrappers occupy the same full-width field track as
+   ordinary controls, including the generated visible and hidden inputs. */
+body.zui-app .nps-datetime-picker,
+body.zui-app .nps-datetime-picker .date-picker,
+body.zui-app .nps-datetime-picker input.form-control {
+    width: 100%;
+}
+body.zui-app .nps-datetime-picker {
+    min-width: 0;
+}
+body.zui-app .nps-datetime-picker .date-picker {
+    margin: 0;
+}
+body.zui-app .nps-datetime-picker input.form-control {
+    min-height: 38px;
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border-color: var(--nps-line-strong);
+}
+body.zui-app .nps-datetime-picker input.form-control::placeholder {
+    color: var(--nps-faint);
+}
+body.zui-app .client-expire-policy {
+    display: flex;
+    min-height: 32px;
+    align-items: center;
+    margin-top: 8px;
+    padding: 7px 10px;
+    color: var(--nps-primary-strong, var(--nps-primary));
+    background: var(--nps-primary-soft);
+    border: 1px solid var(--nps-line);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.45;
+}
+body.zui-app .client-expire-policy:empty { display: none; }
+body.zui-app .client-list-quota {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: 4px;
+    padding: 4px 8px;
+    color: var(--nps-muted);
+    background: var(--nps-surface-subtle);
+    border: 1px solid var(--nps-line);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+body.zui-app .client-list-quota strong { color: var(--nps-primary); }
+
+/* Password rotation uses the native ZUI modal structure, with a narrow,
+   calm surface that remains readable in both themes. */
+body.zui-app .nps-password-modal {
+    overflow: hidden;
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line);
+    border-radius: 12px;
+    box-shadow: var(--nps-shadow);
+}
+body.zui-app .nps-password-modal .modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid var(--nps-line);
+    background: var(--nps-surface-subtle);
+}
+body.zui-app .nps-password-modal .modal-title {
+    margin: 0;
+    color: var(--nps-ink);
+    font-size: 20px;
+    font-weight: 750;
+    line-height: 1.25;
+}
+body.zui-app .nps-modal-kicker {
+    margin-bottom: 5px;
+    color: var(--nps-primary);
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+body.zui-app .nps-password-modal .close {
+    margin: -4px -8px 0 0;
+    padding: 3px 8px;
+    color: var(--nps-muted);
+    text-shadow: none;
+    opacity: 1;
+}
+body.zui-app .nps-password-modal .close:hover,
+body.zui-app .nps-password-modal .close:focus-visible {
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+}
+body.zui-app .nps-password-modal .modal-body {
+    padding: 20px 24px 8px;
+}
+body.zui-app .nps-password-modal__account {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 0 0 18px;
+    padding: 10px 12px;
+    color: var(--nps-muted);
+    background: var(--nps-primary-soft);
+    border: 1px solid var(--nps-line);
+    border-radius: 7px;
+    font-size: 12px;
+}
+body.zui-app .nps-password-modal__account strong {
+    overflow: hidden;
+    color: var(--nps-primary);
+    font-weight: 750;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.zui-app .nps-password-modal .form-group { margin-bottom: 16px; }
+body.zui-app .nps-password-modal .form-label {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--nps-ink);
+    font-size: 12px;
+    font-weight: 700;
+}
+body.zui-app .nps-password-modal .form-control {
+    width: 100%;
+    min-height: 40px;
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border-color: var(--nps-line-strong);
+}
+body.zui-app .nps-password-modal__hint {
+    margin: -2px 0 6px;
+    color: var(--nps-muted);
+    font-size: 12px;
+    line-height: 1.55;
+}
+body.zui-app .nps-password-modal .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 24px 20px;
+    border-top: 0;
+}
+body.zui-app .nps-password-modal .modal-footer .btn { min-width: 88px; }
+body.zui-app #change-password-modal .modal-dialog {
+    width: min(440px, calc(100% - 32px));
+    margin: 8vh auto;
+}
+@media (max-width: 600px) {
+    body.zui-app #change-password-modal .modal-dialog { width: calc(100% - 24px); }
+    body.zui-app .nps-password-modal .modal-header,
+    body.zui-app .nps-password-modal .modal-body,
+    body.zui-app .nps-password-modal .modal-footer { padding-right: 18px; padding-left: 18px; }
+}
+
 /* Brand and account rail: keep the identity compact, then pin the account
    actions to the bottom of the navigation without changing legacy routes. */
 body.zui-app .nps-brand-mark {
@@ -2837,7 +3222,7 @@ body.zui-app .logo-element img {
     display: block;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
 }
 body.zui-app .logo-element {
     width: 38px;
@@ -2891,8 +3276,8 @@ body.zui-app .auth-brand .nps-pro-badge { margin-left: 1px; }
     body.zui-app .nps-pro-badge { animation: none; }
 }
 
-/* Login and registration use the supplied circular mark as the visual
-   anchor. The panel badge remains above the form title at a readable size. */
+/* Login and registration keep the supplied mark in the compact page header;
+   the form surface stays text-first so the fields remain the visual focus. */
 body.auth-body .auth-brand__mark,
 body.auth-body .auth-context__brand-mark {
     overflow: hidden;
@@ -2903,7 +3288,7 @@ body.auth-body .auth-context__brand-mark img {
     display: block;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
 }
 body.auth-body .auth-context__brand-lockup {
     display: flex;
@@ -2938,4 +3323,100 @@ body.auth-body .auth-panel__badge {
     body.zui-app:not(.mini-navbar) .white-bg { left: 208px !important; }
     body.zui-app:not(.mini-navbar) .nav-header { padding-right: 14px !important; padding-left: 14px !important; }
     body.zui-app:not(.mini-navbar) #side-menu li a { margin-right: 7px; margin-left: 7px; padding-right: 10px !important; padding-left: 10px !important; }
+}
+
+/* A quiet, low-contrast canvas gives the authentication flow a little depth
+   without competing with the form. The effect is transform/opacity-only and
+   is disabled for users who request reduced motion. */
+body.auth-body .auth-page {
+    position: relative;
+    isolation: isolate;
+    overflow-x: hidden;
+    overflow-x: clip;
+    background:
+        radial-gradient(ellipse 70% 48% at 8% 0%, rgba(37, 99, 235, .08), transparent 72%),
+        radial-gradient(ellipse 62% 52% at 100% 100%, rgba(8, 145, 178, .07), transparent 74%),
+        var(--nps-canvas);
+}
+body.auth-body .auth-page::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(37, 99, 235, .045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(37, 99, 235, .045) 1px, transparent 1px);
+    background-size: 44px 44px;
+    opacity: .68;
+}
+body.auth-body .auth-page::after {
+    content: "";
+    position: absolute;
+    top: 8%;
+    left: 10%;
+    z-index: -1;
+    width: clamp(320px, 46vw, 650px);
+    aspect-ratio: 1;
+    pointer-events: none;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(37, 99, 235, .13) 0%, rgba(37, 99, 235, 0) 69%);
+    filter: blur(9px);
+    opacity: .72;
+    transform: translate3d(-4vw, -2vh, 0) scale(.94);
+    animation: nps-auth-glow-drift 18s ease-in-out infinite alternate;
+    will-change: transform, opacity;
+}
+@keyframes nps-auth-glow-drift {
+    0% { opacity: .56; transform: translate3d(-4vw, -2vh, 0) scale(.94); }
+    100% { opacity: .78; transform: translate3d(11vw, 7vh, 0) scale(1.06); }
+}
+[data-theme="dark"] body.auth-body .auth-page {
+    background:
+        radial-gradient(ellipse 70% 48% at 8% 0%, rgba(110, 160, 255, .12), transparent 72%),
+        radial-gradient(ellipse 62% 52% at 100% 100%, rgba(85, 201, 222, .08), transparent 74%),
+        var(--nps-canvas);
+}
+[data-theme="dark"] body.auth-body .auth-page::before {
+    background-image:
+        linear-gradient(rgba(110, 160, 255, .055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(110, 160, 255, .055) 1px, transparent 1px);
+    opacity: .46;
+}
+[data-theme="dark"] body.auth-body .auth-page::after {
+    background: radial-gradient(circle, rgba(110, 160, 255, .16) 0%, rgba(110, 160, 255, 0) 69%);
+    opacity: .62;
+}
+@media (prefers-reduced-motion: reduce) {
+    body.auth-body .auth-page::after {
+        animation: none;
+        transform: translate3d(-4vw, -2vh, 0) scale(.98);
+    }
+}
+
+/* Keep the account/exit block visually separated from the last navigation
+   group.  This final override follows the legacy sidebar rules so the
+   spacing remains consistent even when the compact desktop rail is active. */
+body.zui-app .nav-sidebar-footer {
+    margin-top: auto !important;
+    padding: 22px 0 18px !important;
+    border-top: 1px solid var(--nps-sidebar-line) !important;
+}
+body.zui-app .nav-sidebar-footer .nav-account {
+    min-height: 34px;
+    margin: 0 16px 10px !important;
+    padding: 0 3px;
+}
+body.zui-app .nav-sidebar-footer .nav-logout-link {
+    margin: 0 7px !important;
+}
+@media (max-width: 991px) {
+    body.zui-app .nav-sidebar-footer {
+        padding-top: 18px !important;
+        padding-bottom: 15px !important;
+    }
+    body.zui-app .nav-sidebar-footer .nav-account {
+        margin-right: 18px !important;
+        margin-left: 18px !important;
+    }
 }

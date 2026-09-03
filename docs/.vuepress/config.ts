@@ -78,7 +78,7 @@ export default defineUserConfig({
   title: 'NPS',
   description: 'NPS 内网穿透文档：安装、服务端、客户端、隧道、功能、运维和 Web API。',
   head: [
-    ['link', { rel: 'icon', href: '/nps/logo.svg' }],
+    ['link', { rel: 'icon', href: '/nps/logo.png' }],
     ['meta', { name: 'theme-color', content: '#0f766e' }],
   ],
 
@@ -87,7 +87,7 @@ export default defineUserConfig({
   ],
 
   theme: defaultTheme({
-    logo: '/logo.svg',
+    logo: '/logo.png',
     repo: 'ZiDuNet/nps',
     repoLabel: 'GitHub',
     docsRepo: 'https://github.com/ZiDuNet/nps',

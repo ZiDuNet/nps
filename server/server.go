@@ -1428,27 +1428,33 @@ func checkClientExpire() {
 		if !ok || v == nil {
 			return true
 		}
+		v.RLock()
+		status := v.Status
+		v.RUnlock()
+		if !status {
+			return true
+		}
+		effectiveExpireTime, err := file.GetDb().EffectiveClientExpireTime(v)
+		if err != nil || effectiveExpireTime == "" {
+			return true
+		}
+		expiresAt, valid := file.ParseExpiryTime(effectiveExpireTime)
+		if !valid || now.Before(expiresAt) {
+			return true
+		}
+
 		v.Lock()
-		if v.ExpireTime == "" || !v.Status {
-			v.Unlock()
-			return true
-		}
-		t, err := time.ParseInLocation("2006-01-02 15:04:05", v.ExpireTime, time.Local)
-		if err != nil {
-			v.Unlock()
-			return true
-		}
-		if now.Before(t) {
+		if !v.Status {
 			v.Unlock()
 			return true
 		}
 		v.Status = false
-		clientID, remark, expireTime := v.Id, v.Remark, v.ExpireTime
+		clientID, remark := v.Id, v.Remark
 		v.Unlock()
 		changed = true
 		DelClientConnect(clientID)
 		DelTunnelAndHostByClientId(clientID, false)
-		logs.Info("client id %d (remark: %s) expired at %s, auto paused", clientID, remark, expireTime)
+		logs.Info("client id %d (remark: %s) reached effective expiry %s, auto paused", clientID, remark, effectiveExpireTime)
 		return true
 	})
 	if changed {

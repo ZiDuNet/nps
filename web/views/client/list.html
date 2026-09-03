@@ -10,11 +10,18 @@
         <div class="management-page-column">
             <section class="panel ibox float-e-margins management-table-card zui-panel">
                 <div class="ibox-content management-table-content">
-                    {{if eq true .isAdmin}}
                     <div id="toolbar" class="management-table-toolbar">
                         <a href="{{.web_base_url}}/client/add" class="btn btn-primary dim">
                             <i class="fa fa-fw fa-lg fa-plus"></i> <span langtag="word-add"></span>
                         </a>
+                        {{if .accountQuota.Visible}}
+                        <span class="client-list-quota" role="status">
+                            <i class="fa fa-desktop" aria-hidden="true"></i>
+                            <span data-i18n-zh="客户端" data-i18n-en="Clients">客户端</span>
+                            <strong>{{.accountQuota.ClientUsed}} / {{if .accountQuota.ClientLimit}}{{.accountQuota.ClientLimit}}{{else}}<span data-i18n-zh="不限" data-i18n-en="Unlimited">不限</span>{{end}}</strong>
+                        </span>
+                        {{end}}
+                        {{if eq true .isAdmin}}
                         <label class="nps-table-filter" for="client-owner-filter">
                             <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
                             <select id="client-owner-filter" class="form-control nps-table-filter__control" data-nps-table-filter="user_id">
@@ -25,8 +32,8 @@
                                 {{end}}
                             </select>
                         </label>
+                        {{end}}
                     </div>
-                    {{end}}
                     <table id="table"></table>
                 </div>
             </section>
@@ -37,6 +44,11 @@
 <script>
     /* ZUI-compatible remote table */
     var clientListCompact = window.matchMedia && window.matchMedia('(min-width: 992px) and (max-width: 1599px)').matches;
+
+    function clientUnlimitedText() {
+        return npsIsEnglish() ? 'Unlimited' : '永不过期';
+    }
+
     $('#table').npsTable({
         toolbar: "#toolbar",
         method: 'post', // 服务器数据的请求方式 get or post
@@ -75,7 +87,12 @@
                 if (!value || !value.length) return '-';
                 return text(Array.isArray(value) ? value.join(', ') : value);
             };
-            var expireDisplay = row.ExpireTime ? text(row.ExpireTime) : '<span langtag="info-unrestricted"></span>';
+            var configuredExpiry = row.ExpireTime
+                ? text(row.ExpireTime)
+                : (Number(row.UserId) > 0 ? (english ? 'Follow user' : '跟随所属用户') : text(clientUnlimitedText()));
+            var effectiveExpiry = row.EffectiveExpireTime
+                ? text(row.EffectiveExpireTime)
+                : text(clientUnlimitedText());
             var inletFlow = changeunit(flow.InletFlow || 0);
             var exportFlow = changeunit(flow.ExportFlow || 0);
             var kv = function(label, value) {
@@ -125,7 +142,8 @@
                 + section('clock', english ? 'Timestamps' : '时间信息',
                     kv('<span langtag="word-createtime"></span>', text(row.CreateTime, '-'))
                     + kv('<span langtag="word-lastonlinetime"></span>', text(row.LastOnlineTime, '-'))
-                    + kv('<span langtag="word-expiretime"></span>', expireDisplay))
+                    + kv(english ? 'Client expiry' : '客户端有效期', configuredExpiry)
+                    + kv(english ? 'Effective expiry' : '实际有效期', effectiveExpiry))
                 + section('terminal', english ? 'Connection commands' : '连接命令',
                     cmdRow('<span langtag="word-quicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.p}}|' + (row.VerifyKey || '') + '|false'))
                     + cmdRow('<span langtag="word-tlsquicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.tls_p}}|' + (row.VerifyKey || '') + '|true'))
@@ -218,6 +236,16 @@
                 formatter: function (value, row, index) {
                     var nowRate = (row.Rate && row.Rate.NowRate) ? row.Rate.NowRate : 0;
                     return changeunit(nowRate) + "/S"
+                }
+            },
+            {
+                field: 'ExpireTime',
+                title: '<span data-i18n-zh="实际有效期" data-i18n-en="Effective expiry">实际有效期</span>',
+                halign: 'center',
+                class: 'client-list__expire-time',
+                visible: !clientListCompact,
+                formatter: function (value, row) {
+                    return npsEscapeHtml((row && row.EffectiveExpireTime) || clientUnlimitedText());
                 }
             },
             {

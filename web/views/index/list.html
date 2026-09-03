@@ -28,6 +28,15 @@
                                 {{end}}
                             </select>
                         </label>
+                        <label class="nps-table-filter" for="tunnel-client-filter">
+                            <span class="nps-table-filter__label" data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>
+                            <select id="tunnel-client-filter" class="form-control nps-table-filter__control" data-nps-table-filter="filter_client_id" {{if .client_id}}disabled{{end}}>
+                                <option value="0" data-i18n-zh="全部客户端" data-i18n-en="All clients">全部客户端</option>
+                                {{range .clients}}
+                                <option value="{{.Id}}">{{.Id}} · {{.Remark}}</option>
+                                {{end}}
+                            </select>
+                        </label>
                         {{end}}
                     </div>
                     <table id="table"></table>
@@ -47,6 +56,12 @@
     var tunnelListCompact = window.matchMedia && window.matchMedia('(min-width: 769px) and (max-width: 1599px)').matches;
     if (!isFinite(tunnelListClientId) || Math.floor(tunnelListClientId) !== tunnelListClientId || tunnelListClientId < 0) {
         tunnelListClientId = 0;
+    }
+    // Preserve the client scope when this list was opened from a client row.
+    // The filter uses a separate request key so its default "all" value can
+    // never overwrite the scoped client_id query parameter.
+    if (tunnelListClientId > 0) {
+        $('#tunnel-client-filter').val(String(tunnelListClientId));
     }
     var tunnelListLanguageKey = tunnelListType === 'host' ? 'page-hostlist' : 'page-list' + tunnelListType;
     $('#langtag').attr('langtag', tunnelListLanguageKey);
