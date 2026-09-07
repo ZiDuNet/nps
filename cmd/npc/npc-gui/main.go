@@ -30,6 +30,9 @@ func main() {
 			DisableQuitOnLastWindowClosed: true,
 		},
 	})
+	if len(trayIcon) > 0 {
+		app.SetIcon(trayIcon)
+	}
 
 	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             "main",
