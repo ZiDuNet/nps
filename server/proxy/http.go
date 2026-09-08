@@ -402,6 +402,17 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		failureContent  = s.errorContent
 		failureRaw      bool
 	)
+	responseStarted := false
+	responseWaitOnExit := false
+	waitForResponse := func() bool {
+		if responseStarted {
+			completed := waitHTTPResponse(&wg, c)
+			responseStarted = false
+			responseWaitOnExit = false
+			return completed
+		}
+		return true
+	}
 	releaseClientConn := func() {
 		if accountedClient == nil {
 			return
@@ -410,6 +421,12 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		accountedClient = nil
 	}
 	defer func() {
+		// A request-side EOF does not guarantee that the upstream response has
+		// finished. Wait before closing the hijacked connection so the final
+		// response bytes (including a terminating chunk) reach the client.
+		if responseWaitOnExit {
+			waitForResponse()
+		}
 		releaseClientConn()
 		if connClient != nil {
 			connClient.Close()
@@ -512,6 +529,8 @@ reset:
 	// Read response bytes from the client-side target connection.
 	isReset.Store(false)
 	wg.Add(1)
+	responseStarted = true
+	responseWaitOnExit = r.Close || strings.EqualFold(strings.TrimSpace(r.Header.Get("Connection")), "close")
 	go func(targetConn io.ReadWriteCloser, requestHost *file.Host, streaming, done chan struct{}) {
 		defer targetConn.Close()
 		defer func() {
@@ -629,7 +648,7 @@ reset:
 		} else if host != hostTmp {
 			isReset.Store(true)
 			connClient.Close()
-			if !waitHTTPResponse(&wg, c) {
+			if !waitForResponse() {
 				return
 			}
 			releaseClientConn()
@@ -637,7 +656,7 @@ reset:
 			goto reset
 		}
 	}
-	waitHTTPResponse(&wg, c)
+	waitForResponse()
 }
 
 func writeRequestRaw(w io.Writer, r *http.Request, br *bufio.Reader) error {

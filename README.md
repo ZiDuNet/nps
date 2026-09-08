@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.8</sub>
+﻿# NPS <sub>v1.1.9</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -179,6 +179,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.9** (2026-09-09) - Prevented Host proxy responses from being truncated when clients close the HTTP request side
 - **v1.1.8** (2026-09-04) - User client quotas, expiry-bound validation, self-service client settings, and transparent brand assets
 - **v1.1.6** (2026-09-02) - Release metadata synchronized for the refreshed console UI, platform domains, certificate hot reload, and GitHub publishing
 - **v1.1.5** (2026-09-02) - Scoped runtime dashboard, proxy rates, quota and health status, flicker-free refresh, and streaming regression fixes

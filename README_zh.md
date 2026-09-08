@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.8</sub>
+﻿# NPS <sub>v1.1.9</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -194,6 +194,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.9** (2026-09-09) - 修复客户端关闭 HTTP 请求端时 Host 反向代理响应被截断的问题
 - **v1.1.8** (2026-09-04) - 新增用户客户端配额、到期边界校验、自助客户端配置与透明品牌资源
 - **v1.1.6** (2026-09-02) - 同步清新 ZUI 控制台、平台泛域名、证书热更新和 GitHub 发布元数据
 - **v1.1.5** (2026-09-02) - 仪表盘权限隔离、代理速率与运行状态、无闪局部刷新、流式转发回归保护

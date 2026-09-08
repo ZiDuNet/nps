@@ -249,6 +249,99 @@ func TestHostFiniteResponseKeepsBoundedIdleCleanup(t *testing.T) {
 	}
 }
 
+func TestHostConnectionCloseWaitsForCompleteChunkedResponse(t *testing.T) {
+	installStreamingHost(t)
+	upstream, upstreamPeer := net.Pipe()
+	defer upstreamPeer.Close()
+	bridge := &streamingTestBridge{target: upstream}
+	server := &httpServer{BaseServer: BaseServer{bridge: bridge}}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+	clientConn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	clientTCP := clientConn.(*net.TCPConn)
+	defer clientTCP.Close()
+	serverConn, err := listener.Accept()
+	if err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	defer serverConn.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "http://stream.example.test/assets/app.js", nil)
+	req.RequestURI = "/assets/app.js"
+	req.URL.Scheme = "http"
+	req.Header.Set("Connection", "close")
+	req.Close = true
+	req.RemoteAddr = "198.51.100.22:12345"
+	done := make(chan struct{})
+	go func() {
+		server.handleHttp(conn.NewConn(serverConn), req, bufio.NewReader(serverConn))
+		close(done)
+	}()
+
+	if err := clientTCP.CloseWrite(); err != nil {
+		t.Fatalf("half-close request: %v", err)
+	}
+	if err := upstreamPeer.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	upstreamReader := bufio.NewReader(upstreamPeer)
+	for {
+		line, readErr := upstreamReader.ReadString('\n')
+		if readErr != nil {
+			t.Fatalf("read forwarded request: %v", readErr)
+		}
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+	if err := upstreamPeer.SetReadDeadline(time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := upstreamPeer.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	firstChunk := []byte("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nhello\r\n")
+	if _, err := upstreamPeer.Write(firstChunk); err != nil {
+		t.Fatalf("write first response chunk: %v", err)
+	}
+	// Keep the response open briefly so the request-side EOF is handled while
+	// the response copier is still active.
+	time.Sleep(50 * time.Millisecond)
+	lastChunk := []byte("6\r\n world\r\n0\r\n\r\n")
+	if _, err := upstreamPeer.Write(lastChunk); err != nil {
+		t.Fatalf("write terminating response chunk: %v", err)
+	}
+	_ = upstreamPeer.Close()
+
+	if err := clientTCP.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.ReadResponse(bufio.NewReader(clientTCP), req)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	body, err := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	if err != nil {
+		t.Fatalf("read response body: %v", err)
+	}
+	if string(body) != "hello world" {
+		t.Fatalf("response body = %q, want %q", body, "hello world")
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Host handler did not finish after complete response")
+	}
+}
+
 func TestJoinWithFlowStopsBothDirectionsOnPeerDisconnect(t *testing.T) {
 	client, clientPeer := net.Pipe()
 	upstream, upstreamPeer := net.Pipe()
