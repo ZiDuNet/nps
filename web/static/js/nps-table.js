@@ -26,6 +26,7 @@
         showRefresh: false,
         detailView: false,
         cardView: false,
+        storageKey: '',
         uniqueId: 'Id',
         columns: [],
         formatLoadingMessage: function () { return '<div class="table-loading-state" role="status">正在加载记录...</div>'; },
@@ -89,6 +90,12 @@
         return typeof window.npsIsEnglish === 'function' && window.npsIsEnglish() ? english : chinese;
     }
 
+    function tableColumnKey(column, index) {
+        if (column && column.stateKey) return String(column.stateKey);
+        if (column && column.field) return String(column.field);
+        return 'index:' + index;
+    }
+
     function NpsTable(element, options) {
         this.element = element;
         this.$el = $(element);
@@ -103,6 +110,7 @@
         }
         this.pageNumber = Number(this.options.pageNumber) > 0 ? Number(this.options.pageNumber) : 1;
         this.pageSize = Number(this.options.pageSize) > 0 ? Number(this.options.pageSize) : 10;
+        this.restorePreferences();
         this.searchText = '';
         this.sortField = '';
         this.sortOrder = '';
@@ -114,6 +122,61 @@
         this._requestSerial = 0;
         this.init();
     }
+
+    NpsTable.prototype.preferenceStorageKey = function () {
+        var key = $.trim(String(this.options.storageKey || ''));
+        return key ? 'nps:table-preferences:v1:' + key : '';
+    };
+
+    NpsTable.prototype.restorePreferences = function () {
+        var key = this.preferenceStorageKey();
+        if (!key) return;
+
+        var saved;
+        try {
+            if (!window.localStorage) return;
+            saved = JSON.parse(window.localStorage.getItem(key) || 'null');
+        } catch (error) {
+            return;
+        }
+        if (!saved || typeof saved !== 'object') return;
+
+        var pageList = this.options.pageList || [];
+        var savedPageSize = Number(saved.pageSize);
+        if (savedPageSize > 0 && pageList.some(function (size) { return Number(size) === savedPageSize; })) {
+            this.pageSize = savedPageSize;
+        }
+
+        if (!saved.columns || typeof saved.columns !== 'object') return;
+        this.options.columns.forEach(function (column, index) {
+            if (!column || column.checkbox) return;
+            var columnKey = tableColumnKey(column, index);
+            if (Object.prototype.hasOwnProperty.call(saved.columns, columnKey)
+                && typeof saved.columns[columnKey] === 'boolean') {
+                column.visible = saved.columns[columnKey];
+            }
+        });
+    };
+
+    NpsTable.prototype.savePreferences = function () {
+        var key = this.preferenceStorageKey();
+        if (!key) return;
+
+        var columns = {};
+        this.options.columns.forEach(function (column, index) {
+            if (!column || column.checkbox) return;
+            columns[tableColumnKey(column, index)] = column.visible !== false;
+        });
+        try {
+            window.localStorage.setItem(key, JSON.stringify({
+                pageSize: this.pageSize,
+                columns: columns
+            }));
+        } catch (error) {
+            // Private browsing and restrictive storage policies should not
+            // prevent the table from working with its in-memory defaults.
+        }
+    };
 
     NpsTable.prototype.init = function () {
         var self = this;
@@ -187,6 +250,7 @@
             var index = Number($(this).attr('data-column-index'));
             if (!self.options.columns[index]) return;
             self.options.columns[index].visible = this.checked;
+            self.savePreferences();
             self.renderHeader();
             self.renderBody();
             self.renderColumnsMenu();
@@ -238,6 +302,7 @@
             if (!size) return;
             self.pageSize = size;
             self.pageNumber = 1;
+            self.savePreferences();
             self.load();
         });
     };
@@ -505,6 +570,7 @@
         options = options || {};
         this.options = $.extend(true, this.options, options);
         if (options.columns) this.options.columns = options.columns.map(function (column) { return $.extend({}, column); });
+        this.restorePreferences();
         this.renderHeader();
         if (this.options.showColumns) this.renderColumnsMenu();
         this.load();
