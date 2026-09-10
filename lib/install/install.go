@@ -399,7 +399,6 @@ func downloadAndUnpack(bin, unpackPath string) (string, error) {
 
 func copyStaticFile(srcPath, bin string) (string, error) {
 	// nps web UI is embedded in the binary; no web/ files to copy.
-	binPath, _ := filepath.Abs(os.Args[0])
 	srcBin := filepath.Join(srcPath, bin)
 	if common.IsWindows() {
 		srcBin += ".exe"
@@ -407,24 +406,38 @@ func copyStaticFile(srcPath, bin string) (string, error) {
 	if _, err := os.Stat(srcBin); err != nil {
 		return "", fmt.Errorf("更新包中未找到可执行文件 %s: %w", srcBin, err)
 	}
+
+	destinations := []string{filepath.Join(common.GetAppPath(), bin+".exe")}
 	if !common.IsWindows() {
-		if _, err := copyFile(srcBin, "/usr/bin/"+bin); err != nil {
-			if _, err := copyFile(srcBin, "/usr/local/bin/"+bin); err != nil {
-				return "", err
-			}
-			binPath = "/usr/local/bin/" + bin
-		} else {
-			binPath = "/usr/bin/" + bin
-		}
-	} else {
-		destBin := filepath.Join(common.GetAppPath(), bin+".exe")
-		if err := replaceExecutable(srcBin, destBin); err != nil {
-			return "", err
-		}
-		binPath = destBin
+		destinations = []string{"/usr/bin/" + bin, "/usr/local/bin/" + bin}
 	}
-	chMod(binPath, 0755)
-	return binPath, nil
+	srcInfo, err := os.Stat(srcBin)
+	if err != nil {
+		return "", err
+	}
+	var lastErr error
+	for _, destBin := range destinations {
+		if dstInfo, statErr := os.Stat(destBin); statErr == nil && os.SameFile(srcInfo, dstInfo) {
+			chMod(destBin, 0755)
+			return destBin, nil
+		}
+
+		if common.IsWindows() {
+			if err := replaceExecutable(srcBin, destBin); err != nil {
+				lastErr = err
+				continue
+			}
+		} else if _, err := copyFile(srcBin, destBin); err != nil {
+			lastErr = err
+			continue
+		}
+		chMod(destBin, 0755)
+		return destBin, nil
+	}
+	if lastErr == nil {
+		lastErr = errors.New("无法选择可执行文件安装路径")
+	}
+	return "", lastErr
 }
 
 func copyStaticFileReplaceNps(srcPath, descPath string) error {
@@ -529,15 +542,22 @@ func replaceExecutable(srcBin, destBin string) error {
 	return nil
 }
 
-func InstallNpc() {
+// InstallNpcPath installs the NPC binary and returns the path used by system
+// services. Keeping this path explicit prevents systemd from capturing the
+// temporary path of the archive that was used to perform the installation.
+func InstallNpcPath() (string, error) {
 	path := common.GetInstallPath()
 	if !common.FileExists(path) {
 		err := os.Mkdir(path, 0755)
 		if err != nil {
-			log.Fatal(err)
+			return "", err
 		}
 	}
-	if _, err := copyStaticFile(common.GetAppPath(), "npc"); err != nil {
+	return copyStaticFile(common.GetAppPath(), "npc")
+}
+
+func InstallNpc() {
+	if _, err := InstallNpcPath(); err != nil {
 		log.Fatalln(err)
 	}
 }

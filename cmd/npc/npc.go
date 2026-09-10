@@ -64,6 +64,25 @@ func currentTLSOptions() client.TLSOptions {
 	}
 }
 
+func newNpcServiceConfig(name, displayName, description string) *service.Config {
+	options := make(service.KeyValue)
+	svcConfig := &service.Config{
+		Name:        name,
+		DisplayName: displayName,
+		Description: description,
+		Option:      options,
+	}
+	if !common.IsWindows() {
+		svcConfig.Dependencies = []string{
+			"Requires=network.target",
+			"After=network-online.target syslog.target",
+		}
+		svcConfig.Option["SystemdScript"] = install.SystemdScript
+		svcConfig.Option["SysvScript"] = install.SysvScript
+	}
+	return svcConfig
+}
+
 func main() {
 	flag.Parse()
 	logs.Reset()
@@ -86,20 +105,11 @@ func main() {
 	}
 
 	// init service
-	options := make(service.KeyValue)
-	svcConfig := &service.Config{
-		Name:        "Npc",
-		DisplayName: "nps内网穿透客户端",
-		Description: "一款轻量级、功能强大的内网穿透代理服务器。支持tcp、udp流量转发，支持内网http代理、内网socks5代理，同时支持snappy压缩、站点保护、加密传输、多路复用、header修改等。支持web图形化管理，集成多用户模式。",
-		Option:      options,
-	}
-	if !common.IsWindows() {
-		svcConfig.Dependencies = []string{
-			"Requires=network.target",
-			"After=network-online.target syslog.target"}
-		svcConfig.Option["SystemdScript"] = install.SystemdScript
-		svcConfig.Option["SysvScript"] = install.SysvScript
-	}
+	svcConfig := newNpcServiceConfig(
+		"Npc",
+		"nps内网穿透客户端",
+		"一款轻量级、功能强大的内网穿透代理服务器。支持tcp、udp流量转发，支持内网http代理、内网socks5代理，同时支持snappy压缩、站点保护、加密传输、多路复用、header修改等。支持web图形化管理，集成多用户模式。",
+	)
 	for _, v := range os.Args[1:] {
 		switch v {
 		case "install", "start", "stop", "uninstall", "restart":
@@ -166,7 +176,14 @@ func main() {
 		case "install":
 			service.Control(s, "stop")
 			service.Control(s, "uninstall")
-			install.InstallNpc()
+			installedPath, installErr := install.InstallNpcPath()
+			if installErr != nil {
+				logs.Error(installErr, "install npc binary failed")
+				return
+			}
+			// The service must run the stable installation path rather than the
+			// archive/extraction path used to invoke this command.
+			svcConfig.Executable = installedPath
 			err := service.Control(s, os.Args[1])
 			if err != nil {
 				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
@@ -466,17 +483,13 @@ func systemPro(flag string, serAddr string, vkey string, tls bool) {
 	prg := &npc{
 		exit: make(chan struct{}),
 	}
-	options := make(service.KeyValue)
-	svcConfig := &service.Config{
-		Name:        "nps-client-" + vkey,
-		DisplayName: "nps-client-" + vkey,
-		Description: "NPS内网穿透客户端，支持tcp、udp流量转发，支持内网http代理，地址：https://github.com/ZiDuNet/nps",
-		Option:      options,
-	}
-	s, _ := service.New(prg, svcConfig)
+	svcConfig := newNpcServiceConfig(
+		"nps-client-"+vkey,
+		"nps-client-"+vkey,
+		"NPS内网穿透客户端，支持tcp、udp流量转发，支持内网http代理，地址：https://github.com/ZiDuNet/nps",
+	)
 
-	switch flag {
-	case "1":
+	if flag == "1" {
 		svcConfig.Arguments = append(svcConfig.Arguments, "-server="+serAddr)
 		svcConfig.Arguments = append(svcConfig.Arguments, "-vkey="+vkey)
 		if tls {
@@ -498,7 +511,25 @@ func systemPro(flag string, serAddr string, vkey string, tls bool) {
 		logs.SetLogFuncCallDepth(3)
 		logs.SetLogger(logs.AdapterFile, `{"level":`+*logLevel+`,"filename":"`+*logPath+`","daily":false,"maxlines":100000,"color":true}`)
 
-		install.InstallNpc()
+		installedPath, installErr := install.InstallNpcPath()
+		if installErr != nil {
+			fmt.Println("隧道["+vkey+"]安装客户端失败", installErr)
+			return
+		}
+		// Use the stable installed binary in systemd/SysV scripts. Otherwise a
+		// service created from a temporary extraction directory breaks after the
+		// downloaded archive is moved or removed.
+		svcConfig.Executable = installedPath
+	}
+
+	s, err := service.New(prg, svcConfig)
+	if err != nil {
+		fmt.Println("隧道["+vkey+"]系统服务管理器不可用", err)
+		return
+	}
+
+	switch flag {
+	case "1":
 		err := service.Control(s, "install")
 		if err != nil {
 			fmt.Println("隧道["+vkey+"]安装到系统服务失败", err)
