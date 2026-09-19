@@ -169,6 +169,22 @@
 		<zh-CN>客户端状态</zh-CN>
 		<en-US>Client status</en-US>
 	</lang>
+	<lang id="word-configstatus">
+		<zh-CN>配置状态</zh-CN>
+		<en-US>Config status</en-US>
+	</lang>
+	<lang id="word-listenstatus">
+		<zh-CN>监听状态</zh-CN>
+		<en-US>Listener status</en-US>
+	</lang>
+	<lang id="word-currentconnections">
+		<zh-CN>当前 TCP 连接</zh-CN>
+		<en-US>Active TCP connections</en-US>
+	</lang>
+	<lang id="word-runerror">
+		<zh-CN>启动错误</zh-CN>
+		<en-US>Startup error</en-US>
+	</lang>
 	<lang id="word-client">
 		<zh-CN>客户端</zh-CN>
 		<en-US>Client</en-US>
@@ -283,8 +299,8 @@
 		<en-US>Global settings</en-US>
 	</lang>
 	<lang id="word-exportflow">
-		<zh-CN>出口流量</zh-CN>
-		<en-US>Export Flow</en-US>
+		<zh-CN>出口流量（内网→公网）</zh-CN>
+		<en-US>Outbound flow (LAN to public)</en-US>
 	</lang>
 	<lang id="word-false">
 		<zh-CN>否</zh-CN>
@@ -337,8 +353,8 @@
 		<en-US>In</en-US>
 	</lang>
 	<lang id="word-inletflow">
-		<zh-CN>入口流量</zh-CN>
-		<en-US>Inlet Flow</en-US>
+		<zh-CN>入口流量（公网→内网）</zh-CN>
+		<en-US>Inbound flow (public to LAN)</en-US>
 	</lang>
 	<lang id="word-iprestriction">
 		<zh-CN>IP 限制</zh-CN>

@@ -298,10 +298,10 @@ func (s *UdpModeServer) dispatch(key string, sess *udpSession, data []byte, n in
 	sess.touch()
 	if snapshot, err := s.snapshotTask(); err == nil {
 		if snapshot.clientFlow != nil {
-			snapshot.clientFlow.Add(int64(n), int64(n))
+			snapshot.clientFlow.Add(int64(n), 0)
 		}
 		if snapshot.taskFlow != nil {
-			snapshot.taskFlow.Add(int64(n), int64(n))
+			snapshot.taskFlow.Add(int64(n), 0)
 		}
 	}
 }
@@ -381,10 +381,10 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 	}
 	common.BufPoolUdp.Put(buf)
 	if snapshot.clientFlow != nil {
-		snapshot.clientFlow.Add(int64(n), int64(n))
+		snapshot.clientFlow.Add(int64(n), 0)
 	}
 	if snapshot.taskFlow != nil {
-		snapshot.taskFlow.Add(int64(n), int64(n))
+		snapshot.taskFlow.Add(int64(n), 0)
 	}
 
 	// 下行读循环
@@ -412,10 +412,10 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 			return
 		}
 		if snapshot.clientFlow != nil {
-			snapshot.clientFlow.Add(int64(rn), int64(rn))
+			snapshot.clientFlow.Add(0, int64(rn))
 		}
 		if snapshot.taskFlow != nil {
-			snapshot.taskFlow.Add(int64(rn), int64(rn))
+			snapshot.taskFlow.Add(0, int64(rn))
 		}
 	}
 }

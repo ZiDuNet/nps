@@ -1008,7 +1008,7 @@ func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 	if err != nil {
 		return
 	}
-	t.Flow = new(Flow)
+	t.Flow = NewFlow()
 	s.JsonDb.Tasks.Store(t.Id, t)
 	s.JsonDb.StoreTasksToJsonFile()
 	return
@@ -1575,7 +1575,7 @@ func (s *DbUtils) NewHost(t *Host) error {
 	if s.IsHostRouteConflict(t) {
 		return errors.New("host route overlaps another tenant")
 	}
-	t.Flow = new(Flow)
+	t.Flow = NewFlow()
 	s.JsonDb.Hosts.Store(t.Id, t)
 	s.JsonDb.StoreHostToJsonFile()
 	return nil
@@ -1622,7 +1622,7 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	stored.CertFilePath = t.CertFilePath
 	stored.AutoHttps = t.AutoHttps
 	if stored.Flow == nil {
-		stored.Flow = new(Flow)
+		stored.Flow = NewFlow()
 	}
 	stored.Unlock()
 	s.JsonDb.StoreHostToJsonFile()
@@ -1733,7 +1733,7 @@ reset:
 		c.Id = int(s.JsonDb.GetClientId())
 	}
 	if c.Flow == nil {
-		c.Flow = new(Flow)
+		c.Flow = NewFlow()
 	}
 	if c.RateLimit == 0 {
 		c.Rate = rate.NewRate((2 << 23) * 1024)
@@ -1812,7 +1812,7 @@ func (s *DbUtils) UpdateClient(t *Client) error {
 		}
 	}
 	if t.Flow == nil {
-		t.Flow = new(Flow)
+		t.Flow = NewFlow()
 	}
 	limit := int64((2 << 23) * 1024)
 	if t.RateLimit > 0 {

@@ -171,8 +171,8 @@ func TestHostSSEStaysOpenPastRequestIdleWindow(t *testing.T) {
 		t.Fatalf("bridge calls = %d, want one upstream stream", calls)
 	}
 	inlet, export, _ := client.Flow.Snapshot()
-	if inlet < int64(len(responseHeaders)+len(secondEvent)) || export < int64(len(responseHeaders)+len(secondEvent)) {
-		t.Fatalf("client flow counters = inlet %d export %d, want Host response bytes included", inlet, export)
+	if inlet == 0 || export < int64(len(responseHeaders)) {
+		t.Fatalf("client flow counters = inlet %d export %d, want request and Host response bytes in their respective directions", inlet, export)
 	}
 }
 

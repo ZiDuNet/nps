@@ -65,3 +65,36 @@ func TestFlowRateSnapshotUsesCounterDelta(t *testing.T) {
 		t.Fatalf("rate sample = (%d, %d), want positive counter deltas", inRate, outRate)
 	}
 }
+
+func TestFlowLimitUsesDirectionalTotal(t *testing.T) {
+	flow := &Flow{FlowLimit: 1}
+	flow.Add(600<<10, 0)
+	flow.Add(0, 600<<10)
+	if !flow.Exceeded() {
+		t.Fatal("combined inbound and outbound flow should exceed one MiB")
+	}
+	if got := flow.Total(); got != 1200<<10 {
+		t.Fatalf("total flow = %d, want %d", got, 1200<<10)
+	}
+}
+
+func TestFlowMigratesLegacyMirroredCountersWithoutDoublingQuota(t *testing.T) {
+	flow := &Flow{InletFlow: 900 << 10, ExportFlow: 900 << 10, FlowLimit: 1}
+	if !flow.NormalizeLegacyAccounting() {
+		t.Fatal("expected legacy flow migration")
+	}
+	inlet, export, _ := flow.Snapshot()
+	if inlet != 0 || export != 0 {
+		t.Fatalf("directional counters after migration = (%d, %d), want zero", inlet, export)
+	}
+	if got := flow.LegacySnapshot(); got != 900<<10 {
+		t.Fatalf("legacy total = %d, want %d", got, 900<<10)
+	}
+	if flow.Exceeded() {
+		t.Fatal("900 KiB historical usage must not exceed a 1 MiB quota")
+	}
+	flow.Add(200<<10, 0)
+	if !flow.Exceeded() {
+		t.Fatal("historical and new directional traffic should share the quota")
+	}
+}

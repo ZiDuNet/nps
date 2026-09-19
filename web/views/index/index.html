@@ -646,6 +646,7 @@
                 '即将到期': english ? 'Expiring' : '即将到期',
                 '运行中': english ? 'Running' : '运行中',
                 '已停止': english ? 'Stopped' : '已停止',
+                '启动失败': english ? 'Start failed' : '启动失败',
                 '等待客户端连接': english ? 'Waiting' : '等待客户端连接',
                 '等待连接': english ? 'Waiting' : '等待连接'
             };
@@ -677,7 +678,7 @@
             var mapping = prefix === 'client' ? {
                 clientOnline: '在线', clientOffline: '离线', clientDisabled: '已停用', clientExpiring: '即将到期'
             } : {
-                tunnelRunning: '运行中', tunnelStopped: '已停止', tunnelWaiting: '等待客户端连接'
+                tunnelRunning: '运行中', tunnelStopped: '已停止', tunnelWaiting: '等待客户端连接', tunnelFailed: '启动失败'
             };
             for (var key in mapping) {
                 if (!Object.prototype.hasOwnProperty.call(mapping, key)) continue;
@@ -693,7 +694,7 @@
                 online: '在线', offline: '离线', disabled: '已停用', expiring: '即将到期',
                 running: '运行中', stopped: '已停止', waiting: '等待客户端连接',
                 clientOnline: '在线', clientOffline: '离线', clientDisabled: '已停用', clientExpiring: '即将到期',
-                tunnelRunning: '运行中', tunnelStopped: '已停止', tunnelWaiting: '等待客户端连接'
+                tunnelRunning: '运行中', tunnelStopped: '已停止', tunnelWaiting: '等待客户端连接', tunnelFailed: '启动失败', failed: '启动失败'
             };
             var normalized = {};
             for (var key in counts) {
@@ -806,20 +807,21 @@
         function dashboardUpdateResourceChart(data, rows) {
             if (!chartdatas['counts'] || !chartdatas['counts'].series || !chartdatas['counts'].series[0]) return;
             var resource = dashboardValue(data, 'resourceStatus', null);
-            var labels = dashboardIsEnglish() ? ['Running', 'Stopped', 'Waiting'] : ['运行中', '已停止', '等待客户端连接'];
+            var labels = dashboardIsEnglish() ? ['Running', 'Stopped', 'Waiting', 'Failed'] : ['运行中', '已停止', '等待客户端连接', '启动失败'];
             var values = [];
             if (resource && !$.isArray(resource) && typeof resource === 'object') {
-                var resourceKeys = dashboardIsEnglish() ? ['running', 'stopped', 'waiting'] : ['running', 'stopped', 'waiting'];
+                var resourceKeys = ['running', 'stopped', 'waiting', 'failed'];
                 for (var resourceIndex = 0; resourceIndex < resourceKeys.length; resourceIndex++) {
                     values.push({name: labels[resourceIndex], value: dashboardNumber(dashboardValue(resource, resourceKeys[resourceIndex], 0))});
                 }
             } else {
-                var tunnelCounts = dashboardCountStatuses(rows, 'tunnel', {'运行中': true, '已停止': true, '等待客户端连接': true, '等待连接': true});
+                var tunnelCounts = dashboardCountStatuses(rows, 'tunnel', {'运行中': true, '已停止': true, '等待客户端连接': true, '等待连接': true, '启动失败': true});
                 if (!Object.keys(tunnelCounts).length) tunnelCounts = dashboardSummaryCounts(dashboardValue(data, 'runtimeStatus', {}), 'tunnel');
                 values = [
                     {name: labels[0], value: tunnelCounts['运行中'] || 0},
                     {name: labels[1], value: tunnelCounts['已停止'] || 0},
-                    {name: labels[2], value: (tunnelCounts['等待客户端连接'] || 0) + (tunnelCounts['等待连接'] || 0)}
+                    {name: labels[2], value: (tunnelCounts['等待客户端连接'] || 0) + (tunnelCounts['等待连接'] || 0)},
+                    {name: labels[3], value: tunnelCounts['启动失败'] || 0}
                 ];
             }
             if (!values.length) return;
@@ -831,12 +833,13 @@
 
         function dashboardUpdateFlowChart(data) {
             if (!chartdatas['flow'] || !chartdatas['flow'].series || !chartdatas['flow'].series[0]) return;
-            var labels = dashboardIsEnglish() ? ['In', 'Out'] : ['入口', '出口'];
+            var labels = dashboardIsEnglish() ? ['In', 'Out', 'Historical'] : ['入口', '出口', '历史'];
             chartdatas['flow'].legend.data = labels.slice();
             chartdatas['flow'].series[0].name = dashboardIsEnglish() ? 'Traffic' : '流量统计';
             chartdatas['flow'].series[0].data = [
                 {name: labels[0], value: dashboardNumber(dashboardValue(data, 'inletFlowCount', 0))},
-                {name: labels[1], value: dashboardNumber(dashboardValue(data, 'exportFlowCount', 0))}
+                {name: labels[1], value: dashboardNumber(dashboardValue(data, 'exportFlowCount', 0))},
+                {name: labels[2], value: dashboardNumber(dashboardValue(data, 'legacyFlowCount', 0))}
             ];
             if (charts['flow'] && typeof charts['flow'].setOption === 'function') charts['flow'].setOption(chartdatas['flow'], true);
         }
@@ -846,7 +849,7 @@
             var runtimeSummary = dashboardValue(data, 'runtimeStatus', {});
             var rows = dashboardValue(data, 'runtimeRows', $.isArray(runtimeSummary) ? runtimeSummary : []);
             var clientCounts = dashboardCountStatuses(rows, 'client', {'在线': true, '离线': true, '已停用': true, '即将到期': true});
-            var tunnelCounts = dashboardCountStatuses(rows, 'tunnel', {'运行中': true, '已停止': true, '等待客户端连接': true, '等待连接': true});
+            var tunnelCounts = dashboardCountStatuses(rows, 'tunnel', {'运行中': true, '已停止': true, '等待客户端连接': true, '等待连接': true, '启动失败': true});
             if (!Object.keys(clientCounts).length) clientCounts = dashboardSummaryCounts(runtimeSummary, 'client');
             if (!Object.keys(tunnelCounts).length) tunnelCounts = dashboardSummaryCounts(runtimeSummary, 'tunnel');
             var clients = dashboardValue(data, 'clientStatus', dashboardValue(data, 'clients', null));
@@ -855,7 +858,7 @@
             if (tunnels && typeof tunnels === 'object' && !$.isArray(tunnels)) tunnelCounts = dashboardNormalizeCounts(tunnels);
 
             $('#dashboard-client-status').text(dashboardStatusSummary(clientCounts, ['在线', '离线', '已停用', '即将到期']));
-            $('#dashboard-tunnel-status').text(dashboardStatusSummary(tunnelCounts, ['运行中', '已停止', '等待客户端连接', '等待连接']));
+            $('#dashboard-tunnel-status').text(dashboardStatusSummary(tunnelCounts, ['运行中', '已停止', '等待客户端连接', '启动失败', '等待连接']));
             var proxyRate = dashboardValue(data, 'proxyRate', {});
             var inbound = dashboardValue(data, 'proxyInRate', dashboardValue(proxyRate, 'in', 0));
             var outbound = dashboardValue(data, 'proxyOutRate', dashboardValue(proxyRate, 'out', 0));

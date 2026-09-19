@@ -65,8 +65,12 @@ func (s *JsonDb) LoadTaskFromJsonFile() {
 			return
 		}
 		if post.Flow == nil {
-			post.Flow = new(Flow)
+			post.Flow = NewFlow()
 		}
+		post.Flow.NormalizeLegacyAccounting()
+		// Runtime connection counts and startup errors never survive a restart.
+		post.CurrentConnections = 0
+		post.RunError = ""
 		s.Tasks.Store(post.Id, post)
 		if post.Id > int(s.TaskIncreaseId) {
 			s.TaskIncreaseId = int32(post.Id)
@@ -86,6 +90,10 @@ func (s *JsonDb) LoadClientFromJsonFile() {
 			post.Rate = rate.NewRate((2 << 23) * 1024)
 		}
 		post.Rate.Start()
+		if post.Flow == nil {
+			post.Flow = NewFlow()
+		}
+		post.Flow.NormalizeLegacyAccounting()
 		post.NowConn = 0
 		s.Clients.Store(post.Id, post)
 		if post.Id > int(s.ClientIncreaseId) {
@@ -125,8 +133,9 @@ func (s *JsonDb) LoadHostFromJsonFile() {
 			return
 		}
 		if post.Flow == nil {
-			post.Flow = new(Flow)
+			post.Flow = NewFlow()
 		}
+		post.Flow.NormalizeLegacyAccounting()
 		loaded = append(loaded, post)
 		if post.Id > int(s.HostIncreaseId) {
 			s.HostIncreaseId = int32(post.Id)

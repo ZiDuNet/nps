@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.11</sub>
+﻿# NPS <sub>v1.1.12</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -194,7 +194,7 @@ docker-compose up -d
 
 ### 近期更新
 
-- **v1.1.11** (2026-09-19) - 新增不阻塞主转发的实时 HTTP 请求调试与临时正文预览
+- **v1.1.12** (2026-09-19) - 修正双向流量和配额统计，明确隧道运行状态并显示 TCP 当前连接数
 - **v1.1.10** (2026-09-10) - 修复 Linux NPC 注册 systemd 系统服务时引用临时解压路径的问题
 - **v1.1.9** (2026-09-09) - 修复客户端关闭 HTTP 请求端时 Host 反向代理响应被截断的问题
 - **v1.1.8** (2026-09-04) - 新增用户客户端配额、到期边界校验、自助客户端配置与透明品牌资源

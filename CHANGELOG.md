@@ -2,6 +2,14 @@
 
 所有重要变更记录在此。
 
+## [1.1.12] - 2026-09-19
+
+### Changed
+
+- Corrected directional traffic and quota accounting across proxy modes.
+- Clarified tunnel configuration/listener/client states and added active TCP connection counts.
+- Live traffic inspection now shows complete request and response headers for authorized management users.
+
 ## [1.1.11] - 2026-09-19
 
 ### 实时请求调试

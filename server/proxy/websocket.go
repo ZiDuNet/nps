@@ -62,9 +62,8 @@ type flowConn struct {
 	io.ReadWriteCloser
 	fakeAddr net.Addr
 	host     *file.Host
-	flowIn   int64
-	flowOut  int64
-	once     sync.Once
+	flow     *file.Flow
+	track    bool
 }
 
 func (rp *HttpReverseProxy) reserveClientConnection(client *file.Client) error {
@@ -162,16 +161,39 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 
 func (c *flowConn) Read(p []byte) (n int, err error) {
 	n, err = c.ReadWriteCloser.Read(p)
+	if n > 0 {
+		c.addFlow(0, int64(n))
+	}
 	return n, err
 }
 
 func (c *flowConn) Write(p []byte) (n int, err error) {
 	n, err = c.ReadWriteCloser.Write(p)
+	if n > 0 {
+		c.addFlow(int64(n), 0)
+	}
 	return n, err
 }
 
+func (c *flowConn) addFlow(in, out int64) {
+	if c == nil || !c.track {
+		return
+	}
+	seen := c.flow
+	if seen != nil {
+		seen.Add(in, out)
+	}
+	if c.host != nil {
+		c.host.RLock()
+		hostFlow := c.host.Flow
+		c.host.RUnlock()
+		if hostFlow != nil && hostFlow != seen {
+			hostFlow.Add(in, out)
+		}
+	}
+}
+
 func (c *flowConn) Close() error {
-	//c.once.Do(func() { c.host.Flow.Add(c.flowIn, c.flowOut) })
 	if c == nil || c.ReadWriteCloser == nil {
 		return nil
 	}
@@ -221,6 +243,8 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 					ReadWriteCloser: connClient,
 					fakeAddr:        local,
 					host:            state.host,
+					flow:            state.clientFlow,
+					track:           true,
 				}, nil
 			},
 		},
@@ -248,6 +272,8 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 			ReadWriteCloser: connClient,
 			fakeAddr:        local,
 			host:            state.host,
+			flow:            state.clientFlow,
+			track:           false,
 		}, nil
 	}
 	rp.proxy = proxy
@@ -348,10 +374,12 @@ func (p *ReverseProxy) serveWebSocket(rw http.ResponseWriter, req *http.Request,
 	}
 
 	flow := (*file.Flow)(nil)
+	resolvedHost := host
 	if state, stateErr := stateFromContext(req.Context()); stateErr == nil {
 		flow = state.clientFlow
+		resolvedHost = state.host
 	}
-	joinWithFlow(conn, targetConn, flow)
+	joinWithFlow(conn, targetConn, flow, resolvedHost)
 }
 
 func Join(c1 io.ReadWriteCloser, c2 io.ReadWriteCloser, host *file.Host) (inCount int64, outCount int64) {
@@ -369,26 +397,30 @@ func Join(c1 io.ReadWriteCloser, c2 io.ReadWriteCloser, host *file.Host) (inCoun
 			client.RUnlock()
 		}
 	}
-	return joinWithFlow(c1, c2, flow)
+	return joinWithFlow(c1, c2, flow, host)
 }
 
-func joinWithFlow(c1 io.ReadWriteCloser, c2 io.ReadWriteCloser, flow *file.Flow) (inCount int64, outCount int64) {
+func joinWithFlow(c1 io.ReadWriteCloser, c2 io.ReadWriteCloser, flow *file.Flow, hosts ...*file.Host) (inCount int64, outCount int64) {
 	if c1 == nil || c2 == nil {
 		return
 	}
+	var host *file.Host
+	if len(hosts) > 0 {
+		host = hosts[0]
+	}
 	var wait sync.WaitGroup
-	pipe := func(to io.ReadWriteCloser, from io.ReadWriteCloser, count *int64) {
+	pipe := func(to io.ReadWriteCloser, from io.ReadWriteCloser, count *int64, direction goroutine.FlowDirection) {
 		defer to.Close()
 		defer from.Close()
 		defer wait.Done()
-		goroutine.CopyBuffer(to, from, flow, nil, nil, "")
+		goroutine.CopyBufferWithFlowsDirection(to, from, flow, nil, nil, host, "", direction)
 		//*count, _ = io.Copy(to, from)
 	}
 
 	wait.Add(2)
 
-	go pipe(c1, c2, &inCount)
-	go pipe(c2, c1, &outCount)
+	go pipe(c1, c2, &inCount, goroutine.FlowOutbound)
+	go pipe(c2, c1, &outCount, goroutine.FlowInbound)
 	wait.Wait()
 	return
 }

@@ -303,6 +303,7 @@ func stopServer(id int) error {
 		if t, err := file.GetDb().GetTask(id); err == nil {
 			t.Lock()
 			t.Status = false
+			t.RunError = ""
 			port, remark, taskID := t.Port, t.Remark, t.Id
 			clientID := 0
 			if t.Client != nil {
@@ -373,6 +374,7 @@ func addTask(t *file.Tunnel) error {
 				if RunList.CompareAndDelete(taskID, svr) {
 					t.Lock()
 					t.Status = false
+					t.RunError = err.Error()
 					t.Unlock()
 					if updateErr := file.GetDb().UpdateTask(t); updateErr != nil {
 						logs.Warn("persist failed task start state for task %d: %v", taskID, updateErr)
@@ -405,6 +407,7 @@ func StartTask(id int) error {
 		// first prevents that goroutine from racing a later status update.
 		t.Lock()
 		t.Status = true
+		t.RunError = ""
 		t.Unlock()
 		if err := file.GetDb().UpdateTask(t); err != nil {
 			return err
@@ -412,6 +415,7 @@ func StartTask(id int) error {
 		if err := addTask(t); err != nil {
 			t.Lock()
 			t.Status = false
+			t.RunError = err.Error()
 			t.Unlock()
 			_ = file.GetDb().UpdateTask(t)
 			return err
@@ -878,7 +882,7 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 	tunnelCount := 0
 	clientOnlineCount := 0
 	currentProxyConnections := 0
-	var in, out int64
+	var in, out, legacy int64
 	clients := make(map[int]*file.Client)
 	file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {
 		client, ok := value.(*file.Client)
@@ -901,6 +905,7 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 			clientIn, clientOut, _ := flow.Snapshot()
 			in += clientIn
 			out += clientOut
+			legacy += flow.LegacySnapshot()
 		}
 		return true
 	})
@@ -915,7 +920,7 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 	// clients after it runs so the returned snapshot is current and scoped.
 	clientOnlineCount = 0
 	currentProxyConnections = 0
-	in, out = 0, 0
+	in, out, legacy = 0, 0, 0
 	for _, client := range clients {
 		client.RLock()
 		connected, flow := client.IsConnect, client.Flow
@@ -928,11 +933,13 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 			clientIn, clientOut, _ := flow.Snapshot()
 			in += clientIn
 			out += clientOut
+			legacy += flow.LegacySnapshot()
 		}
 	}
 	data["clientOnlineCount"] = clientOnlineCount
 	data["inletFlowCount"] = int(in)
 	data["exportFlowCount"] = int(out)
+	data["legacyFlowCount"] = int(legacy)
 	var tcp, udp, secret, socks5, p2p, http int
 	file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
 		task, ok := value.(*file.Tunnel)
@@ -1020,6 +1027,7 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 		"running": dashboardSummaryInt(runtimeSummary, "tunnelRunning"),
 		"stopped": dashboardSummaryInt(runtimeSummary, "tunnelStopped"),
 		"waiting": dashboardSummaryInt(runtimeSummary, "tunnelWaiting"),
+		"failed":  dashboardSummaryInt(runtimeSummary, "tunnelFailed"),
 	}
 	data["pendingItems"] = dashboardPendingItems(clients, allowedClientIds)
 	data["quotas"] = dashboardQuotaRows(clients)
@@ -1102,6 +1110,7 @@ type dashboardRuntimeRow struct {
 	Name      string `json:"name"`
 	Status    string `json:"status"`
 	ClientID  int    `json:"clientId"`
+	RunError  string `json:"runError,omitempty"`
 	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
@@ -1127,7 +1136,7 @@ func dashboardRuntimeStatus(clients map[int]*file.Client, allowedClientIds map[i
 			return true
 		}
 		task.RLock()
-		id, remark, status, client := task.Id, task.Remark, task.Status, task.Client
+		id, remark, status, runError, client := task.Id, task.Remark, task.Status, task.RunError, task.Client
 		task.RUnlock()
 		if client == nil {
 			return true
@@ -1142,12 +1151,14 @@ func dashboardRuntimeStatus(clients map[int]*file.Client, allowedClientIds map[i
 		state := "已停止"
 		if !clientEnabled {
 			state = "已停止"
+		} else if status && !running && runError != "" {
+			state = "启动失败"
 		} else if status && !connected {
 			state = "等待客户端连接"
 		} else if status && running {
 			state = "运行中"
 		}
-		rows = append(rows, dashboardRuntimeRow{Kind: "tunnel", ID: id, Name: remark, Status: state, ClientID: clientID})
+		rows = append(rows, dashboardRuntimeRow{Kind: "tunnel", ID: id, Name: remark, Status: state, ClientID: clientID, RunError: runError})
 		return true
 	})
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -1168,6 +1179,7 @@ func dashboardRuntimeSummary(rows []dashboardRuntimeRow, proxyInRate, proxyOutRa
 		"tunnelRunning":  0,
 		"tunnelStopped":  0,
 		"tunnelWaiting":  0,
+		"tunnelFailed":   0,
 		"proxyInRate":    proxyInRate,
 		"proxyOutRate":   proxyOutRate,
 	}
@@ -1191,6 +1203,8 @@ func dashboardRuntimeSummary(rows []dashboardRuntimeRow, proxyInRate, proxyOutRa
 				key = "tunnelRunning"
 			case "等待客户端连接":
 				key = "tunnelWaiting"
+			case "启动失败":
+				key = "tunnelFailed"
 			default:
 				key = "tunnelStopped"
 			}
@@ -1224,8 +1238,8 @@ func dashboardQuotaRows(clients map[int]*file.Client) []dashboardQuotaRow {
 		client.RUnlock()
 		var flowUsed, flowLimit int64
 		if flow != nil {
-			inlet, export, limit := flow.Snapshot()
-			flowUsed = inlet + export
+			_, _, limit := flow.Snapshot()
+			flowUsed = flow.Total()
 			if limit > 0 {
 				flowLimit = limit << 20
 			}
@@ -1265,9 +1279,9 @@ func dashboardPendingItems(clients map[int]*file.Client, allowedClientIds map[in
 			}
 		}
 		if flow != nil {
-			inlet, export, limit := flow.Snapshot()
+			_, _, limit := flow.Snapshot()
 			if limit > 0 {
-				if dashboardNearLimitBytes(inlet+export, limit<<20) {
+				if dashboardNearLimitBytes(flow.Total(), limit<<20) {
 					pending = append(pending, "流量配额接近上限")
 				}
 			}

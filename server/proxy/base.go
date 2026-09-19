@@ -54,6 +54,14 @@ func (s *BaseServer) FlowAdd(in, out int64) {
 	}
 }
 
+func (s *BaseServer) FlowAddInbound(bytes int64) {
+	s.FlowAdd(bytes, 0)
+}
+
+func (s *BaseServer) FlowAddOutbound(bytes int64) {
+	s.FlowAdd(0, bytes)
+}
+
 // change the flow
 func (s *BaseServer) FlowAddHost(host *file.Host, in, out int64) {
 	if host == nil {
@@ -65,6 +73,14 @@ func (s *BaseServer) FlowAddHost(host *file.Host, in, out int64) {
 	if flow != nil {
 		flow.Add(in, out)
 	}
+}
+
+func (s *BaseServer) FlowAddHostInbound(host *file.Host, bytes int64) {
+	s.FlowAddHost(host, bytes, 0)
+}
+
+func (s *BaseServer) FlowAddHostOutbound(host *file.Host, bytes int64) {
+	s.FlowAddHost(host, 0, bytes)
 }
 
 // write fail bytes to the connection

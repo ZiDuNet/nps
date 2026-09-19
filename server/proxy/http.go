@@ -490,7 +490,7 @@ reset:
 		}()
 
 		probe := newResponseInspector(targetConn, traffic.Resource{Kind: "host", ID: currentHost.Id}, requestQueue, streaming)
-		if err1 := goroutine.CopyBufferWithFlows(c, probe, hostFlow, []*file.Flow{clientFlow}, nil, requestHost, ""); err1 != nil {
+		if err1 := goroutine.CopyBufferWithFlowsDirection(c, probe, hostFlow, []*file.Flow{clientFlow}, nil, requestHost, "", goroutine.FlowOutbound); err1 != nil {
 			return
 		}
 	}(connClient, currentHost, responseStreaming, responseDone)
@@ -510,10 +510,13 @@ reset:
 					break
 				}
 				logs.Trace("%s request, method %s, host %s, url %s, remote address %s, return cache", r.URL.Scheme, r.Method, r.Host, r.URL.Path, c.RemoteAddr().String())
-				if clientFlow != nil {
-					clientFlow.Add(int64(n), int64(n))
+				host.RLock()
+				hostFlowForCache := host.Flow
+				host.RUnlock()
+				s.FlowAddHostOutbound(host, int64(n))
+				if clientFlow != nil && clientFlow != hostFlowForCache {
+					clientFlow.Add(0, int64(n))
 				}
-				s.FlowAddHost(host, int64(n), int64(n))
 				//if return cache and does not create a new conn with client and Connection is not set or close, close the connection.
 				if strings.ToLower(r.Header.Get("Connection")) == "close" || strings.ToLower(r.Header.Get("Connection")) == "" {
 					break
@@ -578,9 +581,9 @@ reset:
 		_ = c.SetReadDeadline(time.Time{})
 		firstReq = false
 		if clientFlow != nil {
-			clientFlow.Add(int64(lenConn.Len), int64(lenConn.Len))
+			clientFlow.Add(int64(lenConn.Len), 0)
 		}
-		s.FlowAddHost(host, int64(lenConn.Len), int64(lenConn.Len))
+		s.FlowAddHostInbound(host, int64(lenConn.Len))
 		traffic.Publish(traffic.Event{
 			Type:       "request_sent",
 			Time:       time.Now().UTC(),

@@ -44,7 +44,7 @@ func TestPublishIsNonBlockingAndReportsOverflow(t *testing.T) {
 	}
 }
 
-func TestBodyCapturePolicyAndHeaderRedaction(t *testing.T) {
+func TestBodyCapturePolicyAndCompleteHeaders(t *testing.T) {
 	if !IsInspectableContentType("application/json", "") {
 		t.Fatal("JSON should be inspectable")
 	}
@@ -63,8 +63,8 @@ func TestBodyCapturePolicyAndHeaderRedaction(t *testing.T) {
 		"X-Trace":       {"trace-id"},
 	}
 	safe := SafeHeaders(header)
-	if safe["Authorization"] != "[REDACTED]" || safe["Cookie"] != "[REDACTED]" || safe["X-Trace"] != "trace-id" {
-		t.Fatalf("unexpected sanitized headers: %#v", safe)
+	if safe["Authorization"] != "Bearer secret" || safe["Cookie"] != "session=secret" || safe["X-Trace"] != "trace-id" {
+		t.Fatalf("unexpected complete headers: %#v", safe)
 	}
 }
 

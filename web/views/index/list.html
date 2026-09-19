@@ -80,13 +80,13 @@
     // desktop table does not grow wider just because a mode has a different
     // connection model.
     var tunnelListModeColumns = {
-        tcp:       {port: true,  address: true,  target: true,  password: false},
-        udp:       {port: true,  address: true,  target: true,  password: false},
-        httpProxy: {port: true,  address: true,  target: false, password: false},
-        socks5:    {port: true,  address: true,  target: false, password: false},
-        file:      {port: true,  address: true,  target: false, password: false},
-        secret:    {port: false, address: false, target: true,  password: true},
-        p2p:       {port: false, address: false, target: true,  password: true}
+        tcp:       {port: true,  address: true,  target: true,  password: false, currentconnections: true},
+        udp:       {port: true,  address: true,  target: true,  password: false, currentconnections: false},
+        httpProxy: {port: true,  address: true,  target: false, password: false, currentconnections: false},
+        socks5:    {port: true,  address: true,  target: false, password: false, currentconnections: false},
+        file:      {port: true,  address: true,  target: false, password: false, currentconnections: false},
+        secret:    {port: false, address: false, target: true,  password: true, currentconnections: false},
+        p2p:       {port: false, address: false, target: true,  password: true, currentconnections: false}
     };
     var tunnelListColumns = tunnelListModeColumns[tunnelListMode] || {
         port: true,
@@ -163,6 +163,8 @@
                     + '<div><b langtag="word-basicpassword"></b><span>' + tunnelText(config.P || '-') + '</span></div>'
                     + '<div><b langtag="word-protoversion"></b><span>' + tunnelText(row.ProtoVersion || '-') + '</span></div>'
                     + '<div><b langtag="word-runstatus"></b><span>' + tunnelBoolean(row.RunStatus) + '</span></div>'
+                    + (row.Mode === 'tcp' ? '<div><b langtag="word-currentconnections"></b><span>' + tunnelText(row.CurrentConnections || 0) + '</span></div>' : '')
+                    + (row.RunError ? '<div class="tunnel-detail-error"><b langtag="word-runerror"></b><span>' + tunnelText(row.RunError) + '</span></div>' : '')
                     + '<div><b langtag="word-clientstatus"></b><span>' + tunnelBoolean(client.IsConnect) + '</span></div>'
                     + '</div>';
             var copyBtn = '<button type="button" class="copy btn btn-info btn-xs" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button>'
@@ -291,7 +293,7 @@
             },
             {
                 field: 'Status',//域值
-                title: '<span langtag="word-status"></span>',//内容
+                title: '<span langtag="word-configstatus"></span>',//内容
                 align: 'center',
                 halign: 'center',
                 visible: true,//false表示不显示
@@ -306,7 +308,7 @@
             },
             {
                 field: 'RunStatus',//域值
-                title: '<span langtag="word-runstatus"></span>',//内容
+                title: '<span langtag="word-listenstatus"></span>',//内容
                 align: 'center',
                 halign: 'center',
                 visible: tunnelListColumnVisible('runstatus', true),//false表示不显示
@@ -317,6 +319,17 @@
                     } else {
                         return '<span class="badge badge-badge" langtag="word-close"></span>'
                     }
+                }
+            },
+            {
+                field: 'CurrentConnections',
+                title: '<span langtag="word-currentconnections"></span>',
+                align: 'center',
+                halign: 'center',
+                visible: tunnelListColumnVisible('currentconnections', true),
+                sortable: true,
+                formatter: function (value) {
+                    return tunnelText(value || 0);
                 }
             },
             {

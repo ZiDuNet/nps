@@ -11,9 +11,11 @@ import (
 )
 
 type Flow struct {
-	ExportFlow int64
-	InletFlow  int64
-	FlowLimit  int64
+	ExportFlow        int64
+	InletFlow         int64
+	FlowLimit         int64
+	LegacyTotal       int64
+	AccountingVersion int
 	sync.RWMutex
 	rateSampleAt  time.Time
 	rateSampleIn  int64
@@ -22,10 +24,72 @@ type Flow struct {
 	rateOut       int64
 }
 
+const directionalFlowAccountingVersion = 2
+
+func NewFlow() *Flow {
+	return &Flow{AccountingVersion: directionalFlowAccountingVersion}
+}
+
+// NormalizeLegacyAccounting folds counters written by versions that recorded
+// every transferred byte in both fields into one aggregate bucket. The old
+// direction cannot be recovered, but quota consumption stays accurate and all
+// traffic written after migration uses the directional counters.
+func (s *Flow) NormalizeLegacyAccounting() bool {
+	if s == nil {
+		return false
+	}
+	s.Lock()
+	defer s.Unlock()
+	if s.AccountingVersion >= directionalFlowAccountingVersion {
+		return false
+	}
+	legacy := s.InletFlow
+	if s.ExportFlow > legacy {
+		legacy = s.ExportFlow
+	}
+	if legacy > 0 {
+		s.LegacyTotal += legacy
+		s.InletFlow = 0
+		s.ExportFlow = 0
+	}
+	s.AccountingVersion = directionalFlowAccountingVersion
+	s.rateSampleAt = time.Time{}
+	s.rateSampleIn = 0
+	s.rateSampleOut = 0
+	s.rateIn = 0
+	s.rateOut = 0
+	return true
+}
+
+// Total returns real aggregate transfer volume. LegacyTotal holds the
+// directionless usage migrated from releases that recorded both sides twice.
+func (s *Flow) Total() int64 {
+	if s == nil {
+		return 0
+	}
+	s.RLock()
+	total := s.LegacyTotal + s.InletFlow + s.ExportFlow
+	s.RUnlock()
+	return total
+}
+
+func (s *Flow) LegacySnapshot() int64 {
+	if s == nil {
+		return 0
+	}
+	s.RLock()
+	legacy := s.LegacyTotal
+	s.RUnlock()
+	return legacy
+}
+
 const flowRateSampleInterval = time.Second
 
 func (s *Flow) Add(in, out int64) {
 	s.Lock()
+	if s.AccountingVersion == 0 {
+		s.AccountingVersion = directionalFlowAccountingVersion
+	}
 	s.InletFlow += int64(in)
 	s.ExportFlow += int64(out)
 	now := time.Now()
@@ -93,8 +157,13 @@ func (s *Flow) SetLimit(limit int64) {
 }
 
 func (s *Flow) Exceeded() bool {
-	inlet, export, limit := s.Snapshot()
-	return limit > 0 && (limit<<20) < inlet+export
+	if s == nil {
+		return false
+	}
+	s.RLock()
+	exceeded := s.FlowLimit > 0 && (s.FlowLimit<<20) < s.LegacyTotal+s.InletFlow+s.ExportFlow
+	s.RUnlock()
+	return exceeded
 }
 
 type Config struct {
@@ -164,7 +233,7 @@ func NewClient(vKey string, noStore bool, noDisplay bool) *Client {
 		Status:    true,
 		IsConnect: false,
 		RateLimit: 0,
-		Flow:      new(Flow),
+		Flow:      NewFlow(),
 		Rate:      nil,
 		NoStore:   noStore,
 		RWMutex:   sync.RWMutex{},
@@ -316,24 +385,26 @@ func (s *Client) HasHost(h *Host) bool {
 }
 
 type Tunnel struct {
-	Id           int
-	Port         int
-	ServerIp     string
-	Mode         string
-	Status       bool
-	RunStatus    bool
-	Client       *Client
-	Ports        string
-	Flow         *Flow
-	Password     string
-	Remark       string
-	TargetAddr   string
-	NoStore      bool
-	LocalPath    string
-	StripPre     string
-	ProtoVersion string
-	Target       *Target
-	MultiAccount *MultiAccount
+	Id                 int
+	Port               int
+	ServerIp           string
+	Mode               string
+	Status             bool
+	RunStatus          bool
+	RunError           string
+	CurrentConnections int32 `json:"CurrentConnections,omitempty"`
+	Client             *Client
+	Ports              string
+	Flow               *Flow
+	Password           string
+	Remark             string
+	TargetAddr         string
+	NoStore            bool
+	LocalPath          string
+	StripPre           string
+	ProtoVersion       string
+	Target             *Target
+	MultiAccount       *MultiAccount
 	Health
 	sync.RWMutex
 }

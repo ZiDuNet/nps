@@ -230,22 +230,15 @@ func IsInspectableContentType(contentType, disposition string) bool {
 	}
 }
 
-// SafeHeaders keeps useful protocol diagnostics while excluding credentials
-// and cookies. A header value is intentionally collapsed to one line for SSE.
+// SafeHeaders keeps the complete request/response headers for the live
+// inspector. Values are collapsed to one line for SSE; callers explicitly
+// opted into an authorized, non-persistent management debug stream.
 func SafeHeaders(header http.Header) map[string]string {
 	if header == nil {
 		return nil
 	}
-	blocked := map[string]struct{}{
-		"authorization": {}, "proxy-authorization": {}, "cookie": {}, "set-cookie": {},
-		"x-api-key": {}, "x-auth-token": {}, "x-access-token": {},
-	}
 	result := make(map[string]string)
 	for key, values := range header {
-		if _, skip := blocked[strings.ToLower(key)]; skip {
-			result[key] = "[REDACTED]"
-			continue
-		}
 		if len(values) == 0 {
 			continue
 		}
