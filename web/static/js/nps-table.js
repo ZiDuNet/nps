@@ -105,7 +105,11 @@
         });
         // Smart tables switch to labelled cards on narrow screens so dense
         // operational data remains readable without introducing page scroll.
-        if (this.options.smartDisplay && window.matchMedia && window.matchMedia('(max-width: 991px)').matches) {
+        // The content viewport is narrower than the browser viewport while
+        // the desktop sidebar is open. Switch to labelled cards early enough
+        // to keep a 1024px workspace readable instead of compressing every
+        // column into unreadable slivers.
+        if (this.options.smartDisplay && window.matchMedia && window.matchMedia('(max-width: 1199px)').matches) {
             this.options.cardView = true;
         }
         this.pageNumber = Number(this.options.pageNumber) > 0 ? Number(this.options.pageNumber) : 1;
@@ -390,7 +394,11 @@
                     if (column.checkbox) classes.push('nps-checkbox');
                     if (column.class) classes.push(column.class);
                     var $cell = $('<td></td>').addClass(classes.join(' '));
-                    if (column.align) $cell.css('text-align', column.align);
+                    // Bootstrap tables distinguish header and body alignment,
+                    // but the NPS console uses the same semantic column track
+                    // for both. Fall back to halign so a centered header does
+                    // not leave its values visually offset to the left.
+                    if (column.align || column.halign) $cell.css('text-align', column.align || column.halign);
                     if (self.options.cardView) $cell.attr('data-label', plainText(column.title || column.field || ''));
                     if (column.checkbox) {
                         $cell.append('<label class="nps-checkbox__label"><input type="checkbox" class="nps-table__row-select" value="' + escapeHtml(rowKey) + '" data-index="' + index + '" aria-label="'

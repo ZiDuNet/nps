@@ -125,7 +125,7 @@
         sidePagination: 'server',//服务器端分页
         pageNumber: 1,
         pageList: [5, 10, 20, 50],//分页步进值
-        storageKey: 'tunnel-' + tunnelListMode,
+        storageKey: 'tunnel-' + tunnelListMode + '-v2',
         detailView: true,
         smartDisplay: true, // 智能显示 pagination 和 cardview 等
         formatLoadingMessage: function () { return npsTableState('tunnel', true); },
@@ -236,7 +236,9 @@
                 title: '<span langtag="word-verifykey"></span>',//标题
                 halign: 'center',
                 sortable: true, //启用排序
-                visible: tunnelListColumnVisible('verifykey', true),//false表示不显示
+                // The verify key remains available in the expanded detail and
+                // column picker, but is hidden from the default dense view.
+                visible: false,//false表示不显示
                 escape: true
             },
             {

@@ -63,7 +63,7 @@
         sidePagination: 'server',//服务器端分页
         pageNumber: 1,
         pageList: [5, 10, 20, 50],//分页步进值
-        storageKey: 'client',
+        storageKey: 'client-v2',
         detailView: true,
         smartDisplay: true, // 智能显示 pagination 和 cardview 等
         formatLoadingMessage: function () { return npsTableState('client', true); },
@@ -191,7 +191,9 @@
                 title: '<span langtag="word-verifykey"></span>',//标题
                 halign: 'center',
                 class: 'client-list__verify-key',
-                visible: !clientListCompact,//较窄桌面中在详情行保留，避免表头拥挤
+                // Keep credentials out of the default grid. They remain
+                // available in the expanded detail and column picker.
+                visible: false,
                 formatter: function (value, row, index) {
                     if (!row.NoStore) {
                         return npsEscapeHtml(value)

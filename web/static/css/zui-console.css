@@ -264,6 +264,48 @@ body.zui-app .nps-topbar-version.is-update {
     border-color: var(--nps-warning);
     animation: nps-version-pulse 1.8s ease-in-out infinite;
 }
+@media (max-width: 1199px) {
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid { display: block; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid thead { display: none; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tr { display: block; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row { margin: 0; padding: 11px 12px; border-bottom: 1px solid var(--nps-line); }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td { display: grid; grid-template-columns: minmax(82px, 36%) minmax(0, 1fr); gap: 8px; width: 100% !important; min-width: 0; max-width: none; padding: 7px 0 !important; border: 0 !important; text-align: left !important; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td::before { content: attr(data-label); color: var(--nps-faint); font-size: 11px; font-weight: 700; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td .badge { display: inline-flex; width: max-content; max-width: 100%; align-items: center; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-table__detail-cell,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-checkbox { display: inline-flex; width: auto !important; min-width: 36px; padding: 0 4px !important; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-table__detail-cell::before,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-checkbox::before { display: none; }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.tunnel-list__actions,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.host-list__actions,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__actions,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.user-list__actions {
+        display: flex !important;
+        grid-template-columns: none !important;
+        align-items: center;
+        gap: 8px;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+    }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.tunnel-list__actions::before,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.host-list__actions::before,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__actions::before,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.user-list__actions::before {
+        flex: 0 0 36%;
+    }
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.tunnel-list__actions .tunnel-actions,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.host-list__actions .host-actions,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__actions .client-actions,
+    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.user-list__actions .user-actions {
+        flex: 0 0 auto;
+        width: auto !important;
+        max-width: none !important;
+        margin-left: auto;
+    }
+}
+
 @media (max-width: 991px) {
     body.zui-app .nps-topbar-version__label { display: none; }
     body.zui-app .navbar-top-links > li > a.nps-topbar-version { margin-right: 2px; margin-left: 2px; padding-right: 7px !important; padding-left: 7px !important; }
@@ -2148,18 +2190,6 @@ body.zui-app .nps-table__page-button:disabled { opacity: .48; cursor: default; }
     body.zui-app .nps-table__search { order: 3; width: 100%; margin-left: 0; }
     body.zui-app .nps-table__search-field,
     body.zui-app .nps-table__search-input { width: 100% !important; }
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid { display: block; }
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid thead { display: none; }
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody,
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tr { display: block; }
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row { margin: 0; padding: 11px 12px; border-bottom: 1px solid var(--nps-line); }
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td { display: grid; grid-template-columns: minmax(82px, 36%) minmax(0, 1fr); gap: 8px; width: 100% !important; min-width: 0; max-width: none; padding: 7px 0 !important; border: 0 !important; text-align: left !important; }
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td::before { content: attr(data-label); color: var(--nps-faint); font-size: 11px; font-weight: 700; }
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td .badge { display: inline-flex; width: max-content; max-width: 100%; align-items: center; }
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-table__detail-cell,
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-checkbox { display: inline-flex; width: auto !important; min-width: 36px; padding: 0 4px !important; }
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-table__detail-cell::before,
-    body.zui-app .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-checkbox::before { display: none; }
     body.zui-app .nps-table__pagination { align-items: stretch; padding: 12px !important; }
     body.zui-app .nps-table__pagination-detail,
     body.zui-app .nps-table__page-nav { width: 100%; }
@@ -2364,11 +2394,11 @@ body.zui-app .management-page--host .nps-table__grid td.host-list__status {
 }
 body.zui-app .management-page--tunnel .nps-table__grid th.tunnel-list__actions,
 body.zui-app .management-page--tunnel .nps-table__grid td.tunnel-list__actions {
-    width: 188px !important;
-    min-width: 188px !important;
-    max-width: 188px !important;
-    padding-right: 9px !important;
-    padding-left: 9px !important;
+    width: 210px !important;
+    min-width: 210px !important;
+    max-width: 210px !important;
+    padding-right: 0 !important;
+    padding-left: 0 !important;
     text-align: center !important;
     white-space: nowrap;
     overflow: visible !important;
@@ -2377,6 +2407,35 @@ body.zui-app .management-page--host .nps-table__grid th.host-list__actions .nps-
 body.zui-app .management-page--user .nps-table__grid th.user-list__actions .nps-table__header-inner,
 body.zui-app .management-page--tunnel .nps-table__grid th.tunnel-list__actions .nps-table__header-inner {
     justify-content: center !important;
+}
+
+/* Action tracks are sized from the actual icon count. Keep every control
+   inside the cell so the table boundary stays aligned with its header. */
+body.zui-app .management-page--tunnel .nps-table__grid td.tunnel-list__actions .tunnel-actions,
+body.zui-app .management-page--host .nps-table__grid td.host-list__actions .host-actions {
+    display: flex;
+    width: 100%;
+    max-width: none;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+}
+body.zui-app .management-page--tunnel .nps-table__grid td.tunnel-list__actions .tunnel-actions > .btn,
+body.zui-app .management-page--tunnel .nps-table__grid td.tunnel-list__actions .tunnel-actions > a,
+body.zui-app .management-page--host .nps-table__grid td.host-list__actions .host-actions > .btn,
+body.zui-app .management-page--host .nps-table__grid td.host-list__actions .host-actions > a {
+    flex: 0 0 32px;
+    box-sizing: border-box;
+    margin-right: 0 !important;
+    margin-left: 0 !important;
+}
+body.zui-app .management-page--host .nps-table__grid th.host-list__actions,
+body.zui-app .management-page--host .nps-table__grid td.host-list__actions {
+    width: 160px !important;
+    min-width: 160px !important;
+    max-width: 160px !important;
+    padding-right: 0 !important;
+    padding-left: 0 !important;
 }
 
 @media (max-width: 991px) {
