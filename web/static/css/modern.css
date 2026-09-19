@@ -995,3 +995,78 @@ textarea.form-control { min-height: 96px; line-height: 1.55; resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Live traffic inspector. It is deliberately isolated from table overflow so
+   large request bodies scroll inside the detail pane instead of the page. */
+.traffic-debug-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(9, 20, 38, .58);
+}
+.traffic-debug-dialog {
+    display: flex;
+    flex-direction: column;
+    width: min(1240px, 100%);
+    height: min(820px, 92vh);
+    overflow: hidden;
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line-strong);
+    border-radius: var(--nps-radius);
+    box-shadow: 0 24px 70px rgba(7, 22, 44, .30);
+}
+.traffic-debug-header, .traffic-debug-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--nps-line);
+}
+.traffic-debug-header { background: var(--nps-surface-subtle); }
+.traffic-debug-kicker { color: var(--nps-accent); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.traffic-debug-header h2 { margin: 3px 0 0; font-size: 18px; }
+.traffic-debug-actions { display: flex; align-items: center; gap: 8px; }
+.traffic-debug-actions .btn { min-height: 30px; padding: 5px 9px; }
+.traffic-debug-status { display: inline-flex; align-items: center; gap: 6px; color: var(--nps-muted); font-size: 12px; white-space: nowrap; }
+.traffic-debug-status::before { width: 7px; height: 7px; content: ''; border-radius: 50%; background: currentColor; }
+.traffic-debug-status.is-live { color: var(--nps-success); }
+.traffic-debug-status.is-warning { color: var(--nps-warning); }
+.traffic-debug-status.is-paused { color: var(--nps-faint); }
+.traffic-debug-toolbar { justify-content: flex-start; padding: 9px 20px; background: var(--nps-surface); }
+.traffic-debug-hint { flex: 1; color: var(--nps-muted); font-size: 12px; }
+.traffic-debug-count { color: var(--nps-faint); font-size: 12px; }
+.traffic-debug-content { display: grid; grid-template-columns: minmax(250px, 32%) minmax(0, 1fr); min-height: 0; flex: 1; }
+.traffic-debug-list { min-width: 0; overflow: auto; border-right: 1px solid var(--nps-line); background: var(--nps-surface-subtle); }
+.traffic-debug-request { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 2px 8px; width: 100%; padding: 12px 14px; color: var(--nps-ink); text-align: left; border: 0; border-bottom: 1px solid var(--nps-line); background: transparent; cursor: pointer; }
+.traffic-debug-request:hover, .traffic-debug-request.is-selected { background: var(--nps-accent-soft); }
+.traffic-debug-request-method { grid-row: span 2; color: var(--nps-accent); font-size: 11px; font-weight: 750; }
+.traffic-debug-request-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+.traffic-debug-request-meta { color: var(--nps-muted); font-size: 11px; }
+.traffic-debug-detail { min-width: 0; overflow: auto; padding: 18px 20px 24px; }
+.traffic-debug-empty { display: grid; min-height: 220px; place-items: center; color: var(--nps-faint); }
+.traffic-debug-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.traffic-debug-summary > div { min-width: 0; padding: 10px 12px; border: 1px solid var(--nps-line); border-radius: 6px; background: var(--nps-surface-subtle); }
+.traffic-debug-summary span { display: block; margin-bottom: 3px; color: var(--nps-faint); font-size: 11px; }
+.traffic-debug-summary strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.traffic-debug-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.traffic-debug-tabs section { min-width: 0; }
+.traffic-debug-tabs h3 { margin: 0 0 6px; color: var(--nps-muted); font-size: 12px; }
+.traffic-debug-tabs pre { min-height: 86px; max-height: 270px; margin: 0; overflow: auto; padding: 12px; color: var(--nps-ink); border: 1px solid var(--nps-line); border-radius: 6px; background: var(--nps-surface-subtle); font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 768px) {
+    .traffic-debug-modal { padding: 8px; }
+    .traffic-debug-dialog { height: calc(100vh - 16px); }
+    .traffic-debug-header, .traffic-debug-toolbar { padding-right: 12px; padding-left: 12px; }
+    .traffic-debug-header { align-items: flex-start; }
+    .traffic-debug-actions { flex-wrap: wrap; justify-content: flex-end; }
+    .traffic-debug-status { width: 100%; justify-content: flex-end; }
+    .traffic-debug-content { grid-template-columns: 1fr; grid-template-rows: minmax(150px, 34%) minmax(0, 1fr); }
+    .traffic-debug-list { border-right: 0; border-bottom: 1px solid var(--nps-line); }
+    .traffic-debug-detail { padding: 14px; }
+    .traffic-debug-summary, .traffic-debug-tabs { grid-template-columns: 1fr; }
+}

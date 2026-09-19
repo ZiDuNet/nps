@@ -338,12 +338,13 @@
                 align: 'center',
                 halign: 'center',
                 class: 'tunnel-list__actions',
-                width: '188px',
+                width: '228px',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
                     var tunnelId = Number(row.Id);
                     if (!isFinite(tunnelId) || Math.floor(tunnelId) !== tunnelId || tunnelId <= 0) return '';
                     var btn_group = '<div class="btn-group tunnel-actions">'
+                    btn_group += '<button type="button" onclick="npsOpenTrafficDebug(\'tunnel\',' + tunnelId + ')" class="btn btn-outline btn-info" data-title-zh="实时请求调试" data-title-en="Live request inspector" data-aria-label-zh="实时请求调试" data-aria-label-en="Live request inspector"><i class="fa fa-terminal" aria-hidden="true"></i></button>'
                     if (row.Status) {
                         btn_group += "<button type=\"button\" onclick=\"submitform('stop', '{{.web_base_url}}/index/stop', {'id':" + tunnelId
                         btn_group += '})" class="btn btn-outline btn-warning" data-title-zh="停止隧道" data-title-en="Stop tunnel" data-aria-label-zh="停止隧道" data-aria-label-en="Stop tunnel"><i class="fa fa-pause" aria-hidden="true"></i></button>'

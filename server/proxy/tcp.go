@@ -17,6 +17,7 @@ import (
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/server/connection"
+	"ehang.io/nps/server/traffic"
 	"ehang.io/nps/web"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
@@ -241,7 +242,34 @@ func ProcessTunnel(c *conn.Conn, s *TunnelModeServer) error {
 	target.RLock()
 	localProxy := target.LocalProxy
 	target.RUnlock()
-	return s.DealClient(c, client, targetAddr, nil, common.CONN_TCP, nil, nil, localProxy, s.task, nil)
+	resource := traffic.Resource{Kind: "tunnel", ID: taskID}
+	started := time.Now()
+	requestID := traffic.NewRequestID()
+	traffic.Publish(traffic.Event{
+		Type:         "connection_start",
+		Time:         started.UTC(),
+		Resource:     resource,
+		RequestID:    requestID,
+		RemoteAddr:   c.RemoteAddr().String(),
+		TargetAddr:   targetAddr,
+		ListenerAddr: c.LocalAddr().String(),
+	})
+	err = s.DealClient(c, client, targetAddr, nil, common.CONN_TCP, nil, nil, localProxy, s.task, nil)
+	end := traffic.Event{
+		Type:       "connection_end",
+		Time:       time.Now().UTC(),
+		Resource:   resource,
+		RequestID:  requestID,
+		RemoteAddr: c.RemoteAddr().String(),
+		TargetAddr: targetAddr,
+		DurationMS: time.Since(started).Milliseconds(),
+		Complete:   err == nil,
+	}
+	if err != nil {
+		end.Error = err.Error()
+	}
+	traffic.Publish(end)
+	return err
 }
 
 // http proxy
@@ -295,6 +323,37 @@ func ProcessHttp(c *conn.Conn, s *TunnelModeServer) error {
 		localProxy = target.LocalProxy
 		target.RUnlock()
 	}
-	return s.DealClient(c, client, addr, rb, common.CONN_TCP, nil, nil, localProxy, nil, nil)
+	resource := traffic.Resource{Kind: "tunnel", ID: s.task.Id}
+	requestID := traffic.NewRequestID()
+	started := time.Now()
+	traffic.Publish(traffic.Event{
+		Type:         "request_start",
+		Time:         started.UTC(),
+		Resource:     resource,
+		RequestID:    requestID,
+		Method:       r.Method,
+		Host:         r.Host,
+		Path:         r.URL.RequestURI(),
+		RemoteAddr:   c.RemoteAddr().String(),
+		ListenerAddr: c.LocalAddr().String(),
+		TargetAddr:   addr,
+		ContentType:  r.Header.Get("Content-Type"),
+		Headers:      traffic.SafeHeaders(r.Header),
+	})
+	err = s.DealClient(c, client, addr, rb, common.CONN_TCP, nil, nil, localProxy, nil, nil)
+	end := traffic.Event{
+		Type:       "connection_end",
+		Time:       time.Now().UTC(),
+		Resource:   resource,
+		RequestID:  requestID,
+		TargetAddr: addr,
+		DurationMS: time.Since(started).Milliseconds(),
+		Complete:   err == nil,
+	}
+	if err != nil {
+		end.Error = err.Error()
+	}
+	traffic.Publish(end)
+	return err
 
 }

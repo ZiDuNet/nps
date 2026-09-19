@@ -2,16 +2,20 @@ package controllers
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/server"
 	"ehang.io/nps/server/tool"
+	"ehang.io/nps/server/traffic"
 
 	"github.com/astaxie/beego"
 )
@@ -423,6 +427,92 @@ func (s *IndexController) GetTunnel() {
 	}
 	list, cnt := server.GetTunnelByOwnerFilter(start, length, taskType, clientId, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"), owner, allowed)
 	s.AjaxTable(list, cnt, cnt, nil)
+}
+
+// TrafficDebug streams a transient, task-scoped traffic inspection session.
+// The stream is intentionally GET/SSE so the browser can reconnect without a
+// custom websocket client. No event is replayed after reconnecting.
+func (s *IndexController) TrafficDebug() {
+	s.serveTrafficDebug(traffic.Resource{Kind: "tunnel", ID: s.GetIntNoErr("id")})
+}
+
+// HostTrafficDebug is the equivalent stream for domain proxy rules. Hosts are
+// stored separately from ordinary tunnels and therefore use their own endpoint
+// and authorization branch.
+func (s *IndexController) HostTrafficDebug() {
+	s.serveTrafficDebug(traffic.Resource{Kind: "host", ID: s.GetIntNoErr("id")})
+}
+
+func (s *IndexController) serveTrafficDebug(resource traffic.Resource) {
+	if resource.ID <= 0 {
+		http.Error(s.Ctx.ResponseWriter, "invalid resource id", http.StatusBadRequest)
+		s.StopRun()
+		return
+	}
+	if resource.Kind == "host" {
+		if _, err := s.authorizedHost(resource.ID); err != nil {
+			http.Error(s.Ctx.ResponseWriter, "permission denied", http.StatusForbidden)
+			s.StopRun()
+			return
+		}
+	} else {
+		if _, err := s.authorizedTask(resource.ID); err != nil {
+			http.Error(s.Ctx.ResponseWriter, "permission denied", http.StatusForbidden)
+			s.StopRun()
+			return
+		}
+	}
+
+	w := s.Ctx.ResponseWriter
+	_, ok := w.ResponseWriter.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming is not supported", http.StatusInternalServerError)
+		s.StopRun()
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-transform")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	events, closeStream := traffic.Subscribe(resource)
+	defer closeStream()
+	writeEvent := func(event traffic.Event) error {
+		payload, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+		if _, err = fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+			return err
+		}
+		w.Flush()
+		return nil
+	}
+	if err := writeEvent(traffic.Event{
+		Type:     "ready",
+		Time:     time.Now().UTC(),
+		Resource: resource,
+	}); err != nil {
+		return
+	}
+
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+	for {
+		select {
+		case event, ok := <-events:
+			if !ok || writeEvent(event) != nil {
+				return
+			}
+		case <-heartbeat.C:
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				return
+			}
+			w.Flush()
+		case <-s.Ctx.Request.Context().Done():
+			return
+		}
+	}
 }
 
 func (s *IndexController) Add() {

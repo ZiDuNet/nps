@@ -20,6 +20,7 @@ import (
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/server/traffic"
 	"github.com/astaxie/beego/logs"
 	"github.com/pkg/errors"
 )
@@ -466,7 +467,35 @@ func (https *HttpsServer) handleHttps2(c net.Conn, hostName string, rb []byte, r
 	localProxy := hostTarget.LocalProxy
 	hostTarget.RUnlock()
 	logs.Info("new https connection,clientId %d,host %s,remote address %s", clientID, r.Host, c.RemoteAddr().String())
-	https.DealClient(conn.NewConn(c), hostClient, targetAddr, rb, common.CONN_TCP, nil, nil, localProxy, nil, host)
+	resource := traffic.Resource{Kind: "host", ID: host.Id}
+	started := time.Now()
+	requestID := traffic.NewRequestID()
+	traffic.Publish(traffic.Event{
+		Type:         "connection_start",
+		Time:         started.UTC(),
+		Resource:     resource,
+		RequestID:    requestID,
+		Scheme:       "https",
+		Host:         hostName,
+		RemoteAddr:   c.RemoteAddr().String(),
+		TargetAddr:   targetAddr,
+		ListenerAddr: c.LocalAddr().String(),
+	})
+	err = https.DealClient(conn.NewConn(c), hostClient, targetAddr, rb, common.CONN_TCP, nil, nil, localProxy, nil, host)
+	end := traffic.Event{
+		Type:       "connection_end",
+		Time:       time.Now().UTC(),
+		Resource:   resource,
+		RequestID:  requestID,
+		Host:       hostName,
+		TargetAddr: targetAddr,
+		DurationMS: time.Since(started).Milliseconds(),
+		Complete:   err == nil,
+	}
+	if err != nil {
+		end.Error = err.Error()
+	}
+	traffic.Publish(end)
 }
 
 // close

@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/subtle"
 	"crypto/tls"
 	"ehang.io/nps/bridge"
@@ -12,6 +11,7 @@ import (
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/goroutine"
 	"ehang.io/nps/server/connection"
+	"ehang.io/nps/server/traffic"
 	"ehang.io/nps/web"
 	"encoding/json"
 	"errors"
@@ -76,59 +76,6 @@ var httpProxyHandshakeTimeout = 10 * time.Second
 // request on a hijacked Host connection. It is cleared only after the upstream
 // response is identified as an SSE stream; finite responses keep this bound.
 var hostRequestReadTimeout = httpReadHeaderTimeout
-
-type responseProbeReader struct {
-	reader     io.Reader
-	streaming  chan struct{}
-	streamOnce sync.Once
-	header     []byte
-	parsed     bool
-}
-
-func (r *responseProbeReader) Read(p []byte) (int, error) {
-	if r == nil || r.reader == nil {
-		return 0, io.EOF
-	}
-	n, err := r.reader.Read(p)
-	if n > 0 {
-		r.inspectHeader(p[:n])
-	}
-	return n, err
-}
-
-// inspectHeader identifies response types whose body is intentionally kept
-// open after the first event. Ordinary finite responses can use a persistent
-// upstream connection too, so treating every first byte as a stream would
-// disable idle cleanup and leak the hijacked connection.
-func (r *responseProbeReader) inspectHeader(chunk []byte) {
-	if r == nil || r.parsed || r.streaming == nil {
-		return
-	}
-	const maxProbeHeaderSize = 64 << 10
-	if len(r.header)+len(chunk) > maxProbeHeaderSize {
-		chunk = chunk[:maxProbeHeaderSize-len(r.header)]
-	}
-	if len(chunk) > 0 {
-		r.header = append(r.header, chunk...)
-	}
-	end := bytes.Index(r.header, []byte("\r\n\r\n"))
-	if end < 0 {
-		if len(r.header) >= maxProbeHeaderSize {
-			r.parsed = true
-		}
-		return
-	}
-	r.parsed = true
-	response, err := http.ReadResponse(bufio.NewReader(bytes.NewReader(r.header[:end+4])), nil)
-	if err != nil {
-		return
-	}
-	defer response.Body.Close()
-	contentType := strings.ToLower(strings.TrimSpace(strings.SplitN(response.Header.Get("Content-Type"), ";", 2)[0]))
-	if contentType == "text/event-stream" {
-		r.streamOnce.Do(func() { close(r.streaming) })
-	}
-}
 
 // waitHTTPResponse bounds the hand-off wait used by keep-alive Host changes.
 // A client that stops reading can otherwise leave CopyBuffer blocked in c.Write
@@ -443,6 +390,7 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 reset:
 	responseDone = make(chan struct{})
 	responseStreaming = make(chan struct{})
+	requestQueue := newRequestQueue()
 	remoteAddr = strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
 	if len(remoteAddr) == 0 {
 		remoteAddr = c.RemoteAddr().String()
@@ -541,13 +489,19 @@ reset:
 			close(done)
 		}()
 
-		probe := &responseProbeReader{reader: targetConn, streaming: streaming}
+		probe := newResponseInspector(targetConn, traffic.Resource{Kind: "host", ID: currentHost.Id}, requestQueue, streaming)
 		if err1 := goroutine.CopyBufferWithFlows(c, probe, hostFlow, []*file.Flow{clientFlow}, nil, requestHost, ""); err1 != nil {
 			return
 		}
 	}(connClient, currentHost, responseStreaming, responseDone)
 
 	for {
+		var (
+			resource     traffic.Resource
+			requestID    string
+			requestEvent traffic.Event
+			requestBody  *traffic.BodyCapture
+		)
 		//if the cache start and the request is in the cache list, return the cache
 		if s.useCache {
 			if v, ok := s.cache.Get(filepath.Join(hostName, r.URL.Path)); ok {
@@ -572,6 +526,30 @@ reset:
 		common.ChangeHostAndHeader(r, hostChange, headerChange, c.Conn.RemoteAddr().String())
 
 		logs.Info("%s request, method %s, host %s, url %s, remote address %s, target %s", r.URL.Scheme, r.Method, r.Host, r.URL.Path, remoteAddr, lk.Host)
+		resource = traffic.Resource{Kind: "host", ID: host.Id}
+		requestID = traffic.NewRequestID()
+		requestEvent = traffic.Event{
+			Type:         "request_start",
+			Time:         time.Now().UTC(),
+			Resource:     resource,
+			RequestID:    requestID,
+			Method:       r.Method,
+			Scheme:       r.URL.Scheme,
+			Host:         r.Host,
+			Path:         r.URL.RequestURI(),
+			RemoteAddr:   c.RemoteAddr().String(),
+			ForwardedFor: remoteAddr,
+			ListenerAddr: c.LocalAddr().String(),
+			TargetAddr:   targetAddr,
+			ContentType:  r.Header.Get("Content-Type"),
+			Headers:      traffic.SafeHeaders(r.Header),
+		}
+		requestBody = traffic.NewBodyCapture(resource, requestID, "request", r.Header.Get("Content-Type"), r.Header.Get("Content-Disposition"))
+		if traffic.HasSubscribers(resource) {
+			requestEvent.BodySkipped = !requestBody.Active() && r.ContentLength != 0
+		}
+		traffic.Publish(requestEvent)
+		requestQueue.add(requestEvent)
 
 		//write
 		lenConn = conn.NewLenConn(connClient)
@@ -580,15 +558,19 @@ reset:
 			return
 		}
 		if firstReq {
-			if err = writeRequestRaw(lenConn, r, br); err != nil {
+			if err = writeRequestRaw(lenConn, r, br, requestBody); err != nil {
 				logs.Error(err)
 				break
 			}
 		} else {
+			if r.Body != nil && requestBody.Active() {
+				r.Body = &captureReadCloser{ReadCloser: r.Body, capture: requestBody}
+			}
 			if err = r.Write(lenConn); err != nil {
 				logs.Error(err)
 				break
 			}
+			requestBody.End()
 		}
 		// Keep the header deadline active while writeRequestRaw forwards the
 		// request body. A client that drips a body must not hold a hijacked
@@ -599,6 +581,18 @@ reset:
 			clientFlow.Add(int64(lenConn.Len), int64(lenConn.Len))
 		}
 		s.FlowAddHost(host, int64(lenConn.Len), int64(lenConn.Len))
+		traffic.Publish(traffic.Event{
+			Type:       "request_sent",
+			Time:       time.Now().UTC(),
+			Resource:   resource,
+			RequestID:  requestID,
+			Method:     r.Method,
+			Host:       r.Host,
+			Path:       r.URL.RequestURI(),
+			TargetAddr: targetAddr,
+			BytesIn:    int64(lenConn.Len),
+			Complete:   true,
+		})
 
 	readReq:
 		//read req from connection
@@ -659,7 +653,7 @@ reset:
 	waitForResponse()
 }
 
-func writeRequestRaw(w io.Writer, r *http.Request, br *bufio.Reader) error {
+func writeRequestRaw(w io.Writer, r *http.Request, br *bufio.Reader, capture *traffic.BodyCapture) error {
 	bw := bufio.NewWriter(w)
 	if _, err := fmt.Fprintf(bw, "%s %s HTTP/1.1\r\n", r.Method, r.URL.RequestURI()); err != nil {
 		return err
@@ -683,18 +677,50 @@ func writeRequestRaw(w io.Writer, r *http.Request, br *bufio.Reader) error {
 		return err
 	}
 	if r.ContentLength > 0 {
-		if _, err := io.CopyN(w, br, r.ContentLength); err != nil {
+		if err := copyFixedBody(w, br, r.ContentLength, capture); err != nil {
 			return err
 		}
 	} else if chunked {
-		if err := copyRawChunked(w, br); err != nil {
+		if err := copyRawChunked(w, br, capture); err != nil {
 			return err
+		}
+	}
+	if capture != nil {
+		capture.End()
+	}
+	return nil
+}
+
+func copyFixedBody(w io.Writer, br io.Reader, length int64, capture *traffic.BodyCapture) error {
+	buf := make([]byte, 32*1024)
+	remaining := length
+	for remaining > 0 {
+		want := int64(len(buf))
+		if want > remaining {
+			want = remaining
+		}
+		nr, readErr := io.ReadFull(br, buf[:want])
+		if nr > 0 {
+			nw, writeErr := w.Write(buf[:nr])
+			if nw > 0 && capture != nil {
+				capture.Write(buf[:nw])
+			}
+			if writeErr != nil {
+				return writeErr
+			}
+			if nw != nr {
+				return io.ErrShortWrite
+			}
+			remaining -= int64(nr)
+		}
+		if readErr != nil {
+			return readErr
 		}
 	}
 	return nil
 }
 
-func copyRawChunked(w io.Writer, br *bufio.Reader) error {
+func copyRawChunked(w io.Writer, br *bufio.Reader, capture *traffic.BodyCapture) error {
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil {
@@ -725,7 +751,7 @@ func copyRawChunked(w io.Writer, br *bufio.Reader) error {
 				}
 			}
 		}
-		if _, err := io.CopyN(w, br, size); err != nil {
+		if err := copyFixedBody(w, br, size, capture); err != nil {
 			return err
 		}
 		var crlf [2]byte
