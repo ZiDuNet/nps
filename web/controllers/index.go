@@ -13,6 +13,7 @@ import (
 
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server"
 	"ehang.io/nps/server/tool"
 	"ehang.io/nps/server/traffic"
@@ -297,6 +298,41 @@ func (s *IndexController) DashboardData() {
 	s.Data["json"] = map[string]interface{}{
 		"status": 1,
 		"data":   s.dashboardSnapshot(),
+	}
+	s.ServeJSON()
+	s.StopRun()
+}
+
+// Overview renders the standalone, continuously refreshed resource topology.
+// It deliberately uses BaseController.Prepare for the same session validation
+// as the management console, so opening this URL directly cannot bypass login.
+func (s *IndexController) Overview() {
+	accountName := "管理员"
+	if !s.IsAdmin() {
+		if name, ok := s.GetSession("username").(string); ok && strings.TrimSpace(name) != "" {
+			accountName = strings.TrimSpace(name)
+		} else {
+			accountName = "当前用户"
+		}
+	}
+	s.Data["overview_account_name"] = accountName
+	s.Data["version"] = version.VERSION
+	s.Layout = ""
+	s.TplName = "index/overview.html"
+}
+
+// TopologyData returns a live, in-memory view for the topology screen. It is
+// intentionally recomputed for every request; no metric snapshot is persisted.
+func (s *IndexController) TopologyData() {
+	var data server.TopologySnapshot
+	if s.IsAdmin() {
+		data = server.GetTopologyData(nil, true)
+	} else {
+		data = server.GetTopologyData(s.GetAllowedClientIds(), false)
+	}
+	s.Data["json"] = map[string]interface{}{
+		"status": 1,
+		"data":   data,
 	}
 	s.ServeJSON()
 	s.StopRun()

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>NPS 资源拓扑</title>
+    <link rel="stylesheet" href="{{.web_base_url}}/static/css/fontawesome.min.css">
+    <link rel="stylesheet" href="{{.web_base_url}}/static/css/nps-overview.css?v={{.version}}">
+</head>
+<body class="nps-overview" data-base-url="{{.web_base_url}}" data-version="{{.version}}" data-account-name="{{.overview_account_name}}">
+    <a class="overview-skip-link" href="#overview-main">跳到主要内容</a>
+    <header class="overview-header">
+        <a class="overview-brand" href="{{.web_base_url}}/" aria-label="返回 NPS 控制台">
+            <img src="{{.web_base_url}}/static/img/nps-logo.png" width="40" height="40" alt="NPS">
+            <span>
+                <strong>NPS</strong>
+                <small>资源拓扑</small>
+            </span>
+        </a>
+        <div class="overview-header-meta" aria-label="页面状态">
+            <span id="overview-updated" class="overview-updated">正在读取实时数据</span>
+            <time id="overview-clock" class="overview-clock" aria-live="off"></time>
+        </div>
+        <nav class="overview-actions" aria-label="页面操作">
+            <button id="overview-refresh" class="overview-icon-button" type="button" title="立即刷新" aria-label="立即刷新">
+                <i class="fa fa-refresh" aria-hidden="true"></i>
+            </button>
+            <button id="overview-pause" class="overview-icon-button" type="button" title="暂停自动刷新" aria-label="暂停自动刷新" aria-pressed="false">
+                <i class="fa fa-pause" aria-hidden="true"></i>
+            </button>
+            <a class="overview-console-link" href="{{.web_base_url}}/">
+                <i class="fa fa-th-large" aria-hidden="true"></i>
+                <span>控制台</span>
+            </a>
+        </nav>
+    </header>
+
+    <main id="overview-main" class="overview-main" tabindex="-1">
+        <section class="overview-intro" aria-labelledby="overview-title">
+            <div>
+                <p class="overview-eyebrow">实时资源视图</p>
+                <h1 id="overview-title">{{.overview_account_name}}的资源拓扑</h1>
+                <p class="overview-description">客户端、隧道和域名规则按当前账号授权范围展示。</p>
+            </div>
+            <div id="overview-summary" class="overview-summary" aria-live="polite" aria-label="资源摘要"></div>
+        </section>
+
+        <section class="overview-workspace" aria-labelledby="overview-resource-heading">
+            <div class="overview-toolbar">
+                <div>
+                    <p class="overview-section-kicker">资源关系</p>
+                    <h2 id="overview-resource-heading">客户端与转发规则</h2>
+                </div>
+                <div class="overview-controls">
+                    <label class="overview-search">
+                        <i class="fa fa-search" aria-hidden="true"></i>
+                        <span class="sr-only">筛选资源</span>
+                        <input id="overview-search" type="search" placeholder="筛选客户端、地址或备注" autocomplete="off">
+                    </label>
+                    <label class="overview-check">
+                        <input id="overview-online-only" type="checkbox">
+                        <span>仅在线</span>
+                    </label>
+                    <button id="overview-collapse" class="overview-secondary-button" type="button" aria-pressed="false">收起全部</button>
+                </div>
+            </div>
+            <div id="overview-notice" class="overview-notice" role="status" aria-live="polite" hidden></div>
+            <div id="overview-topology" class="overview-topology" aria-live="polite" aria-busy="true">
+                <div class="overview-loading"><i class="fa fa-circle-o-notch fa-spin" aria-hidden="true"></i><span>正在读取资源</span></div>
+            </div>
+        </section>
+    </main>
+
+    <dialog id="overview-detail" class="overview-detail" aria-labelledby="overview-detail-title">
+        <div class="overview-detail-header">
+            <div>
+                <p id="overview-detail-kind" class="overview-detail-kicker"></p>
+                <h2 id="overview-detail-title">资源详情</h2>
+            </div>
+            <button id="overview-detail-close" class="overview-icon-button" type="button" aria-label="关闭详情" title="关闭详情"><i class="fa fa-times" aria-hidden="true"></i></button>
+        </div>
+        <dl id="overview-detail-list" class="overview-detail-list"></dl>
+    </dialog>
+    <p id="overview-live-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+    <script src="{{.web_base_url}}/static/js/nps-overview.js?v={{.version}}"></script>
+</body>
+</html>
