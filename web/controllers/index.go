@@ -318,6 +318,10 @@ func (s *IndexController) Overview() {
 	s.Data["overview_account_name"] = accountName
 	s.Data["version"] = version.VERSION
 	s.Layout = ""
+	if s.IsAdmin() {
+		s.TplName = "index/overview-admin.html"
+		return
+	}
 	s.TplName = "index/overview.html"
 }
 
@@ -624,6 +628,10 @@ func (s *IndexController) Add() {
 			s.AjaxErr(err.Error())
 			return
 		} else {
+			t.Client.RLock()
+			ownerID := t.Client.UserId
+			t.Client.RUnlock()
+			s.auditMutation("tunnel.create", "tunnel", id, ownerID, "", nil, map[string]string{"mode": t.Mode, "remark": t.Remark})
 			s.AjaxOkWithId("add success", id)
 		}
 	}
@@ -705,6 +713,10 @@ func (s *IndexController) Copy() {
 			s.AjaxErr(err.Error())
 			return
 		} else {
+			client.RLock()
+			ownerID := client.UserId
+			client.RUnlock()
+			s.auditMutation("tunnel.copy", "tunnel", id, ownerID, "", nil, map[string]string{"mode": newTask.Mode, "remark": newTask.Remark})
 			s.AjaxOkWithId("add success", id)
 		}
 	}
@@ -818,6 +830,15 @@ func (s *IndexController) Edit() {
 				s.AjaxErr("start error")
 				return
 			}
+			t.RLock()
+			ownerID, mode, remark := 0, t.Mode, t.Remark
+			if t.Client != nil {
+				t.Client.RLock()
+				ownerID = t.Client.UserId
+				t.Client.RUnlock()
+			}
+			t.RUnlock()
+			s.auditMutation("tunnel.update", "tunnel", id, ownerID, "", nil, map[string]string{"mode": mode, "remark": remark})
 		}
 		s.AjaxOk("modified success")
 	}
@@ -832,7 +853,8 @@ func (s *IndexController) Stop() {
 		s.AjaxErr("tunnel ID not found")
 		return
 	}
-	if _, err := s.authorizedTask(id); err != nil {
+	task, err := s.authorizedTask(id)
+	if err != nil {
 		s.AjaxErr(err.Error())
 		return
 	}
@@ -840,6 +862,7 @@ func (s *IndexController) Stop() {
 		s.AjaxErr("stop error")
 		return
 	}
+	s.auditTunnelAction("tunnel.stop", task)
 	s.AjaxOk("stop success")
 }
 
@@ -852,7 +875,8 @@ func (s *IndexController) Del() {
 		s.AjaxErr("tunnel ID not found")
 		return
 	}
-	if _, err := s.authorizedTask(id); err != nil {
+	task, err := s.authorizedTask(id)
+	if err != nil {
 		s.AjaxErr(err.Error())
 		return
 	}
@@ -860,6 +884,7 @@ func (s *IndexController) Del() {
 		s.AjaxErr("delete error")
 		return
 	}
+	s.auditTunnelAction("tunnel.delete", task)
 	s.AjaxOk("delete success")
 }
 
@@ -872,7 +897,8 @@ func (s *IndexController) Start() {
 		s.AjaxErr("tunnel ID not found")
 		return
 	}
-	if _, err := s.authorizedTask(id); err != nil {
+	task, err := s.authorizedTask(id)
+	if err != nil {
 		s.AjaxErr(err.Error())
 		return
 	}
@@ -880,7 +906,25 @@ func (s *IndexController) Start() {
 		s.AjaxErr("start error")
 		return
 	}
+	s.auditTunnelAction("tunnel.start", task)
 	s.AjaxOk("start success")
+}
+
+func (s *IndexController) auditTunnelAction(action string, task *file.Tunnel) {
+	if task == nil {
+		return
+	}
+	task.RLock()
+	id, mode, remark := task.Id, task.Mode, task.Remark
+	client := task.Client
+	task.RUnlock()
+	ownerID := 0
+	if client != nil {
+		client.RLock()
+		ownerID = client.UserId
+		client.RUnlock()
+	}
+	s.auditMutation(action, "tunnel", id, ownerID, "", nil, map[string]string{"mode": mode, "remark": remark})
 }
 
 func (s *IndexController) HostList() {
@@ -933,7 +977,8 @@ func (s *IndexController) DelHost() {
 		return
 	}
 	id := s.GetIntNoErr("id")
-	if _, err := s.authorizedHost(id); err != nil {
+	host, err := s.authorizedHost(id)
+	if err != nil {
 		s.AjaxErr(err.Error())
 		return
 	}
@@ -941,6 +986,7 @@ func (s *IndexController) DelHost() {
 		s.AjaxErr("delete error")
 		return
 	}
+	s.auditHostAction("host.delete", host)
 	s.AjaxOk("delete success")
 }
 
@@ -957,6 +1003,7 @@ func (s *IndexController) HostStop() {
 		h.IsClose = true
 		h.Unlock()
 		file.GetDb().JsonDb.StoreHostToJsonFile()
+		s.auditHostAction("host.stop", h)
 	}
 	s.AjaxOk("stop success")
 }
@@ -974,6 +1021,7 @@ func (s *IndexController) HostStart() {
 		h.IsClose = false
 		h.Unlock()
 		file.GetDb().JsonDb.StoreHostToJsonFile()
+		s.auditHostAction("host.start", h)
 	}
 	s.AjaxOk("start success")
 }
@@ -996,19 +1044,24 @@ func (s *IndexController) AddHost() {
 		}
 		id := int(file.GetDb().JsonDb.GetHostId())
 		h := &file.Host{
-			Id:               id,
-			Host:             hostName,
-			PlatformDomainID: platformDomainID,
-			Target:           &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))},
-			HeaderChange:     s.getEscapeString("header"),
-			HostChange:       s.getEscapeString("hostchange"),
-			Remark:           s.getEscapeString("remark"),
-			Location:         s.getEscapeString("location"),
-			Flow:             &file.Flow{},
-			Scheme:           s.getEscapeString("scheme"),
-			KeyFilePath:      s.getEscapeString("key_file_path"),
-			CertFilePath:     s.getEscapeString("cert_file_path"),
-			AutoHttps:        s.GetBoolNoErr("AutoHttps"),
+			Id:                   id,
+			Host:                 hostName,
+			PlatformDomainID:     platformDomainID,
+			Target:               &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))},
+			HeaderChange:         s.getEscapeString("header"),
+			ResponseHeaderChange: s.getEscapeString("response_header"),
+			HostChange:           s.getEscapeString("hostchange"),
+			Remark:               s.getEscapeString("remark"),
+			Location:             s.getEscapeString("location"),
+			PathRewrite:          s.getEscapeString("path_rewrite"),
+			RedirectURL:          s.getEscapeString("redirect_url"),
+			Flow:                 &file.Flow{},
+			Scheme:               s.getEscapeString("scheme"),
+			KeyFilePath:          s.getEscapeString("key_file_path"),
+			CertFilePath:         s.getEscapeString("cert_file_path"),
+			AutoHttps:            s.GetBoolNoErr("AutoHttps"),
+			AutoCORS:             s.GetBoolNoErr("auto_cors"),
+			CompatMode:           s.GetBoolNoErr("compat_mode"),
 		}
 
 		if h.Scheme == "http" {
@@ -1035,6 +1088,7 @@ func (s *IndexController) AddHost() {
 			s.AjaxErr("add fail" + err.Error())
 			return
 		}
+		s.auditHostAction("host.create", h)
 		s.AjaxOkWithId("add success", id)
 	}
 }
@@ -1092,27 +1146,49 @@ func (s *IndexController) EditHost() {
 				autoHTTPS = false
 			}
 			replacement := &file.Host{
-				Id:               id,
-				Host:             desiredHost,
-				PlatformDomainID: platformDomainID,
-				Client:           desiredClient,
-				Target:           desiredTarget,
-				HeaderChange:     s.getEscapeString("header"),
-				HostChange:       s.getEscapeString("hostchange"),
-				Remark:           s.getEscapeString("remark"),
-				Location:         desiredLocation,
-				Scheme:           desiredScheme,
-				KeyFilePath:      s.getEscapeString("key_file_path"),
-				CertFilePath:     s.getEscapeString("cert_file_path"),
-				AutoHttps:        autoHTTPS,
+				Id:                   id,
+				Host:                 desiredHost,
+				PlatformDomainID:     platformDomainID,
+				Client:               desiredClient,
+				Target:               desiredTarget,
+				HeaderChange:         s.getEscapeString("header"),
+				ResponseHeaderChange: s.getEscapeString("response_header"),
+				HostChange:           s.getEscapeString("hostchange"),
+				Remark:               s.getEscapeString("remark"),
+				Location:             desiredLocation,
+				PathRewrite:          s.getEscapeString("path_rewrite"),
+				RedirectURL:          s.getEscapeString("redirect_url"),
+				Scheme:               desiredScheme,
+				KeyFilePath:          s.getEscapeString("key_file_path"),
+				CertFilePath:         s.getEscapeString("cert_file_path"),
+				AutoHttps:            autoHTTPS,
+				AutoCORS:             s.GetBoolNoErr("auto_cors"),
+				CompatMode:           s.GetBoolNoErr("compat_mode"),
 			}
 			if err := file.GetDb().UpdateHost(replacement); err != nil {
 				s.AjaxErr("modified error," + err.Error())
 				return
 			}
+			s.auditHostAction("host.update", replacement)
 		}
 		s.AjaxOk("modified success")
 	}
+}
+
+func (s *IndexController) auditHostAction(action string, host *file.Host) {
+	if host == nil {
+		return
+	}
+	host.RLock()
+	id, hostName, remark, client := host.Id, host.Host, host.Remark, host.Client
+	host.RUnlock()
+	ownerID := 0
+	if client != nil {
+		client.RLock()
+		ownerID = client.UserId
+		client.RUnlock()
+	}
+	s.auditMutation(action, "host", id, ownerID, "", nil, map[string]string{"host": hostName, "remark": remark})
 }
 
 // PlatformHostAvailable provides immediate feedback while a user edits a

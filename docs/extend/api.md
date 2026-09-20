@@ -4,7 +4,7 @@
 
 ## 鉴权方式
 
-每个请求需附带两个参数：
+管理员签名 API 的每个请求需附带两个参数：
 
 | 参数 | 说明 |
 | --- | --- |
@@ -12,6 +12,29 @@
 | `timestamp` | 当前 unix 时间戳（秒） |
 
 时间戳有效范围为 **20 秒**，每次请求须重新生成。
+
+## 普通用户 API Token
+
+管理员可以为每个普通用户生成独立的 Bearer Token。Token 只在生成接口的响应中显示一次，服务端仅保存 SHA-256 哈希；重新生成会立即使旧 Token 失效。普通用户 Token 不具备管理员权限，只能访问该用户拥有的客户端、隧道和 Host 规则。
+
+管理员使用现有签名 API 调用：
+
+```bash
+ts=$(curl -s http://127.0.0.1:8081/auth/gettime/ | sed 's/.*"time":\([0-9]*\).*/\1/')
+sign=$(echo -n "your_auth_key${ts}" | md5sum | awk '{print $1}')
+curl -s -X POST "http://127.0.0.1:8081/user/regenerateapikey/" \
+  -d "auth_key=${sign}&timestamp=${ts}&id=7"
+```
+
+响应中的 `token` 形如 `npsu_...`，之后在请求头中携带：
+
+```bash
+curl -s -X POST "http://127.0.0.1:8081/client/list/" \
+  -H "Authorization: Bearer npsu_REPLACE_WITH_TOKEN" \
+  -d "offset=0&limit=20"
+```
+
+所有写操作仍必须使用 `POST`。也支持 `api_token` 查询参数以兼容无法设置请求头的客户端，但 URL 可能进入访问日志，生产环境应优先使用 `Authorization`。
 
 ## 获取服务端时间戳
 

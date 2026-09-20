@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.15</sub>
+﻿# NPS <sub>v1.1.16</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -194,6 +194,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.16** (2026-09-21) - 新增操作审计日志、按用户隔离的 API 令牌，以及带响应头安全处理的现代 Host 代理能力
 - **v1.1.15** (2026-09-20) - 修复 MUX 关闭时丢弃已缓冲尾部数据的问题，Host 响应与 TCP 流会完整排空后再释放
 - **v1.1.14** (2026-09-20) - 按用户大屏原型重建资源拓扑页面，并改为从控制台新标签页打开
 - **v1.1.13** (2026-09-20) - 新增按账号授权范围展示客户端、隧道和域名规则的实时资源拓扑页

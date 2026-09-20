@@ -1,0 +1,69 @@
+<section class="wrapper wrapper-content animated fadeInRight management-page management-page--audit" aria-labelledby="audit-list-title">
+    <header class="dashboard-page-header management-page-header">
+        <div>
+            <div class="dashboard-page-kicker" data-i18n-zh="安全与运维" data-i18n-en="Security and operations">安全与运维</div>
+            <h1 id="audit-list-title" data-i18n-zh="操作审计日志" data-i18n-en="Operation audit log">操作审计日志</h1>
+            <p data-i18n-zh="记录管理面板中的登录、配置和资源变更，不包含密码、密钥或业务流量正文。" data-i18n-en="Review management changes without storing passwords, keys, or proxied traffic bodies.">记录管理面板中的登录、配置和资源变更，不包含密码、密钥或业务流量正文。</p>
+        </div>
+    </header>
+    <div class="management-page-grid">
+        <div class="management-page-column">
+            <section class="panel ibox float-e-margins management-table-card zui-panel">
+                <div class="ibox-content management-table-content">
+                    <div id="toolbar" class="management-table-toolbar">
+                        <label class="sr-only" for="audit-search" data-i18n-zh="搜索审计日志" data-i18n-en="Search audit log">搜索审计日志</label>
+                        <input id="audit-search" name="search" class="form-control" type="search" placeholder="搜索操作者、动作、资源或来源地址" data-placeholder-zh="搜索操作者、动作、资源或来源地址" data-placeholder-en="Search actor, action, resource, or source" autocomplete="off">
+                        <select id="audit-result" name="result" class="form-control" aria-label="结果" data-aria-label-zh="结果" data-aria-label-en="Result">
+                            <option value="" data-i18n-zh="全部结果" data-i18n-en="All results">全部结果</option>
+                            <option value="success" data-i18n-zh="成功" data-i18n-en="Success">成功</option>
+                            <option value="failure" data-i18n-zh="失败" data-i18n-en="Failure">失败</option>
+                        </select>
+                    </div>
+                    <table id="table"></table>
+                </div>
+            </section>
+        </div>
+    </div>
+</section>
+
+<script>
+    function auditQueryParams(params) {
+        params.search = $('#audit-search').val() || '';
+        params.result = $('#audit-result').val() || '';
+        return params;
+    }
+
+    $('#table').npsTable({
+        toolbar: '#toolbar',
+        method: 'post',
+        url: '{{.web_base_url}}/audit/list',
+        queryParams: auditQueryParams,
+        contentType: 'application/x-www-form-urlencoded',
+        striped: true,
+        search: false,
+        showHeader: true,
+        showColumns: true,
+        showRefresh: true,
+        pagination: true,
+        sidePagination: 'server',
+        pageNumber: 1,
+        pageList: [10, 20, 50, 100],
+        storageKey: 'audit',
+        smartDisplay: true,
+        formatLoadingMessage: function () { return npsTableState('audit', true); },
+        formatNoMatches: function () { return npsTableState('audit', false); },
+        onPostBody: function () { $('body').setLang('#table'); npsApplyTableState(this, 'audit'); },
+        columns: [
+            { field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', width: '154px' },
+            { field: 'Actor', title: '<span data-i18n-zh="操作者" data-i18n-en="Actor">操作者</span>', halign: 'center', escape: true },
+            { field: 'SourceIP', title: '<span data-i18n-zh="来源地址" data-i18n-en="Source">来源地址</span>', halign: 'center', escape: true },
+            { field: 'Action', title: '<span data-i18n-zh="动作" data-i18n-en="Action">动作</span>', halign: 'center', escape: true },
+            { field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', escape: true },
+            { field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', formatter: function (value) { return value === 'success' ? '<span class="label label-success">成功</span>' : '<span class="label label-danger">失败</span>'; } },
+            { field: 'Error', title: '<span data-i18n-zh="错误" data-i18n-en="Error">错误</span>', halign: 'center', escape: true },
+            { field: 'Details', title: '<span data-i18n-zh="变更摘要" data-i18n-en="Change summary">变更摘要</span>', halign: 'center', escape: true }
+        ]
+    });
+
+    $('#audit-search, #audit-result').on('input change', function () { $('#table').bootstrapTable('refresh', { pageNumber: 1 }); });
+</script>

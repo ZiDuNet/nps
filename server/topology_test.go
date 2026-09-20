@@ -12,6 +12,7 @@ func TestTopologyDataScopesOperationalResourcesToAllowedClients(t *testing.T) {
 	db := file.NewJsonDb(t.TempDir())
 	owned := file.NewClient("owned-secret", false, false)
 	owned.Id = 901
+	owned.UserId = 71
 	owned.Remark = "owned client"
 	owned.Status = true
 	owned.Addr = "198.51.100.10:12000"
@@ -24,6 +25,10 @@ func TestTopologyDataScopesOperationalResourcesToAllowedClients(t *testing.T) {
 	other.Flow = &file.Flow{InletFlow: 900, ExportFlow: 700}
 	db.Clients.Store(owned.Id, owned)
 	db.Clients.Store(other.Id, other)
+	db.Users.Store(owned.UserId, &file.User{
+		Id: 71, UserName: "owner-a", Remark: "研发组", Status: true,
+		MaxClientNum: 5, MaxTunnelNum: 12,
+	})
 
 	ownedTask := &file.Tunnel{
 		Id: 9011, Mode: "tcp", Status: true, Port: 30111, ServerIp: "0.0.0.0",
@@ -70,6 +75,12 @@ func TestTopologyDataScopesOperationalResourcesToAllowedClients(t *testing.T) {
 			t.Fatalf("other client resource leaked into response: %#v", resource)
 		}
 	}
+	if len(data.Owners) != 0 {
+		t.Fatalf("regular-user response exposed owners: %#v", data.Owners)
+	}
+	if data.Clients[0].OwnerID != 0 || data.Clients[0].OwnerName != "" || data.Clients[0].OwnerRemark != "" {
+		t.Fatalf("regular-user response exposed client ownership: %#v", data.Clients[0])
+	}
 
 	var tunnel TopologyResource
 	for _, resource := range data.Resources {
@@ -88,5 +99,20 @@ func TestTopologyDataScopesOperationalResourcesToAllowedClients(t *testing.T) {
 	noScope := GetTopologyData(nil, false)
 	if len(noScope.Clients) != 0 || len(noScope.Resources) != 0 {
 		t.Fatalf("nil non-admin scope leaked data: %#v", noScope)
+	}
+
+	adminData := GetTopologyData(nil, true)
+	if len(adminData.Owners) != 1 || adminData.Owners[0].Name != "owner-a" {
+		t.Fatalf("admin owners = %#v, want owner-a", adminData.Owners)
+	}
+	var adminOwned TopologyClient
+	for _, client := range adminData.Clients {
+		if client.ID == owned.Id {
+			adminOwned = client
+			break
+		}
+	}
+	if adminOwned.OwnerID != 71 || adminOwned.OwnerName != "owner-a" || adminOwned.OwnerRemark != "研发组" {
+		t.Fatalf("admin ownership = %#v, want owner-a", adminOwned)
 	}
 }

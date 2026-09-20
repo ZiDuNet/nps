@@ -12,6 +12,7 @@ import (
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server"
+	"ehang.io/nps/web/audit"
 	"github.com/astaxie/beego"
 )
 
@@ -67,8 +68,10 @@ func (self *LoginController) Verify() {
 		}
 	}
 	if self.doLogin(username, password, true) {
+		appendLoginAudit(self, username, true, "")
 		self.Data["json"] = map[string]interface{}{"status": 1, "msg": "login success"}
 	} else {
+		appendLoginAudit(self, username, false, "username or password incorrect")
 		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "username or password incorrect"}
 	}
 	self.ServeJSON()
@@ -224,16 +227,43 @@ func (self *LoginController) Register() {
 		Flow:        &file.Flow{},
 	}
 	if err := file.GetDb().NewClient(t); err != nil {
+		appendAuthAudit(self, "auth.register", self.GetString("username"), false, err.Error())
 		self.Data["json"] = map[string]interface{}{"status": 0, "msg": err.Error()}
 	} else {
+		appendAuthAudit(self, "auth.register", self.GetString("username"), true, "")
 		self.Data["json"] = map[string]interface{}{"status": 1, "msg": "register success"}
 	}
 	self.ServeJSON()
 }
 
 func (self *LoginController) Out() {
+	appendAuthAudit(self, "auth.logout", "", true, "")
 	clearAuthenticationSession(self.DelSession)
 	self.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
+}
+
+func appendLoginAudit(controller *LoginController, username string, success bool, failure string) {
+	appendAuthAudit(controller, "auth.login", username, success, failure)
+}
+
+func appendAuthAudit(controller *LoginController, action, username string, success bool, failure string) {
+	audit.Configure(beego.AppConfig.String("audit_log_path"))
+	result := audit.ResultSuccess
+	if !success {
+		result = audit.ResultFailure
+	}
+	ip := ""
+	method, path := "", ""
+	if controller != nil && controller.Ctx != nil && controller.Ctx.Request != nil {
+		ip = controller.Ctx.Input.IP()
+		method = controller.Ctx.Request.Method
+		path = controller.Ctx.Request.URL.Path
+	}
+	_ = audit.Append(audit.Event{
+		ActorType: "anonymous", ActorName: username, SourceIP: ip,
+		Method: method, Path: path, Action: action, ResourceType: "session",
+		Result: result, Error: failure,
+	})
 }
 
 // regenerateSession prevents a session identifier supplied before login from

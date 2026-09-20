@@ -15,11 +15,29 @@ import (
 type TopologySnapshot struct {
 	Clients   []TopologyClient   `json:"clients"`
 	Resources []TopologyResource `json:"resources"`
+	Owners    []TopologyOwner    `json:"owners,omitempty"`
 	UpdatedAt string             `json:"updatedAt"`
+}
+
+// TopologyOwner is only included in the administrator topology response. It
+// allows the administrative screen to group clients and rules by their owner
+// without exposing account information to regular users.
+type TopologyOwner struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Remark      string `json:"remark"`
+	Enabled     bool   `json:"enabled"`
+	ClientLimit int    `json:"clientLimit"`
+	TunnelLimit int    `json:"tunnelLimit"`
+	CreatedAt   string `json:"createdAt"`
+	ExpiresAt   string `json:"expiresAt"`
 }
 
 type TopologyClient struct {
 	ID              int    `json:"id"`
+	OwnerID         int    `json:"ownerId,omitempty"`
+	OwnerName       string `json:"ownerName,omitempty"`
+	OwnerRemark     string `json:"ownerRemark,omitempty"`
 	Remark          string `json:"remark"`
 	Address         string `json:"address"`
 	LocalAddress    string `json:"localAddress"`
@@ -99,8 +117,11 @@ func GetTopologyData(allowedClientIDs map[int]struct{}, isAdmin bool) TopologySn
 		Resources: make([]TopologyResource, 0),
 		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
+	if isAdmin {
+		snapshot.Owners = topologyOwners()
+	}
 	for _, client := range clients {
-		snapshot.Clients = append(snapshot.Clients, topologyClient(client))
+		snapshot.Clients = append(snapshot.Clients, topologyClient(client, isAdmin))
 	}
 	sort.Slice(snapshot.Clients, func(i, j int) bool { return snapshot.Clients[i].ID < snapshot.Clients[j].ID })
 
@@ -140,12 +161,13 @@ func GetTopologyData(allowedClientIDs map[int]struct{}, isAdmin bool) TopologySn
 	return snapshot
 }
 
-func topologyClient(client *file.Client) TopologyClient {
+func topologyClient(client *file.Client, includeOwner bool) TopologyClient {
 	if client == nil {
 		return TopologyClient{}
 	}
 	client.RLock()
 	id := client.Id
+	ownerID := client.UserId
 	remark, address, localAddress, version := client.Remark, client.Addr, client.LocalAddr, client.Version
 	enabled, online := client.Status, client.IsConnect
 	connectionLimit, tunnelLimit, rateLimit := client.MaxConn, client.MaxTunnelNum, client.RateLimit
@@ -154,13 +176,53 @@ func topologyClient(client *file.Client) TopologyClient {
 	client.RUnlock()
 	in, out, limit := flow.Snapshot()
 	rateIn, rateOut := flow.RateSnapshot()
-	return TopologyClient{
+	topologyClient := TopologyClient{
 		ID: id, Remark: remark, Address: address, LocalAddress: localAddress, Version: version,
 		Enabled: enabled, Online: online, Connections: atomic.LoadInt32(&client.NowConn),
 		ConnectionLimit: connectionLimit, TunnelLimit: tunnelLimit, RateLimit: rateLimit,
 		FlowIn: in, FlowOut: out, FlowTotal: flow.Total(), FlowLimitBytes: limit << 20,
 		RateIn: rateIn, RateOut: rateOut, CreatedAt: createdAt, LastOnlineAt: lastOnlineAt, ExpiresAt: expiresAt,
 	}
+	if !includeOwner {
+		return topologyClient
+	}
+	if ownerID == 0 {
+		topologyClient.OwnerName = "系统·平台"
+		return topologyClient
+	}
+	topologyClient.OwnerID = ownerID
+	if owner, err := file.GetDb().GetUser(ownerID); err == nil && owner != nil {
+		owner.RLock()
+		topologyClient.OwnerID = owner.Id
+		topologyClient.OwnerName = owner.UserName
+		topologyClient.OwnerRemark = owner.Remark
+		owner.RUnlock()
+		return topologyClient
+	}
+	// An orphaned historic client remains visible to administrators without
+	// pretending it belongs to a current account.
+	topologyClient.OwnerName = "已删除用户"
+	return topologyClient
+}
+
+func topologyOwners() []TopologyOwner {
+	owners := make([]TopologyOwner, 0)
+	file.GetDb().JsonDb.Users.Range(func(_, value interface{}) bool {
+		owner, ok := value.(*file.User)
+		if !ok || owner == nil {
+			return true
+		}
+		owner.RLock()
+		owners = append(owners, TopologyOwner{
+			ID: owner.Id, Name: owner.UserName, Remark: owner.Remark, Enabled: owner.Status,
+			ClientLimit: owner.MaxClientNum, TunnelLimit: owner.MaxTunnelNum,
+			CreatedAt: owner.CreateTime, ExpiresAt: owner.ExpireTime,
+		})
+		owner.RUnlock()
+		return true
+	})
+	sort.Slice(owners, func(i, j int) bool { return owners[i].ID < owners[j].ID })
+	return owners
 }
 
 func topologyTunnel(task *file.Tunnel, clients map[int]*file.Client) (TopologyResource, int, bool) {

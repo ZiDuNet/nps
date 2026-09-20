@@ -157,5 +157,6 @@ func (s *GlobalController) Save() {
 		s.AjaxErr(err.Error())
 		return
 	}
+	s.auditMutation("global.update", "global", 0, 0, "", nil, map[string]string{"server_url": t.ServerUrl, "platform_domains": fmt.Sprintf("%d", len(t.PlatformDomains))})
 	s.AjaxOk("save success")
 }

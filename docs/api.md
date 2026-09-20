@@ -262,6 +262,11 @@ POST /index/addhost
 | `target` | 内网目标 |
 | `header` | 请求 Header 修改 |
 | `hostchange` | 请求 Host 修改 |
+| `path_rewrite` | 后端请求路径重写规则，例如 `/api => /v1/api` |
+| `response_header` | 响应 Header 修改规则；代理 framing Header 不可修改 |
+| `redirect_url` | 307 重定向地址，支持 `{path}` |
+| `auto_cors` | 是否追加通用 CORS 响应 Header |
+| `compat_mode` | 是否使用标准 HTTP 兼容代理链路 |
 | `cert_file_path` | 证书路径 |
 | `key_file_path` | 私钥路径 |
 | `AutoHttps` | 是否自动 HTTPS |

@@ -426,6 +426,7 @@ func (s *ClientController) Add() {
 			s.AjaxErr(err.Error())
 			return
 		}
+		s.auditMutation("client.create", "client", t.Id, t.UserId, "", nil, map[string]string{"remark": t.Remark})
 		s.AjaxOkWithId("add success", t.Id)
 	}
 }
@@ -583,6 +584,10 @@ func (s *ClientController) Edit() {
 			s.AjaxErr(err.Error())
 			return
 		}
+		c.RLock()
+		ownerID, remark := c.UserId, c.Remark
+		c.RUnlock()
+		s.auditMutation("client.update", "client", id, ownerID, "", nil, map[string]string{"remark": remark})
 		s.AjaxOk("save success")
 	}
 }
@@ -654,11 +659,13 @@ func (s *ClientController) ChangeStatus() {
 		status := s.GetBoolNoErr("status")
 		client.Lock()
 		client.Status = status
+		ownerID := client.UserId
 		client.Unlock()
 		file.GetDb().JsonDb.StoreClientsToJsonFile()
 		if !status {
 			server.DelClientConnect(client.Id)
 		}
+		s.auditMutation("client.status_change", "client", id, ownerID, "", nil, map[string]string{"status": strconv.FormatBool(status)})
 		s.AjaxOk("modified success")
 		return
 	}
@@ -674,10 +681,17 @@ func (s *ClientController) Del() {
 		return
 	}
 	id := s.GetIntNoErr("id")
+	ownerID := 0
+	if client, err := file.GetDb().GetClient(id); err == nil && client != nil {
+		client.RLock()
+		ownerID = client.UserId
+		client.RUnlock()
+	}
 	if err := file.GetDb().DelClient(id); err != nil {
 		s.AjaxErr("delete error")
 	}
 	server.DelTunnelAndHostByClientId(id, false)
 	server.DelClientConnect(id)
+	s.auditMutation("client.delete", "client", id, ownerID, "", nil, nil)
 	s.AjaxOk("delete success")
 }

@@ -1614,13 +1614,18 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	stored.Client = t.Client
 	stored.Target = t.Target
 	stored.HeaderChange = t.HeaderChange
+	stored.ResponseHeaderChange = t.ResponseHeaderChange
 	stored.HostChange = t.HostChange
 	stored.Remark = t.Remark
 	stored.Location = t.Location
+	stored.PathRewrite = t.PathRewrite
+	stored.RedirectURL = t.RedirectURL
 	stored.Scheme = t.Scheme
 	stored.KeyFilePath = t.KeyFilePath
 	stored.CertFilePath = t.CertFilePath
 	stored.AutoHttps = t.AutoHttps
+	stored.AutoCORS = t.AutoCORS
+	stored.CompatMode = t.CompatMode
 	if stored.Flow == nil {
 		stored.Flow = NewFlow()
 	}

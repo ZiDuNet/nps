@@ -50,6 +50,7 @@
 | web_cert_file | web 管理 https 证书路径 | `conf/server.pem` |
 | web_key_file | web 管理 https 私钥路径 | `conf/server.key` |
 | open_captcha | 登录是否开启验证码校验 | `false` |
+| audit_log_path | 操作审计日志 JSONL 文件路径；相对路径以程序运行目录为准 | `audit.log` |
 | allow_user_login | 是否允许普通用户登录。优先使用「用户管理」中创建的账号；`user` + 客户端 VerifyKey 仅为历史兼容方式 | `true` |
 | allow_user_register | 是否允许从登录页注册账号 | `false` |
 | allow_user_change_username | 多用户登录后是否允许修改用户名 | `true` |
@@ -82,6 +83,8 @@
 | allow_local_proxy | 是否允许把隧道目标转发到 nps 所在服务器本地 | `false` |
 | allow_ports | 限制可开放的隧道端口范围，例如 `9001-9009,10001,11000-12000`，留空不限制 | （空） |
 | system_info_display | 是否在 web 上展示服务器系统监控信息图表 | `true`（默认开启） |
+
+管理操作审计日志记录登录、用户、客户端、隧道、Host 和全局配置等控制面变更，不记录密码、验证密钥、API Token 原文、证书私钥或代理请求体。日志按 JSONL 追加写入，文件权限为仅服务账号可读写；管理员可在 Web 面板的「操作审计」页面查询。
 
 ## debug / pprof
 

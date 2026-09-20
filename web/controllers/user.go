@@ -103,12 +103,13 @@ func parseUserStatus(value string) (bool, error) {
 
 func newUserUpdateCandidate(existing *file.User, username, password, remark string, maxClientNum, maxTunnelNum int, expireTime string) *file.User {
 	existing.RLock()
-	id, existingPassword, status, createTime := existing.Id, existing.Password, existing.Status, existing.CreateTime
+	id, existingPassword, existingAPIKeyHash, status, createTime := existing.Id, existing.Password, existing.APIKeyHash, existing.Status, existing.CreateTime
 	existing.RUnlock()
 	updated := &file.User{
 		Id:           id,
 		UserName:     username,
 		Password:     existingPassword,
+		APIKeyHash:   existingAPIKeyHash,
 		Status:       status,
 		Remark:       remark,
 		MaxClientNum: maxClientNum,
@@ -120,6 +121,53 @@ func newUserUpdateCandidate(existing *file.User, username, password, remark stri
 		updated.Password = password
 	}
 	return updated
+}
+
+// RegenerateAPIKey rotates the per-user API credential. The raw token is
+// returned exactly once; only its SHA-256 hash is persisted in users.json.
+// Administrators may target any user, while an API-authenticated user may
+// rotate its own token. Browser users can use this endpoint for themselves.
+func (s *UserController) RegenerateAPIKey() {
+	if !s.RequirePost() {
+		return
+	}
+	targetID := s.GetIntNoErr("id")
+	if !s.IsAdmin() {
+		if s.userAPIAuthorized {
+			targetID = s.apiUserID
+		} else {
+			principal, _ := s.GetSession(sessionPrincipalKey).(string)
+			sessionUserID, _ := sessionInt(s.GetSession("userId"))
+			if principal != sessionPrincipalUser || sessionUserID <= 0 || (targetID != 0 && targetID != sessionUserID) {
+				s.AjaxErr("无权操作该用户")
+				return
+			}
+			targetID = sessionUserID
+		}
+	}
+	if targetID <= 0 {
+		s.AjaxErr("user ID not found")
+		return
+	}
+	user, err := file.GetDb().GetUser(targetID)
+	if err != nil || user == nil {
+		s.AjaxErr("user ID not found")
+		return
+	}
+	token, tokenHash, err := generateUserAPIToken()
+	if err != nil {
+		s.AjaxErr("API 密钥生成失败")
+		return
+	}
+	user.Lock()
+	user.APIKeyHash = tokenHash
+	username := user.UserName
+	user.Unlock()
+	file.GetDb().JsonDb.StoreUsersToJsonFile()
+	s.auditMutation("user.api_key_rotate", "user", targetID, targetID, "", nil, map[string]string{"username": username})
+	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "API 密钥已生成，请立即保存", "token": token}
+	s.ServeJSON()
+	s.StopRun()
 }
 
 // parsePasswordChangeInput accepts the descriptive account-popover field
@@ -185,6 +233,7 @@ func (s *UserController) Add() {
 		s.AjaxErr(err.Error())
 		return
 	}
+	s.auditMutation("user.create", "user", u.Id, u.Id, "", nil, map[string]string{"username": u.UserName, "remark": u.Remark})
 	s.AjaxOkWithId("add success", u.Id)
 }
 
@@ -228,6 +277,7 @@ func (s *UserController) Edit() {
 		s.AjaxErr(err.Error())
 		return
 	}
+	s.auditMutation("user.update", "user", id, id, "", nil, map[string]string{"username": updated.UserName, "remark": updated.Remark})
 	s.AjaxOk("save success")
 }
 
@@ -283,7 +333,7 @@ func (s *UserController) ChangePassword() {
 
 	user.RLock()
 	username, currentPassword, status, remark := user.UserName, user.Password, user.Status, user.Remark
-	maxClientNum, maxTunnelNum, expireTime, createTime := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime
+	maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash
 	user.RUnlock()
 	if !s.IsAdmin() {
 		current := s.GetString("current_password")
@@ -300,6 +350,7 @@ func (s *UserController) ChangePassword() {
 		Id:           targetID,
 		UserName:     username,
 		Password:     newPassword,
+		APIKeyHash:   apiKeyHash,
 		Status:       status,
 		Remark:       remark,
 		MaxClientNum: maxClientNum,
@@ -311,6 +362,7 @@ func (s *UserController) ChangePassword() {
 		s.AjaxErr(err.Error())
 		return
 	}
+	s.auditMutation("user.password_change", "user", targetID, targetID, "", nil, nil)
 	s.AjaxOk("密码修改成功")
 }
 
@@ -340,6 +392,7 @@ func (s *UserController) ChangeStatus() {
 		server.RevokeUserClients(id)
 	}
 	file.GetDb().JsonDb.StoreUsersToJsonFile()
+	s.auditMutation("user.status_change", "user", id, id, "", nil, map[string]string{"status": strconv.FormatBool(status)})
 	s.AjaxOk("modified success")
 }
 
@@ -373,5 +426,6 @@ func (s *UserController) Del() {
 		s.AjaxErr("delete error")
 		return
 	}
+	s.auditMutation("user.delete", "user", id, id, "", nil, nil)
 	s.AjaxOk("delete success")
 }

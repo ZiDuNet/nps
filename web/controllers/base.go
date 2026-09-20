@@ -17,14 +17,18 @@ import (
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server"
+	"ehang.io/nps/web/audit"
 	"github.com/astaxie/beego"
+	"github.com/astaxie/beego/logs"
 )
 
 type BaseController struct {
 	beego.Controller
-	controllerName string
-	actionName     string
-	apiAuthorized  bool
+	controllerName    string
+	actionName        string
+	apiAuthorized     bool
+	userAPIAuthorized bool
+	apiUserID         int
 }
 
 const (
@@ -47,6 +51,7 @@ type accountQuotaSummary struct {
 // 初始化参数
 func (s *BaseController) Prepare() {
 	s.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
+	audit.Configure(beego.AppConfig.String("audit_log_path"))
 	controllerName, actionName := s.GetControllerAndAction()
 	if len(controllerName) > len("Controller") {
 		s.controllerName = strings.ToLower(controllerName[0 : len(controllerName)-len("Controller")])
@@ -69,7 +74,15 @@ func (s *BaseController) Prepare() {
 	// browser session turns a short-lived signed API call into a lasting admin
 	// login, which is both surprising and unsafe.
 	s.apiAuthorized = apiAuthorized
-	if !apiAuthorized && !sessionBool(s.GetSession("auth")) {
+	if !apiAuthorized {
+		userToken := extractUserAPIToken(s.Ctx.Request.Header.Get("Authorization"), s.GetString("api_token"))
+		if userID, ok := lookupUserByAPIToken(userToken); ok {
+			s.userAPIAuthorized = true
+			s.apiUserID = userID
+		}
+	}
+	authorizedRequest := apiAuthorized || s.userAPIAuthorized || sessionBool(s.GetSession("auth"))
+	if !authorizedRequest {
 		// A redirect does not stop Beego from invoking the action by itself, so
 		// StopRun is required before returning from Prepare.
 		s.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
@@ -78,7 +91,7 @@ func (s *BaseController) Prepare() {
 	}
 	isAdminSession := s.GetSession("isAdmin")
 	isAdmin := s.IsAdmin()
-	if !apiAuthorized {
+	if !apiAuthorized && !s.userAPIAuthorized {
 		if _, ok := isAdminSession.(bool); !ok {
 			// Keep downstream controllers compatible with their historical bool
 			// assertions even when a session store returns a string or nil.
@@ -89,20 +102,28 @@ func (s *BaseController) Prepare() {
 		// A non-admin session must still map to an active principal on every
 		// request. User/client status or ownership can change after login, so a
 		// cached session alone is not sufficient authorization.
-		if !s.hasActiveNonAdminPrincipal() {
+		if !s.userAPIAuthorized && !s.hasActiveNonAdminPrincipal() {
 			clearAuthenticationSession(s.DelSession)
 			s.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
 			s.StopRun()
 			return
 		}
 		s.Data["isAdmin"] = false
-		s.Data["username"] = s.GetSession("username")
+		if s.userAPIAuthorized {
+			if user, err := file.GetDb().GetUser(s.apiUserID); err == nil && user != nil {
+				user.RLock()
+				s.Data["username"] = user.UserName
+				user.RUnlock()
+			}
+		} else {
+			s.Data["username"] = s.GetSession("username")
+		}
 		s.Data["accountExpireTime"] = s.accountExpireTime()
 		s.Data["accountQuota"] = s.accountQuota()
 		// Ordinary users cannot browse the administrative user/global pages,
 		// but they may call the narrowly-scoped password endpoint to rotate
 		// their own dashboard credential from the account popover.
-		if s.controllerName == "global" || (s.controllerName == "user" && s.actionName != "changepassword") {
+		if s.controllerName == "global" || (s.controllerName == "user" && s.actionName != "changepassword" && s.actionName != "regenerateapikey") {
 			s.StopRun()
 			return
 		}
@@ -130,6 +151,65 @@ func (s *BaseController) Prepare() {
 	if httpsPort != "" && httpsPort != "443" {
 		s.Data["https_proxy_port"] = ":" + httpsPort
 	}
+}
+
+// auditMutation records a control-plane action after authorization has been
+// checked. Details are intentionally supplied by each caller rather than
+// serializing request parameters, preventing passwords, keys, and other
+// credentials from entering the audit journal.
+func (s *BaseController) auditMutation(action, resourceType string, resourceID, ownerUserID int, result string, err error, details map[string]string) {
+	actorType, actorID, actorName := s.auditActor()
+	errorText := ""
+	if err != nil {
+		errorText = err.Error()
+		result = audit.ResultFailure
+	}
+	if result == "" {
+		result = audit.ResultSuccess
+	}
+	method, path, sourceIP := "", "", ""
+	if s.Ctx != nil && s.Ctx.Request != nil {
+		method = s.Ctx.Request.Method
+		path = s.Ctx.Request.URL.Path
+		sourceIP = s.Ctx.Input.IP()
+	}
+	if writeErr := audit.Append(audit.Event{
+		ActorType: actorType, ActorID: actorID, ActorName: actorName,
+		SourceIP: sourceIP, Method: method, Path: path,
+		Action: action, ResourceType: resourceType, ResourceID: resourceID,
+		OwnerUserID: ownerUserID, Result: result, Error: errorText, Details: details,
+	}); writeErr != nil {
+		logs.Error("写入操作审计日志失败: %v", writeErr)
+	}
+}
+
+func (s *BaseController) auditActor() (string, int, string) {
+	if s.userAPIAuthorized {
+		name := "api-user"
+		if user, err := file.GetDb().GetUser(s.apiUserID); err == nil && user != nil {
+			user.RLock()
+			name = user.UserName
+			user.RUnlock()
+		}
+		return "api-user", s.apiUserID, name
+	}
+	if s.apiAuthorized {
+		return "api", 0, "api"
+	}
+	name, _ := s.GetSession("username").(string)
+	if s.IsAdmin() {
+		if strings.TrimSpace(name) == "" {
+			name = "admin"
+		}
+		return "admin", 0, name
+	}
+	principal, _ := s.GetSession(sessionPrincipalKey).(string)
+	if principal == sessionPrincipalClient {
+		id, _ := sessionInt(s.GetSession("clientId"))
+		return "client", id, name
+	}
+	id, _ := sessionInt(s.GetSession("userId"))
+	return "user", id, name
 }
 
 // IsAdmin returns the effective privilege for the current request. Signed API
@@ -184,6 +264,15 @@ func activeNonAdminPrincipal(principal string, userID, clientID int, userActive,
 // the earlier valid expiry is shown instead of incorrectly claiming that the
 // account never expires.
 func (s *BaseController) accountExpireTime() string {
+	if s.userAPIAuthorized {
+		if user, err := file.GetDb().GetUser(s.apiUserID); err == nil && user != nil {
+			user.RLock()
+			expire := user.ExpireTime
+			user.RUnlock()
+			return strings.TrimSpace(expire)
+		}
+		return ""
+	}
 	principal, _ := s.GetSession(sessionPrincipalKey).(string)
 	userID, _ := sessionInt(s.GetSession("userId"))
 	clientID, _ := sessionInt(s.GetSession("clientId"))
@@ -292,7 +381,7 @@ func (s *BaseController) RequirePost() bool {
 		s.rejectRequest(http.StatusMethodNotAllowed, "method not allowed")
 		return false
 	}
-	if !s.apiAuthorized && !isSameOriginRequest(s.Ctx.Request) {
+	if !s.apiAuthorized && !s.userAPIAuthorized && !isSameOriginRequest(s.Ctx.Request) {
 		s.rejectRequest(http.StatusForbidden, "invalid request origin")
 		return false
 	}
@@ -662,6 +751,9 @@ func (s *BaseController) CheckUserAuth() {
 // the current session. It deliberately excludes the legacy per-client login
 // principal, which has a client ID but no authority to create new clients.
 func (s *BaseController) currentUserPrincipalID() (int, bool) {
+	if s.userAPIAuthorized && s.apiUserID > 0 {
+		return s.apiUserID, true
+	}
 	principal, _ := s.GetSession(sessionPrincipalKey).(string)
 	userID, _ := sessionInt(s.GetSession("userId"))
 	if principal != sessionPrincipalUser || userID <= 0 {
@@ -671,6 +763,9 @@ func (s *BaseController) currentUserPrincipalID() (int, bool) {
 }
 
 func (s *BaseController) GetAllowedClientIds() map[int]struct{} {
+	if s.userAPIAuthorized && s.apiUserID > 0 {
+		return file.GetDb().UserClientIds(s.apiUserID)
+	}
 	principal, _ := s.GetSession(sessionPrincipalKey).(string)
 	userID, _ := sessionInt(s.GetSession("userId"))
 	clientID, _ := sessionInt(s.GetSession("clientId"))

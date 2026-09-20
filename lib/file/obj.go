@@ -207,11 +207,12 @@ type Client struct {
 }
 
 type User struct {
-	Id       int
-	UserName string
-	Password string
-	Status   bool
-	Remark   string
+	Id         int
+	UserName   string
+	Password   string
+	APIKeyHash string `json:"api_key_hash,omitempty"`
+	Status     bool
+	Remark     string
 	// MaxClientNum limits the number of clients owned by this user. A zero
 	// value intentionally means unlimited so records written by older NPS
 	// versions remain compatible when decoded from JSON.
@@ -427,21 +428,26 @@ type Host struct {
 	Host string //host
 	// PlatformDomainID identifies a managed wildcard domain. An empty value
 	// keeps historical hosts as user-managed custom domains.
-	PlatformDomainID string
-	HeaderChange     string //header change
-	HostChange       string //host change
-	Location         string //url router
-	Remark           string //remark
-	Scheme           string //http https all
-	CertFilePath     string
-	KeyFilePath      string
-	NoStore          bool
-	IsClose          bool
-	AutoHttps        bool // 自动https
-	Flow             *Flow
-	Client           *Client
-	Target           *Target //目标
-	Health           `json:"-"`
+	PlatformDomainID     string
+	HeaderChange         string //header change
+	ResponseHeaderChange string //response header change
+	HostChange           string //host change
+	Location             string //url router
+	PathRewrite          string //path rewrite rules
+	RedirectURL          string //redirect target
+	Remark               string //remark
+	Scheme               string //http https all
+	CertFilePath         string
+	KeyFilePath          string
+	NoStore              bool
+	IsClose              bool
+	AutoHttps            bool // 自动https
+	AutoCORS             bool // add permissive CORS response headers
+	CompatMode           bool // use net/http reverse proxy compatibility path
+	Flow                 *Flow
+	Client               *Client
+	Target               *Target //目标
+	Health               `json:"-"`
 	sync.RWMutex
 }
 

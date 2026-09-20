@@ -1,6 +1,6 @@
 # Web API
 
-> 除 `AuthController` 和 `LoginController` 外，所有接口均需通过鉴权，详见 [API 鉴权说明](api.html)。
+> 除 `AuthController` 和 `LoginController` 外，所有接口均需通过鉴权，详见 [API 鉴权说明](api.html)。管理员使用时间戳签名；普通用户可以使用自己的 Bearer Token，服务端会按用户自动过滤资源。
 
 ## 通用响应格式
 
@@ -139,6 +139,14 @@ POST /client/del/
 ## User 用户管理
 
 用户接口仅供管理员调用。普通用户账号归属 `users.json`，与客户端的历史 Web 登录字段不同。
+
+### 生成普通用户 API Token
+
+```
+POST /user/regenerateapikey/
+```
+
+管理员提交 `id`，响应返回一次性的 `token`。服务端只保存 Token 哈希，重新生成会使旧 Token 立即失效。Token 使用 `Authorization: Bearer <token>` 调用其他接口时，只能看到和管理该用户名下的客户端、隧道及 Host 规则；不会获得用户管理、全局设置或其他用户数据权限。普通用户也可以在自己的已授权会话中调用该接口轮换自己的 Token（API Token 调用时不需要提交 `id`）。
 
 ### 用户列表
 
@@ -383,6 +391,11 @@ POST /index/addhost/
 | local_proxy | 是否转发到 nps 服务器本地，`true` / `false` |
 | header | 自定义 request header |
 | hostchange | 修改 request host |
+| path_rewrite | 路径重写规则，例如 `/api => /v1/api` |
+| response_header | 响应 Header 修改规则；`-Name` 删除，代理 framing Header 不可修改 |
+| redirect_url | 307 重定向地址，支持 `{path}` 占位符 |
+| auto_cors | 是否追加通用 CORS 响应 Header |
+| compat_mode | 是否使用标准 HTTP 兼容代理链路 |
 | key_file_path | 自定义域名的 HTTPS 证书私钥文本或路径；平台模式下忽略并由服务端锁定 |
 | cert_file_path | 自定义域名的 HTTPS 证书文件文本或路径；平台模式下忽略并由服务端锁定 |
 | AutoHttps | 是否自动 HTTPS（仅 scheme 非 `http` 时生效） |
@@ -410,6 +423,11 @@ POST /index/edithost/
 | local_proxy | 是否转发到 nps 服务器本地 |
 | header | 自定义 request header |
 | hostchange | 修改 request host |
+| path_rewrite | 路径重写规则，例如 `/api => /v1/api` |
+| response_header | 响应 Header 修改规则；`-Name` 删除，代理 framing Header 不可修改 |
+| redirect_url | 307 重定向地址，支持 `{path}` 占位符 |
+| auto_cors | 是否追加通用 CORS 响应 Header |
+| compat_mode | 是否使用标准 HTTP 兼容代理链路 |
 | key_file_path | 自定义域名的 HTTPS 证书私钥文本或路径；平台模式下忽略并由服务端锁定 |
 | cert_file_path | 自定义域名的 HTTPS 证书文件文本或路径；平台模式下忽略并由服务端锁定 |
 | AutoHttps | 是否自动 HTTPS |

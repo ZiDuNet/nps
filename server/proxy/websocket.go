@@ -218,8 +218,34 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 	local, _ := net.ResolveTCPAddr("tcp", "127.0.0.1")
 	proxy := NewReverseProxy(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			//host := r.Context().Value("host").(*file.Host)
-			//common.ChangeHostAndHeader(r, host.HostChange, host.HeaderChange, "")
+			state, err := stateFromContext(r.Context())
+			if err != nil || state.host == nil {
+				return
+			}
+			state.host.RLock()
+			hostChange, headerChange, pathRewrite := state.host.HostChange, state.host.HeaderChange, state.host.PathRewrite
+			state.host.RUnlock()
+			rewriteHostRequestPath(r, pathRewrite)
+			common.ChangeHostAndHeader(r, hostChange, headerChange, r.RemoteAddr)
+		},
+		ModifyResponse: func(response *http.Response) error {
+			if response == nil || response.Request == nil {
+				return nil
+			}
+			state, err := stateFromContext(response.Request.Context())
+			if err != nil || state.host == nil {
+				return nil
+			}
+			state.host.RLock()
+			rules, cors := state.host.ResponseHeaderChange, state.host.AutoCORS
+			state.host.RUnlock()
+			applyHeaderChanges(response.Header, rules)
+			if cors {
+				response.Header.Set("Access-Control-Allow-Origin", "*")
+				response.Header.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+				response.Header.Set("Access-Control-Allow-Headers", "*")
+			}
+			return nil
 		},
 		Transport: &http.Transport{
 			ResponseHeaderTimeout: rp.responseHeaderTimeout,

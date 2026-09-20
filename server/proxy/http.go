@@ -294,6 +294,7 @@ func (s *httpServer) handleTunneling(w http.ResponseWriter, r *http.Request) {
 	}
 	host.RLock()
 	autoHTTPS, hostName := host.AutoHttps, host.Host
+	redirectURL, compatMode := host.RedirectURL, host.CompatMode
 	host.RUnlock()
 
 	// 自动 http 301 https
@@ -301,8 +302,12 @@ func (s *httpServer) handleTunneling(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "https://"+hostName+":"+beego.AppConfig.String("https_proxy_port"), http.StatusMovedPermanently)
 		return
 	}
+	if redirect := redirectLocation(r, redirectURL); redirect != "" {
+		http.Redirect(w, r, redirect, http.StatusTemporaryRedirect)
+		return
+	}
 
-	if r.Header.Get("Upgrade") != "" {
+	if r.Header.Get("Upgrade") != "" || compatMode {
 		rProxy := NewHttpReverseProxy(s)
 		rProxy.ServeHTTP(w, r)
 	} else {
@@ -346,6 +351,7 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		hostName        string
 		hostChange      string
 		headerChange    string
+		pathRewrite     string
 		failureContent  = s.errorContent
 		failureRaw      bool
 	)
@@ -427,6 +433,7 @@ reset:
 	hostTarget.RUnlock()
 	host.RLock()
 	hostName, hostChange, headerChange = host.Host, host.HostChange, host.HeaderChange
+	pathRewrite = host.PathRewrite
 	host.RUnlock()
 	if isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) {
 		failureContent, failureRaw = s.ipWhiteResponse(c, r, hostClient)
@@ -489,7 +496,7 @@ reset:
 			close(done)
 		}()
 
-		probe := newResponseInspector(targetConn, traffic.Resource{Kind: "host", ID: currentHost.Id}, requestQueue, streaming)
+		probe := newResponseInspector(newResponseHeaderTransform(targetConn, requestHost), traffic.Resource{Kind: "host", ID: currentHost.Id}, requestQueue, streaming)
 		if err1 := goroutine.CopyBufferWithFlowsDirection(c, probe, hostFlow, []*file.Flow{clientFlow}, nil, requestHost, "", goroutine.FlowOutbound); err1 != nil {
 			return
 		}
@@ -526,6 +533,7 @@ reset:
 		}
 
 		//change the host and header and set proxy setting
+		rewriteHostRequestPath(r, pathRewrite)
 		common.ChangeHostAndHeader(r, hostChange, headerChange, c.Conn.RemoteAddr().String())
 
 		logs.Info("%s request, method %s, host %s, url %s, remote address %s, target %s", r.URL.Scheme, r.Method, r.Host, r.URL.Path, remoteAddr, lk.Host)

@@ -2,6 +2,18 @@
 
 所有重要变更记录在此。
 
+## [1.1.16] - 2026-09-21
+
+### Added
+
+- Added administrator operation audit logs for login, user, client, tunnel, Host, and global configuration changes. The local JSONL journal excludes passwords, API tokens, certificate keys, and proxied request bodies.
+- Added scoped per-user API tokens with Bearer authentication. Tokens are shown only once and become invalid when the user is disabled or expired.
+- Added Host path rewriting, response-header changes, redirects, automatic CORS, and compatibility mode.
+
+### Fixed
+
+- Protected HTTP framing headers while rewriting raw Host responses so response-body chunking cannot be corrupted by optional header rules.
+
 ## [1.1.15] - 2026-09-20
 
 ### Fixed

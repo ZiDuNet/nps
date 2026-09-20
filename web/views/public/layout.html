@@ -112,6 +112,10 @@
                 <a href="{{.web_base_url}}/global/index"><i class="icon icon-cog" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-globalparam">全局参数</span></a>
                 </li>
+                <li class="{{if eq "audit" .menu}}active{{end}}">
+                <a href="{{.web_base_url}}/audit/list"><i class="icon icon-list-alt" aria-hidden="true"></i>
+                    <span class="nav-label" data-i18n-zh="操作审计" data-i18n-en="Audit log">操作审计</span></a>
+                </li>
                 {{end}}
                 <li class="{{if eq "help" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/index/help"><i class="icon icon-lightbulb" aria-hidden="true"></i>

@@ -23,6 +23,7 @@ import (
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server/connection"
 	"ehang.io/nps/server/tool"
+	"ehang.io/nps/web/audit"
 	"ehang.io/nps/web/routers"
 
 	"ehang.io/nps/lib/common"
@@ -80,6 +81,7 @@ func main() {
 	if err := beego.LoadAppConfig("ini", filepath.Join(common.GetRunPath(), "conf", "nps.conf")); err != nil {
 		log.Fatalln("load config file error", err.Error())
 	}
+	audit.Configure(beego.AppConfig.String("audit_log_path"))
 
 	common.InitPProfFromFile()
 	if level = beego.AppConfig.String("log_level"); level == "" {

@@ -26,10 +26,13 @@ Linux/macOS 上可通过 `nps reload` 重新加载 `web_username`、`web_passwor
 | `web_cert_file` | Web HTTPS 证书路径 | `conf/server.pem` |
 | `web_key_file` | Web HTTPS 私钥路径 | `conf/server.key` |
 | `open_captcha` | 登录验证码 | `false` |
+| `audit_log_path` | 操作审计日志 JSONL 文件路径；相对路径以程序运行目录为准 | `audit.log` |
 
 管理面板默认使用简体中文，登录页右上角可以切换中英文。若浏览器仍显示旧页面，请重启服务或清理缓存后重新加载。
 
 管理员账号只保存在 `nps.conf` 中。普通用户在 Web 面板「用户管理」中维护，保存到 `conf/users.json`。
+
+管理操作审计日志默认保存为 `audit.log`，记录登录、用户/客户端/隧道/Host/全局配置等控制面变更，不记录密码、验证密钥、API Token 原文或代理请求体。文件按 JSONL 追加写入，权限为仅服务账号可读写；管理员可在面板的「操作审计」页面查询。
 
 安全部署建议：保持 `web_ip=127.0.0.1`，通过 HTTPS 反向代理访问；若必须远程直连，只允许受控管理网段并启用 `web_open_ssl`。Docker 容器可用 `NPS_WEB_IP=0.0.0.0` 让容器内反向代理访问，但宿主机端口应只发布到回环或管理网卡。防火墙只开放实际使用的 Bridge、代理和管理端口。不要启用公共密钥 `public_vkey`，除非确实需要；配置和 JSON 数据文件应限制为服务账号可读。
 

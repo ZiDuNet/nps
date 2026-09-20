@@ -1,6 +1,7 @@
 package nps_mux
 
 import (
+	"bytes"
 	"io"
 	"math"
 	"net"
@@ -145,5 +146,77 @@ func TestMuxRoundTrip(t *testing.T) {
 	}
 	if got := string(buf); got != payload {
 		t.Fatalf("payload = %q, want %q", got, payload)
+	}
+}
+
+func TestMuxLargePayloadRoundTrip(t *testing.T) {
+	server, client := net.Pipe()
+	left := NewMux(server, "tcp", 5)
+	right := NewMux(client, "tcp", 5)
+	t.Cleanup(func() {
+		_ = left.Close()
+		_ = right.Close()
+	})
+
+	accepted := make(chan net.Conn, 1)
+	acceptErr := make(chan error, 1)
+	go func() {
+		connection, err := right.Accept()
+		if err != nil {
+			acceptErr <- err
+			return
+		}
+		accepted <- connection
+	}()
+
+	local, err := left.NewConn()
+	if err != nil {
+		t.Fatalf("NewConn: %v", err)
+	}
+	defer local.Close()
+	var remote net.Conn
+	select {
+	case remote = <-accepted:
+	case err := <-acceptErr:
+		t.Fatalf("Accept: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Accept did not receive the new connection")
+	}
+	defer remote.Close()
+
+	const payloadSize = 8 << 20
+	payload := make([]byte, payloadSize)
+	for i := range payload {
+		payload[i] = byte((i*31 + i/251) % 251)
+	}
+	if err := local.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := remote.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	writeDone := make(chan error, 1)
+	go func() {
+		n, writeErr := local.Write(payload)
+		if writeErr == nil && n != len(payload) {
+			writeErr = io.ErrShortWrite
+		}
+		writeDone <- writeErr
+	}()
+	received := make([]byte, len(payload))
+	if _, err := io.ReadFull(remote, received); err != nil {
+		t.Fatalf("read large payload: %v", err)
+	}
+	select {
+	case err := <-writeDone:
+		if err != nil {
+			t.Fatalf("write large payload: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("write large payload did not complete")
+	}
+	if !bytes.Equal(received, payload) {
+		t.Fatal("large payload was corrupted or truncated")
 	}
 }
