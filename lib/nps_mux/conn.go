@@ -23,7 +23,14 @@ type conn struct {
 	receiveWindow    *receiveWindow
 	sendWindow       *sendWindow
 	once             sync.Once
+	drainTimerMu     sync.Mutex
+	drainTimer       *time.Timer
 }
+
+// remoteCloseDrainTimeout bounds how long a peer-closed stream may remain
+// unread. The receiver normally drains already queued data immediately; this
+// guard reclaims streams abandoned by their local consumer.
+var remoteCloseDrainTimeout = 30 * time.Second
 
 func NewConn(connId int32, mux *Mux) *conn {
 	c := &conn{
@@ -51,6 +58,11 @@ func (s *conn) Read(buf []byte) (n int, err error) {
 	}
 	// waiting for takeout from receive window finish or timeout
 	n, err = s.receiveWindow.Read(buf, s.connId)
+	if errors.Is(err, io.EOF) {
+		// A peer close is a half-close until the receive queue is drained. Once
+		// the reader observes the final EOF, release this stream immediately.
+		_ = s.Close()
+	}
 	return
 }
 
@@ -75,6 +87,7 @@ func (s *conn) Close() (err error) {
 
 func (s *conn) closeProcess() {
 	s.isClose.Store(true)
+	s.stopDrainTimer()
 	s.receiveWindow.mux.connMap.Delete(s.connId)
 	if !s.receiveWindow.mux.IsClose() {
 		// if server or user close the conn while reading, will Get a io.EOF
@@ -84,6 +97,38 @@ func (s *conn) closeProcess() {
 	s.sendWindow.CloseWindow()
 	s.receiveWindow.CloseWindow()
 	return
+}
+
+// closeRemoteInput records that the peer will not send additional frames.
+// Frames already accepted by receiveWindow must stay readable: muxConnClose is
+// sent after data on the ordered mux transport, so discarding that queue would
+// truncate the tail of HTTP responses and generic TCP streams.
+func (s *conn) closeRemoteInput() {
+	if s == nil || s.isClose.Load() {
+		return
+	}
+	s.closingFlag.Store(true)
+	s.receiveWindow.Stop()
+
+	s.drainTimerMu.Lock()
+	if !s.isClose.Load() && s.drainTimer == nil {
+		s.drainTimer = time.AfterFunc(remoteCloseDrainTimeout, func() {
+			_ = s.Close()
+		})
+	}
+	s.drainTimerMu.Unlock()
+}
+
+func (s *conn) stopDrainTimer() {
+	if s == nil {
+		return
+	}
+	s.drainTimerMu.Lock()
+	if s.drainTimer != nil {
+		s.drainTimer.Stop()
+		s.drainTimer = nil
+	}
+	s.drainTimerMu.Unlock()
 }
 
 func (s *conn) LocalAddr() net.Addr {

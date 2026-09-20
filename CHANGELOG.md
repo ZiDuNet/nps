@@ -2,6 +2,13 @@
 
 所有重要变更记录在此。
 
+## [1.1.15] - 2026-09-20
+
+### Fixed
+
+- Fixed MUX remote-close handling that discarded queued trailing frames. HTTP/1.0 Host responses without `Content-Length`, chunked responses, and TCP streams now drain buffered data before EOF.
+- Added a bounded 30-second cleanup for peer-closed streams that are never read; normal streams are released immediately after their queued data is consumed.
+
 ## [1.1.14] - 2026-09-20
 
 ### Changed

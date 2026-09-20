@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.14</sub>
+﻿# NPS <sub>v1.1.15</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -179,6 +179,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.15** (2026-09-20) - Fixed MUX close handling so Host responses and TCP streams drain queued trailing data before release
 - **v1.1.14** (2026-09-20) - Rebuilt the resource topology screen from the user-dashboard prototype and opened it in a new tab from the console
 - **v1.1.13** (2026-09-20) - Added an account-scoped, live resource topology view for clients, tunnels, and domain hosts
 - **v1.1.12** (2026-09-19) - Corrected directional traffic and quota accounting, clarified tunnel runtime state, and added active TCP connection counts

@@ -399,9 +399,10 @@ func (s *Mux) readSession() {
 					releaseMuxPack(pack)
 					continue
 				case muxConnClose: //close the connection
-					connection.closingFlag.Store(true)
-					connection.receiveWindow.Stop() // close signal to receive window
-					_ = connection.Close()
+					// The peer has finished writing. Keep queued frames readable
+					// before releasing the stream; an immediate Close here drops
+					// response data that arrived just before this control frame.
+					connection.closeRemoteInput()
 					releaseMuxPack(pack)
 					continue
 				}

@@ -13,6 +13,7 @@ import (
 
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/nps_mux"
 )
 
 type streamingTestBridge struct {
@@ -339,6 +340,113 @@ func TestHostConnectionCloseWaitsForCompleteChunkedResponse(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("Host handler did not finish after complete response")
+	}
+}
+
+func TestHostHTTP10ResponseDrainsBeforeMuxClose(t *testing.T) {
+	installStreamingHost(t)
+	leftTransport, rightTransport := net.Pipe()
+	serverMux := nps_mux.NewMux(leftTransport, "tcp", 1)
+	clientMux := nps_mux.NewMux(rightTransport, "tcp", 1)
+	t.Cleanup(func() {
+		_ = serverMux.Close()
+		_ = clientMux.Close()
+	})
+
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		connection, acceptErr := clientMux.Accept()
+		if acceptErr == nil {
+			accepted <- connection
+		}
+	}()
+	serverTarget, err := serverMux.NewConn()
+	if err != nil {
+		t.Fatalf("new server mux stream: %v", err)
+	}
+	defer serverTarget.Close()
+
+	var clientTarget net.Conn
+	select {
+	case clientTarget = <-accepted:
+	case <-time.After(time.Second):
+		t.Fatal("client mux did not accept server stream")
+	}
+	defer clientTarget.Close()
+
+	bridge := &streamingTestBridge{target: serverTarget}
+	server := &httpServer{BaseServer: BaseServer{bridge: bridge}}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+	clientConn, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	clientTCP := clientConn.(*net.TCPConn)
+	defer clientTCP.Close()
+	serverConn, err := listener.Accept()
+	if err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+	defer serverConn.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "http://stream.example.test/index.html", nil)
+	req.RequestURI = "/index.html"
+	req.URL.Scheme = "http"
+	req.Header.Set("Connection", "close")
+	req.Close = true
+	req.RemoteAddr = "198.51.100.23:12345"
+	done := make(chan struct{})
+	go func() {
+		server.handleHttp(conn.NewConn(serverConn), req, bufio.NewReader(serverConn))
+		close(done)
+	}()
+
+	if err := clientTCP.CloseWrite(); err != nil {
+		t.Fatalf("half-close request: %v", err)
+	}
+	upstreamReader := bufio.NewReader(clientTarget)
+	for {
+		line, readErr := upstreamReader.ReadString('\n')
+		if readErr != nil {
+			t.Fatalf("read forwarded request: %v", readErr)
+		}
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+
+	body := bytes.Repeat([]byte("response-without-content-length\n"), 768)
+	response := append([]byte("HTTP/1.0 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"), body...)
+	if n, writeErr := clientTarget.Write(response); writeErr != nil || n != len(response) {
+		t.Fatalf("write HTTP/1.0 response: n=%d err=%v", n, writeErr)
+	}
+	if err := clientTarget.Close(); err != nil {
+		t.Fatalf("close upstream mux stream: %v", err)
+	}
+
+	if err := clientTCP.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	responseReader, err := http.ReadResponse(bufio.NewReader(clientTCP), req)
+	if err != nil {
+		t.Fatalf("read proxied response: %v", err)
+	}
+	got, err := io.ReadAll(responseReader.Body)
+	_ = responseReader.Body.Close()
+	if err != nil {
+		t.Fatalf("read proxied HTTP/1.0 body: %v", err)
+	}
+	if !bytes.Equal(got, body) {
+		t.Fatalf("proxied body was truncated: got %d bytes, want %d", len(got), len(body))
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Host handler did not exit after full HTTP/1.0 response")
 	}
 }
 
