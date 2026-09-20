@@ -2,6 +2,13 @@
 
 所有重要变更记录在此。
 
+## [1.1.14] - 2026-09-20
+
+### Changed
+
+- Rebuilt the resource topology page from the supplied user-dashboard prototype while retaining live, account-scoped NPS data.
+- The dashboard now opens the topology page in a separate tab; the page keeps global authentication and removes user switching.
+
 ## [1.1.13] - 2026-09-20
 
 ### Added
