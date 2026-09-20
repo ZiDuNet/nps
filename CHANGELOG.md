@@ -2,6 +2,17 @@
 
 所有重要变更记录在此。
 
+## [1.1.13] - 2026-09-20
+
+### Added
+
+- Added a standalone, account-scoped resource topology view for clients, tunnels, and domain hosts.
+- The dashboard now links to the live view, which refreshes operational data without persisting metric snapshots.
+
+### Changed
+
+- Direct topology access reuses management-console authentication and never returns credentials, certificate paths, or per-resource authentication settings.
+
 ## [1.1.12] - 2026-09-19
 
 ### Changed
