@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: '要发布的 Git 标签，例如 v1.1.16；必须与源码版本一致'
+        description: '要发布的 Git 标签，例如 v1.1.17；必须与源码版本一致'
         required: false
         type: string
 
@@ -385,13 +385,35 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ env.WAILS_VERSION }}
         working-directory: ${{ env.GUI_DIR }}
+      - name: Download GUI Go dependencies
+        working-directory: ${{ env.GUI_DIR }}
+        run: |
+          for attempt in 1 2 3; do
+            if go mod download; then
+              exit 0
+            fi
+            echo "Go dependency download failed (attempt ${attempt}/3); retrying..."
+            sleep 10
+          done
+          exit 1
       - name: Build and package (Linux)
         shell: bash
         working-directory: ${{ env.GUI_DIR }}
         run: |
           export GOOS=linux
           export GOARCH="${{ matrix.arch }}"
-          wails3 build --tags npcgui
+          built=false
+          for attempt in 1 2 3; do
+            if wails3 build --tags npcgui; then
+              built=true
+              break
+            fi
+            echo "Wails Linux build failed (attempt ${attempt}/3); retrying..."
+            sleep 10
+          done
+          if [ "$built" != true ]; then
+            exit 1
+          fi
           cd bin
           bin="$(find . -maxdepth 1 -type f -perm -111 -printf '%f\n' | head -n 1)"
           if [ -z "$bin" ]; then

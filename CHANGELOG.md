@@ -2,6 +2,13 @@
 
 所有重要变更记录在此。
 
+## [1.1.17] - 2026-09-21
+
+### Fixed
+
+- Added retries for Linux GUI release dependency downloads and Wails builds so transient network failures do not skip the formal Release.
+- Synchronized GUI installer metadata to `1.1.17`.
+
 ## [1.1.16] - 2026-09-21
 
 ### Added
