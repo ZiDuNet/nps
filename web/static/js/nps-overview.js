@@ -5,7 +5,12 @@
     var body = document.body;
     var baseURL = (body.dataset.baseUrl || "").replace(/\/$/, "");
     var accountName = body.dataset.accountName || "当前用户";
-    var refreshInterval = 5000;
+    var DEFAULT_REFRESH_SECONDS = 60;
+    var MIN_REFRESH_SECONDS = 5;
+    var MAX_REFRESH_SECONDS = 3600;
+    var REFRESH_STORAGE_KEY = "nps-overview-refresh-seconds";
+    var refreshSeconds = loadRefreshSeconds();
+    var refreshTimer = null;
     var state = { data: null, loading: false, onlyOnline: false, collapsedClients: new Set() };
     var linkPaths = [];
     var drawTimer = null;
@@ -14,6 +19,47 @@
         udp: ["udp", "m-udp", "UDP"], socks5: ["socks", "m-socks", "SOCKS"], p2p: ["p2p", "m-p2p", "P2P"],
         secret: ["secret", "m-secret", "SECRET"], file: ["file", "m-file", "FILE"]
     };
+
+    function clampRefreshSeconds(value) {
+        var seconds = Number.parseInt(value, 10);
+        if (!Number.isFinite(seconds)) return DEFAULT_REFRESH_SECONDS;
+        return Math.min(MAX_REFRESH_SECONDS, Math.max(MIN_REFRESH_SECONDS, seconds));
+    }
+    function loadRefreshSeconds() {
+        try { return clampRefreshSeconds(window.localStorage.getItem(REFRESH_STORAGE_KEY)); } catch (error) { return DEFAULT_REFRESH_SECONDS; }
+    }
+    function saveRefreshSeconds() {
+        try { window.localStorage.setItem(REFRESH_STORAGE_KEY, String(refreshSeconds)); } catch (error) { /* 本地存储不可用时仍保持当前页面设置 */ }
+    }
+    function refreshLabel() { return "每 " + refreshSeconds + " 秒"; }
+    function scheduleRefresh() {
+        if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+        refreshTimer = window.setTimeout(function () {
+            loadData();
+            scheduleRefresh();
+        }, refreshSeconds * 1000);
+    }
+    function setRefreshSeconds(value) {
+        refreshSeconds = clampRefreshSeconds(value);
+        var input = $("#refreshSeconds");
+        if (input) input.value = String(refreshSeconds);
+        saveRefreshSeconds();
+        scheduleRefresh();
+        renderLegend();
+        if (state.data) {
+            var updated = state.data.updatedAt ? new Date(state.data.updatedAt).toLocaleTimeString("zh-CN", { hour12: false }) : "刚刚";
+            $("#topStatus").textContent = "更新于 " + updated + " · " + refreshLabel() + "刷新";
+        }
+    }
+    function bindRefreshControl() {
+        var input = $("#refreshSeconds");
+        if (!input) return;
+        input.value = String(refreshSeconds);
+        input.addEventListener("change", function () { setRefreshSeconds(input.value); });
+        input.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") { event.preventDefault(); input.blur(); }
+        });
+    }
 
     function esc(value) {
         return String(value == null ? "" : value).replace(/[&<>"']/g, function (character) {
@@ -116,7 +162,7 @@
         $("#legend").innerHTML = items.map(function (item) {
             var marker = item[1].indexOf("dot") === 0 ? '<span class="dot ' + item[1].split(" ")[1] + '"></span>' : '<span class="sw ' + item[1].split(" ")[1] + '"></span>';
             return '<span class="lg">' + marker + esc(item[0]) + '</span>';
-        }).join("") + '<span class="right">每 5 秒刷新 · 点击客户端收起或展开规则 · 点击规则查看详情</span>';
+        }).join("") + '<span class="right">' + esc(refreshLabel()) + '刷新 · 点击客户端收起或展开规则 · 点击规则查看详情</span>';
     }
 
     function renderMap() {
@@ -310,7 +356,7 @@
                 if (!payload || payload.status !== 1 || !payload.data) throw new Error("实时数据格式无效");
                 state.data = normalize(payload.data);
                 renderAll();
-                $("#topStatus").textContent = "更新于 " + (state.data.updatedAt ? new Date(state.data.updatedAt).toLocaleTimeString("zh-CN", { hour12: false }) : "刚刚") + " · 每 5 秒刷新";
+                $("#topStatus").textContent = "更新于 " + (state.data.updatedAt ? new Date(state.data.updatedAt).toLocaleTimeString("zh-CN", { hour12: false }) : "刚刚") + " · " + refreshLabel() + "刷新";
                 $("#liveStatus").textContent = "已更新当前账号的资源拓扑。";
             })
             .catch(function (error) {
@@ -340,10 +386,11 @@
     window.addEventListener("resize", scheduleDraw);
     $("#mapBody").addEventListener("scroll", scheduleDraw);
     document.addEventListener("visibilitychange", function () { if (!document.hidden) loadData(); });
+    bindRefreshControl();
 
     renderLegend();
     tick();
     window.setInterval(tick, 1000);
-    window.setInterval(loadData, refreshInterval);
     loadData();
+    scheduleRefresh();
 }());

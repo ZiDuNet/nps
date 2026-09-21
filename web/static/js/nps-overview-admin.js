@@ -3,7 +3,12 @@
 
     var $ = function (selector) { return document.querySelector(selector); };
     var baseURL = (document.body.dataset.baseUrl || "").replace(/\/$/, "");
-    var refreshInterval = 5000;
+    var DEFAULT_REFRESH_SECONDS = 60;
+    var MIN_REFRESH_SECONDS = 5;
+    var MAX_REFRESH_SECONDS = 3600;
+    var REFRESH_STORAGE_KEY = "nps-overview-refresh-seconds";
+    var refreshSeconds = loadRefreshSeconds();
+    var refreshTimer = null;
     var state = {
         data: { owners: [], clients: [], resources: [], updatedAt: "" },
         loading: false,
@@ -21,6 +26,43 @@
     };
     var CLIENT_PALETTE = ["#2458e6", "#0e9384", "#d4592a", "#c0268b", "#e8890c", "#0b8fbf", "#64748b", "#7c3aed", "#087443", "#b42318"];
     var USER_PALETTE = ["#2458e6", "#0e9384", "#d4592a", "#8b5cf6", "#c0268b", "#64748b"];
+
+    function clampRefreshSeconds(value) {
+        var seconds = Number.parseInt(value, 10);
+        if (!Number.isFinite(seconds)) return DEFAULT_REFRESH_SECONDS;
+        return Math.min(MAX_REFRESH_SECONDS, Math.max(MIN_REFRESH_SECONDS, seconds));
+    }
+    function loadRefreshSeconds() {
+        try { return clampRefreshSeconds(window.localStorage.getItem(REFRESH_STORAGE_KEY)); } catch (error) { return DEFAULT_REFRESH_SECONDS; }
+    }
+    function saveRefreshSeconds() {
+        try { window.localStorage.setItem(REFRESH_STORAGE_KEY, String(refreshSeconds)); } catch (error) { /* 本地存储不可用时仍保持当前页面设置 */ }
+    }
+    function refreshLabel() { return "每 " + refreshSeconds + " 秒"; }
+    function scheduleRefresh() {
+        if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+        refreshTimer = window.setTimeout(function () {
+            refresh();
+            scheduleRefresh();
+        }, refreshSeconds * 1000);
+    }
+    function setRefreshSeconds(value) {
+        refreshSeconds = clampRefreshSeconds(value);
+        var input = $("#refreshSeconds");
+        if (input) input.value = String(refreshSeconds);
+        saveRefreshSeconds();
+        scheduleRefresh();
+        renderLegend();
+    }
+    function bindRefreshControl() {
+        var input = $("#refreshSeconds");
+        if (!input) return;
+        input.value = String(refreshSeconds);
+        input.addEventListener("change", function () { setRefreshSeconds(input.value); });
+        input.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") { event.preventDefault(); input.blur(); }
+        });
+    }
 
     function number(value) { return Number(value) || 0; }
     function esc(value) {
@@ -138,7 +180,7 @@
             return [MODE_META[mode][2] + "规则", "sw " + MODE_META[mode][1]];
         }));
         var updated = state.data.updatedAt ? new Date(state.data.updatedAt).toLocaleTimeString("zh-CN", { hour12: false }) : "等待首个响应";
-        var status = state.lastError ? "读取失败，保留上次数据" : "每 5 秒实时读取";
+        var status = state.lastError ? "读取失败，保留上次数据" : refreshLabel() + "实时读取";
         $("#legend").innerHTML = items.map(function (item) {
             var parts = item[1].split(" ");
             var marker = parts[0] === "dot" ? '<span class="dot ' + parts[1] + '"></span>' : '<span class="sw ' + parts[1] + '"></span>';
@@ -336,8 +378,9 @@
     }
 
     bindControls();
+    bindRefreshControl();
     tick();
     window.setInterval(tick, 1000);
     refresh();
-    window.setInterval(refresh, refreshInterval);
+    scheduleRefresh();
 }());

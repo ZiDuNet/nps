@@ -2,6 +2,12 @@
 
 所有重要变更记录在此。
 
+## [1.1.18] - 2026-09-21
+
+### Added
+
+- Added a configurable resource-topology refresh interval for administrator and user dashboards. The default is 60 seconds, with a browser-local setting from 5 to 3600 seconds.
+
 ## [1.1.17] - 2026-09-21
 
 ### Fixed

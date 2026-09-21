@@ -34,6 +34,7 @@
                     <input id="q" placeholder="搜索 备注 / IP / 端口 / 域名…" autocomplete="off">
                 </label>
                 <label class="chk"><input type="checkbox" id="onlyOnline"> 仅显示在线</label>
+                <label class="refresh-control" for="refreshSeconds"><span>刷新</span><input id="refreshSeconds" type="number" min="5" max="3600" step="1" inputmode="numeric" aria-label="刷新间隔（秒）"><span>秒</span></label>
                 <div class="seg" id="segTunnels" aria-label="隧道展开控制">
                     <button data-mode="all" class="on" type="button">全部隧道</button>
                     <button data-mode="off" type="button">收起隧道</button>

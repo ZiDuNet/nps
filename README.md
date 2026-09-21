@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.17</sub>
+﻿# NPS <sub>v1.1.18</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -179,6 +179,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.18** (2026-09-21) - Added a configurable 5–3600 second refresh interval to both resource topology dashboards, defaulting to 60 seconds and stored per browser
 - **v1.1.17** (2026-09-21) - Improved release reliability with retried Linux GUI dependency downloads and Wails builds
 - **v1.1.16** (2026-09-21) - Added operation audit logs, scoped per-user API tokens, and modern Host proxy options with bounded response-header rewriting
 - **v1.1.15** (2026-09-20) - Fixed MUX close handling so Host responses and TCP streams drain queued trailing data before release
