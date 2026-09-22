@@ -123,7 +123,7 @@ func (s *BaseController) Prepare() {
 		// Ordinary users cannot browse the administrative user/global pages,
 		// but they may call the narrowly-scoped password endpoint to rotate
 		// their own dashboard credential from the account popover.
-		if s.controllerName == "global" || (s.controllerName == "user" && s.actionName != "changepassword" && s.actionName != "regenerateapikey") {
+		if s.controllerName == "global" || (s.controllerName == "user" && s.actionName != "changepassword" && s.actionName != "regenerateapikey" && s.actionName != "revokeapikey" && s.actionName != "apikeystatus") {
 			s.StopRun()
 			return
 		}

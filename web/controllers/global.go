@@ -152,6 +152,11 @@ func (s *GlobalController) Save() {
 		ServerUrl:       s.getEscapeString("serverUrl"),
 		PlatformDomains: platformDomains,
 	}
+	if current := file.GetDb().GetGlobal(); current != nil {
+		current.RLock()
+		t.DashboardKeyHash = current.DashboardKeyHash
+		current.RUnlock()
+	}
 
 	if err := file.GetDb().SaveGlobal(t); err != nil {
 		s.AjaxErr(err.Error())

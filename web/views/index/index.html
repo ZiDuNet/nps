@@ -13,7 +13,7 @@
             {{end}}
         </div>
         <div class="dashboard-page-actions">
-            <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/overview" target="_blank" rel="noopener"><i class="fa fa-sitemap"></i><span data-i18n-zh="资源拓扑" data-i18n-en="Resource topology">资源拓扑</span></a>
+            {{if or (eq true .isAdmin) .accountQuota.Visible}}<button type="button" class="btn btn-outline btn-primary" data-toggle="modal" data-target="#dashboard-access-modal" aria-haspopup="dialog"><i class="fa fa-sitemap"></i><span data-i18n-zh="资源拓扑" data-i18n-en="Resource topology">资源拓扑</span></button>{{else}}<a class="btn btn-outline btn-primary" href="{{.web_base_url}}/overview" target="_blank" rel="noopener"><i class="fa fa-sitemap"></i><span data-i18n-zh="资源拓扑" data-i18n-en="Resource topology">资源拓扑</span></a>{{end}}
             <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/client/list"><i class="fa fa-desktop"></i><span data-i18n-zh="客户端" data-i18n-en="Clients">客户端</span></a>
             <a class="btn btn-primary" href="{{.web_base_url}}/index/add?type=tcp"><i class="fa fa-plus"></i><span data-i18n-zh="新建隧道" data-i18n-en="New tunnel">新建隧道</span></a>
         </div>

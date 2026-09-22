@@ -11,6 +11,7 @@
     var REFRESH_STORAGE_KEY = "nps-overview-refresh-seconds";
     var refreshSeconds = loadRefreshSeconds();
     var refreshTimer = null;
+    var accessKey = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("access_key") || "";
     var state = { data: null, loading: false, onlyOnline: false, collapsedClients: new Set() };
     var linkPaths = [];
     var drawTimer = null;
@@ -342,7 +343,9 @@
     function loadData() {
         if (state.loading || document.hidden) return;
         state.loading = true;
-        fetch(baseURL + "/overview/data?_=" + Date.now(), { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } })
+        var headers = { Accept: "application/json" };
+        if (accessKey) headers.Authorization = "Bearer " + accessKey;
+        fetch(baseURL + "/overview/data?_=" + Date.now(), { credentials: "same-origin", cache: "no-store", headers: headers })
             .then(function (response) {
                 var type = response.headers.get("content-type") || "";
                 if (response.redirected || response.status === 401 || response.status === 403 || type.indexOf("application/json") === -1) {

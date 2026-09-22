@@ -10,8 +10,13 @@ func Init() {
 	if len(web_base_url) > 0 {
 		ns := beego.NewNamespace(web_base_url,
 			beego.NSRouter("/", &controllers.IndexController{}, "*:Index"),
-			beego.NSRouter("/overview", &controllers.IndexController{}, "*:Overview"),
-			beego.NSRouter("/overview/data", &controllers.IndexController{}, "*:TopologyData"),
+			beego.NSRouter("/overview", &controllers.DashboardController{}, "*:Entry"),
+			beego.NSRouter("/overview/admin", &controllers.DashboardController{}, "*:Admin"),
+			beego.NSRouter("/overview/user", &controllers.DashboardController{}, "*:User"),
+			beego.NSRouter("/overview/data", &controllers.DashboardController{}, "*:TopologyData"),
+			beego.NSRouter("/overview/access/role", &controllers.DashboardController{}, "*:AccessRole"),
+			beego.NSRouter("/overview/accesskey", &controllers.DashboardAccessController{}, "GET:Status;POST:Generate"),
+			beego.NSRouter("/overview/accesskey/revoke", &controllers.DashboardAccessController{}, "POST:Revoke"),
 			beego.NSAutoRouter(&controllers.IndexController{}),
 			beego.NSAutoRouter(&controllers.LoginController{}),
 			beego.NSAutoRouter(&controllers.ClientController{}),
@@ -24,8 +29,13 @@ func Init() {
 		beego.AddNamespace(ns)
 	} else {
 		beego.Router("/", &controllers.IndexController{}, "*:Index")
-		beego.Router("/overview", &controllers.IndexController{}, "*:Overview")
-		beego.Router("/overview/data", &controllers.IndexController{}, "*:TopologyData")
+		beego.Router("/overview", &controllers.DashboardController{}, "*:Entry")
+		beego.Router("/overview/admin", &controllers.DashboardController{}, "*:Admin")
+		beego.Router("/overview/user", &controllers.DashboardController{}, "*:User")
+		beego.Router("/overview/data", &controllers.DashboardController{}, "*:TopologyData")
+		beego.Router("/overview/access/role", &controllers.DashboardController{}, "*:AccessRole")
+		beego.Router("/overview/accesskey", &controllers.DashboardAccessController{}, "GET:Status;POST:Generate")
+		beego.Router("/overview/accesskey/revoke", &controllers.DashboardAccessController{}, "POST:Revoke")
 		beego.AutoRouter(&controllers.IndexController{})
 		beego.AutoRouter(&controllers.LoginController{})
 		beego.AutoRouter(&controllers.ClientController{})

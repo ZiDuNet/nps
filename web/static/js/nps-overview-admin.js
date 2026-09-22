@@ -9,6 +9,7 @@
     var REFRESH_STORAGE_KEY = "nps-overview-refresh-seconds";
     var refreshSeconds = loadRefreshSeconds();
     var refreshTimer = null;
+    var accessKey = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("access_key") || "";
     var state = {
         data: { owners: [], clients: [], resources: [], updatedAt: "" },
         loading: false,
@@ -362,7 +363,9 @@
     function refresh() {
         if (state.loading) return;
         state.loading = true;
-        fetch(baseURL + "/overview/data?_=" + Date.now(), { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } })
+        var headers = { Accept: "application/json" };
+        if (accessKey) headers.Authorization = "Bearer " + accessKey;
+        fetch(baseURL + "/overview/data?_=" + Date.now(), { credentials: "same-origin", cache: "no-store", headers: headers })
             .then(function (response) { if (!response.ok) throw new Error("HTTP " + response.status); return response.json(); })
             .then(function (payload) {
                 if (!payload || payload.status !== 1 || !payload.data) throw new Error("响应格式无效");

@@ -34,7 +34,73 @@ curl -s -X POST "http://127.0.0.1:8081/client/list/" \
   -d "offset=0&limit=20"
 ```
 
+Python：
+
+```python
+import requests
+
+host = "http://127.0.0.1:8081"
+token = "npsu_REPLACE_WITH_TOKEN"
+r = requests.post(
+    f"{host}/client/list/",
+    headers={"Authorization": f"Bearer {token}"},
+    data={"offset": 0, "limit": 20},
+)
+print(r.json())
+```
+
+JavaScript：
+
+```javascript
+const host = "http://127.0.0.1:8081";
+const token = "npsu_REPLACE_WITH_TOKEN";
+
+const response = await fetch(`${host}/client/list/`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/x-www-form-urlencoded",
+  },
+  body: new URLSearchParams({ offset: "0", limit: "20" }),
+});
+console.log(await response.json());
+```
+
 所有写操作仍必须使用 `POST`。也支持 `api_token` 查询参数以兼容无法设置请求头的客户端，但 URL 可能进入访问日志，生产环境应优先使用 `Authorization`。
+
+### 普通用户自助管理 Token
+
+普通用户登录面板后，在左侧账号区域打开「API 接入」即可查看状态、生成/重新生成或撤销自己的 Token。普通用户不需要填写用户 ID，服务端会从当前登录会话或当前 Bearer Token 绑定账号；提交其他用户 ID 会被拒绝。Token 只在生成成功的响应中显示一次，刷新页面后无法恢复，只能重新生成。
+
+撤销当前用户 Token：
+
+```bash
+curl -s -X POST "http://127.0.0.1:8081/user/revokeapikey/" \
+  -H "Authorization: Bearer npsu_REPLACE_WITH_TOKEN"
+```
+
+查询当前用户 Token 是否已启用：
+
+```bash
+curl -s "http://127.0.0.1:8081/user/apikeystatus/" \
+  -H "Authorization: Bearer npsu_REPLACE_WITH_TOKEN"
+```
+
+管理员仍可在「用户管理」中生成、重新生成或撤销任意普通用户 Token。管理员只能看到「未配置 / 已启用」状态，不能查看已生成的 Token 原文。
+
+## 资源拓扑大屏快捷地址
+
+仪表盘的「资源拓扑」支持为当前账号生成独立的只读大屏密钥。管理员生成的快捷地址展示全局资源；普通用户生成的快捷地址只展示自己名下客户端、隧道和 Host 规则。该密钥与登录密码、普通用户 API Token 分开管理，不具备创建、修改、删除资源的权限。
+
+生成后得到类似下面的地址：
+
+```text
+https://nps.example.com/overview#access_key=npsd_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+密钥位于 URL 的 `#` 片段中，浏览器不会把片段发送给 HTTP 服务器。快捷地址可用于无人值守大屏，支持自定义密钥；留空时由系统随机生成。密钥哈希保存于 JSON 配置，原文只在生成成功时显示一次。密钥默认不设置过期时间，但管理员或账号本人可以随时撤销/重新生成；账号停用或到期时，其大屏密钥立即失效。
+
+请把快捷地址视为密码，仅通过 HTTPS 或可信内网分享。密钥仅用于读取拓扑数据，不能调用管理 API。
 
 ## 获取服务端时间戳
 

@@ -19,17 +19,18 @@ type UserController struct {
 // userListRow deliberately keeps the historical response shape while never
 // sending stored credentials to the browser.
 type userListRow struct {
-	Id           int
-	UserName     string
-	Password     string
-	Status       bool
-	Remark       string
-	ClientCount  int
-	TunnelCount  int
-	MaxClientNum int
-	MaxTunnelNum int
-	ExpireTime   string
-	CreateTime   string
+	Id            int
+	UserName      string
+	Password      string
+	Status        bool
+	Remark        string
+	ClientCount   int
+	TunnelCount   int
+	MaxClientNum  int
+	MaxTunnelNum  int
+	ExpireTime    string
+	CreateTime    string
+	APIKeyEnabled bool
 }
 
 func newUserListRows(users []*file.User) []*userListRow {
@@ -44,21 +45,22 @@ func newUserListRowsWithResourceCounts(users []*file.User, counts map[int]file.U
 		}
 		user.RLock()
 		id, userName, status := user.Id, user.UserName, user.Status
-		remark, maxClientNum, maxTunnelNum, expireTime, createTime := user.Remark, user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime
+		remark, maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash := user.Remark, user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash
 		user.RUnlock()
 		resourceCounts := counts[id]
 		rows = append(rows, &userListRow{
-			Id:           id,
-			UserName:     html.UnescapeString(userName),
-			Password:     "",
-			Status:       status,
-			Remark:       html.UnescapeString(remark),
-			ClientCount:  resourceCounts.ClientCount,
-			TunnelCount:  resourceCounts.TunnelCount,
-			MaxClientNum: maxClientNum,
-			MaxTunnelNum: maxTunnelNum,
-			ExpireTime:   expireTime,
-			CreateTime:   createTime,
+			Id:            id,
+			UserName:      html.UnescapeString(userName),
+			Password:      "",
+			Status:        status,
+			Remark:        html.UnescapeString(remark),
+			ClientCount:   resourceCounts.ClientCount,
+			TunnelCount:   resourceCounts.TunnelCount,
+			MaxClientNum:  maxClientNum,
+			MaxTunnelNum:  maxTunnelNum,
+			ExpireTime:    expireTime,
+			CreateTime:    createTime,
+			APIKeyEnabled: strings.TrimSpace(apiKeyHash) != "",
 		})
 	}
 	return rows
@@ -103,19 +105,20 @@ func parseUserStatus(value string) (bool, error) {
 
 func newUserUpdateCandidate(existing *file.User, username, password, remark string, maxClientNum, maxTunnelNum int, expireTime string) *file.User {
 	existing.RLock()
-	id, existingPassword, existingAPIKeyHash, status, createTime := existing.Id, existing.Password, existing.APIKeyHash, existing.Status, existing.CreateTime
+	id, existingPassword, existingAPIKeyHash, existingDashboardKeyHash, status, createTime := existing.Id, existing.Password, existing.APIKeyHash, existing.DashboardKeyHash, existing.Status, existing.CreateTime
 	existing.RUnlock()
 	updated := &file.User{
-		Id:           id,
-		UserName:     username,
-		Password:     existingPassword,
-		APIKeyHash:   existingAPIKeyHash,
-		Status:       status,
-		Remark:       remark,
-		MaxClientNum: maxClientNum,
-		MaxTunnelNum: maxTunnelNum,
-		ExpireTime:   expireTime,
-		CreateTime:   createTime,
+		Id:               id,
+		UserName:         username,
+		Password:         existingPassword,
+		APIKeyHash:       existingAPIKeyHash,
+		DashboardKeyHash: existingDashboardKeyHash,
+		Status:           status,
+		Remark:           remark,
+		MaxClientNum:     maxClientNum,
+		MaxTunnelNum:     maxTunnelNum,
+		ExpireTime:       expireTime,
+		CreateTime:       createTime,
 	}
 	if password != "" {
 		updated.Password = password
@@ -168,6 +171,72 @@ func (s *UserController) RegenerateAPIKey() {
 	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "API 密钥已生成，请立即保存", "token": token}
 	s.ServeJSON()
 	s.StopRun()
+}
+
+// APIKeyStatus reports whether the current user's credential exists without
+// ever returning the credential itself. Administrators use the user list
+// response instead of this self-service endpoint.
+func (s *UserController) APIKeyStatus() {
+	if !s.IsAdmin() {
+		if _, ok := s.currentUserPrincipalID(); !ok {
+			s.AjaxErr("当前会话不是用户账号")
+			return
+		}
+	}
+	userID := s.GetIntNoErr("id")
+	if !s.IsAdmin() {
+		userID, _ = s.currentUserPrincipalID()
+	}
+	user, err := file.GetDb().GetUser(userID)
+	if err != nil || user == nil {
+		s.AjaxErr("user ID not found")
+		return
+	}
+	user.RLock()
+	enabled := strings.TrimSpace(user.APIKeyHash) != ""
+	user.RUnlock()
+	s.Data["json"] = map[string]interface{}{"status": 1, "enabled": enabled}
+	s.ServeJSON()
+	s.StopRun()
+}
+
+// RevokeAPIKey immediately disables the selected user's API credential. The
+// same endpoint is available to the account owner and administrators; an
+// ordinary user cannot submit another user's ID.
+func (s *UserController) RevokeAPIKey() {
+	if !s.RequirePost() {
+		return
+	}
+	targetID := s.GetIntNoErr("id")
+	if !s.IsAdmin() {
+		if s.userAPIAuthorized {
+			targetID = s.apiUserID
+		} else {
+			principal, _ := s.GetSession(sessionPrincipalKey).(string)
+			sessionUserID, _ := sessionInt(s.GetSession("userId"))
+			if principal != sessionPrincipalUser || sessionUserID <= 0 || (targetID != 0 && targetID != sessionUserID) {
+				s.AjaxErr("无权操作该用户")
+				return
+			}
+			targetID = sessionUserID
+		}
+	}
+	if targetID <= 0 {
+		s.AjaxErr("user ID not found")
+		return
+	}
+	user, err := file.GetDb().GetUser(targetID)
+	if err != nil || user == nil {
+		s.AjaxErr("user ID not found")
+		return
+	}
+	user.Lock()
+	user.APIKeyHash = ""
+	username := user.UserName
+	user.Unlock()
+	file.GetDb().JsonDb.StoreUsersToJsonFile()
+	s.auditMutation("user.api_key_revoke", "user", targetID, targetID, "", nil, map[string]string{"username": username})
+	s.AjaxOk("API 密钥已撤销")
 }
 
 // parsePasswordChangeInput accepts the descriptive account-popover field
@@ -333,7 +402,7 @@ func (s *UserController) ChangePassword() {
 
 	user.RLock()
 	username, currentPassword, status, remark := user.UserName, user.Password, user.Status, user.Remark
-	maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash
+	maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash, dashboardKeyHash := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash, user.DashboardKeyHash
 	user.RUnlock()
 	if !s.IsAdmin() {
 		current := s.GetString("current_password")
@@ -347,16 +416,17 @@ func (s *UserController) ChangePassword() {
 	}
 
 	updated := &file.User{
-		Id:           targetID,
-		UserName:     username,
-		Password:     newPassword,
-		APIKeyHash:   apiKeyHash,
-		Status:       status,
-		Remark:       remark,
-		MaxClientNum: maxClientNum,
-		MaxTunnelNum: maxTunnelNum,
-		ExpireTime:   expireTime,
-		CreateTime:   createTime,
+		Id:               targetID,
+		UserName:         username,
+		Password:         newPassword,
+		APIKeyHash:       apiKeyHash,
+		DashboardKeyHash: dashboardKeyHash,
+		Status:           status,
+		Remark:           remark,
+		MaxClientNum:     maxClientNum,
+		MaxTunnelNum:     maxTunnelNum,
+		ExpireTime:       expireTime,
+		CreateTime:       createTime,
 	}
 	if err := file.GetDb().UpdateUser(updated); err != nil {
 		s.AjaxErr(err.Error())

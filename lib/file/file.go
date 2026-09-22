@@ -266,9 +266,10 @@ func cloneGlobal(global *Glob) *Glob {
 	}
 	global.RLock()
 	copy := &Glob{
-		ServerUrl:       global.ServerUrl,
-		BlackIpList:     append([]string(nil), global.BlackIpList...),
-		PlatformDomains: append([]PlatformDomain(nil), global.PlatformDomains...),
+		ServerUrl:        global.ServerUrl,
+		BlackIpList:      append([]string(nil), global.BlackIpList...),
+		PlatformDomains:  append([]PlatformDomain(nil), global.PlatformDomains...),
+		DashboardKeyHash: global.DashboardKeyHash,
 	}
 	global.RUnlock()
 	return copy

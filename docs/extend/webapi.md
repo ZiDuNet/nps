@@ -138,7 +138,7 @@ POST /client/del/
 
 ## User 用户管理
 
-用户接口仅供管理员调用。普通用户账号归属 `users.json`，与客户端的历史 Web 登录字段不同。
+用户列表、创建、编辑和删除等管理接口仅供管理员调用。普通用户账号归属 `users.json`，与客户端的历史 Web 登录字段不同；Token 自助接口允许普通用户只操作自己的凭据。
 
 ### 生成普通用户 API Token
 
@@ -147,6 +147,38 @@ POST /user/regenerateapikey/
 ```
 
 管理员提交 `id`，响应返回一次性的 `token`。服务端只保存 Token 哈希，重新生成会使旧 Token 立即失效。Token 使用 `Authorization: Bearer <token>` 调用其他接口时，只能看到和管理该用户名下的客户端、隧道及 Host 规则；不会获得用户管理、全局设置或其他用户数据权限。普通用户也可以在自己的已授权会话中调用该接口轮换自己的 Token（API Token 调用时不需要提交 `id`）。
+
+### 撤销普通用户 API Token
+
+```
+POST /user/revokeapikey/
+```
+
+管理员提交 `id` 撤销指定用户 Token；普通用户不提交 `id` 时撤销自己的 Token。撤销后原 Token 立即失效，接口不会返回 Token 原文。
+
+### 查询当前用户 Token 状态
+
+```
+GET /user/apikeystatus/
+```
+
+普通用户可查询自己的 Token 是否已启用；管理员可以提交 `id` 查询指定用户状态。响应示例：
+
+```json
+{"status":1,"enabled":true}
+```
+
+### 资源拓扑大屏密钥
+
+大屏快捷地址由登录后的面板操作生成，不使用 `auth_key` 签名 API。相关接口如下：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/overview/accesskey/` | 查询当前账号是否已配置大屏密钥，不返回原文 |
+| `POST` | `/overview/accesskey/` | 生成或重新生成密钥；可选提交 `key` 自定义密钥，响应只显示一次 `key` 与 `url` |
+| `POST` | `/overview/accesskey/revoke/` | 撤销当前账号大屏密钥 |
+
+`url` 是带 `#access_key=...` 片段的快捷地址。大屏数据接口 `/overview/data/` 只接受当前登录会话或 `Authorization: Bearer npsd_...`，并按密钥所属账号实时过滤资源。
 
 ### 用户列表
 

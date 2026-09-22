@@ -66,12 +66,23 @@
                 }
             },
             {
+                field: 'APIKeyEnabled',
+                title: '<span data-i18n-zh="API Token" data-i18n-en="API token">API Token</span>',
+                align: 'center',
+                halign: 'center',
+                formatter: function(value) {
+                    return value
+                        ? '<span class="badge badge-primary">' + (npsIsEnglish() ? 'Enabled' : '已启用') + '</span>'
+                        : '<span class="badge badge-default">' + (npsIsEnglish() ? 'Not set' : '未配置') + '</span>';
+                }
+            },
+            {
                 field: 'option',
                 title: '<span data-i18n-zh="操作" data-i18n-en="Actions">操作</span>',
                 align: 'center',
                 halign: 'center',
                 class: 'user-list__actions',
-                width: '170px',
+                width: '205px',
                 formatter: function(value, row) {
                     var userId = Number(row.Id);
                     if (!isFinite(userId) || Math.floor(userId) !== userId || userId <= 0) return '';
@@ -82,6 +93,7 @@
                         btn += '<button type="button" onclick="submitform(\'start\', \'{{.web_base_url}}/user/changestatus\', {\'id\':' + userId + ', \'status\': 1})" class="btn btn-outline btn-primary" title="' + (npsIsEnglish() ? 'Enable user' : '启用用户') + '" aria-label="' + (npsIsEnglish() ? 'Enable user' : '启用用户') + '"><i class="fa fa-play" aria-hidden="true"></i></button>';
                     }
                     btn += '<button type="button" onclick="regenerateUserAPIKey(' + userId + ')" class="btn btn-outline btn-info" title="' + (npsIsEnglish() ? 'Rotate API key' : '生成用户 API 密钥') + '" aria-label="' + (npsIsEnglish() ? 'Rotate API key' : '生成用户 API 密钥') + '"><i class="fa fa-key" aria-hidden="true"></i></button>';
+                    if (row.APIKeyEnabled) btn += '<button type="button" onclick="revokeUserAPIKey(' + userId + ')" class="btn btn-outline btn-warning" title="' + (npsIsEnglish() ? 'Revoke API key' : '撤销 API 密钥') + '" aria-label="' + (npsIsEnglish() ? 'Revoke API key' : '撤销 API 密钥') + '"><i class="fa fa-unlink" aria-hidden="true"></i></button>';
                     btn += '<a href="{{.web_base_url}}/user/edit?id=' + userId + '" class="btn btn-outline btn-success" title="' + (npsIsEnglish() ? 'Edit user' : '编辑用户') + '" aria-label="' + (npsIsEnglish() ? 'Edit user' : '编辑用户') + '"><i class="fa fa-edit" aria-hidden="true"></i></a>';
                     btn += '<button type="button" onclick="submitform(\'delete\', \'{{.web_base_url}}/user/del\', {\'id\':' + userId + '})" class="btn btn-outline btn-danger" title="' + (npsIsEnglish() ? 'Delete user' : '删除用户') + '" aria-label="' + (npsIsEnglish() ? 'Delete user' : '删除用户') + '"><i class="fa fa-trash" aria-hidden="true"></i></button>';
                     btn += '</div>';
@@ -120,6 +132,17 @@
             } else {
                 window.prompt(npsIsEnglish() ? 'Copy and save this API key' : '请复制并保存此 API 密钥', token);
             }
+        }, 'json');
+    }
+
+    function revokeUserAPIKey(userId) {
+        $.post('{{.web_base_url}}/user/revokeapikey', { id: userId }, function (response) {
+            if (!response || Number(response.status) !== 1) {
+                npsNotify('error', response && response.msg ? response.msg : (npsIsEnglish() ? 'Failed to revoke API key' : '撤销 API 密钥失败'));
+                return;
+            }
+            npsNotify('success', response.msg || (npsIsEnglish() ? 'API key revoked' : 'API 密钥已撤销'));
+            $('#table').bootstrapTable('refresh');
         }, 'json');
     }
 </script>

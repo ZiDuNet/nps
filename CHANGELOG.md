@@ -2,6 +2,15 @@
 
 所有重要变更记录在此。
 
+## [1.1.19] - 2026-09-22
+
+### Added
+
+- Added self-service ordinary-user API token generation, rotation, status, and revocation.
+- Added administrator token status/revocation controls without exposing token plaintext.
+- Added scoped, read-only resource topology shortcut keys for administrators and ordinary users.
+- Documented API integration and unattended dashboard access in the Web API guides.
+
 ## [1.1.18] - 2026-09-21
 
 ### Added

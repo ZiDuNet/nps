@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>NPS 资源拓扑</title>
+    <link rel="stylesheet" href="{{.web_base_url}}/static/css/nps-overview.css?v={{.version}}">
+</head>
+<body data-base-url="{{.web_base_url}}">
+<main class="access-gate" aria-labelledby="access-title">
+    <div class="access-gate__mark">NPS</div>
+    <h1 id="access-title">正在验证大屏访问权限</h1>
+    <p id="access-message">请稍候…</p>
+    <a id="access-login" href="{{.web_base_url}}/login/index" hidden>登录管理面板</a>
+</main>
+<script>
+(function () {
+    var base = (document.body.dataset.baseUrl || '').replace(/\/$/, '');
+    var message = document.getElementById('access-message');
+    var login = document.getElementById('access-login');
+    var params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    var key = params.get('access_key') || '';
+    function fail(text, showLogin) { message.textContent = text; if (showLogin) login.hidden = false; }
+    if (!key) { fail('没有检测到大屏密钥，请先登录后生成快捷地址。', true); return; }
+    fetch(base + '/overview/access/role', { headers: { Authorization: 'Bearer ' + key }, credentials: 'same-origin', cache: 'no-store' })
+        .then(function (response) { if (!response.ok) throw new Error('invalid'); return response.json(); })
+        .then(function (payload) {
+            if (!payload || payload.status !== 1) throw new Error('invalid');
+            window.location.replace(base + (payload.admin ? '/overview/admin' : '/overview/user') + '#access_key=' + encodeURIComponent(key));
+        })
+        .catch(function () { fail('大屏密钥无效或已撤销，请重新生成快捷地址。', false); });
+}());
+</script>
+</body>
+</html>

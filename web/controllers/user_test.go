@@ -12,11 +12,12 @@ import (
 func TestUserListRowsRedactPasswords(t *testing.T) {
 	rows := newUserListRows([]*file.User{
 		{
-			Id:       7,
-			UserName: "alice",
-			Password: "do-not-expose",
-			Status:   true,
-			Remark:   "<script>alert(1)</script>",
+			Id:         7,
+			UserName:   "alice",
+			Password:   "do-not-expose",
+			APIKeyHash: "stored-hash",
+			Status:     true,
+			Remark:     "<script>alert(1)</script>",
 		},
 	})
 
@@ -30,6 +31,9 @@ func TestUserListRowsRedactPasswords(t *testing.T) {
 	}
 	if !strings.Contains(got, `"Password":""`) {
 		t.Fatalf("user list response no longer preserves the password field shape: %s", got)
+	}
+	if !strings.Contains(got, `"APIKeyEnabled":true`) {
+		t.Fatalf("user list response did not expose only API token state: %s", got)
 	}
 	var roundTrip []userListRow
 	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
@@ -58,14 +62,16 @@ func TestUserListRowsExposeResourceCounts(t *testing.T) {
 
 func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 	existing := &file.User{
-		Id:           7,
-		UserName:     "alice",
-		Password:     "existing-password",
-		Status:       true,
-		Remark:       "before",
-		MaxTunnelNum: 3,
-		ExpireTime:   "2026-01-01 00:00:00",
-		CreateTime:   "2025-01-01 00:00:00",
+		Id:               7,
+		UserName:         "alice",
+		Password:         "existing-password",
+		APIKeyHash:       "api-hash",
+		DashboardKeyHash: "dashboard-hash",
+		Status:           true,
+		Remark:           "before",
+		MaxTunnelNum:     3,
+		ExpireTime:       "2026-01-01 00:00:00",
+		CreateTime:       "2025-01-01 00:00:00",
 	}
 
 	updated := newUserUpdateCandidate(existing, "alice-updated", "", "after", 0, 6, "2027-01-01 00:00:00")
@@ -74,6 +80,9 @@ func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 	}
 	if updated.Password != "existing-password" {
 		t.Fatalf("blank password should preserve the existing credential, got %q", updated.Password)
+	}
+	if updated.APIKeyHash != "api-hash" || updated.DashboardKeyHash != "dashboard-hash" {
+		t.Fatalf("credential hashes were not preserved: api=%q dashboard=%q", updated.APIKeyHash, updated.DashboardKeyHash)
 	}
 	if existing.UserName != "alice" || existing.Remark != "before" || existing.MaxTunnelNum != 3 {
 		t.Fatalf("building an update candidate mutated the existing user: %#v", existing)

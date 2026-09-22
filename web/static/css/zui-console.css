@@ -3122,6 +3122,32 @@ body.zui-app .nav-sidebar-footer .nav-account--button:focus-visible {
     color: var(--nps-sidebar-ink);
     background: var(--nps-sidebar-hover);
 }
+body.zui-app .nav-sidebar-footer .nav-account-tool {
+    display: flex;
+    width: calc(100% - 36px);
+    align-items: center;
+    gap: 7px;
+    margin: 0 18px 10px;
+    padding: 7px 10px;
+    border: 1px solid rgba(142,184,255,.22);
+    border-radius: 7px;
+    background: rgba(255,255,255,.04);
+    color: var(--nps-sidebar-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 11px;
+    text-align: left;
+}
+body.zui-app .nav-sidebar-footer .nav-account-tool:hover,
+body.zui-app .nav-sidebar-footer .nav-account-tool:focus-visible {
+    color: var(--nps-sidebar-ink);
+    border-color: #8eb8ff;
+    background: rgba(142,184,255,.10);
+    outline: none;
+}
+body.zui-app .credential-result .input-group { display: flex; gap: 8px; }
+body.zui-app .credential-result .input-group .form-control { min-width: 0; flex: 1; }
+body.zui-app .credential-result .input-group .btn { flex: none; }
 body.zui-app .nav-sidebar-footer .nav-account--button:focus-visible {
     outline: 2px solid #9ec1ff;
     outline-offset: 2px;
