@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.19</sub>
+﻿# NPS <sub>v1.1.20</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -194,6 +194,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.20** (2026-09-22) - 大屏快捷密钥加密持久化，授权账号刷新后可再次查看；用户 API Token 操作移入状态列
 - **v1.1.19** (2026-09-22) - 增加普通用户 API Token 自助生成/撤销，以及管理员和普通用户隔离的只读大屏快捷地址
 - **v1.1.17** (2026-09-21) - 增加 Linux GUI 依赖下载与 Wails 构建重试，修复正式发布偶发失败
 - **v1.1.16** (2026-09-21) - 新增操作审计日志、按用户隔离的 API 令牌，以及带响应头安全处理的现代 Host 代理能力

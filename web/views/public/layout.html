@@ -269,10 +269,10 @@
                 <button type="button" class="nps-modal-close" data-dismiss="modal" aria-label="关闭"><i class="fa fa-times" aria-hidden="true"></i></button>
             </div>
             <div class="modal-body">
-                <p class="nps-password-modal__account"><span data-i18n-zh="当前状态" data-i18n-en="Current status">当前状态</span><strong id="dashboard-key-status">读取中…</strong></p>
-                <p class="help-block" data-i18n-zh="大屏密钥只读当前账号可见资源，不具备管理权限。密钥可设置为永不过期，但可随时撤销。请仅在可信环境中使用快捷地址。" data-i18n-en="This read-only key exposes only the current account's resources and has no management privileges. It may never expire, but can be revoked at any time.">大屏密钥只读当前账号可见资源，不具备管理权限。密钥可设置为永不过期，但可随时撤销。请仅在可信环境中使用快捷地址。</p>
-                <div class="form-group"><label class="form-label" for="dashboard-custom-key" data-i18n-zh="自定义密钥（可选）" data-i18n-en="Custom key (optional)">自定义密钥（可选）</label><input id="dashboard-custom-key" class="form-control" type="text" maxlength="128" placeholder="至少 16 位字母、数字、下划线或连字符"><small class="help-block" data-i18n-zh="留空自动生成。自定义密钥不会以明文保存。" data-i18n-en="Leave blank to generate one. The custom key is never stored in plaintext.">留空自动生成。自定义密钥不会以明文保存。</small></div>
-                <div id="dashboard-key-result" class="credential-result" hidden><label class="form-label" for="dashboard-key-value" data-i18n-zh="大屏快捷地址（只显示本次生成结果）" data-i18n-en="Dashboard shortcut (shown only now)">大屏快捷地址（只显示本次生成结果）</label><div class="input-group"><input id="dashboard-key-value" class="form-control" type="text" readonly><button id="dashboard-key-copy" type="button" class="btn btn-outline btn-primary" title="复制快捷地址" aria-label="复制快捷地址"><i class="fa fa-copy" aria-hidden="true"></i></button><button id="dashboard-key-open" type="button" class="btn btn-primary" title="打开大屏" aria-label="打开大屏"><i class="fa fa-external-link" aria-hidden="true"></i></button></div><label class="form-label" for="dashboard-key-raw" data-i18n-zh="本次密钥" data-i18n-en="Key">本次密钥</label><input id="dashboard-key-raw" class="form-control" type="text" readonly></div>
+                <p class="nps-password-modal__account dashboard-key-status-row"><span data-i18n-zh="当前状态" data-i18n-en="Current status">当前状态</span><strong id="dashboard-key-status">读取中…</strong><button id="dashboard-key-open-status" type="button" class="btn btn-outline btn-primary btn-xs" title="打开大屏" aria-label="打开大屏" hidden><i class="fa fa-external-link" aria-hidden="true"></i><span data-i18n-zh="打开大屏" data-i18n-en="Open dashboard">打开大屏</span></button></p>
+                <p class="help-block" data-i18n-zh="大屏密钥只读当前账号可见资源，不具备管理权限。密钥会加密保存，当前账号登录后可再次查看和打开；重新生成会立即使旧地址失效。请仅在可信环境中使用快捷地址。" data-i18n-en="This read-only key exposes only the current account's resources and has no management privileges. It is encrypted at rest and can be viewed or opened again after signing in; rotating it immediately invalidates the old address.">大屏密钥只读当前账号可见资源，不具备管理权限。密钥会加密保存，当前账号登录后可再次查看和打开；重新生成会立即使旧地址失效。请仅在可信环境中使用快捷地址。</p>
+                <div class="form-group"><label class="form-label" for="dashboard-custom-key" data-i18n-zh="自定义密钥（可选）" data-i18n-en="Custom key (optional)">自定义密钥（可选）</label><input id="dashboard-custom-key" class="form-control" type="text" maxlength="128" placeholder="至少 16 位字母、数字、下划线或连字符"><small class="help-block" data-i18n-zh="留空自动生成。密钥会以加密形式保存，仅当前已授权账号可以再次查看。" data-i18n-en="Leave blank to generate one. The key is encrypted at rest and can be viewed again only by the authorized account.">留空自动生成。密钥会以加密形式保存，仅当前已授权账号可以再次查看。</small></div>
+                <div id="dashboard-key-result" class="credential-result" hidden><label class="form-label" for="dashboard-key-value" data-i18n-zh="大屏快捷地址" data-i18n-en="Dashboard shortcut">大屏快捷地址</label><div class="input-group"><input id="dashboard-key-value" class="form-control" type="text" readonly><button id="dashboard-key-copy" type="button" class="btn btn-outline btn-primary" title="复制快捷地址" aria-label="复制快捷地址"><i class="fa fa-copy" aria-hidden="true"></i></button><button id="dashboard-key-open" type="button" class="btn btn-primary" title="打开大屏" aria-label="打开大屏"><i class="fa fa-external-link" aria-hidden="true"></i></button></div><label class="form-label" for="dashboard-key-raw" data-i18n-zh="大屏密钥" data-i18n-en="Dashboard key">大屏密钥</label><input id="dashboard-key-raw" class="form-control" type="text" readonly></div>
             </div>
             <div class="modal-footer"><button type="button" class="btn btn-outline btn-danger" id="dashboard-key-revoke" data-i18n-zh="撤销密钥" data-i18n-en="Revoke key">撤销密钥</button><button type="button" class="btn btn-primary" id="dashboard-key-generate" data-i18n-zh="生成快捷地址" data-i18n-en="Generate shortcut">生成快捷地址</button></div>
         </div>
@@ -301,11 +301,25 @@
         }
         var dashboardModal = document.getElementById('dashboard-access-modal');
         if (dashboardModal) {
-            $.get((window.nps.web_base_url || '') + '/overview/accesskey', function (response) { setText('dashboard-key-status', response && response.enabled ? (npsIsEnglish() ? 'Enabled (rotate to view)' : '已启用（重新生成后查看）') : (npsIsEnglish() ? 'Not generated' : '未生成')); }, 'json');
-            $('#dashboard-key-generate').on('click', function () { var button = this; button.disabled = true; post('/overview/accesskey', { key: $('#dashboard-custom-key').val() }).done(function (response) { if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : '生成失败'); $('#dashboard-key-value').val(response.url || ''); $('#dashboard-key-raw').val(response.key || ''); $('#dashboard-key-result').prop('hidden', false); setText('dashboard-key-status', npsIsEnglish() ? 'Enabled (rotate to view)' : '已启用（重新生成后查看）'); npsNotify('success', response.msg || '快捷地址已生成'); }).always(function () { button.disabled = false; }); });
-            $('#dashboard-key-revoke').on('click', function () { var button = this; button.disabled = true; post('/overview/accesskey/revoke').done(function (response) { if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : '撤销失败'); $('#dashboard-key-result').prop('hidden', true); $('#dashboard-key-value').val(''); $('#dashboard-key-raw').val(''); setText('dashboard-key-status', npsIsEnglish() ? 'Not generated' : '未生成'); npsNotify('success', response.msg || '大屏密钥已撤销'); }).always(function () { button.disabled = false; }); });
+            var dashboardKeyURL = '';
+            function setDashboardCredential(response) {
+                var enabled = Boolean(response && response.enabled);
+                var key = response && response.key ? response.key : '';
+                var url = response && response.url ? response.url : '';
+                dashboardKeyURL = url;
+                $('#dashboard-key-value').val(url);
+                $('#dashboard-key-raw').val(key);
+                $('#dashboard-key-result').prop('hidden', !key || !url);
+                $('#dashboard-key-open-status').prop('hidden', !url);
+                setText('dashboard-key-status', enabled ? (npsIsEnglish() ? 'Enabled' : '已启用') : (npsIsEnglish() ? 'Not generated' : '未生成'));
+            }
+            function openDashboard() { if (dashboardKeyURL) window.open(dashboardKeyURL, '_blank', 'noopener,noreferrer'); }
+            $.get((window.nps.web_base_url || '') + '/overview/accesskey', function (response) { setDashboardCredential(response); }, 'json');
+            $('#dashboard-key-generate').on('click', function () { var button = this; button.disabled = true; post('/overview/accesskey', { key: $('#dashboard-custom-key').val() }).done(function (response) { if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : '生成失败'); setDashboardCredential(response); npsNotify('success', response.msg || '快捷地址已生成'); }).always(function () { button.disabled = false; }); });
+            $('#dashboard-key-revoke').on('click', function () { var button = this; button.disabled = true; post('/overview/accesskey/revoke').done(function (response) { if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : '撤销失败'); setDashboardCredential({ enabled: false }); npsNotify('success', response.msg || '大屏密钥已撤销'); }).always(function () { button.disabled = false; }); });
             $('#dashboard-key-copy').on('click', function () { npsCopyText($('#dashboard-key-value').val(), npsIsEnglish() ? 'Shortcut copied' : '快捷地址已复制'); });
-            $('#dashboard-key-open').on('click', function () { var url = $('#dashboard-key-value').val(); if (url) window.open(url, '_blank', 'noopener,noreferrer'); });
+            $('#dashboard-key-open').on('click', openDashboard);
+            $('#dashboard-key-open-status').on('click', openDashboard);
         }
     }());
 

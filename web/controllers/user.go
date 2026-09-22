@@ -105,20 +105,21 @@ func parseUserStatus(value string) (bool, error) {
 
 func newUserUpdateCandidate(existing *file.User, username, password, remark string, maxClientNum, maxTunnelNum int, expireTime string) *file.User {
 	existing.RLock()
-	id, existingPassword, existingAPIKeyHash, existingDashboardKeyHash, status, createTime := existing.Id, existing.Password, existing.APIKeyHash, existing.DashboardKeyHash, existing.Status, existing.CreateTime
+	id, existingPassword, existingAPIKeyHash, existingDashboardKeyHash, existingDashboardKeyCiphertext, status, createTime := existing.Id, existing.Password, existing.APIKeyHash, existing.DashboardKeyHash, existing.DashboardKeyCiphertext, existing.Status, existing.CreateTime
 	existing.RUnlock()
 	updated := &file.User{
-		Id:               id,
-		UserName:         username,
-		Password:         existingPassword,
-		APIKeyHash:       existingAPIKeyHash,
-		DashboardKeyHash: existingDashboardKeyHash,
-		Status:           status,
-		Remark:           remark,
-		MaxClientNum:     maxClientNum,
-		MaxTunnelNum:     maxTunnelNum,
-		ExpireTime:       expireTime,
-		CreateTime:       createTime,
+		Id:                     id,
+		UserName:               username,
+		Password:               existingPassword,
+		APIKeyHash:             existingAPIKeyHash,
+		DashboardKeyHash:       existingDashboardKeyHash,
+		DashboardKeyCiphertext: existingDashboardKeyCiphertext,
+		Status:                 status,
+		Remark:                 remark,
+		MaxClientNum:           maxClientNum,
+		MaxTunnelNum:           maxTunnelNum,
+		ExpireTime:             expireTime,
+		CreateTime:             createTime,
 	}
 	if password != "" {
 		updated.Password = password
@@ -402,7 +403,7 @@ func (s *UserController) ChangePassword() {
 
 	user.RLock()
 	username, currentPassword, status, remark := user.UserName, user.Password, user.Status, user.Remark
-	maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash, dashboardKeyHash := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash, user.DashboardKeyHash
+	maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash, dashboardKeyHash, dashboardKeyCiphertext := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash, user.DashboardKeyHash, user.DashboardKeyCiphertext
 	user.RUnlock()
 	if !s.IsAdmin() {
 		current := s.GetString("current_password")
@@ -416,17 +417,18 @@ func (s *UserController) ChangePassword() {
 	}
 
 	updated := &file.User{
-		Id:               targetID,
-		UserName:         username,
-		Password:         newPassword,
-		APIKeyHash:       apiKeyHash,
-		DashboardKeyHash: dashboardKeyHash,
-		Status:           status,
-		Remark:           remark,
-		MaxClientNum:     maxClientNum,
-		MaxTunnelNum:     maxTunnelNum,
-		ExpireTime:       expireTime,
-		CreateTime:       createTime,
+		Id:                     targetID,
+		UserName:               username,
+		Password:               newPassword,
+		APIKeyHash:             apiKeyHash,
+		DashboardKeyHash:       dashboardKeyHash,
+		DashboardKeyCiphertext: dashboardKeyCiphertext,
+		Status:                 status,
+		Remark:                 remark,
+		MaxClientNum:           maxClientNum,
+		MaxTunnelNum:           maxTunnelNum,
+		ExpireTime:             expireTime,
+		CreateTime:             createTime,
 	}
 	if err := file.GetDb().UpdateUser(updated); err != nil {
 		s.AjaxErr(err.Error())

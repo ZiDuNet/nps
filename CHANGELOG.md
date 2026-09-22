@@ -2,6 +2,14 @@
 
 所有重要变更记录在此。
 
+## [1.1.20] - 2026-09-22
+
+### Changed
+
+- Persisted resource-topology shortcut keys as authenticated encrypted ciphertext so authorized accounts can view and reopen them after refreshing the console.
+- Moved administrator API token generation, rotation, and revocation controls into the API Token status column; the Actions column now contains only account state, edit, and delete controls.
+- Narrowed user-list client and tunnel count columns for compact three-digit values.
+
 ## [1.1.19] - 2026-09-22
 
 ### Added

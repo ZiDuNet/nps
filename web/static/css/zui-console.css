@@ -2951,6 +2951,31 @@ body.zui-app .nav-sidebar-footer .nav-account {
 body.zui-app .nav-sidebar-footer .nav-logout-link {
     margin: 0 7px !important;
 }
+body.zui-app .user-token-cell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+body.zui-app .user-token-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+body.zui-app .user-token-actions .btn {
+    min-width: 28px;
+    padding: 3px 6px;
+}
+body.zui-app .dashboard-key-status-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+body.zui-app .dashboard-key-status-row strong {
+    margin-right: 2px;
+}
 @media (max-width: 991px) {
     body.zui-app .nav-sidebar-footer {
         padding-top: 18px !important;

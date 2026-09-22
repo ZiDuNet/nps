@@ -155,6 +155,7 @@ func (s *GlobalController) Save() {
 	if current := file.GetDb().GetGlobal(); current != nil {
 		current.RLock()
 		t.DashboardKeyHash = current.DashboardKeyHash
+		t.DashboardKeyCiphertext = current.DashboardKeyCiphertext
 		current.RUnlock()
 	}
 

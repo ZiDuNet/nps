@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.19</sub>
+﻿# NPS <sub>v1.1.20</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -179,6 +179,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.20** (2026-09-22) - Persisted encrypted dashboard shortcut keys for authorized re-viewing and moved user API token controls into the status column
 - **v1.1.19** (2026-09-22) - Added self-service user API tokens, revocation, and scoped read-only resource topology shortcut keys for administrators and users
 - **v1.1.17** (2026-09-21) - Improved release reliability with retried Linux GUI dependency downloads and Wails builds
 - **v1.1.16** (2026-09-21) - Added operation audit logs, scoped per-user API tokens, and modern Host proxy options with bounded response-header rewriting

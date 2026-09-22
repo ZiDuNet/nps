@@ -1,11 +1,17 @@
 package controllers
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"ehang.io/nps/lib/file"
+	"github.com/astaxie/beego"
+	beecontext "github.com/astaxie/beego/context"
 )
 
 func TestDashboardAccessKeyGenerationAndValidation(t *testing.T) {
@@ -21,6 +27,106 @@ func TestDashboardAccessKeyGenerationAndValidation(t *testing.T) {
 	}
 	if _, _, err := generateDashboardAccessKey("too-short"); err == nil {
 		t.Fatal("short custom dashboard key was accepted")
+	}
+}
+
+func TestDashboardAccessKeyEncryptionRoundTrip(t *testing.T) {
+	previousCryptKey := beego.AppConfig.String("auth_crypt_key")
+	previousAuthKey := beego.AppConfig.String("auth_key")
+	beego.AppConfig.Set("auth_crypt_key", "dashboard-test-crypt-key")
+	beego.AppConfig.Set("auth_key", "dashboard-test-auth-key")
+	t.Cleanup(func() {
+		beego.AppConfig.Set("auth_crypt_key", previousCryptKey)
+		beego.AppConfig.Set("auth_key", previousAuthKey)
+	})
+
+	key := dashboardAccessKeyPrefix + "encrypted-test-key-123456"
+	ciphertext, err := encryptDashboardAccessKey(key)
+	if err != nil {
+		t.Fatalf("encryptDashboardAccessKey: %v", err)
+	}
+	if ciphertext == "" || strings.Contains(ciphertext, key) {
+		t.Fatalf("encrypted dashboard key leaked plaintext: %q", ciphertext)
+	}
+	decrypted, err := decryptDashboardAccessKey(ciphertext)
+	if err != nil {
+		t.Fatalf("decryptDashboardAccessKey: %v", err)
+	}
+	if decrypted != key {
+		t.Fatalf("decrypted dashboard key = %q, want %q", decrypted, key)
+	}
+
+	beego.AppConfig.Set("auth_crypt_key", "rotated-dashboard-test-key")
+	if _, err := decryptDashboardAccessKey(ciphertext); err == nil {
+		t.Fatal("dashboard key decrypted with a different encryption key")
+	}
+}
+
+func newDashboardAccessController(t *testing.T, method string, action string, form url.Values, sessionValues map[interface{}]interface{}) (*DashboardAccessController, *httptest.ResponseRecorder) {
+	t.Helper()
+	request := httptest.NewRequest(method, "http://console.test/overview/accesskey", strings.NewReader(form.Encode()))
+	request.Host = "console.test"
+	request.Header.Set("Origin", "http://console.test")
+	if len(form) > 0 {
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	recorder := httptest.NewRecorder()
+	ctx := beecontext.NewContext()
+	ctx.Reset(recorder, request)
+	controller := &DashboardAccessController{}
+	controller.Init(ctx, "DashboardAccessController", action, controller)
+	session := &clientPermissionSession{values: sessionValues}
+	controller.CruSession = session
+	ctx.Input.CruSession = session
+	return controller, recorder
+}
+
+func readDashboardAccessResponse(t *testing.T, recorder *httptest.ResponseRecorder) map[string]interface{} {
+	t.Helper()
+	var response map[string]interface{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode dashboard access response %q: %v", recorder.Body.String(), err)
+	}
+	return response
+}
+
+func TestDashboardAccessStatusRestoresEncryptedCredential(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	previousWebBaseURL := beego.AppConfig.String("web_base_url")
+	previousCryptKey := beego.AppConfig.String("auth_crypt_key")
+	previousAuthKey := beego.AppConfig.String("auth_key")
+	beego.AppConfig.Set("web_base_url", "http://console.test")
+	beego.AppConfig.Set("auth_crypt_key", "dashboard-controller-crypt-key")
+	beego.AppConfig.Set("auth_key", "dashboard-controller-auth-key")
+	t.Cleanup(func() {
+		beego.AppConfig.Set("web_base_url", previousWebBaseURL)
+		beego.AppConfig.Set("auth_crypt_key", previousCryptKey)
+		beego.AppConfig.Set("auth_key", previousAuthKey)
+	})
+
+	session := map[interface{}]interface{}{"auth": true, "isAdmin": true}
+	generate, recorder := newDashboardAccessController(t, http.MethodPost, "Generate", url.Values{"key": {"persisted-dashboard-key-123456"}}, session)
+	runClientPermissionAction(t, generate.Generate)
+	generated := readDashboardAccessResponse(t, recorder)
+	key, _ := generated["key"].(string)
+	shortcut, _ := generated["url"].(string)
+	if generated["status"] != float64(1) || key == "" || shortcut == "" {
+		t.Fatalf("dashboard key generation response = %#v", generated)
+	}
+
+	status, recorder := newDashboardAccessController(t, http.MethodGet, "Status", nil, session)
+	runClientPermissionAction(t, status.Status)
+	restored := readDashboardAccessResponse(t, recorder)
+	if restored["enabled"] != true || restored["key"] != key || restored["url"] != shortcut {
+		t.Fatalf("dashboard key status did not restore encrypted credential = %#v", restored)
+	}
+
+	global := db.GetGlobal()
+	global.RLock()
+	ciphertext := global.DashboardKeyCiphertext
+	global.RUnlock()
+	if ciphertext == "" || strings.Contains(ciphertext, key) {
+		t.Fatalf("dashboard key ciphertext leaked plaintext: %q", ciphertext)
 	}
 }
 

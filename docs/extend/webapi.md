@@ -178,7 +178,7 @@ GET /user/apikeystatus/
 | `POST` | `/overview/accesskey/` | 生成或重新生成密钥；可选提交 `key` 自定义密钥，响应只显示一次 `key` 与 `url` |
 | `POST` | `/overview/accesskey/revoke/` | 撤销当前账号大屏密钥 |
 
-`url` 是带 `#access_key=...` 片段的快捷地址。大屏数据接口 `/overview/data/` 只接受当前登录会话或 `Authorization: Bearer npsd_...`，并按密钥所属账号实时过滤资源。
+`url` 是带 `#access_key=...` 片段的快捷地址；生成后和之后已授权的状态查询都会返回 `key` 与 `url`，但只返回给当前管理员或当前普通用户。大屏数据接口 `/overview/data/` 只接受当前登录会话或 `Authorization: Bearer npsd_...`，并按密钥所属账号实时过滤资源。
 
 ### 用户列表
 

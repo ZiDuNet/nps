@@ -49,9 +49,9 @@
             { field: 'Id', title: 'ID', halign: 'center', class: 'user-list__id', width: '56px' },
             { field: 'UserName', title: '<span data-i18n-zh="用户名" data-i18n-en="Username">用户名</span>', halign: 'center', escape: true },
             { field: 'Remark', title: '<span data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', halign: 'center', escape: true },
-            { field: 'ClientCount', title: '<span data-i18n-zh="客户端数" data-i18n-en="Clients">客户端数</span>', align: 'center', halign: 'center', formatter: function(value) { return userTableText(Number(value) || 0); } },
+            { field: 'ClientCount', title: '<span data-i18n-zh="客户端数" data-i18n-en="Clients">客户端数</span>', align: 'center', halign: 'center', width: '72px', formatter: function(value) { return userTableText(Number(value) || 0); } },
             { field: 'MaxClientNum', title: '<span data-i18n-zh="客户端上限" data-i18n-en="Client limit">客户端上限</span>', halign: 'center', formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedQuotaText()); } },
-            { field: 'TunnelCount', title: '<span data-i18n-zh="隧道数" data-i18n-en="Tunnels">隧道数</span>', align: 'center', halign: 'center', formatter: function(value) { return userTableText(Number(value) || 0); } },
+            { field: 'TunnelCount', title: '<span data-i18n-zh="隧道数" data-i18n-en="Tunnels">隧道数</span>', align: 'center', halign: 'center', width: '72px', formatter: function(value) { return userTableText(Number(value) || 0); } },
             { field: 'MaxTunnelNum', title: '<span data-i18n-zh="总隧道上限" data-i18n-en="Tunnel limit">总隧道上限</span>', halign: 'center', formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedQuotaText()); } },
             { field: 'ExpireTime', title: '<span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span>', halign: 'center', formatter: function(value) { return userTableText(value || userUnlimitedText()); } },
             {
@@ -70,10 +70,17 @@
                 title: '<span data-i18n-zh="API Token" data-i18n-en="API token">API Token</span>',
                 align: 'center',
                 halign: 'center',
-                formatter: function(value) {
-                    return value
+                formatter: function(value, row) {
+                    var userId = Number(row && row.Id);
+                    if (!isFinite(userId) || Math.floor(userId) !== userId || userId <= 0) return '';
+                    var status = value
                         ? '<span class="badge badge-primary">' + (npsIsEnglish() ? 'Enabled' : '已启用') + '</span>'
                         : '<span class="badge badge-default">' + (npsIsEnglish() ? 'Not set' : '未配置') + '</span>';
+                    var actions = '<span class="user-token-actions">';
+                    actions += '<button type="button" onclick="regenerateUserAPIKey(' + userId + ')" class="btn btn-outline btn-info btn-xs" title="' + (npsIsEnglish() ? 'Rotate API key' : (value ? '重新生成 API 密钥' : '生成 API 密钥')) + '" aria-label="' + (npsIsEnglish() ? 'Rotate API key' : (value ? '重新生成 API 密钥' : '生成 API 密钥')) + '"><i class="fa fa-key" aria-hidden="true"></i></button>';
+                    if (value) actions += '<button type="button" onclick="revokeUserAPIKey(' + userId + ')" class="btn btn-outline btn-warning btn-xs" title="' + (npsIsEnglish() ? 'Revoke API key' : '撤销 API 密钥') + '" aria-label="' + (npsIsEnglish() ? 'Revoke API key' : '撤销 API 密钥') + '"><i class="fa fa-unlink" aria-hidden="true"></i></button>';
+                    actions += '</span>';
+                    return '<div class="user-token-cell">' + status + actions + '</div>';
                 }
             },
             {
@@ -82,7 +89,7 @@
                 align: 'center',
                 halign: 'center',
                 class: 'user-list__actions',
-                width: '205px',
+                width: '132px',
                 formatter: function(value, row) {
                     var userId = Number(row.Id);
                     if (!isFinite(userId) || Math.floor(userId) !== userId || userId <= 0) return '';
@@ -92,8 +99,6 @@
                     } else {
                         btn += '<button type="button" onclick="submitform(\'start\', \'{{.web_base_url}}/user/changestatus\', {\'id\':' + userId + ', \'status\': 1})" class="btn btn-outline btn-primary" title="' + (npsIsEnglish() ? 'Enable user' : '启用用户') + '" aria-label="' + (npsIsEnglish() ? 'Enable user' : '启用用户') + '"><i class="fa fa-play" aria-hidden="true"></i></button>';
                     }
-                    btn += '<button type="button" onclick="regenerateUserAPIKey(' + userId + ')" class="btn btn-outline btn-info" title="' + (npsIsEnglish() ? 'Rotate API key' : '生成用户 API 密钥') + '" aria-label="' + (npsIsEnglish() ? 'Rotate API key' : '生成用户 API 密钥') + '"><i class="fa fa-key" aria-hidden="true"></i></button>';
-                    if (row.APIKeyEnabled) btn += '<button type="button" onclick="revokeUserAPIKey(' + userId + ')" class="btn btn-outline btn-warning" title="' + (npsIsEnglish() ? 'Revoke API key' : '撤销 API 密钥') + '" aria-label="' + (npsIsEnglish() ? 'Revoke API key' : '撤销 API 密钥') + '"><i class="fa fa-unlink" aria-hidden="true"></i></button>';
                     btn += '<a href="{{.web_base_url}}/user/edit?id=' + userId + '" class="btn btn-outline btn-success" title="' + (npsIsEnglish() ? 'Edit user' : '编辑用户') + '" aria-label="' + (npsIsEnglish() ? 'Edit user' : '编辑用户') + '"><i class="fa fa-edit" aria-hidden="true"></i></a>';
                     btn += '<button type="button" onclick="submitform(\'delete\', \'{{.web_base_url}}/user/del\', {\'id\':' + userId + '})" class="btn btn-outline btn-danger" title="' + (npsIsEnglish() ? 'Delete user' : '删除用户') + '" aria-label="' + (npsIsEnglish() ? 'Delete user' : '删除用户') + '"><i class="fa fa-trash" aria-hidden="true"></i></button>';
                     btn += '</div>';

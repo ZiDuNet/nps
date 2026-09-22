@@ -212,10 +212,12 @@ type User struct {
 	Password   string
 	APIKeyHash string `json:"api_key_hash,omitempty"`
 	// DashboardKeyHash stores only the SHA-256 digest of the read-only
-	// resource topology credential. The raw key is returned once at creation.
-	DashboardKeyHash string `json:"dashboard_key_hash,omitempty"`
-	Status           bool
-	Remark           string
+	// resource topology credential. DashboardKeyCiphertext stores the same
+	// credential encrypted at rest for authorized owners who need to reopen it.
+	DashboardKeyHash       string `json:"dashboard_key_hash,omitempty"`
+	DashboardKeyCiphertext string `json:"dashboard_key_ciphertext,omitempty"`
+	Status                 bool
+	Remark                 string
 	// MaxClientNum limits the number of clients owned by this user. A zero
 	// value intentionally means unlimited so records written by older NPS
 	// versions remain compatible when decoded from JSON.
@@ -535,6 +537,7 @@ type Glob struct {
 	ServerUrl       string
 	PlatformDomains []PlatformDomain
 	// DashboardKeyHash is the administrator's read-only topology credential.
-	DashboardKeyHash string `json:"dashboard_key_hash,omitempty"`
+	DashboardKeyHash       string `json:"dashboard_key_hash,omitempty"`
+	DashboardKeyCiphertext string `json:"dashboard_key_ciphertext,omitempty"`
 	sync.RWMutex
 }

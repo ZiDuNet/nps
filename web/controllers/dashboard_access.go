@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -57,6 +59,70 @@ func validDashboardAccessKey(storedHash, key string) bool {
 	}
 	want := hashDashboardAccessKey(key)
 	return subtle.ConstantTimeCompare([]byte(storedHash), []byte(want)) == 1
+}
+
+func dashboardEncryptionKey() ([]byte, error) {
+	secret := strings.TrimSpace(beego.AppConfig.String("auth_crypt_key"))
+	if secret == "" {
+		secret = strings.TrimSpace(beego.AppConfig.String("auth_key"))
+	}
+	if secret == "" {
+		return nil, errors.New("未配置大屏密钥加密主密钥")
+	}
+	sum := sha256.Sum256([]byte("nps-dashboard-key-v1:" + secret))
+	return sum[:], nil
+}
+
+func encryptDashboardAccessKey(key string) (string, error) {
+	encryptionKey, err := dashboardEncryptionKey()
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(encryptionKey)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	sealed := gcm.Seal(nil, nonce, []byte(key), nil)
+	payload := append(nonce, sealed...)
+	return base64.RawStdEncoding.EncodeToString(payload), nil
+}
+
+func decryptDashboardAccessKey(ciphertext string) (string, error) {
+	if strings.TrimSpace(ciphertext) == "" {
+		return "", errors.New("大屏密钥未保存")
+	}
+	encryptionKey, err := dashboardEncryptionKey()
+	if err != nil {
+		return "", err
+	}
+	payload, err := base64.RawStdEncoding.DecodeString(ciphertext)
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(encryptionKey)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	if len(payload) < gcm.NonceSize() {
+		return "", errors.New("大屏密钥密文无效")
+	}
+	plain, err := gcm.Open(nil, payload[:gcm.NonceSize()], payload[gcm.NonceSize():], nil)
+	if err != nil {
+		return "", err
+	}
+	return string(plain), nil
 }
 
 func lookupDashboardAccessKey(key string) (dashboardPrincipal, bool) {
@@ -131,18 +197,28 @@ func (s *DashboardAccessController) Status() {
 		return
 	}
 	enabled := false
+	ciphertext := ""
 	if isAdmin {
 		if global := file.GetDb().GetGlobal(); global != nil {
 			global.RLock()
 			enabled = strings.TrimSpace(global.DashboardKeyHash) != ""
+			ciphertext = global.DashboardKeyCiphertext
 			global.RUnlock()
 		}
 	} else if user, getErr := file.GetDb().GetUser(userID); getErr == nil && user != nil {
 		user.RLock()
 		enabled = strings.TrimSpace(user.DashboardKeyHash) != ""
+		ciphertext = user.DashboardKeyCiphertext
 		user.RUnlock()
 	}
-	s.Data["json"] = map[string]interface{}{"status": 1, "enabled": enabled, "masked": maskedDashboardAccessKey(enabled)}
+	response := map[string]interface{}{"status": 1, "enabled": enabled, "masked": maskedDashboardAccessKey(enabled)}
+	if enabled {
+		if key, decryptErr := decryptDashboardAccessKey(ciphertext); decryptErr == nil && validDashboardAccessKey(fileDashboardKeyHash(isAdmin, userID), key) {
+			response["key"] = key
+			response["url"] = dashboardAccessURL(key)
+		}
+	}
+	s.Data["json"] = response
 	s.ServeJSON()
 	s.StopRun()
 }
@@ -152,6 +228,26 @@ func maskedDashboardAccessKey(enabled bool) string {
 		return ""
 	}
 	return dashboardAccessKeyPrefix + "••••••••"
+}
+
+func fileDashboardKeyHash(isAdmin bool, userID int) string {
+	if isAdmin {
+		if global := file.GetDb().GetGlobal(); global != nil {
+			global.RLock()
+			hash := global.DashboardKeyHash
+			global.RUnlock()
+			return hash
+		}
+		return ""
+	}
+	user, err := file.GetDb().GetUser(userID)
+	if err != nil || user == nil {
+		return ""
+	}
+	user.RLock()
+	hash := user.DashboardKeyHash
+	user.RUnlock()
+	return hash
 }
 
 func (s *DashboardAccessController) Generate() {
@@ -168,8 +264,13 @@ func (s *DashboardAccessController) Generate() {
 		s.AjaxErr(err.Error())
 		return
 	}
+	ciphertext, err := encryptDashboardAccessKey(key)
+	if err != nil {
+		s.AjaxErr("大屏密钥加密失败，请检查 auth_key 或 auth_crypt_key 配置")
+		return
+	}
 	if isAdmin {
-		if err := file.GetDb().SetGlobalDashboardKeyHash(hash); err != nil {
+		if err := file.GetDb().SetGlobalDashboardKey(hash, ciphertext); err != nil {
 			s.AjaxErr("大屏密钥保存失败")
 			return
 		}
@@ -182,6 +283,7 @@ func (s *DashboardAccessController) Generate() {
 		}
 		user.Lock()
 		user.DashboardKeyHash = hash
+		user.DashboardKeyCiphertext = ciphertext
 		user.Unlock()
 		file.GetDb().JsonDb.StoreUsersToJsonFile()
 		s.auditMutation("dashboard.key_rotate", "dashboard", userID, userID, "", nil, nil)
@@ -206,7 +308,7 @@ func (s *DashboardAccessController) Revoke() {
 		return
 	}
 	if isAdmin {
-		if err := file.GetDb().SetGlobalDashboardKeyHash(""); err != nil {
+		if err := file.GetDb().SetGlobalDashboardKey("", ""); err != nil {
 			s.AjaxErr("大屏密钥撤销失败")
 			return
 		}
@@ -219,6 +321,7 @@ func (s *DashboardAccessController) Revoke() {
 		}
 		user.Lock()
 		user.DashboardKeyHash = ""
+		user.DashboardKeyCiphertext = ""
 		user.Unlock()
 		file.GetDb().JsonDb.StoreUsersToJsonFile()
 		s.auditMutation("dashboard.key_revoke", "dashboard", userID, userID, "", nil, nil)
