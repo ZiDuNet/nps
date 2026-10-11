@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -138,6 +139,8 @@ func (s *WebServer) Start() error {
 		if useTLS {
 			keyPath := beego.AppConfig.String("web_key_file")
 			certPath := beego.AppConfig.String("web_cert_file")
+			keyPath = resolveWebTLSPath(keyPath)
+			certPath = resolveWebTLSPath(certPath)
 			err = server.ServeTLS(l, certPath, keyPath)
 		} else {
 			err = server.Serve(l)
@@ -152,6 +155,13 @@ func (s *WebServer) Start() error {
 		logs.Error(err)
 	}
 	return err
+}
+
+func resolveWebTLSPath(path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(common.GetRunPath(), path)
 }
 
 func configureWebSessionTLS(useTLS bool) {

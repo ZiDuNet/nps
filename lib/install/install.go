@@ -138,37 +138,49 @@ WantedBy=multi-user.target
 `
 
 func UpdateNps() {
-	UpdateNpsNew()
+	_, _ = updateNps()
 }
 
 func UpdateNpsNew() {
+	_, _ = updateNps()
+}
+
+// UpdateNpsResult updates the installed server binary and reports whether a
+// newer release was installed. The result lets callers restart an installed
+// service only after a successful replacement.
+func UpdateNpsResult() (bool, error) {
+	return updateNps()
+}
+
+func updateNps() (bool, error) {
 	latest, err := fetchLatestVersion()
 	if err != nil {
 		log.Println("获取最新版本失败：", err)
-		return
+		return false, err
 	}
 	fmt.Println("最新版本为：", latest)
 	available, err := updateAvailable(latest)
 	if err != nil {
 		log.Println("检查版本失败：", err)
-		return
+		return false, err
 	}
 	if !available {
 		fmt.Println("当前已是最新版本，无需更新")
-		return
+		return false, nil
 	}
 	tempDir := filepath.Join(common.GetAppPath(), "temp")
 	destPath, err := downloadAndUnpack("server", tempDir)
 	if err != nil {
 		log.Println("下载更新失败：", err)
-		return
+		return false, err
 	}
 	//复制文件到对应目录
 	if err := copyStaticFileReplaceNps(destPath, common.GetAppPath()); err != nil {
 		log.Println("替换服务端文件失败：", err)
-		return
+		return false, err
 	}
-	fmt.Println("更新成功，请重启服务")
+	fmt.Println("更新成功")
+	return true, nil
 }
 
 func fetchLatestVersion() (string, error) {

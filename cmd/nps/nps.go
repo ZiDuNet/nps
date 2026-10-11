@@ -204,7 +204,11 @@ func main() {
 			}
 			return
 		case "update":
-			install.UpdateNps()
+			if updated, err := install.UpdateNpsResult(); err != nil {
+				logs.Error("更新失败：", err)
+			} else if updated {
+				restartNpsService(s)
+			}
 			return
 			//default:
 			//	logs.Error("command is not support")
@@ -331,7 +335,11 @@ func inputCmd() {
 			}
 
 		case "3":
-			install.UpdateNpsNew()
+			if updated, err := install.UpdateNpsResult(); err != nil {
+				fmt.Println("更新失败：", err)
+			} else if updated {
+				restartNpsService(s)
+			}
 			break
 		case "4":
 			var statusMsg = ""
@@ -372,6 +380,29 @@ func inputCmd() {
 			}
 		}
 	}
+}
+
+// restartNpsService restarts an already installed service after a successful
+// binary update. A non-service foreground process is left untouched.
+func restartNpsService(s service.Service) {
+	if s == nil {
+		fmt.Println("未检测到已安装的 NPS 服务，请手动重启")
+		return
+	}
+	if _, err := s.Status(); err != nil {
+		fmt.Println("未检测到已安装的 NPS 服务，请手动重启")
+		return
+	}
+	if service.Platform() == "unix-systemv" {
+		if err := exec.Command("/etc/init.d/"+"Nps", "restart").Run(); err != nil {
+			fmt.Println("NPS 服务自动重启失败，请手动重启：", err)
+			return
+		}
+	} else if err := service.Control(s, "restart"); err != nil {
+		fmt.Println("NPS 服务自动重启失败，请手动重启：", err)
+		return
+	}
+	fmt.Println("NPS 服务已自动重启，新版本已生效")
 }
 
 func installNps() {

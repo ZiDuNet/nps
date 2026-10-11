@@ -430,11 +430,15 @@ func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSn
 	// A SOCKS success reply means the bridge is already available.  Sending it
 	// earlier leaves clients with a seemingly valid UDP relay that cannot carry
 	// traffic when the client is offline.
-	remoteTCPAddr, _ := c.RemoteAddr().(*net.TCPAddr)
-	serverIP := "0.0.0.0"
-	if remoteTCPAddr != nil {
-		serverIP = common.GetServerIpByClientIp(remoteTCPAddr.IP)
+	clientIP := net.IP(nil)
+	if remoteTCPAddr, ok := c.RemoteAddr().(*net.TCPAddr); ok {
+		clientIP = remoteTCPAddr.IP
 	}
+	localIP := net.IP(nil)
+	if localTCPAddr, ok := c.LocalAddr().(*net.TCPAddr); ok {
+		localIP = localTCPAddr.IP
+	}
+	serverIP := common.GetServerIpByClientIp(clientIP, localIP)
 	if err := s.sendUdpReply(c, reply, succeeded, serverIP); err != nil {
 		logs.Warn("send SOCKS5 UDP associate reply to %s: %s", c.RemoteAddr(), err)
 		return

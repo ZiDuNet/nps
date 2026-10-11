@@ -340,3 +340,18 @@ func TestWebServerTLSConfigEnablesSecureSessionCookies(t *testing.T) {
 		t.Fatal("non-TLS web mode must not mark session cookies Secure")
 	}
 }
+
+func TestResolveWebTLSPathUsesRunPathForRelativeFiles(t *testing.T) {
+	if got := resolveWebTLSPath("/etc/nps/server.crt"); got != "/etc/nps/server.crt" {
+		t.Fatalf("absolute TLS path changed to %q", got)
+	}
+	if got := resolveWebTLSPath(""); got != "" {
+		t.Fatalf("empty TLS path changed to %q", got)
+	}
+
+	got := resolveWebTLSPath("conf/server.crt")
+	want := filepath.Join(common.GetRunPath(), "conf/server.crt")
+	if got != want {
+		t.Fatalf("relative TLS path = %q, want %q", got, want)
+	}
+}

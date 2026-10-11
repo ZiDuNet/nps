@@ -5,6 +5,7 @@ import (
 	"github.com/astaxie/beego/utils/captcha"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,10 +35,21 @@ type record struct {
 	lastLoginTime     time.Time
 }
 
-func init() {
+// InitCaptcha registers the captcha route after the application configuration
+// has been loaded. This keeps captcha requests under web_base_url when the
+// panel is mounted behind a reverse proxy sub-path.
+func InitCaptcha() {
 	// use beego cache system store the captcha data
 	store := cache.NewMemoryCache()
-	cpt = captcha.NewWithFilter("/captcha/", store)
+	cpt = captcha.NewWithFilter(captchaFilterPath(beego.AppConfig.String("web_base_url")), store)
+}
+
+func captchaFilterPath(webBaseURL string) string {
+	base := strings.TrimSuffix(strings.TrimSpace(webBaseURL), "/")
+	if base != "" && !strings.HasPrefix(base, "/") {
+		base = "/" + base
+	}
+	return base + "/captcha/"
 }
 
 func (self *LoginController) Index() {

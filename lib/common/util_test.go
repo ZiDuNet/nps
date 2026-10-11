@@ -1,6 +1,9 @@
 package common
 
-import "testing"
+import (
+	"net"
+	"testing"
+)
 
 func TestInDoesNotMutateAddressList(t *testing.T) {
 	addresses := []string{"10.0.0.3", "10.0.0.1", "10.0.0.2"}
@@ -66,5 +69,13 @@ func TestIsPortRejectsOutOfRangeValues(t *testing.T) {
 	}
 	if IsPort("65536") {
 		t.Fatal("65536 must be rejected")
+	}
+}
+
+func TestGetServerIpByClientIpPrefersReachablePublicListener(t *testing.T) {
+	clientIP := net.ParseIP("198.51.100.20")
+	localIP := net.ParseIP("203.0.113.10")
+	if got := GetServerIpByClientIp(clientIP, localIP); got != localIP.String() {
+		t.Fatalf("server address = %q, want %q", got, localIP.String())
 	}
 }

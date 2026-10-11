@@ -2,6 +2,15 @@
 
 所有重要变更记录在此。
 
+## [1.1.21] - 2026-10-12
+
+### Fixed
+
+- Fixed CAPTCHA routes when the Web panel is mounted under `web_base_url` behind a reverse proxy.
+- Resolved relative Web panel TLS certificate paths from the NPS run directory for system-service launches.
+- Made SOCKS5 UDP `BND.ADDR` prefer the public listener address used by the client, with validated HTTPS fallback IP discovery.
+- Made the server updater restart an installed NPS service after a successful binary replacement.
+
 ## [1.1.20] - 2026-09-22
 
 ### Changed

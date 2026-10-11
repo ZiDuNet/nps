@@ -6,6 +6,7 @@ import (
 )
 
 func Init() {
+	controllers.InitCaptcha()
 	web_base_url := beego.AppConfig.String("web_base_url")
 	if len(web_base_url) > 0 {
 		ns := beego.NewNamespace(web_base_url,

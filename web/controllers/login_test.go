@@ -84,3 +84,24 @@ func TestRegenerateSessionWithoutManagerIsSafe(t *testing.T) {
 	var controller LoginController
 	controller.regenerateSession()
 }
+
+func TestCaptchaFilterPathFollowsWebBaseURL(t *testing.T) {
+	tests := []struct {
+		name string
+		base string
+		want string
+	}{
+		{name: "root", base: "", want: "/captcha/"},
+		{name: "subpath", base: "/nps", want: "/nps/captcha/"},
+		{name: "trailing slash", base: "/nps/", want: "/nps/captcha/"},
+		{name: "missing leading slash", base: "nps", want: "/nps/captcha/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := captchaFilterPath(tt.base); got != tt.want {
+				t.Fatalf("captchaFilterPath(%q) = %q, want %q", tt.base, got, tt.want)
+			}
+		})
+	}
+}

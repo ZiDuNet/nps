@@ -474,18 +474,38 @@ func GetExtFromPath(path string) string {
 
 var externalIp string
 
+// externalIPServices are queried in order until one returns a valid IP.
+// HTTPS endpoints are preferred because plain HTTP echo services can be
+// intercepted or cached by an ISP and return an unusable address.
+var externalIPServices = []string{
+	"https://ifconfig.me/ip",
+	"https://ipinfo.io/ip",
+	"http://v4.ipip.net",
+}
+
 func GetExternalIp() string {
 	if externalIp != "" {
 		return externalIp
 	}
-	resp, err := http.Get("http://myexternalip.com/raw")
-	if err != nil {
-		return ""
+	client := &http.Client{Timeout: 3 * time.Second}
+	for _, endpoint := range externalIPServices {
+		resp, err := client.Get(endpoint)
+		if err != nil {
+			continue
+		}
+		content, _ := ioutil.ReadAll(io.LimitReader(resp.Body, 64))
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			continue
+		}
+		ip := strings.TrimSpace(string(content))
+		if net.ParseIP(ip) == nil {
+			continue
+		}
+		externalIp = ip
+		return externalIp
 	}
-	defer resp.Body.Close()
-	content, _ := ioutil.ReadAll(resp.Body)
-	externalIp = string(content)
-	return externalIp
+	return ""
 }
 
 func GetIntranetIp() (error, string) {
@@ -631,12 +651,15 @@ func IsPublicIP(IP net.IP) bool {
 	return false
 }
 
-func GetServerIpByClientIp(clientIp net.IP) string {
-	if IsPublicIP(clientIp) {
-		return GetExternalIp()
+func GetServerIpByClientIp(clientIp, localIp net.IP) string {
+	if !IsPublicIP(clientIp) {
+		_, ip := GetIntranetIp()
+		return ip
 	}
-	_, ip := GetIntranetIp()
-	return ip
+	if IsPublicIP(localIp) {
+		return localIp.String()
+	}
+	return GetExternalIp()
 }
 
 func PrintVersion() {
