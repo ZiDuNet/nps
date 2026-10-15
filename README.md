@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.21</sub>
+﻿# NPS <sub>v1.1.22</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -179,6 +179,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.22** (2026-10-15) - Release build for the latest upstream compatibility fixes
 - **v1.1.21** (2026-10-12) - Fixed reverse-proxy CAPTCHA paths, service-mode TLS certificate paths, SOCKS5 UDP relay address selection, and automatic service restart after server updates
 - **v1.1.20** (2026-09-22) - Persisted encrypted dashboard shortcut keys for authorized re-viewing and moved user API token controls into the status column
 - **v1.1.19** (2026-09-22) - Added self-service user API tokens, revocation, and scoped read-only resource topology shortcut keys for administrators and users

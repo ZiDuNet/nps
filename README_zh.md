@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.21</sub>
+﻿# NPS <sub>v1.1.22</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -194,6 +194,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.22** (2026-10-15) - 发布包含最新上游兼容性修复的版本
 - **v1.1.21** (2026-10-12) - 修复反向代理验证码路径、系统服务证书路径、SOCKS5 UDP 中继地址选择和服务端更新后的自动重启
 - **v1.1.20** (2026-09-22) - 大屏快捷密钥加密持久化，授权账号刷新后可再次查看；用户 API Token 操作移入状态列
 - **v1.1.19** (2026-09-22) - 增加普通用户 API Token 自助生成/撤销，以及管理员和普通用户隔离的只读大屏快捷地址
