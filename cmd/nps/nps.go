@@ -53,11 +53,6 @@ func main() {
 		common.PrintVersion()
 		return
 	}
-	if *serverCmd {
-		printSlogan()
-		inputCmd()
-		return
-	}
 
 	var logPath string
 	// *confPath why get null value ?
@@ -73,6 +68,15 @@ func main() {
 		if strings.Contains(v, "-log_path=") {
 			logPath = strings.Replace(v, "-log_path=", "", -1)
 		}
+	}
+	// Parse the explicit configuration directory before entering the
+	// management menu.  This keeps `nps -server -conf_path=...` consistent
+	// with normal service commands and prevents menu actions from silently
+	// operating on the default directory.
+	if *serverCmd {
+		printSlogan()
+		inputCmd()
+		return
 	}
 
 	// auto-generate default config files if not exist
