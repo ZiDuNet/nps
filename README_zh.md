@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.24</sub>
+﻿# NPS <sub>v1.1.25</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -194,6 +194,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.25** (2026-10-22) - 正式版本标签统一触发 CI、文档部署、Docker 推送和 GitHub Release；Release 正文自动读取更新日志
 - **v1.1.24** (2026-10-21) - 普通用户可删除自己名下的客户端；Docker `latest` 改为仅跟随正式版，master 测试镜像使用 SHA 标签
 - **v1.1.23** (2026-10-21) - 管理员可从客户端列表下发 NPC 远程升级；客户端校验 Release 后按服务账户权限替换并自动重启
 

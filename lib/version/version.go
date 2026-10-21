@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const VERSION = "1.1.24"
+const VERSION = "1.1.25"
 
 // ClientUpdateMinVersion is the first client release that understands the
 // server-pushed self-update signal. Older clients must be updated manually
