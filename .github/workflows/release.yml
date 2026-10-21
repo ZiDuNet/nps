@@ -436,8 +436,6 @@ jobs:
 
   # ==================== 正式 Release 汇总上传 ====================
   publish_release:
-    permissions:
-      contents: write
     runs-on: ubuntu-latest
     needs: [build_assets, build_android, build_windows_gui, build_macos_gui, build_linux_gui]
     if: github.ref_type == 'tag' || inputs.release_tag != ''
@@ -467,27 +465,11 @@ jobs:
           find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.apk' -o -name '*.zip' \) -print0 \
             | sort -z | xargs -0 -r sha256sum > checksums.txt
           test -s checksums.txt
-      - name: Prepare release notes
-        run: |
-          source_version="$(sed -nE 's/^const VERSION = "([^"]+)"$/\1/p' lib/version/version.go)"
-          heading="## [${source_version}]"
-          awk -v heading="$heading" '
-            index($0, heading) == 1 { in_section = 1; next }
-            in_section && /^## \[/ { exit }
-            in_section { print }
-          ' CHANGELOG.md > release-notes.md
-          test -s release-notes.md
-          {
-            printf '# NPS v%s\n\n' "$source_version"
-            cat release-notes.md
-          } > release-notes.tmp
-          mv release-notes.tmp release-notes.md
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ inputs.release_tag || github.ref_name }}
-          body_path: release-notes.md
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           make_latest: true
           files: |

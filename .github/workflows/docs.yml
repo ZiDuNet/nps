@@ -50,8 +50,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment:
-      # 版本标签发布不属于默认分支；使用独立环境避免旧 github-pages 环境的分支保护规则拒绝 tag 部署。
-      name: github-pages-release
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
