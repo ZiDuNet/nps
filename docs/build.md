@@ -105,7 +105,7 @@ docker build -f Dockerfile.npc -t npc .
 - Windows/macOS/Linux GUI 客户端打包
 - Release 附件上传
 
-`.github/workflows/ci.yml` 提供手动触发的服务端/客户端构建、核心 Go 包测试，以及 GUI 前端的冻结依赖安装和构建。文档站使用 `docs/package-lock.json` 与 `npm ci` 构建，确保 Pages 部署可复现；`.github/workflows/docs.yml` 也仅在需要时手动部署文档站。
+`.github/workflows/ci.yml` 在推送 `v*` 版本标签时执行服务端/客户端构建、核心 Go 包测试，以及 GUI 前端的冻结依赖安装和构建，也可以手动触发。文档站使用 `docs/package-lock.json` 与 `npm ci` 构建，确保 Pages 部署可复现；`.github/workflows/docs.yml` 同样随 `v*` 版本标签部署，也保留手动入口。
 
 日常推送代码到 `master` 不会自动触发 CI、Docker 或文档流水线，也不会更新 `latest`、生成正式 GitHub Release 或产生供软件更新器读取的版本资产。`.github/workflows/docker.yml` 保留为手动测试入口，手动运行时只构建并推送不可变的多架构 `sha-<短提交号>` 镜像。
 
