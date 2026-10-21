@@ -62,13 +62,13 @@ func requestRemoteUpdate(client *TRPClient) {
 		handler := remoteUpdateHandler.fn
 		remoteUpdateHandler.RUnlock()
 		if handler == nil {
-			client.logError("server requested a client update, but no updater is registered")
+			client.logError("[更新异常] 服务端请求客户端升级，但当前进程没有注册升级器")
 			remoteUpdateInProgress.Store(false)
 			return
 		}
 		restartRequested, err := handler(client.vKey)
 		if err != nil {
-			client.logError("server-requested client update failed: %s", err.Error())
+			client.logError("[更新异常] 服务端下发的客户端升级失败：%s", err.Error())
 			remoteUpdateInProgress.Store(false)
 			return
 		}
@@ -273,14 +273,14 @@ retry:
 	NowStatus.Store(0)
 	c, err := NewConnWithTLS(s.bridgeConnType, s.vKey, s.svrAddr, common.WORK_MAIN, s.proxyUrl, s.tlsEnable, s.tlsOptions)
 	if err != nil {
-		s.logError("The connection server failed and will be reconnected in five seconds, error", err.Error())
+		s.logError("[连接异常] 连接服务端失败，5 秒后重连：%s", err.Error())
 		if !s.waitReconnect() {
 			return
 		}
 		goto retry
 	}
 	if c == nil {
-		s.logError("Error data from server, and will be reconnected in five seconds")
+		s.logError("[连接异常] 服务端返回了空连接，5 秒后重连")
 		if !s.waitReconnect() {
 			return
 		}
@@ -290,7 +290,7 @@ retry:
 		_ = c.Close()
 		return
 	}
-	s.logInfo("Successful connection with server %s", s.svrAddr)
+	s.logInfo("[连接] 已连接服务端 %s", s.svrAddr)
 	//monitor the connection
 	go s.ping()
 	if !s.installSignal(c) {
@@ -331,7 +331,7 @@ mainLoop:
 	for {
 		flags, err := signal.ReadFlag()
 		if err != nil {
-			s.logError("Accept server data error %s, end this service", err.Error())
+			s.logError("[连接异常] 读取服务端控制数据失败，连接结束：%s", err.Error())
 			break
 		}
 		switch flags {
@@ -433,7 +433,7 @@ func matchesP2PRemote(session net.Conn, expectedRemote string) bool {
 func (s *TRPClient) newChan() {
 	tunnel, err := NewConnWithTLS(s.bridgeConnType, s.vKey, s.svrAddr, common.WORK_CHAN, s.proxyUrl, s.tlsEnable, s.tlsOptions)
 	if err != nil {
-		s.logError("connect to %s error: %v, client will reconnect", s.svrAddr, err)
+		s.logError("[通道异常] 建立数据通道失败：%s：%v", s.svrAddr, err)
 		s.Close()
 		return
 	}
@@ -451,7 +451,7 @@ func (s *TRPClient) newChan() {
 	for {
 		src, err := newMux.Accept()
 		if err != nil {
-			s.logWarn(err.Error())
+			s.logWarn("[通道异常] MUX 接收连接失败：%s", err.Error())
 			if detachedSignal, detachedTunnel, ok := s.detach(nil, newMux); ok {
 				s.closeDetached(detachedSignal, detachedTunnel)
 			}
@@ -465,7 +465,7 @@ func (s *TRPClient) handleChan(src net.Conn) {
 	lk, err := conn.NewConn(src).GetLinkInfo()
 	if err != nil || lk == nil {
 		src.Close()
-		s.logError("get connection info from server error %v", err)
+		s.logError("[通道异常] 读取转发连接信息失败：%v", err)
 		return
 	}
 	//host for target processing

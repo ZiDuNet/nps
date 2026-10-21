@@ -174,7 +174,7 @@ func (s *Mux) sendInfo(flag uint8, id int32, data interface{}) bool {
 	err = pack.Set(flag, id, data)
 	if err != nil {
 		releaseMuxPack(pack)
-		log.Println("mux: New Pack err", err)
+		log.Println("[MUX][异常] 创建数据包失败：", err)
 		_ = s.Close()
 		return false
 	}
@@ -214,7 +214,7 @@ func (s *Mux) writeSession() {
 			err := pack.Pack(s.conn)
 			muxPack.Put(pack)
 			if err != nil {
-				log.Println("mux: Pack err", err)
+				log.Println("[MUX][异常] 写入数据包失败：", err)
 				_ = s.Close()
 				break
 			}
@@ -240,7 +240,7 @@ func (s *Mux) ping() {
 			}
 			checkTime := atomic.LoadUint32(&s.pingCheckTime)
 			if checkTime > s.pingCheckThreshold {
-				log.Println("mux: ping time out, checktime", checkTime, "threshold", s.pingCheckThreshold)
+				log.Println("[MUX][心跳异常] ping 超时，checktime", checkTime, "threshold", s.pingCheckThreshold)
 				_ = s.Close()
 				// more than limit times not receive the ping return package,
 				// mux conn is damaged, maybe a packet drop, close it
@@ -317,7 +317,7 @@ func (s *Mux) readSession() {
 			pack = muxPack.Get()
 			s.bw.StartRead()
 			if l, err = pack.UnPack(s.conn); err != nil {
-				log.Println("mux: read session unpack from connection err", err)
+				log.Println("[MUX][通道异常] 读取数据通道失败：", err)
 				releaseMuxPack(pack)
 				_ = s.Close()
 				break
@@ -370,7 +370,7 @@ func (s *Mux) readSession() {
 					}
 					releaseMuxPack(pack)
 					if err != nil {
-						log.Println("mux: read session connection New msg err", err)
+						log.Println("[MUX][通道异常] 创建转发连接失败：", err)
 						_ = connection.Close()
 					}
 					continue
@@ -462,7 +462,7 @@ func (s *Mux) Close() (err error) {
 	s.newConnMu.Lock()
 	s.newConnQueue.Stop()
 	s.newConnMu.Unlock()
-	log.Println("close mux")
+	log.Println("[MUX][通道] MUX 已关闭")
 	s.connMap.Close()
 	// newConnCh intentionally remains open. Accept selects closeChan, while
 	// the reader may still be finishing a send; closing it here would race with

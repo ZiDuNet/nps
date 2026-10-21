@@ -490,7 +490,7 @@ func run() {
 				for {
 					logs.Info("start vkey:" + key)
 					client.NewRPClientWithTLS(*serverAddr, key, *connType, *proxyUrl, nil, *disconnectTime, *tlsEnable, currentTLSOptions()).Start()
-					logs.Info("Client closed! It will be reconnected in five seconds")
+					logs.Info("[重连] 客户端连接已关闭，5 秒后重连")
 					time.Sleep(time.Second * 5)
 				}
 			}()
@@ -632,7 +632,7 @@ func startNpcServer(startCmd string) {
 			}
 			logs.Info("版本: %s, 核心版本: %s, TLS: %t", version.VERSION, version.GetVersion(), tlsEnable)
 			client.NewRPClientWithTLS(serAddr, vkey, *connType, *proxyUrl, nil, *disconnectTime, tlsEnable, currentTLSOptions()).Start()
-			logs.Info("连接断开，5秒后重连")
+			logs.Info("[重连] 连接断开，5 秒后重连")
 			time.Sleep(time.Second * 5)
 		}
 	}()

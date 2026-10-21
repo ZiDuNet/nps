@@ -115,13 +115,13 @@ func StartFromFile(path string) {
 		}
 		return
 	}
-	logs.Info("Loading configuration file %s successfully", path)
+	logs.Info("[配置] 配置文件加载成功：%s", path)
 
 	logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), cnf.CommonConfig.TlsEnable)
 re:
 	if first || cnf.CommonConfig.AutoReconnection {
 		if !first {
-			logs.Info("Reconnecting...")
+			logs.Info("[重连] 配置连接断开，5 秒后重连")
 			time.Sleep(time.Second * 5)
 		}
 	} else {
@@ -130,7 +130,7 @@ re:
 	first = false
 	c, err := NewConnWithTLS(cnf.CommonConfig.Tp, cnf.CommonConfig.VKey, cnf.CommonConfig.Server, common.WORK_CONFIG, cnf.CommonConfig.ProxyUrl, cnf.CommonConfig.TlsEnable, TLSOptionsFromConfig(cnf.CommonConfig))
 	if err != nil {
-		logs.Error(err)
+		logs.Error("[连接异常] 配置通道连接失败：%v", err)
 		goto re
 	}
 	var isPub bool

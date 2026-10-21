@@ -229,7 +229,7 @@ func (s *Bridge) requestClientLocalAddr(id int, c *conn.Conn) {
 	defer func() { _ = c.Conn.SetReadDeadline(time.Time{}) }()
 	b, err := c.GetShortLenContent()
 	if err != nil {
-		logs.Trace("clientId %d did not report local addr (old client or timeout): %v", id, err)
+		logs.Trace("[兼容] clientId %d 未上报内网地址（旧客户端或超时）：%v", id, err)
 		return
 	}
 	localAddr := strings.TrimSpace(string(b))
@@ -240,7 +240,7 @@ func (s *Bridge) requestClientLocalAddr(id int, c *conn.Conn) {
 		client.Lock()
 		client.LocalAddr = localAddr
 		client.Unlock()
-		logs.Info("clientId %d local addr: %s", id, localAddr)
+		logs.Info("[客户端] clientId %d 内网地址：%s", id, localAddr)
 	}
 }
 
@@ -364,7 +364,7 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	//read test flag
 	if _, err := c.GetShortContent(3); err != nil {
-		logs.Info("The client %s connect error", c.Conn.RemoteAddr(), err.Error())
+		logs.Info("[连接异常] 客户端 %s 握手失败：%s", c.Conn.RemoteAddr(), err.Error())
 		c.Close()
 		return
 	}
@@ -378,7 +378,7 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 	var vs []byte
 	var err error
 	if vs, err = c.GetShortLenContent(); err != nil {
-		logs.Info("get client %s version error", err.Error())
+		logs.Info("[连接异常] 读取客户端 %s 版本失败：%s", c.Conn.RemoteAddr(), err.Error())
 		c.Close()
 		return
 	}
@@ -394,7 +394,7 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 	//verify
 	id, err := file.GetDb().GetIdByVerifyKey(string(buf), c.Conn.RemoteAddr().String())
 	if err != nil {
-		logs.Info("Current client connection validation error, close this client: %s, reason: %v", c.Conn.RemoteAddr(), err)
+		logs.Info("[验证失败] 拒绝客户端连接 %s，原因：%v", c.Conn.RemoteAddr(), err)
 		s.verifyError(c)
 		return
 	} else {
@@ -404,7 +404,7 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 		_ = c.SetReadDeadline(time.Time{})
 		s.typeDeal(flag, c, id, string(vs))
 	} else {
-		logs.Warn(err, flag)
+		logs.Warn("[连接异常] 读取客户端连接类型失败：%v，flag=%q", err, flag)
 		c.Close()
 	}
 	return
@@ -554,7 +554,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 		}
 		s.requestClientLocalAddr(id, c)
 		go s.GetHealthFromClient(id, c)
-		logs.Info("clientId %d connection succeeded, address:%s ", id, c.Conn.RemoteAddr())
+		logs.Info("[连接] clientId %d 已连接，来源：%s", id, c.Conn.RemoteAddr())
 	case common.WORK_CHAN:
 		muxConn := nps_mux.NewMux(c.Conn, s.tunnelType, s.disconnectTime)
 		var oldTunnel *nps_mux.Mux
@@ -808,7 +808,7 @@ func (s *Bridge) ping() {
 				return true
 			})
 			for _, v := range arr {
-				logs.Info("the client %d closed", v.id)
+				logs.Info("[连接] clientId %d 会话已关闭", v.id)
 				s.delClientIfSnapshot(v.id, v.snapshot)
 			}
 			// 清理过期的 Register 条目
