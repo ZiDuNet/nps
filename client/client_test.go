@@ -100,6 +100,40 @@ func TestTRPClientUsesInstanceLogger(t *testing.T) {
 	}
 }
 
+func TestRemoteUpdateHandlerRunsAsynchronouslyAndOnlyOnce(t *testing.T) {
+	started := make(chan string, 1)
+	release := make(chan struct{})
+	SetRemoteUpdateHandler(func(vKey string) (bool, error) {
+		started <- vKey
+		<-release
+		return false, nil
+	})
+	t.Cleanup(func() { SetRemoteUpdateHandler(nil) })
+
+	client := NewRPClient("", "test-vkey", "", "", nil, 0)
+	requestRemoteUpdate(client)
+	select {
+	case got := <-started:
+		if got != "test-vkey" {
+			t.Fatalf("handler vkey = %q, want test-vkey", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("update handler did not start")
+	}
+	requestRemoteUpdate(client)
+	if !remoteUpdateInProgress.Load() {
+		t.Fatal("update should remain in progress while handler is blocked")
+	}
+	close(release)
+	deadline := time.Now().Add(time.Second)
+	for remoteUpdateInProgress.Load() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if remoteUpdateInProgress.Load() {
+		t.Fatal("update guard was not released after handler completed")
+	}
+}
+
 func TestHandleChanHTTPPreservesPipelinedRequests(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

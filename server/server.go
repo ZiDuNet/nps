@@ -715,6 +715,15 @@ func bridgeClientConnected(clientID int) bool {
 	return connected
 }
 
+// RequestClientUpdate sends a self-update signal through the live control
+// channel. It does not wait for the download or restart to finish.
+func RequestClientUpdate(clientID int) error {
+	if Bridge == nil {
+		return errors.New("服务端控制通道未初始化")
+	}
+	return Bridge.RequestClientUpdate(clientID)
+}
+
 func dealClientData() {
 
 	file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {

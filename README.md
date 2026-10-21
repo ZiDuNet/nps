@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.22</sub>
+﻿# NPS <sub>v1.1.23</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -178,6 +178,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.23** (2026-10-21) - Added administrator-triggered NPC remote updates from the client list; releases are verified before replacement and automatic restart
 
 - **v1.1.22** (2026-10-15) - Release build for the latest upstream compatibility fixes
 - **v1.1.21** (2026-10-12) - Fixed reverse-proxy CAPTCHA paths, service-mode TLS certificate paths, SOCKS5 UDP relay address selection, and automatic service restart after server updates

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -9,6 +10,7 @@ import (
 
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
+	npsversion "ehang.io/nps/lib/version"
 	"ehang.io/nps/server"
 	"github.com/astaxie/beego"
 )
@@ -36,6 +38,7 @@ type clientListRow struct {
 	ConfigConnAllow     bool
 	MaxTunnelNum        int
 	Version             string
+	CanRemoteUpdate     bool
 	BlackIpList         []string
 	CreateTime          string
 	LastOnlineTime      string
@@ -44,6 +47,11 @@ type clientListRow struct {
 	ExpireTime          string
 	UserExpireTime      string
 	EffectiveExpireTime string
+}
+
+func supportsRemoteClientUpdate(clientVersion string) bool {
+	comparison, err := npsversion.Compare(clientVersion, npsversion.ClientUpdateMinVersion)
+	return err == nil && comparison >= 0
 }
 
 type clientListFlow struct {
@@ -287,6 +295,7 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 			ConfigConnAllow: client.ConfigConnAllow,
 			MaxTunnelNum:    client.MaxTunnelNum,
 			Version:         client.Version,
+			CanRemoteUpdate: supportsRemoteClientUpdate(client.Version),
 			BlackIpList:     append([]string(nil), client.BlackIpList...),
 			CreateTime:      client.CreateTime,
 			LastOnlineTime:  client.LastOnlineTime,
@@ -317,6 +326,7 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 func (s *ClientController) List() {
 	if s.Ctx.Request.Method == "GET" {
 		s.Data["menu"] = "client"
+		s.Data["client_update_min_version"] = npsversion.ClientUpdateMinVersion
 		s.setOwnerFilterData()
 		s.SetInfo("client")
 		s.display("client/list")
@@ -343,6 +353,47 @@ func (s *ClientController) List() {
 	cmd["bridgeType"] = beego.AppConfig.String("bridge_type")
 	cmd["bridgePort"] = server.Bridge.TunnelPort
 	s.AjaxTable(newClientListRows(list), cnt, cnt, cmd)
+}
+
+// Upgrade tells a connected, update-capable NPC to run its built-in updater.
+// Updating is asynchronous; success here means only that the signal was sent.
+func (s *ClientController) Upgrade() {
+	if !s.RequirePost() || !s.RequireAdmin() {
+		return
+	}
+	id := s.GetIntNoErr("id")
+	if id <= 0 {
+		s.AjaxErr("客户端编号无效")
+		return
+	}
+	client, err := file.GetDb().GetClient(id)
+	if err != nil || client == nil {
+		s.AjaxErr("客户端不存在")
+		return
+	}
+	client.RLock()
+	ownerID, clientVersion := client.UserId, client.Version
+	enabled, noStore := client.Status, client.NoStore
+	client.RUnlock()
+	if !enabled || noStore {
+		err = errors.New("客户端已停用或不支持远程升级")
+		s.auditMutation("client.remote_update", "client", id, ownerID, "", err, nil)
+		s.AjaxErr(err.Error())
+		return
+	}
+	if !supportsRemoteClientUpdate(clientVersion) {
+		err = fmt.Errorf("当前客户端版本 %q 不支持远程升级，请先手动升级到 v%s", clientVersion, npsversion.ClientUpdateMinVersion)
+		s.auditMutation("client.remote_update", "client", id, ownerID, "", err, map[string]string{"version": clientVersion})
+		s.AjaxErr(err.Error())
+		return
+	}
+	if err = server.RequestClientUpdate(id); err != nil {
+		s.auditMutation("client.remote_update", "client", id, ownerID, "", err, map[string]string{"version": clientVersion})
+		s.AjaxErr(err.Error())
+		return
+	}
+	s.auditMutation("client.remote_update", "client", id, ownerID, "", nil, map[string]string{"version": clientVersion})
+	s.AjaxOk("升级指令已下发；客户端下载并校验新版本后将自动重启")
 }
 
 // 添加客户端

@@ -1,8 +1,11 @@
 package install
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/version"
 )
 
@@ -58,5 +61,33 @@ func TestUpdateAvailable(t *testing.T) {
 	}
 	if _, err := updateAvailable("master"); err == nil {
 		t.Fatal("non-semantic release tag should be rejected")
+	}
+}
+
+func TestReplaceBinFromPackageUsesExplicitTarget(t *testing.T) {
+	packageDir := t.TempDir()
+	targetDir := t.TempDir()
+	target := filepath.Join(targetDir, "npc-renamed")
+	sourceName := "npc"
+	if common.IsWindows() {
+		sourceName += ".exe"
+		target += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, sourceName), []byte("new-binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("old-binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyStaticFileReplaceNpcAt(packageDir, targetDir, target); err != nil {
+		t.Fatalf("copyStaticFileReplaceNpcAt: %v", err)
+	}
+	content, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "new-binary" {
+		t.Fatalf("target content = %q, want new-binary", content)
 	}
 }

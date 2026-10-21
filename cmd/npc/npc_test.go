@@ -5,6 +5,7 @@ package main
 
 import (
 	"errors"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -49,5 +50,57 @@ func TestNewNpcServiceConfig(t *testing.T) {
 	}
 	if len(config.Dependencies) != 2 {
 		t.Fatalf("service dependencies = %v, want network dependencies", config.Dependencies)
+	}
+}
+
+func TestFindNpcCommandAfterFlags(t *testing.T) {
+	command, index := findNpcCommand([]string{"-service_name=nps-client-key", "restart"})
+	if command != "restart" || index != 1 {
+		t.Fatalf("findNpcCommand() = (%q, %d), want (restart, 1)", command, index)
+	}
+}
+
+func TestResolveNpcServiceName(t *testing.T) {
+	names := []string{"nps-client-alpha", "nps-client-beta"}
+	tests := []struct {
+		input string
+		want  string
+		fail  bool
+	}{
+		{input: "alpha", want: "nps-client-alpha"},
+		{input: "nps-client-beta", want: "nps-client-beta"},
+		{input: "missing", fail: true},
+		{input: "../alpha", fail: true},
+		{input: "", fail: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := resolveNpcServiceName(names, tt.input)
+			if tt.fail {
+				if err == nil {
+					t.Fatalf("resolveNpcServiceName(%q) unexpectedly succeeded with %q", tt.input, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveNpcServiceName(%q): %v", tt.input, err)
+			}
+			if got != tt.want {
+				t.Fatalf("resolveNpcServiceName(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNpcServiceLogPath(t *testing.T) {
+	path, err := npcServiceLogPath("nps-client-alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := filepath.Base(path), "npc-alpha.log"; got != want {
+		t.Fatalf("log filename = %q, want %q", got, want)
+	}
+	if _, err := npcServiceLogPath("nps-client-../outside"); err == nil {
+		t.Fatal("expected invalid service name to be rejected")
 	}
 }

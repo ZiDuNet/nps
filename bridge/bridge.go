@@ -87,6 +87,32 @@ func (c *Client) VersionSnapshot() string {
 	return version
 }
 
+// RequestClientUpdate asks a connected NPC to execute its built-in updater.
+// The client version gate is enforced by the Web controller because the
+// bridge only owns the live signal connection.
+func (s *Bridge) RequestClientUpdate(id int) error {
+	if s == nil {
+		return errors.New("服务端 Bridge 尚未初始化")
+	}
+	value, ok := s.Client.Load(id)
+	if !ok {
+		return fmt.Errorf("客户端 %d 当前未连接", id)
+	}
+	client, ok := bridgeClient(value)
+	if !ok {
+		return fmt.Errorf("客户端 %d 控制连接无效", id)
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.signal == nil || client.signal.Conn == nil {
+		return fmt.Errorf("客户端 %d 当前未连接", id)
+	}
+	if _, err := client.signal.Write([]byte(common.CLIENT_UPDATE)); err != nil {
+		return fmt.Errorf("发送升级指令失败：%w", err)
+	}
+	return nil
+}
+
 type Bridge struct {
 	TunnelPort     int //通信隧道端口
 	Client         sync.Map

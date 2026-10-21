@@ -184,7 +184,34 @@
                 halign: 'center',
                 class: 'client-list__version',
                 visible: !clientListCompact,//较窄桌面中在详情行保留，避免表头拥挤
-                escape: true
+                formatter: function (value, row) {
+                    var versionText = npsEscapeHtml(value || '-');
+                    {{if eq true .isAdmin}}
+                    var clientId = Number(row.Id);
+                    if (!isFinite(clientId) || Math.floor(clientId) !== clientId || clientId <= 0) return versionText;
+                    var supported = row.CanRemoteUpdate === true;
+                    var online = row.IsConnect === true && row.Status === true && row.NoStore !== true;
+                    var disabled = !supported || !online;
+                    var titleZh = !supported
+                        ? '请先手动升级到 v{{.client_update_min_version}}，之后可远程升级'
+                        : (!online ? '客户端启用并在线后才能升级' : '下发客户端升级');
+                    var titleEn = !supported
+                        ? 'Manually update once to v{{.client_update_min_version}} to enable remote updates'
+                        : (!online ? 'Client must be enabled and online' : 'Send client update');
+                    var title = npsIsEnglish() ? titleEn : titleZh;
+                    return '<span class="client-version-cell"><span class="client-version-cell__text">' + versionText + '</span>'
+                        + '<button type="button" class="btn btn-outline btn-primary btn-xs client-version-update"'
+                        + (disabled ? ' disabled' : '')
+                        + ' onclick="requestClientUpgrade(this,' + clientId + ')"'
+                        + ' title="' + npsEscapeHtml(title) + '" data-title-zh="' + npsEscapeHtml(titleZh) + '"'
+                        + ' aria-label="' + npsEscapeHtml(title) + '" data-aria-label-zh="' + npsEscapeHtml(titleZh) + '"'
+                        + ' data-title-en="' + npsEscapeHtml(titleEn) + '"'
+                        + ' data-aria-label-en="' + npsEscapeHtml(titleEn) + '">'
+                        + '<i class="fa fa-cloud-download" aria-hidden="true"></i></button></span>';
+                    {{else}}
+                    return versionText;
+                    {{end}}
+                }
             },
             {
                 field: 'VerifyKey',//域值
@@ -337,6 +364,40 @@
 
     function copyCommand(data) {
         data.setAttribute("data-clipboard-text", data.previousElementSibling ? data.previousElementSibling.textContent : '')
+    }
+
+    function requestClientUpgrade(button, clientId) {
+        var english = npsIsEnglish();
+        var question = english
+            ? 'Send an update request? The client will download and verify the latest GitHub release, then restart. Tunnels may briefly disconnect.'
+            : '确定下发升级指令吗？客户端会下载并校验 GitHub 最新版本，随后自动重启，隧道可能短暂中断。';
+        if (!button || !clientId || !window.confirm(question)) return;
+
+        var $button = $(button);
+        var originalMarkup = $button.html();
+        $button.prop('disabled', true).attr('aria-busy', 'true');
+        $button.html('<i class="fa fa-spinner fa-spin" aria-hidden="true"></i>');
+        $.ajax({
+            type: 'POST',
+            url: '{{.web_base_url}}/client/upgrade',
+            data: { id: clientId }
+        }).done(function (response) {
+            if (response && response.status === 1) {
+                var sentLabel = english ? 'Update request sent' : '升级指令已下发';
+                $button.html('<i class="fa fa-check" aria-hidden="true"></i>')
+                    .attr('title', sentLabel).attr('aria-label', sentLabel).removeAttr('aria-busy');
+                npsNotify('success', english
+                    ? 'Update request sent. The client restarts after downloading and verifying the release.'
+                    : '升级指令已下发，客户端将在下载并校验完成后自动重启。');
+            } else {
+                $button.html(originalMarkup).prop('disabled', false).removeAttr('aria-busy');
+                npsNotify('error', response && response.msg ? response.msg : npsRequestErrorMessage());
+            }
+        }).fail(function (xhr) {
+            $button.html(originalMarkup).prop('disabled', false).removeAttr('aria-busy');
+            var message = xhr && xhr.responseJSON && xhr.responseJSON.msg;
+            npsNotify('error', message || npsRequestErrorMessage());
+        });
     }
 
     var clipboard = new ClipboardJS('.copy');

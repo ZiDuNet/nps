@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.22</sub>
+﻿# NPS <sub>v1.1.23</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -193,6 +193,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.23** (2026-10-21) - 管理员可从客户端列表下发 NPC 远程升级；客户端校验 Release 后按服务账户权限替换并自动重启
 
 - **v1.1.22** (2026-10-15) - 发布包含最新上游兼容性修复的版本
 - **v1.1.21** (2026-10-12) - 修复反向代理验证码路径、系统服务证书路径、SOCKS5 UDP 中继地址选择和服务端更新后的自动重启

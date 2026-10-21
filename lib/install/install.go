@@ -207,32 +207,61 @@ func UpdateNpc() {
 }
 
 func UpdateNpcNew() {
+	updated, err := UpdateNpcResult()
+	if err != nil {
+		log.Println("客户端更新失败：", err)
+		return
+	}
+	if updated {
+		fmt.Println("更新成功，请重启客户端")
+	}
+}
+
+// UpdateNpcResult checks the latest stable GitHub release, verifies its
+// checksum, and replaces the running NPC binary. It deliberately does not
+// restart the process; callers decide how to restart their service safely.
+func UpdateNpcResult() (bool, error) {
+	return updateNpcResult("")
+}
+
+// UpdateNpcResultAt is the same update operation but writes the NPC binary to
+// targetPath. It is used by the Windows temporary updater process, because
+// that process must run from a separate executable while replacing the
+// service's original executable.
+func UpdateNpcResultAt(targetPath string) (bool, error) {
+	return updateNpcResult(targetPath)
+}
+
+func updateNpcResult(targetPath string) (bool, error) {
 	latest, err := fetchLatestVersion()
 	if err != nil {
-		log.Println("获取最新版本失败：", err)
-		return
+		return false, fmt.Errorf("获取最新版本失败：%w", err)
 	}
-	fmt.Println("最新版本为：", latest)
+	log.Println("NPC 最新版本为：", latest)
 	available, err := updateAvailable(latest)
 	if err != nil {
-		log.Println("检查版本失败：", err)
-		return
+		return false, fmt.Errorf("检查版本失败：%w", err)
 	}
 	if !available {
-		fmt.Println("当前已是最新版本，无需更新")
-		return
+		log.Println("NPC 当前已是最新版本，无需更新")
+		return false, nil
 	}
-	tempDir := filepath.Join(common.GetAppPath(), "temp")
+	// Downloads must not require the service account to write into the
+	// installation directory. Only the final executable replacement needs
+	// write permission there, and failures are returned with that context.
+	tempDir, err := os.MkdirTemp("", "nps-npc-update-*")
+	if err != nil {
+		return false, fmt.Errorf("创建客户端更新临时目录失败：%w", err)
+	}
+	defer os.RemoveAll(tempDir)
 	destPath, err := downloadAndUnpack("client", tempDir)
 	if err != nil {
-		log.Println("下载更新失败：", err)
-		return
+		return false, fmt.Errorf("下载更新失败：%w", err)
 	}
-	if err := copyStaticFileReplaceNpc(destPath, common.GetAppPath()); err != nil {
-		log.Println("替换客户端文件失败：", err)
-		return
+	if err := copyStaticFileReplaceNpcAt(destPath, common.GetAppPath(), targetPath); err != nil {
+		return false, fmt.Errorf("替换客户端文件失败（请确认服务账号有权写入 NPC 安装目录）：%w", err)
 	}
-	fmt.Println("更新成功，请重启客户端")
+	return true, nil
 }
 
 type release struct {
@@ -454,25 +483,30 @@ func copyStaticFile(srcPath, bin string) (string, error) {
 
 func copyStaticFileReplaceNps(srcPath, descPath string) error {
 	// Web UI is embedded in the binary; only replace the executable.
-	return replaceBinFromPackage(srcPath, descPath, "nps")
+	return replaceBinFromPackage(srcPath, descPath, "nps", "")
 }
 
 func copyStaticFileReplaceNpc(srcPath, descPath string) error {
-	return replaceBinFromPackage(srcPath, descPath, "npc")
+	return copyStaticFileReplaceNpcAt(srcPath, descPath, "")
 }
 
-func replaceBinFromPackage(srcPath, descPath, bin string) error {
+func copyStaticFileReplaceNpcAt(srcPath, descPath, targetPath string) error {
+	return replaceBinFromPackage(srcPath, descPath, "npc", targetPath)
+}
+
+func replaceBinFromPackage(srcPath, descPath, bin, targetPath string) error {
 	srcBin := filepath.Join(srcPath, bin)
 	destBin := filepath.Join(descPath, bin)
 	if common.IsWindows() {
 		srcBin += ".exe"
 		destBin += ".exe"
 	}
-	// Prefer replacing the actually running binary when its basename matches.
-	if exe, err := os.Executable(); err == nil {
-		if filepath.Base(exe) == filepath.Base(destBin) {
-			destBin = exe
-		}
+	// Update the executable that launched this updater. This also supports
+	// services installed outside the default directory or with a renamed binary.
+	if targetPath != "" {
+		destBin = targetPath
+	} else if exe, err := os.Executable(); err == nil {
+		destBin = exe
 	}
 	if _, err := os.Stat(srcBin); err != nil {
 		// unpackit may return a nested root dir; search one level if needed

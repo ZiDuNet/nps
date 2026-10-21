@@ -6,13 +6,17 @@ package main
 import (
 	"bufio"
 	"ehang.io/nps/lib/crypt"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,29 +34,35 @@ import (
 )
 
 var (
-	serverAddr     = flag.String("server", "", "Server addr (ip:port)")
-	configPath     = flag.String("config", "", "Configuration file path")
-	verifyKey      = flag.String("vkey", "", "Authentication key")
-	logType        = flag.String("log", "stdout", "Log output mode（stdout|file）")
-	connType       = flag.String("type", "tcp", "Connection type with the server（kcp|tcp）")
-	proxyUrl       = flag.String("proxy", "", "proxy socks5 url(eg:socks5://111:222@127.0.0.1:9007)")
-	logLevel       = flag.String("log_level", "7", "log level 0~7")
-	registerTime   = flag.Int("time", 2, "register time long /h")
-	localPort      = flag.Int("local_port", 2000, "p2p local port")
-	password       = flag.String("password", "", "p2p password flag")
-	target         = flag.String("target", "", "p2p target")
-	localType      = flag.String("local_type", "p2p", "p2p target")
-	logPath        = flag.String("log_path", "", "npc log path")
-	debug          = flag.Bool("debug", true, "npc debug")
-	pprofAddr      = flag.String("pprof", "", "PProf debug addr (ip:port)")
-	stunAddr       = flag.String("stun_addr", "stun.stunprotocol.org:3478", "stun server address (eg:stun.stunprotocol.org:3478)")
-	ver            = flag.Bool("version", false, "show current version")
-	disconnectTime = flag.Int("disconnect_timeout", 60, "not receiving check packet times, until timeout will disconnect the client")
-	tlsEnable      = flag.Bool("tls_enable", false, "enable tls")
-	tlsCAFile      = flag.String("tls_ca_file", "", "TLS CA certificate file")
-	tlsServerName  = flag.String("tls_server_name", "", "TLS server name")
-	tlsFingerprint = flag.String("tls_fingerprint", "", "TLS server SHA-256 certificate fingerprint")
-	tlsInsecure    = flag.Bool("tls_insecure_skip_verify", false, "explicitly disable TLS certificate verification")
+	serverAddr           = flag.String("server", "", "Server addr (ip:port)")
+	configPath           = flag.String("config", "", "Configuration file path")
+	verifyKey            = flag.String("vkey", "", "Authentication key")
+	logType              = flag.String("log", "stdout", "Log output mode（stdout|file）")
+	connType             = flag.String("type", "tcp", "Connection type with the server（kcp|tcp）")
+	proxyUrl             = flag.String("proxy", "", "proxy socks5 url(eg:socks5://111:222@127.0.0.1:9007)")
+	logLevel             = flag.String("log_level", "7", "log level 0~7")
+	registerTime         = flag.Int("time", 2, "register time long /h")
+	localPort            = flag.Int("local_port", 2000, "p2p local port")
+	password             = flag.String("password", "", "p2p password flag")
+	target               = flag.String("target", "", "p2p target")
+	localType            = flag.String("local_type", "p2p", "p2p target")
+	logPath              = flag.String("log_path", "", "npc log path")
+	debug                = flag.Bool("debug", true, "npc debug")
+	pprofAddr            = flag.String("pprof", "", "PProf debug addr (ip:port)")
+	stunAddr             = flag.String("stun_addr", "stun.stunprotocol.org:3478", "stun server address (eg:stun.stunprotocol.org:3478)")
+	ver                  = flag.Bool("version", false, "show current version")
+	disconnectTime       = flag.Int("disconnect_timeout", 60, "not receiving check packet times, until timeout will disconnect the client")
+	serviceName          = flag.String("service_name", "Npc", "system service name")
+	remoteUpdateHelper   = flag.Bool("remote_update_helper", false, "internal Windows remote update helper")
+	remoteUpdateTarget   = flag.String("remote_update_target", "", "internal remote update target executable")
+	remoteUpdateParent   = flag.Int("remote_update_parent", 0, "internal remote update parent PID")
+	remoteUpdateService  = flag.String("remote_update_service", "", "internal remote update service name")
+	remoteUpdateArgsFile = flag.String("remote_update_args_file", "", "internal remote update argument file")
+	tlsEnable            = flag.Bool("tls_enable", false, "enable tls")
+	tlsCAFile            = flag.String("tls_ca_file", "", "TLS CA certificate file")
+	tlsServerName        = flag.String("tls_server_name", "", "TLS server name")
+	tlsFingerprint       = flag.String("tls_fingerprint", "", "TLS server SHA-256 certificate fingerprint")
+	tlsInsecure          = flag.Bool("tls_insecure_skip_verify", false, "explicitly disable TLS certificate verification")
 )
 
 func currentTLSOptions() client.TLSOptions {
@@ -83,8 +93,22 @@ func newNpcServiceConfig(name, displayName, description string) *service.Config 
 	return svcConfig
 }
 
+func findNpcCommand(args []string) (string, int) {
+	for index, arg := range args {
+		switch arg {
+		case "status", "register", "update", "nat", "start", "stop", "restart", "install", "uninstall":
+			return arg, index
+		}
+	}
+	return "", -1
+}
+
 func main() {
 	flag.Parse()
+	if *remoteUpdateHelper {
+		runWindowsRemoteUpdateHelper()
+		return
+	}
 	logs.Reset()
 	logs.EnableFuncCallDepth(true)
 	logs.SetLogFuncCallDepth(3)
@@ -106,7 +130,7 @@ func main() {
 
 	// init service
 	svcConfig := newNpcServiceConfig(
-		"Npc",
+		*serviceName,
 		"nps内网穿透客户端",
 		"一款轻量级、功能强大的内网穿透代理服务器。支持tcp、udp流量转发，支持内网http代理、内网socks5代理，同时支持snappy压缩、站点保护、加密传输、多路复用、header修改等。支持web图形化管理，集成多用户模式。",
 	)
@@ -119,6 +143,8 @@ func main() {
 			svcConfig.Arguments = append(svcConfig.Arguments, v)
 		}
 	}
+	command, commandIndex := findNpcCommand(os.Args[1:])
+	commandArgIndex := commandIndex + 1 // absolute index in os.Args
 	svcConfig.Arguments = append(svcConfig.Arguments, "-debug=false")
 	prg := &npc{
 		exit: make(chan struct{}),
@@ -126,6 +152,7 @@ func main() {
 	s, err := service.New(prg, svcConfig)
 	if err != nil {
 		logs.Error(err, "service function disabled")
+		registerRemoteUpdateHandler(nil)
 		run()
 		// run without service
 		wg := sync.WaitGroup{}
@@ -133,22 +160,23 @@ func main() {
 		wg.Wait()
 		return
 	}
-	if len(os.Args) >= 2 {
-		switch os.Args[1] {
+	registerRemoteUpdateHandler(s)
+	if command != "" {
+		switch command {
 		case "status":
-			if len(os.Args) > 2 {
-				path := strings.Replace(os.Args[2], "-config=", "", -1)
+			if len(os.Args) > commandArgIndex+1 {
+				path := strings.Replace(os.Args[commandArgIndex+1], "-config=", "", -1)
 				client.GetTaskStatus(path)
 			}
 		case "register":
-			flag.CommandLine.Parse(os.Args[2:])
+			flag.CommandLine.Parse(os.Args[commandArgIndex+1:])
 			client.RegisterLocalIp(*serverAddr, *verifyKey, *connType, *proxyUrl, *registerTime)
 		case "update":
 			install.UpdateNpc()
 			return
 		case "nat":
 			c := stun.NewClient()
-			flag.CommandLine.Parse(os.Args[2:])
+			flag.CommandLine.Parse(os.Args[commandArgIndex+1:])
 			c.SetServerAddr(*stunAddr)
 			nat, host, err := c.Discover()
 			if err != nil || host == nil {
@@ -161,14 +189,14 @@ func main() {
 			// support busyBox and sysV, for openWrt
 			if service.Platform() == "unix-systemv" {
 				logs.Info("unix-systemv service")
-				cmd := exec.Command("/etc/init.d/"+svcConfig.Name, os.Args[1])
+				cmd := exec.Command("/etc/init.d/"+svcConfig.Name, command)
 				err := cmd.Run()
 				if err != nil {
 					logs.Error(err)
 				}
 				return
 			}
-			err := service.Control(s, os.Args[1])
+			err := service.Control(s, command)
 			if err != nil {
 				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
 			}
@@ -184,7 +212,7 @@ func main() {
 			// The service must run the stable installation path rather than the
 			// archive/extraction path used to invoke this command.
 			svcConfig.Executable = installedPath
-			err := service.Control(s, os.Args[1])
+			err := service.Control(s, command)
 			if err != nil {
 				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
 			}
@@ -196,7 +224,7 @@ func main() {
 			}
 			return
 		case "uninstall":
-			err := service.Control(s, os.Args[1])
+			err := service.Control(s, command)
 			if err != nil {
 				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
 			}
@@ -209,6 +237,183 @@ func main() {
 		}
 	}
 	s.Run()
+}
+
+func registerRemoteUpdateHandler(s service.Service) {
+	client.SetRemoteUpdateHandler(func(vKey string) (bool, error) {
+		if runtime.GOOS == "windows" {
+			if s == nil {
+				return false, fmt.Errorf("Windows 客户端服务对象不可用")
+			}
+			restartName := *serviceName
+			if restartName == "Npc" && vKey != "" {
+				// Older menu-installed services did not persist -service_name.
+				restartName = "nps-client-" + vKey
+			}
+			serviceMode := !service.Interactive()
+			if err := spawnWindowsRemoteUpdateHelper(restartName, serviceMode); err != nil {
+				return false, fmt.Errorf("无法启动 Windows 客户端更新器：%w", err)
+			}
+			if serviceMode {
+				// The helper waits for this process to exit before replacing the
+				// executable, then starts the registered service again.
+				if err := s.Stop(); err != nil {
+					return false, fmt.Errorf("更新器已启动，但无法停止当前 Windows 服务：%w", err)
+				}
+				return true, nil
+			}
+			// A foreground process has no service manager to stop it. The
+			// helper will relaunch the same command line after replacement.
+			os.Exit(0)
+			return true, nil
+		}
+		updated, err := install.UpdateNpcResult()
+		if err != nil || !updated {
+			return false, err
+		}
+		logs.Info("NPC update verified and installed; restarting client process")
+		if err := install.RestartNpcProcess(); err != nil {
+			return false, fmt.Errorf("客户端已更新，但自动重启失败：%w", err)
+		}
+		return true, nil
+	})
+}
+
+// spawnWindowsRemoteUpdateHelper copies the current executable to a temporary
+// updater path. Windows keeps the running image locked, so the helper waits
+// for the NPC process to exit, updates the original executable, and then
+// restarts either the registered service or the original foreground command.
+func spawnWindowsRemoteUpdateHelper(name string, serviceMode bool) error {
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	source, err := os.Open(executable)
+	if err != nil {
+		return err
+	}
+	helper, err := os.CreateTemp("", "nps-npc-updater-*.exe")
+	if err != nil {
+		_ = source.Close()
+		return err
+	}
+	helperPath := helper.Name()
+	if _, err := io.Copy(helper, source); err != nil {
+		_ = source.Close()
+		_ = helper.Close()
+		_ = os.Remove(helperPath)
+		return err
+	}
+	if err := source.Close(); err != nil {
+		_ = helper.Close()
+		_ = os.Remove(helperPath)
+		return err
+	}
+	if err := helper.Close(); err != nil {
+		_ = os.Remove(helperPath)
+		return err
+	}
+
+	args := []string{
+		"-remote_update_helper=true",
+		"-remote_update_target=" + executable,
+		"-remote_update_parent=" + strconv.Itoa(os.Getpid()),
+	}
+	var argsFile string
+	if serviceMode {
+		args = append(args, "-remote_update_service="+name)
+	} else {
+		file, createErr := os.CreateTemp("", "nps-npc-update-args-*.json")
+		if createErr != nil {
+			_ = os.Remove(helperPath)
+			return createErr
+		}
+		argsFile = file.Name()
+		if encodeErr := json.NewEncoder(file).Encode(os.Args[1:]); encodeErr != nil {
+			_ = file.Close()
+			_ = os.Remove(argsFile)
+			_ = os.Remove(helperPath)
+			return encodeErr
+		}
+		if closeErr := file.Close(); closeErr != nil {
+			_ = os.Remove(argsFile)
+			_ = os.Remove(helperPath)
+			return closeErr
+		}
+		args = append(args, "-remote_update_args_file="+argsFile)
+	}
+
+	cmd := exec.Command(helperPath, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		if argsFile != "" {
+			_ = os.Remove(argsFile)
+		}
+		_ = os.Remove(helperPath)
+		return err
+	}
+	return cmd.Process.Release()
+}
+
+func runWindowsRemoteUpdateHelper() {
+	if runtime.GOOS != "windows" {
+		fmt.Fprintln(os.Stderr, "remote update helper is only supported on Windows")
+		return
+	}
+	if *remoteUpdateTarget == "" {
+		fmt.Fprintln(os.Stderr, "remote update helper target is missing")
+		return
+	}
+	waitForWindowsProcessExit(*remoteUpdateParent)
+	if _, err := install.UpdateNpcResultAt(*remoteUpdateTarget); err != nil {
+		fmt.Fprintln(os.Stderr, "NPC 远程更新失败：", err)
+		return
+	}
+	if *remoteUpdateService != "" {
+		cmd := exec.Command(*remoteUpdateTarget, "-service_name="+*remoteUpdateService, "restart")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintln(os.Stderr, "NPC Windows 服务重启失败：", err)
+		}
+		return
+	}
+	if *remoteUpdateArgsFile == "" {
+		fmt.Fprintln(os.Stderr, "remote update helper arguments are missing")
+		return
+	}
+	data, err := os.ReadFile(*remoteUpdateArgsFile)
+	_ = os.Remove(*remoteUpdateArgsFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "读取 NPC 启动参数失败：", err)
+		return
+	}
+	var args []string
+	if err := json.Unmarshal(data, &args); err != nil {
+		fmt.Fprintln(os.Stderr, "解析 NPC 启动参数失败：", err)
+		return
+	}
+	cmd := exec.Command(*remoteUpdateTarget, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, "NPC 重启失败：", err)
+	}
+}
+
+func waitForWindowsProcessExit(pid int) {
+	if pid <= 0 {
+		return
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		output, err := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH").CombinedOutput()
+		if err != nil || !strings.Contains(string(output), strconv.Itoa(pid)) {
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
 
 type npc struct {
@@ -326,6 +531,8 @@ func printSlogan() {
 	fmt.Println("  [5] 更新客户端")
 	fmt.Println("  [6] 查看已注册服务列表")
 	fmt.Println("  [7] 查看服务状态")
+	fmt.Println("  [8] 查看 NPC 服务日志")
+	fmt.Println("  [9] 重启所有 NPC 服务")
 	fmt.Println("  [0] 退出")
 	fmt.Println()
 	fmt.Println("  输入[快捷启动命令]直接启动隧道，多个用英文逗号拼接")
@@ -367,6 +574,16 @@ func inputCmd() {
 
 		if input == "7" {
 			systemService(input)
+			continue
+		}
+
+		if input == "8" {
+			showNpcServiceLogs()
+			continue
+		}
+
+		if input == "9" {
+			restartAllNpcServices()
 			continue
 		}
 
@@ -490,6 +707,7 @@ func systemPro(flag string, serAddr string, vkey string, tls bool) {
 	)
 
 	if flag == "1" {
+		svcConfig.Arguments = append(svcConfig.Arguments, "-service_name="+svcConfig.Name)
 		svcConfig.Arguments = append(svcConfig.Arguments, "-server="+serAddr)
 		svcConfig.Arguments = append(svcConfig.Arguments, "-vkey="+vkey)
 		if tls {
@@ -637,6 +855,219 @@ func printNpcServiceList() {
 		status, err := npcServiceStatus(name)
 		fmt.Println("  " + name + "：" + serviceStatusText(status, err))
 	}
+}
+
+func showNpcServiceLogs() {
+	names, err := listNpcServiceNames()
+	if err != nil {
+		fmt.Println("获取服务列表失败：", err)
+		return
+	}
+	if len(names) == 0 {
+		fmt.Println("未发现已注册的 nps-client-* 服务")
+		return
+	}
+
+	fmt.Println("可查看日志的 NPC 服务：")
+	for _, name := range names {
+		fmt.Println("  " + name)
+	}
+	fmt.Print("请输入 VKEY 或服务名（输入 0 返回）：")
+	var input string
+	if _, err := fmt.Fscanln(bufio.NewReader(os.Stdin), &input); err != nil {
+		fmt.Println("读取输入失败：", err)
+		return
+	}
+	if input == "0" {
+		return
+	}
+
+	serviceName, err := resolveNpcServiceName(names, strings.TrimSpace(input))
+	if err != nil {
+		fmt.Println("无法查看日志：", err)
+		return
+	}
+	logPath, err := npcServiceLogPath(serviceName)
+	if err != nil {
+		fmt.Println("无法查看日志：", err)
+		return
+	}
+	fmt.Printf("正在查看 %s 的日志（Ctrl+C 返回菜单）：%s\n", serviceName, logPath)
+	if err := followNpcLogFile(logPath); err != nil {
+		fmt.Println("读取日志失败：", err)
+	}
+}
+
+func resolveNpcServiceName(names []string, input string) (string, error) {
+	input = strings.TrimSpace(input)
+	if strings.HasPrefix(input, "nps-client-") {
+		for _, name := range names {
+			if input == name {
+				return name, nil
+			}
+		}
+		return "", fmt.Errorf("服务 %q 未注册", input)
+	}
+	if input == "" || strings.ContainsAny(input, `/\\`) || input == "." || input == ".." {
+		return "", fmt.Errorf("请输入有效的 VKEY")
+	}
+	wanted := "nps-client-" + input
+	for _, name := range names {
+		if wanted == name {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("VKEY %q 对应的服务未注册", input)
+}
+
+func npcServiceLogPath(serviceName string) (string, error) {
+	if !strings.HasPrefix(serviceName, "nps-client-") || strings.ContainsAny(serviceName, `/\\`) {
+		return "", fmt.Errorf("无效的 NPC 服务名 %q", serviceName)
+	}
+	vkey := strings.TrimPrefix(serviceName, "nps-client-")
+	if vkey == "" || vkey == "." || vkey == ".." {
+		return "", fmt.Errorf("无效的 NPC 服务名 %q", serviceName)
+	}
+	return filepath.Join(filepath.Dir(common.GetNpcLogPath()), "npc-"+vkey+".log"), nil
+}
+
+func followNpcLogFile(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("日志文件不存在或无法读取（%s）：%w", path, err)
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	const initialTailBytes = 128 * 1024
+	start := info.Size() - initialTailBytes
+	if start < 0 {
+		start = 0
+	}
+	if _, err := file.Seek(start, io.SeekStart); err != nil {
+		return err
+	}
+	reader := bufio.NewReader(file)
+	if start > 0 {
+		if _, err := reader.ReadString('\n'); err != nil && err != io.EOF {
+			return err
+		}
+	}
+	initial, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(strings.TrimSuffix(string(initial), "\n"), "\n")
+	if len(initial) == 0 {
+		lines = nil
+	}
+	if len(lines) > 100 {
+		lines = lines[len(lines)-100:]
+	}
+	for _, line := range lines {
+		fmt.Println(line)
+	}
+
+	// Keep the interactive menu alive when the user presses Ctrl+C.
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+	defer signal.Stop(interrupt)
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		line, readErr := reader.ReadString('\n')
+		if len(line) > 0 {
+			fmt.Print(line)
+		}
+		if readErr == nil {
+			continue
+		}
+		if readErr != io.EOF {
+			return readErr
+		}
+
+		select {
+		case <-interrupt:
+			fmt.Println("\n已退出日志查看")
+			return nil
+		case <-ticker.C:
+			currentOffset, seekErr := file.Seek(0, io.SeekCurrent)
+			if seekErr != nil {
+				return seekErr
+			}
+			currentInfo, statErr := file.Stat()
+			if statErr != nil {
+				return statErr
+			}
+			if currentInfo.Size() < currentOffset {
+				if _, err := file.Seek(0, io.SeekStart); err != nil {
+					return err
+				}
+				reader.Reset(file)
+				fmt.Println("日志文件已被清空，继续跟踪新日志")
+			}
+		}
+	}
+}
+
+func restartAllNpcServices() {
+	names, err := listNpcServiceNames()
+	if err != nil {
+		fmt.Println("获取服务列表失败：", err)
+		return
+	}
+	if len(names) == 0 {
+		fmt.Println("未发现已注册的 nps-client-* 服务")
+		return
+	}
+
+	fmt.Printf("即将重启以下 %d 个 NPC 服务：\n", len(names))
+	for _, name := range names {
+		fmt.Println("  " + name)
+	}
+	fmt.Print("重启会短暂中断这些隧道，确认继续？(y/N)：")
+	var confirmation string
+	if _, err := fmt.Fscanln(bufio.NewReader(os.Stdin), &confirmation); err != nil || !strings.EqualFold(strings.TrimSpace(confirmation), "y") {
+		fmt.Println("已取消")
+		return
+	}
+
+	failed := 0
+	for _, name := range names {
+		if err := controlNpcService(name, "restart"); err != nil {
+			failed++
+			fmt.Printf("  %s：重启失败：%v\n", name, err)
+		} else {
+			fmt.Printf("  %s：重启成功\n", name)
+		}
+	}
+	fmt.Printf("重启完成：成功 %d 个，失败 %d 个\n", len(names)-failed, failed)
+}
+
+func controlNpcService(name, action string) error {
+	if !strings.HasPrefix(name, "nps-client-") || strings.ContainsAny(name, `/\\`) {
+		return fmt.Errorf("无效的 NPC 服务名 %q", name)
+	}
+	if service.Platform() == "unix-systemv" {
+		cmd := exec.Command("/etc/init.d/"+name, action)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+		}
+		return nil
+	}
+
+	prg := &npc{exit: make(chan struct{})}
+	svcConfig := newNpcServiceConfig(name, name, "NPS 内网穿透客户端")
+	s, err := service.New(prg, svcConfig)
+	if err != nil {
+		return err
+	}
+	return service.Control(s, action)
 }
 
 func listNpcServiceNames() ([]string, error) {

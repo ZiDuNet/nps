@@ -1,10 +1,12 @@
 package bridge
 
 import (
+	"io"
 	"net"
 	"testing"
 	"time"
 
+	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
 )
@@ -20,6 +22,32 @@ func TestSanitizePublicClientOwnsIdentityFields(t *testing.T) {
 	candidate.RUnlock()
 	if id != 0 || userID != 0 || !noStore || noDisplay || !status {
 		t.Fatalf("identity fields were not normalized: id=%d user=%d noStore=%t noDisplay=%t status=%t", id, userID, noStore, noDisplay, status)
+	}
+}
+
+func TestRequestClientUpdateWritesSignal(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	b := &Bridge{}
+	b.Client.Store(7, NewClient(nil, nil, conn.NewConn(serverConn), "test"))
+	read := make(chan string, 1)
+	go func() {
+		buf := make([]byte, len(common.CLIENT_UPDATE))
+		_, _ = io.ReadFull(clientConn, buf)
+		read <- string(buf)
+	}()
+	if err := b.RequestClientUpdate(7); err != nil {
+		t.Fatalf("RequestClientUpdate: %v", err)
+	}
+	select {
+	case got := <-read:
+		if got != common.CLIENT_UPDATE {
+			t.Fatalf("signal = %q, want %q", got, common.CLIENT_UPDATE)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("update signal was not written")
 	}
 }
 

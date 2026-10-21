@@ -6,7 +6,12 @@ import (
 	"strings"
 )
 
-const VERSION = "1.1.22"
+const VERSION = "1.1.23"
+
+// ClientUpdateMinVersion is the first client release that understands the
+// server-pushed self-update signal. Older clients must be updated manually
+// once before remote updates can be used.
+const ClientUpdateMinVersion = "1.1.23"
 
 // GitHubRepository is the canonical source for release metadata and binaries.
 const GitHubRepository = "ZiDuNet/nps"

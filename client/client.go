@@ -35,6 +35,49 @@ type ClientLogger interface {
 	Trace(format string, v ...interface{})
 }
 
+var remoteUpdateHandler struct {
+	sync.RWMutex
+	fn func(vKey string) (bool, error)
+}
+
+var remoteUpdateInProgress atomic.Bool
+
+// SetRemoteUpdateHandler registers the executable-level updater. The client
+// package handles the wire signal, while the NPC command chooses the
+// platform-appropriate process/service restart strategy.
+func SetRemoteUpdateHandler(handler func(vKey string) (bool, error)) {
+	remoteUpdateHandler.Lock()
+	remoteUpdateHandler.fn = handler
+	remoteUpdateHandler.Unlock()
+	remoteUpdateInProgress.Store(false)
+}
+
+func requestRemoteUpdate(client *TRPClient) {
+	if !remoteUpdateInProgress.CompareAndSwap(false, true) {
+		client.logInfo("remote client update is already in progress")
+		return
+	}
+	go func() {
+		remoteUpdateHandler.RLock()
+		handler := remoteUpdateHandler.fn
+		remoteUpdateHandler.RUnlock()
+		if handler == nil {
+			client.logError("server requested a client update, but no updater is registered")
+			remoteUpdateInProgress.Store(false)
+			return
+		}
+		restartRequested, err := handler(client.vKey)
+		if err != nil {
+			client.logError("server-requested client update failed: %s", err.Error())
+			remoteUpdateInProgress.Store(false)
+			return
+		}
+		if !restartRequested {
+			remoteUpdateInProgress.Store(false)
+		}
+	}()
+}
+
 type TRPClient struct {
 	svrAddr        string
 	bridgeConnType string
@@ -292,6 +335,11 @@ mainLoop:
 			break
 		}
 		switch flags {
+		case common.CLIENT_UPDATE:
+			// Update asynchronously so a slow GitHub download never blocks the
+			// main control reader or tunnel traffic. The process is restarted only
+			// after the new binary has been downloaded and verified.
+			requestRemoteUpdate(s)
 		case common.REPORT_LOCAL_IP:
 			// Newer servers request the client's private/LAN addresses. Older
 			// servers never send this flag, so this is protocol-compatible.

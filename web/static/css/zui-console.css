@@ -2105,6 +2105,10 @@ body.zui-app .management-page--client .nps-table__grid td.client-list__id {
     padding-left: 8px !important;
     white-space: nowrap;
 }
+body.zui-app .management-page--client .nps-table__grid td.client-list__version { white-space: nowrap; }
+body.zui-app .client-version-cell { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+body.zui-app .client-version-update { display: inline-flex; width: 26px; min-width: 26px; height: 26px; align-items: center; justify-content: center; padding: 0 !important; }
+body.zui-app .client-version-update:disabled { cursor: not-allowed; opacity: .55; }
 /* Client rows have two action tracks. Give them enough room for their icon
    buttons so fixed-layout tables never clip the controls at the right edge. */
 body.zui-app .management-page--client .nps-table__grid th.client-list__option,

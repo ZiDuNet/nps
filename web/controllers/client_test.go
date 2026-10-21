@@ -11,6 +11,24 @@ import (
 	"ehang.io/nps/lib/file"
 )
 
+func TestClientRemoteUpdateVersionGate(t *testing.T) {
+	for _, tt := range []struct {
+		version string
+		want    bool
+	}{
+		{version: "1.1.22", want: false},
+		{version: "v1.1.23", want: true},
+		{version: "1.1.24", want: true},
+		{version: "unknown", want: false},
+	} {
+		t.Run(tt.version, func(t *testing.T) {
+			if got := supportsRemoteClientUpdate(tt.version); got != tt.want {
+				t.Fatalf("supportsRemoteClientUpdate(%q) = %t, want %t", tt.version, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestClientListRowsExposeUserName(t *testing.T) {
 	rows := newClientListRows([]*file.Client{
 		{
