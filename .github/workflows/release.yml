@@ -199,6 +199,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=nps
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/nps:${{ env.RELEASE_VERSION }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/nps:latest
       - name: Build and push npc
         uses: docker/build-push-action@v6
         with:
@@ -212,6 +213,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=npc
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/npc:${{ env.RELEASE_VERSION }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/npc:latest
       - name: Update Docker Hub description for nps
         uses: peter-evans/dockerhub-description@v4
         with:
@@ -477,56 +479,3 @@ jobs:
             release-assets/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  promote_docker_latest:
-    name: Promote released Docker images to latest
-    needs: [build_docker, publish_release]
-    if: github.ref_type == 'tag' || inputs.release_tag != ''
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Set released Docker version
-        run: |
-          source_version="$(sed -nE 's/^const VERSION = "([^"]+)"$/\1/p' lib/version/version.go)"
-          if [ -z "$source_version" ]; then
-            echo "Unable to read lib/version.VERSION"
-            exit 1
-          fi
-          printf 'RELEASE_VERSION=%s\n' "$source_version" >> "$GITHUB_ENV"
-      - name: Check this is still the latest GitHub release
-        id: latest_release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          latest_tag="$(curl -fsSL \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" | jq -r '.tag_name')"
-          if [ "$latest_tag" = "v${RELEASE_VERSION}" ]; then
-            echo "promote=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "promote=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping stale Docker promotion: GitHub latest is ${latest_tag}, not v${RELEASE_VERSION}."
-          fi
-      - name: Set up Docker Buildx
-        if: steps.latest_release.outputs.promote == 'true'
-        uses: docker/setup-buildx-action@v3
-      - name: Login to DockerHub
-        if: steps.latest_release.outputs.promote == 'true'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Promote release images to latest
-        if: steps.latest_release.outputs.promote == 'true'
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-        run: |
-          docker buildx imagetools create \
-            --tag "${DOCKERHUB_USERNAME}/nps:latest" \
-            "${DOCKERHUB_USERNAME}/nps:${RELEASE_VERSION}"
-          docker buildx imagetools create \
-            --tag "${DOCKERHUB_USERNAME}/npc:latest" \
-            "${DOCKERHUB_USERNAME}/npc:${RELEASE_VERSION}"
