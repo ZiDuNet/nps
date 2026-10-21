@@ -63,7 +63,11 @@
         sidePagination: 'server',//服务器端分页
         pageNumber: 1,
         pageList: [5, 10, 20, 50],//分页步进值
-        storageKey: 'client-v2',
+        // v3 keeps the action column visible even when an older browser
+        // preference hid the version column (where the update action used to
+        // live).  Existing preferences are intentionally not reused so the
+        // remote-update action cannot disappear after an upgrade.
+        storageKey: 'client-v3',
         detailView: true,
         smartDisplay: true, // 智能显示 pagination 和 cardview 等
         formatLoadingMessage: function () { return npsTableState('client', true); },
@@ -185,32 +189,7 @@
                 class: 'client-list__version',
                 visible: !clientListCompact,//较窄桌面中在详情行保留，避免表头拥挤
                 formatter: function (value, row) {
-                    var versionText = npsEscapeHtml(value || '-');
-                    {{if eq true .isAdmin}}
-                    var clientId = Number(row.Id);
-                    if (!isFinite(clientId) || Math.floor(clientId) !== clientId || clientId <= 0) return versionText;
-                    var supported = row.CanRemoteUpdate === true;
-                    var online = row.IsConnect === true && row.Status === true && row.NoStore !== true;
-                    var disabled = !supported || !online;
-                    var titleZh = !supported
-                        ? '请先手动升级到 v{{.client_update_min_version}}，之后可远程升级'
-                        : (!online ? '客户端启用并在线后才能升级' : '下发客户端升级');
-                    var titleEn = !supported
-                        ? 'Manually update once to v{{.client_update_min_version}} to enable remote updates'
-                        : (!online ? 'Client must be enabled and online' : 'Send client update');
-                    var title = npsIsEnglish() ? titleEn : titleZh;
-                    return '<span class="client-version-cell"><span class="client-version-cell__text">' + versionText + '</span>'
-                        + '<button type="button" class="btn btn-outline btn-primary btn-xs client-version-update"'
-                        + (disabled ? ' disabled' : '')
-                        + ' onclick="requestClientUpgrade(this,' + clientId + ')"'
-                        + ' title="' + npsEscapeHtml(title) + '" data-title-zh="' + npsEscapeHtml(titleZh) + '"'
-                        + ' aria-label="' + npsEscapeHtml(title) + '" data-aria-label-zh="' + npsEscapeHtml(titleZh) + '"'
-                        + ' data-title-en="' + npsEscapeHtml(titleEn) + '"'
-                        + ' data-aria-label-en="' + npsEscapeHtml(titleEn) + '">'
-                        + '<i class="fa fa-cloud-download" aria-hidden="true"></i></button></span>';
-                    {{else}}
-                    return versionText;
-                    {{end}}
+                    return npsEscapeHtml(value || '-');
                 }
             },
             {
@@ -312,7 +291,7 @@
                 align: 'center',
                 halign: 'center',
                 class: 'client-list__option',
-                width: '132px',
+                width: '168px',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
                     var clientId = Number(row.Id);
@@ -320,6 +299,29 @@
                     var btn_group = '<div class="client-actions client-actions--manage">'
 
                     {{if eq true .isAdmin}}
+                    // Keep the remote-update action in the always-visible
+                    // management column.  The version column is responsive
+                    // and may be hidden on compact screens or by a saved
+                    // column preference, which previously made this action
+                    // impossible to discover.
+                    var supported = row.CanRemoteUpdate === true;
+                    var online = row.IsConnect === true && row.Status === true && row.NoStore !== true;
+                    var disabled = !supported || !online;
+                    var titleZh = !supported
+                        ? '请先手动升级到 v{{.client_update_min_version}}，之后可远程升级'
+                        : (!online ? '客户端启用并在线后才能升级' : '下发客户端升级');
+                    var titleEn = !supported
+                        ? 'Manually update once to v{{.client_update_min_version}} to enable remote updates'
+                        : (!online ? 'Client must be enabled and online' : 'Send client update');
+                    var title = npsIsEnglish() ? titleEn : titleZh;
+                    btn_group += '<button type="button" class="btn btn-outline btn-primary client-version-update"'
+                        + (disabled ? ' disabled' : '')
+                        + ' onclick="requestClientUpgrade(this,' + clientId + ')"'
+                        + ' title="' + npsEscapeHtml(title) + '" data-title-zh="' + npsEscapeHtml(titleZh) + '"'
+                        + ' aria-label="' + npsEscapeHtml(title) + '" data-aria-label-zh="' + npsEscapeHtml(titleZh) + '"'
+                        + ' data-title-en="' + npsEscapeHtml(titleEn) + '"'
+                        + ' data-aria-label-en="' + npsEscapeHtml(titleEn) + '">'
+                        + '<i class="fa fa-cloud-download" aria-hidden="true"></i></button>';
                     if (row.Status) {
                         btn_group += '<button type="button" onclick="submitform(\'stop\', \'{{.web_base_url}}/client/changestatus\', {\'id\':' + clientId
                         btn_group += ', \'status\': 0})" class="btn btn-outline btn-warning" data-title-zh="停用客户端" data-title-en="Disable client" data-aria-label-zh="停用客户端" data-aria-label-en="Disable client"><i class="fa fa-pause" aria-hidden="true"></i></button>'

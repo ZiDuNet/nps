@@ -125,7 +125,11 @@ func main() {
 	if *debug {
 		logs.SetLogger(logs.AdapterConsole, `{"level":`+*logLevel+`,"color":true}`)
 	} else {
-		logs.SetLogger(logs.AdapterFile, `{"level":`+*logLevel+`,"filename":"`+*logPath+`","daily":false,"maxlines":100000,"color":true}`)
+		// Service logs are intentionally readable by non-root operators so the
+		// built-in log viewer works for a user who can manage NPC services.
+		// Beego defaults to 0660; a root-owned file with that mode otherwise
+		// produces EACCES for ordinary users.
+		logs.SetLogger(logs.AdapterFile, `{"level":`+*logLevel+`,"filename":"`+*logPath+`","daily":false,"maxlines":100000,"perm":"0644","rotateperm":"0644","color":true}`)
 	}
 
 	// init service
@@ -727,7 +731,7 @@ func systemPro(flag string, serAddr string, vkey string, tls bool) {
 		logs.Reset()
 		logs.EnableFuncCallDepth(true)
 		logs.SetLogFuncCallDepth(3)
-		logs.SetLogger(logs.AdapterFile, `{"level":`+*logLevel+`,"filename":"`+*logPath+`","daily":false,"maxlines":100000,"color":true}`)
+		logs.SetLogger(logs.AdapterFile, `{"level":`+*logLevel+`,"filename":"`+*logPath+`","daily":false,"maxlines":100000,"perm":"0644","rotateperm":"0644","color":true}`)
 
 		installedPath, installErr := install.InstallNpcPath()
 		if installErr != nil {
@@ -934,6 +938,9 @@ func npcServiceLogPath(serviceName string) (string, error) {
 func followNpcLogFile(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
+		if os.IsPermission(err) {
+			return fmt.Errorf("日志文件权限不足（%s），请先重启对应 NPC 服务以应用新的 0644 日志权限，或使用 root/管理员运行 NPC 菜单：%w", path, err)
+		}
 		return fmt.Errorf("日志文件不存在或无法读取（%s）：%w", path, err)
 	}
 	defer file.Close()

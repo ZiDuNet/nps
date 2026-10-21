@@ -2113,9 +2113,9 @@ body.zui-app .client-version-update:disabled { cursor: not-allowed; opacity: .55
    buttons so fixed-layout tables never clip the controls at the right edge. */
 body.zui-app .management-page--client .nps-table__grid th.client-list__option,
 body.zui-app .management-page--client .nps-table__grid td.client-list__option {
-    width: 132px !important;
-    min-width: 132px !important;
-    max-width: 132px !important;
+    width: 168px !important;
+    min-width: 168px !important;
+    max-width: 168px !important;
     padding-right: 9px !important;
     padding-left: 9px !important;
     text-align: center !important;

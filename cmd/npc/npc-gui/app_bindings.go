@@ -22,6 +22,10 @@ type App struct {
 	app    *application.App
 	window *application.WebviewWindow
 	tray   *application.SystemTray
+	// updateMu serializes manual and server-triggered updates.  Both paths
+	// replace the running executable and must never write the same binary at
+	// the same time.
+	updateMu sync.Mutex
 }
 
 // ShortClient 与前端结构对应
@@ -67,6 +71,10 @@ func NewApp(app *application.App, window *application.WebviewWindow) *App {
 func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	// 初始化日志系统：应用日志走 slog，客户端日志走内存缓冲 + JSON 文件
 	initAppLogger()
+	// The GUI embeds the same TRP client as the CLI, but it has its own
+	// updater. Register it before any saved client shortcut can connect so a
+	// server-issued CLIENT_UPDATE signal is handled instead of being dropped.
+	a.registerRemoteUpdateHandler()
 
 	// 同步开机启动状态：检查配置与实际注册表是否一致
 	go func() {
@@ -94,6 +102,8 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 }
 
 func (a *App) ServiceShutdown() error {
+	// Do not leave a process-wide handler pointing at a shutting-down GUI.
+	client.SetRemoteUpdateHandler(nil)
 	setQuitting()
 	closeAllLogStores()
 	if a.tray != nil {

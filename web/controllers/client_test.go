@@ -176,6 +176,8 @@ func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
 		`data-title-en="Disable client"`,
 		`data-title-en="Delete my client"`,
 		`data-title-en="Copy command"`,
+		`storageKey: 'client-v3'`,
+		`client-version-update`,
 		`npsNotify('success', npsIsEnglish() ? 'Copied' : '复制成功')`,
 	} {
 		if !strings.Contains(content, marker) {

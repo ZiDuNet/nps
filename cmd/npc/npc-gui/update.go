@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"ehang.io/nps/client"
 	"ehang.io/nps/lib/version"
 )
 
@@ -72,6 +73,9 @@ func fetchLatestRelease() (*ghRelease, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+			return nil, fmt.Errorf("获取版本信息失败：GitHub API 限流（HTTP %d），请稍后重试", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("获取版本信息失败: HTTP %d", resp.StatusCode)
 	}
 	rl := new(ghRelease)
@@ -174,11 +178,65 @@ func (a *App) CheckForUpdate() (*UpdateInfo, error) {
 	}, nil
 }
 
+// registerRemoteUpdateHandler connects the embedded NPC client to the GUI
+// updater.  The client package receives the wire-level CLIENT_UPDATE signal
+// asynchronously; this handler only performs the GUI-specific download,
+// replacement and restart work.  A GUI process has one executable shared by
+// all of its saved connections, so updating once restarts the whole GUI.
+func (a *App) registerRemoteUpdateHandler() {
+	client.SetRemoteUpdateHandler(func(_ string) (bool, error) {
+		if a == nil {
+			return false, errors.New("GUI 应用不可用，无法执行远程升级")
+		}
+
+		a.updateMu.Lock()
+		defer a.updateMu.Unlock()
+
+		rl, err := fetchLatestRelease()
+		if err != nil {
+			return false, err
+		}
+		available, err := updateAvailable(version.VERSION, rl.TagName)
+		if err != nil {
+			return false, err
+		}
+		if !available {
+			slog.Info("收到服务端升级请求，但当前 GUI 已是最新版本", "version", version.VERSION)
+			return false, nil
+		}
+
+		if err := a.downloadAndInstallRelease(rl); err != nil {
+			return false, err
+		}
+		if err := a.RestartApp(); err != nil {
+			return false, err
+		}
+		return true, nil
+	})
+	slog.Info("GUI 客户端远程升级器已注册")
+}
+
 // DownloadAndInstallUpdate 下载最新版本并热替换当前可执行文件
 func (a *App) DownloadAndInstallUpdate() error {
+	a.updateMu.Lock()
+	defer a.updateMu.Unlock()
+	return a.downloadAndInstallUpdate()
+}
+
+// downloadAndInstallUpdate performs the replacement without taking updateMu.
+// Callers that can run concurrently with the frontend must use the exported
+// method above or hold updateMu (as the remote-update handler does).
+func (a *App) downloadAndInstallUpdate() error {
 	rl, err := fetchLatestRelease()
 	if err != nil {
 		return err
+	}
+	return a.downloadAndInstallRelease(rl)
+}
+
+func (a *App) downloadAndInstallRelease(rl *ghRelease) error {
+	if rl == nil || rl.TagName == "" {
+		return errors.New("Release 信息为空")
 	}
 	available, err := updateAvailable(version.VERSION, rl.TagName)
 	if err != nil {

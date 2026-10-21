@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -153,13 +154,13 @@ func UpdateNpsResult() (bool, error) {
 }
 
 func updateNps() (bool, error) {
-	latest, err := fetchLatestVersion()
+	release, err := fetchLatestRelease()
 	if err != nil {
 		log.Println("获取最新版本失败：", err)
 		return false, err
 	}
-	fmt.Println("最新版本为：", latest)
-	available, err := updateAvailable(latest)
+	fmt.Println("最新版本为：", release.TagName)
+	available, err := updateAvailable(release.TagName)
 	if err != nil {
 		log.Println("检查版本失败：", err)
 		return false, err
@@ -169,7 +170,7 @@ func updateNps() (bool, error) {
 		return false, nil
 	}
 	tempDir := filepath.Join(common.GetAppPath(), "temp")
-	destPath, err := downloadAndUnpack("server", tempDir)
+	destPath, err := downloadAndUnpackRelease(release, "server", tempDir)
 	if err != nil {
 		log.Println("下载更新失败：", err)
 		return false, err
@@ -221,6 +222,8 @@ func UpdateNpcNew() {
 // checksum, and replaces the running NPC binary. It deliberately does not
 // restart the process; callers decide how to restart their service safely.
 func UpdateNpcResult() (bool, error) {
+	npcUpdateMu.Lock()
+	defer npcUpdateMu.Unlock()
 	return updateNpcResult("")
 }
 
@@ -229,16 +232,18 @@ func UpdateNpcResult() (bool, error) {
 // that process must run from a separate executable while replacing the
 // service's original executable.
 func UpdateNpcResultAt(targetPath string) (bool, error) {
+	npcUpdateMu.Lock()
+	defer npcUpdateMu.Unlock()
 	return updateNpcResult(targetPath)
 }
 
 func updateNpcResult(targetPath string) (bool, error) {
-	latest, err := fetchLatestVersion()
+	release, err := fetchLatestRelease()
 	if err != nil {
 		return false, fmt.Errorf("获取最新版本失败：%w", err)
 	}
-	log.Println("NPC 最新版本为：", latest)
-	available, err := updateAvailable(latest)
+	log.Println("NPC 最新版本为：", release.TagName)
+	available, err := updateAvailable(release.TagName)
 	if err != nil {
 		return false, fmt.Errorf("检查版本失败：%w", err)
 	}
@@ -254,7 +259,7 @@ func updateNpcResult(targetPath string) (bool, error) {
 		return false, fmt.Errorf("创建客户端更新临时目录失败：%w", err)
 	}
 	defer os.RemoveAll(tempDir)
-	destPath, err := downloadAndUnpack("client", tempDir)
+	destPath, err := downloadAndUnpackRelease(release, "client", tempDir)
 	if err != nil {
 		return false, fmt.Errorf("下载更新失败：%w", err)
 	}
@@ -281,6 +286,12 @@ const (
 
 var releaseHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
+// npcUpdateMu serializes manual updates and server-triggered updates inside
+// one NPC process. Both paths download and replace the same executable; without
+// this guard concurrent requests could rename the binary and its .old backup
+// over one another.
+var npcUpdateMu sync.Mutex
+
 func fetchLatestRelease() (*release, error) {
 	req, err := http.NewRequest(http.MethodGet, latestReleaseAPI, nil)
 	if err != nil {
@@ -295,6 +306,9 @@ func fetchLatestRelease() (*release, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+			return nil, fmt.Errorf("获取版本信息失败：GitHub API 限流（HTTP %d），请稍后重试", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("获取版本信息失败: HTTP %d", resp.StatusCode)
 	}
 
@@ -370,6 +384,17 @@ func downloadAndUnpack(bin, unpackPath string) (string, error) {
 	}
 	if _, err := version.Compare(version.VERSION, rl.TagName); err != nil {
 		return "", fmt.Errorf("最新 Release 标签 %q 无效: %w", rl.TagName, err)
+	}
+	return downloadAndUnpackRelease(rl, bin, unpackPath)
+}
+
+// downloadAndUnpackRelease downloads an asset from an already-fetched
+// release. Keeping metadata and package download in one operation avoids a
+// second GitHub API request, which is important for unauthenticated clients
+// sharing GitHub's 60-request/hour limit.
+func downloadAndUnpackRelease(rl *release, bin, unpackPath string) (string, error) {
+	if rl == nil || rl.TagName == "" {
+		return "", errors.New("Release 信息为空")
 	}
 
 	filename := releaseAssetName(runtime.GOOS, runtime.GOARCH, bin)
