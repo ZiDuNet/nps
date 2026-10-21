@@ -1693,6 +1693,36 @@ func (s *DbUtils) GetHostByAllowedClientsFiltered(start, length int, id int, sea
 func (s *DbUtils) DelClient(id int) error {
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()
+	return s.delClientLocked(id)
+}
+
+// DelClientForUser removes a client only while holding the same mutation lock
+// used for ownership changes. This keeps a self-service delete from racing an
+// administrator reassigning the client to another user.
+func (s *DbUtils) DelClientForUser(id, userID int) error {
+	if userID <= 0 {
+		return errors.New("用户 ID 无效")
+	}
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	old, ok := s.JsonDb.Clients.Load(id)
+	if !ok {
+		return errors.New("未找到客户端")
+	}
+	client, valid := old.(*Client)
+	if !valid || client == nil {
+		return errors.New("客户端记录无效")
+	}
+	client.RLock()
+	ownerID := client.UserId
+	client.RUnlock()
+	if ownerID != userID {
+		return errors.New("无权删除该客户端")
+	}
+	return s.delClientLocked(id)
+}
+
+func (s *DbUtils) delClientLocked(id int) error {
 	if old, ok := s.JsonDb.Clients.Load(id); ok {
 		if client, valid := old.(*Client); valid && client != nil {
 			client.RLock()

@@ -299,3 +299,57 @@ func TestDashboardUserCannotEditAnotherUsersClient(t *testing.T) {
 		t.Fatalf("cross-owner edit changed remark to %q", remark)
 	}
 }
+
+func TestDashboardUserCanDeleteOwnClient(t *testing.T) {
+	utils := useClientPermissionTestDb(t)
+	utils.JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Status: true})
+	client := &file.Client{Id: 2, UserId: 7, Status: true, Remark: "owned", Cnf: &file.Config{}, Flow: &file.Flow{}}
+	utils.JsonDb.Clients.Store(client.Id, client)
+
+	controller, recorder := newClientPermissionController(t, "Del", url.Values{"id": {"2"}}, testUserSession(7))
+	runClientPermissionAction(t, controller.Del)
+
+	response := readClientPermissionResponse(t, recorder)
+	if response["status"] != float64(1) {
+		t.Fatalf("ordinary user delete response = %#v", response)
+	}
+	if _, err := utils.GetClient(2); err == nil {
+		t.Fatal("ordinary user delete did not remove owned client")
+	}
+}
+
+func TestDashboardUserCannotDeleteAnotherUsersClient(t *testing.T) {
+	utils := useClientPermissionTestDb(t)
+	utils.JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Status: true})
+	client := &file.Client{Id: 2, UserId: 8, Status: true, Remark: "other user", Cnf: &file.Config{}, Flow: &file.Flow{}}
+	utils.JsonDb.Clients.Store(client.Id, client)
+
+	controller, recorder := newClientPermissionController(t, "Del", url.Values{"id": {"2"}}, testUserSession(7))
+	controller.Del()
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("cross-owner delete status = %d, want %d", recorder.Code, http.StatusForbidden)
+	}
+	if _, err := utils.GetClient(2); err != nil {
+		t.Fatalf("cross-owner delete removed client: %v", err)
+	}
+}
+
+func TestLegacyClientPrincipalCannotDeleteClient(t *testing.T) {
+	utils := useClientPermissionTestDb(t)
+	client := &file.Client{Id: 5, UserId: 0, Status: true, Remark: "legacy", Cnf: &file.Config{}, Flow: &file.Flow{}}
+	utils.JsonDb.Clients.Store(client.Id, client)
+	sessionValues := map[interface{}]interface{}{
+		"isAdmin":           false,
+		sessionPrincipalKey: sessionPrincipalClient,
+		"clientId":          5,
+		"auth":              true,
+	}
+	controller, recorder := newClientPermissionController(t, "Del", url.Values{"id": {"5"}}, sessionValues)
+	controller.Del()
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("legacy client delete status = %d, want %d", recorder.Code, http.StatusForbidden)
+	}
+	if _, err := utils.GetClient(5); err != nil {
+		t.Fatalf("legacy client delete removed client: %v", err)
+	}
+}

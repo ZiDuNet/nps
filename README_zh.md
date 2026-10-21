@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.23</sub>
+﻿# NPS <sub>v1.1.24</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -194,6 +194,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.24** (2026-10-21) - 普通用户可删除自己名下的客户端，服务端会同步清理该客户端的隧道、域名规则和在线连接
 - **v1.1.23** (2026-10-21) - 管理员可从客户端列表下发 NPC 远程升级；客户端校验 Release 后按服务账户权限替换并自动重启
 
 - **v1.1.22** (2026-10-15) - 发布包含最新上游兼容性修复的版本

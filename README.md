@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.23</sub>
+﻿# NPS <sub>v1.1.24</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -179,6 +179,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.24** (2026-10-21) - Added self-service deletion for ordinary users' own clients, including tunnel/Host cleanup and ownership-safe authorization
 - **v1.1.23** (2026-10-21) - Added administrator-triggered NPC remote updates from the client list; releases are verified before replacement and automatic restart
 
 - **v1.1.22** (2026-10-15) - Release build for the latest upstream compatibility fixes

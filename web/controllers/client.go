@@ -3,6 +3,7 @@ package controllers
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -728,18 +729,31 @@ func (s *ClientController) Del() {
 	if !s.RequirePost() {
 		return
 	}
-	if !s.RequireAdmin() {
+	id := s.GetIntNoErr("id")
+	if !s.RequireAdminOrClientOwner(id) {
 		return
 	}
-	id := s.GetIntNoErr("id")
-	ownerID := 0
-	if client, err := file.GetDb().GetClient(id); err == nil && client != nil {
-		client.RLock()
-		ownerID = client.UserId
-		client.RUnlock()
-	}
-	if err := file.GetDb().DelClient(id); err != nil {
+	client, err := file.GetDb().GetClient(id)
+	if err != nil || client == nil {
 		s.AjaxErr("delete error")
+		return
+	}
+	client.RLock()
+	ownerID := client.UserId
+	client.RUnlock()
+	if s.IsAdmin() {
+		err = file.GetDb().DelClient(id)
+	} else {
+		userID, ok := s.currentUserPrincipalID()
+		if !ok {
+			s.rejectRequest(http.StatusForbidden, "permission denied")
+			return
+		}
+		err = file.GetDb().DelClientForUser(id, userID)
+	}
+	if err != nil {
+		s.AjaxErr("delete error")
+		return
 	}
 	server.DelTunnelAndHostByClientId(id, false)
 	server.DelClientConnect(id)

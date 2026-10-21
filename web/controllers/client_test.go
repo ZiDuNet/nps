@@ -174,6 +174,7 @@ func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
 		`npsApplyTableState(this, 'client')`,
 		`type="button"`,
 		`data-title-en="Disable client"`,
+		`data-title-en="Delete my client"`,
 		`data-title-en="Copy command"`,
 		`npsNotify('success', npsIsEnglish() ? 'Copied' : '复制成功')`,
 	} {

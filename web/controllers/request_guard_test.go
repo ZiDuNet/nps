@@ -38,10 +38,13 @@ func TestAdministrativeClientActionsRequireAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, action := range []string{"ChangeStatus", "Del"} {
+	for _, action := range []string{"ChangeStatus"} {
 		if !functionCalls(parsed, action, "RequireAdmin") {
 			t.Errorf("client.go.%s must require administrator authorization", action)
 		}
+	}
+	if !functionCalls(parsed, "Del", "RequireAdminOrClientOwner") {
+		t.Fatal("client.go.Del must require administrator or current client owner authorization")
 	}
 	global, err := parser.ParseFile(token.NewFileSet(), "global.go", nil, 0)
 	if err != nil {

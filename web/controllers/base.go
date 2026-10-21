@@ -399,6 +399,21 @@ func (s *BaseController) RequireAdmin() bool {
 	return false
 }
 
+// RequireAdminOrClientOwner allows ordinary dashboard users to remove only
+// clients currently assigned to their own account. Legacy per-client login
+// sessions are intentionally excluded from this self-service operation.
+func (s *BaseController) RequireAdminOrClientOwner(clientID int) bool {
+	if s.IsAdmin() {
+		return true
+	}
+	userID, ok := s.currentUserPrincipalID()
+	if ok && file.GetDb().IsClientBelongToUser(clientID, userID) {
+		return true
+	}
+	s.rejectRequest(http.StatusForbidden, "permission denied")
+	return false
+}
+
 func (s *BaseController) rejectRequest(status int, message string) {
 	s.Ctx.Output.SetStatus(status)
 	s.Data["json"] = ajax(message, 0)
