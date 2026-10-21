@@ -113,6 +113,8 @@ Docker Hub：
 - 服务端：[wushuo98/nps](https://hub.docker.com/r/wushuo98/nps)
 - 客户端：[wushuo98/npc](https://hub.docker.com/r/wushuo98/npc)
 
+标签约定：`latest` 只在正式 GitHub Release 成功构建时更新，并与对应语义版本标签（如 `1.1.24`）指向同一镜像；推送到 `master` 的测试构建只发布不可变的 `sha-<短提交号>` 标签，不会覆盖稳定版。NPC/NPS 的软件内在线更新独立读取 GitHub Releases 的正式版本号和校验文件，不依赖 Docker 的 `latest` 标签。
+
 当前 Docker CI 构建的平台：
 
 - `linux/amd64`

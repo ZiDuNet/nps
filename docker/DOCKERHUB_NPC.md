@@ -4,6 +4,8 @@ NPC 是 NPS 的客户端程序，用于连接 NPS 服务端并把内网服务转
 
 NPC 可以直接容器化运行，镜像入口为 `/npc`，命令行参数和物理机二进制一致。
 
+`latest` 始终指向最新正式版；`master` 测试构建使用 `sha-<短提交号>` 标签。NPC 在线升级以 GitHub Releases 正式版本为准，与 Docker 标签无关。
+
 ## 快速启动
 
 ```bash

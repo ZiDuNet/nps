@@ -107,9 +107,11 @@ docker build -f Dockerfile.npc -t npc .
 
 `.github/workflows/ci.yml` 在 `master` 分支提交和 Pull Request 上执行服务端/客户端构建、核心 Go 包测试，以及 GUI 前端的冻结依赖安装和构建。文档站使用 `docs/package-lock.json` 与 `npm ci` 构建，确保 Pages 部署可复现。
 
-每次推送到 `master` 都会执行 CI 和独立的 Docker 工作流。Docker 工作流只构建并推送多架构 `latest` 与不可变的 `sha-<短提交号>` 标签，并会取消同一分支上较旧的镜像构建；master 提交不会生成正式 GitHub Release，也不会产生供软件更新器读取的版本资产。
+每次推送到 `master` 都会执行 CI 和独立的 Docker 工作流。Docker 工作流只构建并推送不可变的多架构 `sha-<短提交号>` 测试镜像，并会取消同一分支上较旧的镜像构建；master 提交不会更新 `latest`、不会生成正式 GitHub Release，也不会产生供软件更新器读取的版本资产。
 
-推送与源码版本严格一致的标签（例如源码为 `1.1.12` 时推送 `v1.1.12`）才会运行 Release 工作流并创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；CLI/GUI 自动更新仍只读取经过完整校验的 Release，版本标签、平台资产名称和 `checksums.txt` 格式保持不变。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`，避免并行任务争抢同一个 Release；标签工作流只推送对应的 Docker 版本标签（如 `1.1.12`），`latest` 由 master 的 Docker 工作流唯一维护。也可以在 Actions 页面手动执行 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.12`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
+推送与源码版本严格一致的标签（例如源码为 `1.1.24` 时推送 `v1.1.24`）才会运行 Release 工作流并创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；CLI/GUI 自动更新和服务端下发的 NPC 在线升级仍只读取 GitHub 上经过完整校验的最新正式 Release，并按 `lib/version.VERSION` 与 Release tag 比较，不依赖 Docker 标签。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`，避免并行任务争抢同一个 Release；Release 工作流先推送对应版本 Docker 标签（如 `1.1.24`），待 GitHub Release 发布成功后，再将同一多架构镜像清单晋升为 `latest`。因此 `latest` 只会随正式 Release 更新，而 `sha-<短提交号>` 用于测试 master 构建。也可以在 Actions 页面手动执行 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.24`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
+
+`sha-<短提交号>` 测试镜像仍按源码编译，因此可能显示尚未正式发布的 `lib/version.VERSION`。更新器只按此版本号与 GitHub 最新正式 Release 比较，不会从 Docker Hub 的 `latest` 推断版本；测试镜像适用于验证，不应把其版本号当成已发布版本。
 
 GUI 构建由 Wails 3 调用 `wails.json` 中配置的 Yarn 前端流程：
 
