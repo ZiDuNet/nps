@@ -92,6 +92,9 @@
                 if (!value || !value.length) return '-';
                 return text(Array.isArray(value) ? value.join(', ') : value);
             };
+            var credentialStatus = function (configured) {
+                return configured ? (english ? 'Configured' : '已设置') : (english ? 'Not set' : '未设置');
+            };
             var configuredExpiry = row.ExpireTime
                 ? text(row.ExpireTime)
                 : (Number(row.UserId) > 0 ? (english ? 'Follow user' : '跟随所属用户') : text(clientUnlimitedText()));
@@ -133,10 +136,10 @@
                 + '<div class="client-detail__columns">'
                 + '<div class="client-detail__column">'
                 + section('key', english ? 'Authentication' : '认证信息',
-                    kv('<span langtag="word-webusername"></span>', '-')
-                    + kv('<span langtag="word-webpassword"></span>', '-')
-                    + kv('<span langtag="word-basicusername"></span>', '-')
-                    + kv('<span langtag="word-basicpassword"></span>', '-'))
+                    kv('<span langtag="word-webusername"></span>', text(row.WebUserName, '-'))
+                    + kv('<span langtag="word-webpassword"></span>', credentialStatus(!!row.WebPasswordSet))
+                    + kv('<span langtag="word-basicusername"></span>', text(row.BasicUserName, '-'))
+                    + kv('<span langtag="word-basicpassword"></span>', credentialStatus(!!row.BasicPasswordSet)))
                 + '</div>'
                 + '<div class="client-detail__column">'
                 + section('shield-alt', english ? 'Access control' : '访问控制',

@@ -508,6 +508,10 @@ body.zui-app .toggle-field { display: inline-flex; align-items: center; gap: 9px
 body.zui-app .toggle-slider { background: var(--nps-line-strong); }
 body.zui-app .toggle-switch input:checked + .toggle-slider { background: var(--nps-primary); }
 body.zui-app .toggle-label { color: var(--nps-muted); font-size: 13px; }
+body.zui-app .host-option-toggles { display: grid; gap: 10px; }
+body.zui-app .host-option-toggle { padding: 11px 13px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 7px; }
+body.zui-app .host-option-toggle .toggle-field { width: 100%; }
+body.zui-app .host-option-toggle__help { margin: 2px 0 0 !important; }
 body.zui-app .form-control.is-invalid, body.zui-app .has-field-error .form-control { border-color: var(--nps-danger) !important; box-shadow: 0 0 0 3px var(--nps-danger-soft) !important; }
 body.zui-app .field-validation-message { display: block; margin-top: 6px; color: var(--nps-danger); font-size: 12px; }
 body.zui-app .form-workflow-content { padding: 29px 31px 25px !important; }

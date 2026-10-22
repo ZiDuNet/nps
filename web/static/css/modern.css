@@ -575,6 +575,10 @@ textarea.form-control { min-height: 96px; line-height: 1.55; resize: vertical; }
 .toggle-switch input:checked + .toggle-slider { background: var(--nps-accent); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
 .toggle-label { color: var(--nps-muted); font-size: 13px; }
+.host-option-toggles { display: grid; gap: 10px; }
+.host-option-toggle { padding: 11px 13px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 7px; }
+.host-option-toggle .toggle-field { width: 100%; }
+.host-option-toggle__help { margin: 2px 0 0 !important; }
 .form-control.is-invalid, .has-field-error .form-control { border-color: var(--nps-danger) !important; box-shadow: 0 0 0 3px var(--nps-danger-soft) !important; }
 .field-validation-message { display: block; margin-top: 6px; color: var(--nps-danger); font-size: 12px; }
 .form-page-heading { min-width: 0; }

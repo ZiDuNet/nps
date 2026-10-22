@@ -40,6 +40,10 @@ type clientListRow struct {
 	MaxTunnelNum        int
 	Version             string
 	CanRemoteUpdate     bool
+	WebUserName         string
+	WebPasswordSet      bool
+	BasicUserName       string
+	BasicPasswordSet    bool
 	BlackIpList         []string
 	CreateTime          string
 	LastOnlineTime      string
@@ -279,30 +283,39 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 		}
 		client.RLock()
 		flow, clientRate, userID, userName := client.Flow, client.Rate, client.UserId, client.UserName
+		webUserName, webPasswordSet := client.WebUserName, client.WebPassword != ""
+		basicUserName, basicPasswordSet := "", false
+		if client.Cnf != nil {
+			basicUserName, basicPasswordSet = client.Cnf.U, client.Cnf.P != ""
+		}
 		row := &clientListRow{
-			Id:              client.Id,
-			UserId:          userID,
-			UserName:        userName,
-			VerifyKey:       client.VerifyKey,
-			Addr:            client.Addr,
-			LocalAddr:       client.LocalAddr,
-			Remark:          client.Remark,
-			Status:          client.Status,
-			IsConnect:       client.IsConnect,
-			RateLimit:       client.RateLimit,
-			NoStore:         client.NoStore,
-			MaxConn:         client.MaxConn,
-			NowConn:         atomic.LoadInt32(&client.NowConn),
-			ConfigConnAllow: client.ConfigConnAllow,
-			MaxTunnelNum:    client.MaxTunnelNum,
-			Version:         client.Version,
-			CanRemoteUpdate: supportsRemoteClientUpdate(client.Version),
-			BlackIpList:     append([]string(nil), client.BlackIpList...),
-			CreateTime:      client.CreateTime,
-			LastOnlineTime:  client.LastOnlineTime,
-			IpWhite:         client.IpWhite,
-			IpWhiteList:     append([]string(nil), client.IpWhiteList...),
-			ExpireTime:      client.ExpireTime,
+			Id:               client.Id,
+			UserId:           userID,
+			UserName:         userName,
+			VerifyKey:        client.VerifyKey,
+			Addr:             client.Addr,
+			LocalAddr:        client.LocalAddr,
+			Remark:           client.Remark,
+			Status:           client.Status,
+			IsConnect:        client.IsConnect,
+			RateLimit:        client.RateLimit,
+			NoStore:          client.NoStore,
+			MaxConn:          client.MaxConn,
+			NowConn:          atomic.LoadInt32(&client.NowConn),
+			ConfigConnAllow:  client.ConfigConnAllow,
+			MaxTunnelNum:     client.MaxTunnelNum,
+			Version:          client.Version,
+			CanRemoteUpdate:  supportsRemoteClientUpdate(client.Version),
+			WebUserName:      webUserName,
+			WebPasswordSet:   webPasswordSet,
+			BasicUserName:    basicUserName,
+			BasicPasswordSet: basicPasswordSet,
+			BlackIpList:      append([]string(nil), client.BlackIpList...),
+			CreateTime:       client.CreateTime,
+			LastOnlineTime:   client.LastOnlineTime,
+			IpWhite:          client.IpWhite,
+			IpWhiteList:      append([]string(nil), client.IpWhiteList...),
+			ExpireTime:       client.ExpireTime,
 		}
 		client.RUnlock()
 		if userID > 0 {
