@@ -64,6 +64,7 @@
 
 - [客户端配置与启动](client_config.md)
 - [配置文件参考](client/config-file.md)
+- [NPC Docker 部署](client/docker.md)
 - [客户端使用](client/use.md)
 - [客户端增强功能](client/npc_extend.md)
 - [GUI 客户端](gui.md)

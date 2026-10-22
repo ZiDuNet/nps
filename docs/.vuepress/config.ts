@@ -37,6 +37,7 @@ const sidebar: SidebarConfig = [
       { text: 'NPC SDK', link: '/client/npc_sdk.html' },
       { text: '客户端配置与启动', link: '/client_config.html' },
       { text: '配置文件参考', link: '/client/config-file.html' },
+      { text: 'NPC Docker 部署', link: '/client/docker.html' },
       { text: 'NPC GUI 客户端', link: '/gui.html' },
     ],
   },

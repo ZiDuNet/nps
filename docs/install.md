@@ -270,6 +270,8 @@ docker run -d --name npc wushuo98/npc \
 
 如果内网服务在宿主机上，注意容器网络和宿主机网络不是一回事。Linux 可以按需使用 `--network host`，Windows/macOS Docker Desktop 需要使用对应的宿主机访问地址。
 
+需要挂载 `npc.conf`、使用 Compose、配置自定义 CA 或排查容器网络时，参见 [NPC Docker 部署](client/docker.md)。
+
 ## NPC GUI 客户端
 
 NPC GUI 是 Wails 桌面程序。它不是简单启动外部 `npc` 进程，而是在程序内直接调用客户端核心逻辑连接 NPS。

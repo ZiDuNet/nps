@@ -4,7 +4,7 @@ NPC 是 NPS 的客户端程序，用于连接 NPS 服务端并把内网服务转
 
 NPC 可以直接容器化运行，镜像入口为 `/npc`，命令行参数和物理机二进制一致。
 
-`latest` 始终指向最新正式版；`master` 测试构建使用 `sha-<短提交号>` 标签。NPC 在线升级以 GitHub Releases 正式版本为准，与 Docker 标签无关。
+`latest` 跟随 `master` 分支最近一次成功的 Docker 构建；`master` 构建同时保留 `sha-<短提交号>` 不可变标签。正式 Release 另外推送版本号标签（例如 `1.1.27`）。NPC 在线升级以 GitHub Releases 正式版本为准，与 Docker 标签无关。
 
 ## 快速启动
 
@@ -19,6 +19,30 @@ TLS 模式：
 docker run -d --name npc wushuo98/npc:latest \
   -server=<服务器IP>:8025 -vkey=<VerifyKey> -tls_enable=true
 ```
+
+## 使用配置文件
+
+NPC 不会在容器内自动生成 `npc.conf`。先从仓库模板复制一份并修改 `[common]`：
+
+```bash
+mkdir -p /opt/npc/conf
+cp conf/npc.conf /opt/npc/conf/npc.conf
+```
+
+然后只读挂载配置启动：
+
+```bash
+docker run -d \
+  --name npc \
+  --restart unless-stopped \
+  -v /opt/npc/conf:/conf:ro \
+  wushuo98/npc:latest \
+  -config=/conf/npc.conf
+```
+
+配置文件完整字段和规则示例见项目文档：[NPC 配置文件参考](https://zidunet.github.io/nps/client/config-file.html)。Docker 专项说明（Compose、`--network host`、自定义 CA、日志和升级）见：[NPC Docker 部署](https://zidunet.github.io/nps/client/docker.html)。
+
+NPC 镜像基于 `scratch`，容器内没有 `sh` 或 `curl`；请使用 `docker logs npc` 查看日志。修改挂载配置后需要重启或重建容器。
 
 ## 常用参数
 
