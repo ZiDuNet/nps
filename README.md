@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.26</sub>
+﻿# NPS <sub>v1.1.27</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -179,6 +179,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.27** (2026-10-22) - Fixed NPC service log permissions and completed CLI/GUI/server-triggered update flows; release packages are checksum-verified before replacement.
 - **v1.1.26** (2026-10-22) - Restored the v1.1.24 feature baseline and the v1.1.23 release pipeline; master builds publish latest plus immutable SHA Docker tags, while formal releases publish versioned images.
 - **v1.1.25** (2026-10-22) - Release tags now run CI, docs deployment, Docker publishing, and GitHub Release together; release notes are taken from the changelog
 - **v1.1.24** (2026-10-21) - Added self-service client deletion; Docker `latest` now tracks formal releases while master test images use SHA tags
