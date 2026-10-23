@@ -300,6 +300,8 @@ POST /index/add/
 | local_path | 本地文件路径（file 模式） |
 | strip_pre | URL 前缀去除（仅 `file` 模式） |
 | proto_version | 协议版本 |
+| upload_limit | 资源上行限速，单位 KB/s；`0` 或留空表示不限速 |
+| download_limit | 资源下行限速，单位 KB/s；`0` 或留空表示不限速 |
 
 ---
 
@@ -337,6 +339,8 @@ POST /index/edit/
 | local_path | 本地文件路径 |
 | strip_pre | URL 前缀去除（仅 `file` 模式） |
 | proto_version | 协议版本 |
+
+编辑时可通过 `client_id` 将隧道迁移到当前账号有权限的另一个客户端；省略时沿用当前客户端，兼容旧调用方。目标客户端和用户配额会在迁移前校验。
 
 ---
 
@@ -387,6 +391,7 @@ POST /index/hostlist/
 | 参数 | 含义 |
 | --- | --- |
 | client_id | 客户端 id |
+| filter_client_id | 管理员列表筛选客户端；`0` 表示全部。已有 `client_id` 固定作用域优先于此筛选 |
 | search | 搜索关键词（域名/备注） |
 | offset | 分页起始 |
 | limit | 每页条数 |
@@ -433,6 +438,14 @@ POST /index/addhost/
 | key_file_path | 自定义域名的 HTTPS 证书私钥文本或路径；平台模式下忽略并由服务端锁定 |
 | cert_file_path | 自定义域名的 HTTPS 证书文件文本或路径；平台模式下忽略并由服务端锁定 |
 | AutoHttps | 是否自动 HTTPS（仅 scheme 非 `http` 时生效） |
+| upload_limit | 资源上行限速，单位 KB/s；`0` 或留空表示不限速 |
+| download_limit | 资源下行限速，单位 KB/s；`0` 或留空表示不限速 |
+
+域名来源有且只能有一种：`custom` 必须提供 `host`，且不能同时提交 `platform_domain_id` / `platform_prefix`；`platform` 必须同时提供平台域名 ID 和前缀，且不能同时提交自定义 `host`。为兼容旧版客户端，未提交 `domain_mode` 时会按旧字段推断模式；新集成应始终明确传入 `domain_mode`。协议只接受 `http`、`https`、`all`（历史请求省略时按 `all` 处理）；内网目标每行一个 `host:port` 地址。
+
+创建和更新会在数据层再次做原子唯一性、路由冲突和字段校验。失败时不会留下内存或 `hosts.json` 记录；Host ID 由递增序列分配，不保证无间断。列表和单条查询响应包含 `Id`、`Scheme`、`HttpPort`、`HttpsPort` 等字段；端口为空表示标准端口 80/443，非空时是带冒号的端口后缀，例如 `:30111`。因此消费方可分别用协议和端口组装 HTTP/HTTPS 访问地址，无需依赖页面模板配置。
+
+Host 列表和单条查询同时返回 `UploadLimit`、`DownloadLimit`、`UploadRate`、`DownloadRate`。限速单位为 KB/s，当前速率是近似的一秒采样值，空闲时为 `0`。
 
 ---
 
@@ -465,6 +478,10 @@ POST /index/edithost/
 | key_file_path | 自定义域名的 HTTPS 证书私钥文本或路径；平台模式下忽略并由服务端锁定 |
 | cert_file_path | 自定义域名的 HTTPS 证书文件文本或路径；平台模式下忽略并由服务端锁定 |
 | AutoHttps | 是否自动 HTTPS |
+| upload_limit | 资源上行限速，单位 KB/s；`0` 或留空表示不限速 |
+| download_limit | 资源下行限速，单位 KB/s；`0` 或留空表示不限速 |
+
+编辑时可传 `client_id` 将规则迁移到该账号有权限的客户端；省略时沿用当前客户端，兼容旧调用方。平台/自定义域名字段互斥规则与新增接口相同。
 
 ```
 POST /index/hoststop/

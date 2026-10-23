@@ -1,32 +1,119 @@
 package controllers
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/astaxie/beego"
 )
 
-func TestReserveLoginAttemptDoesNotCountImplicitLoginPageChecks(t *testing.T) {
-	const ip = "implicit-login-page"
-	ipRecord.Delete(ip)
-	t.Cleanup(func() { ipRecord.Delete(ip) })
-
-	if _, exists := ipRecord.Load(ip); exists {
-		t.Fatal("test setup left an existing login record")
+func TestVerifyLoginPoWConsumesShortLivedChallenge(t *testing.T) {
+	oldBits := beego.AppConfig.String("pow_bits")
+	oldForce := beego.AppConfig.String("force_pow")
+	_ = beego.AppConfig.Set("pow_bits", "1")
+	_ = beego.AppConfig.Set("force_pow", "true")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("pow_bits", oldBits)
+		_ = beego.AppConfig.Set("force_pow", oldForce)
+	})
+	nonce := "pow-test"
+	now := time.Now()
+	if !powChallenges.store(nonce, now.Add(time.Minute), now) {
+		t.Fatal("could not store test challenge")
 	}
-	if !allowLoginAttempt(ip, false, time.Now()) {
+	solution := ""
+	for i := 0; i < 100; i++ {
+		candidate := string(rune('0' + i))
+		digest := sha256.Sum256([]byte(nonce + "\x00" + candidate))
+		if digest[0]&0x80 == 0 {
+			solution = candidate
+			break
+		}
+	}
+	if solution == "" {
+		t.Fatal("could not find a one-bit PoW test solution")
+	}
+	if !verifyLoginPoW("alice", nonce, solution) {
+		t.Fatal("valid PoW solution was rejected")
+	}
+	if verifyLoginPoW("alice", nonce, solution) {
+		t.Fatal("PoW challenge was reusable")
+	}
+}
+
+func TestPoWChallengeStoreIsBoundedAndReclaimsExpiredEntries(t *testing.T) {
+	store := newPoWChallengeStore(2)
+	base := time.Unix(1_700_000_000, 0)
+	for _, nonce := range []string{"one", "two"} {
+		if !store.store(nonce, base.Add(time.Minute), base) {
+			t.Fatalf("could not store challenge %q", nonce)
+		}
+	}
+	if store.store("three", base.Add(time.Minute), base) {
+		t.Fatal("challenge store exceeded its configured capacity")
+	}
+	if got := store.len(); got != 2 {
+		t.Fatalf("challenge count = %d, want capacity 2", got)
+	}
+
+	if !store.store("three", base.Add(2*time.Minute), base.Add(time.Minute)) {
+		t.Fatal("expired challenges should be reclaimed before rejecting a new one")
+	}
+	if got := store.len(); got != 1 {
+		t.Fatalf("challenge count after expiry cleanup = %d, want 1", got)
+	}
+	if !store.consume("three", base.Add(time.Minute+time.Second)) {
+		t.Fatal("fresh challenge was not consumable")
+	}
+	if store.consume("three", base.Add(time.Minute+time.Second)) {
+		t.Fatal("challenge was reusable")
+	}
+}
+
+func TestPoWChallengeStoreConcurrentCapacity(t *testing.T) {
+	const capacity = 64
+	store := newPoWChallengeStore(capacity)
+	now := time.Now()
+	var accepted atomic.Int32
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for index := 0; index < capacity*2; index++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			<-start
+			if store.store(fmt.Sprintf("challenge-%d", index), now.Add(time.Minute), now) {
+				accepted.Add(1)
+			}
+		}(index)
+	}
+	close(start)
+	wg.Wait()
+	if got := int(accepted.Load()); got != capacity {
+		t.Fatalf("accepted challenges = %d, want %d", got, capacity)
+	}
+	if got := store.len(); got != capacity {
+		t.Fatalf("stored challenges = %d, want %d", got, capacity)
+	}
+}
+
+func TestReserveLoginAttemptDoesNotCountImplicitLoginPageChecks(t *testing.T) {
+	limiter := newLoginAttemptLimiter(8)
+	if !allowLoginAttemptWith(limiter, "implicit-login-page", "nobody", false, time.Now()) {
 		t.Fatal("implicit login page checks should remain allowed")
 	}
-	if _, exists := ipRecord.Load(ip); exists {
+	if ipCount, userCount := limiter.lengths(); ipCount != 0 || userCount != 0 {
 		t.Fatal("implicit login page checks must not create a failure record")
 	}
 }
 
 func TestReserveLoginAttemptLimitsConcurrentFailures(t *testing.T) {
 	const ip = "concurrent-login-attempts"
-	ipRecord.Delete(ip)
-	t.Cleanup(func() { ipRecord.Delete(ip) })
+	limiter := newLoginAttemptLimiter(32)
 
 	var allowed int32
 	var wg sync.WaitGroup
@@ -36,7 +123,7 @@ func TestReserveLoginAttemptLimitsConcurrentFailures(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			if reserveLoginAttempt(ip, time.Now()) {
+			if limiter.reserve(ip, "alice", time.Now()) {
 				atomic.AddInt32(&allowed, 1)
 			}
 		}()
@@ -51,20 +138,59 @@ func TestReserveLoginAttemptLimitsConcurrentFailures(t *testing.T) {
 
 func TestReserveLoginAttemptExpiresFailureWindow(t *testing.T) {
 	const ip = "expired-login-attempts"
-	ipRecord.Delete(ip)
-	t.Cleanup(func() { ipRecord.Delete(ip) })
+	limiter := newLoginAttemptLimiter(8)
 
 	now := time.Unix(1_700_000_000, 0)
 	for i := 0; i < maxLoginFailures; i++ {
-		if !reserveLoginAttempt(ip, now) {
+		if !limiter.reserve(ip, "alice", now) {
 			t.Fatalf("attempt %d unexpectedly rejected", i+1)
 		}
 	}
-	if reserveLoginAttempt(ip, now) {
+	if limiter.reserve(ip, "alice", now) {
 		t.Fatal("attempt after the failure limit should be rejected")
 	}
-	if !reserveLoginAttempt(ip, now.Add(loginFailureWindow)) {
+	if !limiter.reserve(ip, "alice", now.Add(loginFailureWindow)) {
 		t.Fatal("attempt after the failure window should be admitted")
+	}
+}
+
+func TestLoginAttemptLimiterAppliesIPAndUsernameDimensions(t *testing.T) {
+	limiter := newLoginAttemptLimiter(32)
+	base := time.Unix(1_700_000_000, 0)
+	for i := 0; i < maxLoginFailures; i++ {
+		if !limiter.reserve("192.0.2.1", "Alice", base.Add(time.Duration(i)*time.Millisecond)) {
+			t.Fatalf("attempt %d was unexpectedly rejected", i+1)
+		}
+	}
+	if limiter.reserve("192.0.2.2", "ALICE", base.Add(time.Second)) {
+		t.Fatal("username limit should apply across source IPs and case variants")
+	}
+	if !limiter.reserve("192.0.2.2", "Bob", base.Add(time.Second)) {
+		t.Fatal("a different username and IP should have an independent allowance")
+	}
+	limiter.clear("192.0.2.1", "Alice")
+	if !limiter.reserve("192.0.2.2", "alice", base.Add(2*time.Second)) {
+		t.Fatal("successful authentication should clear the IP and username reservations")
+	}
+}
+
+func TestLoginAttemptLimiterBoundsStateAndReclaimsExpiredEntries(t *testing.T) {
+	limiter := newLoginAttemptLimiter(2)
+	base := time.Unix(1_700_000_000, 0)
+	if !limiter.reserve("192.0.2.1", "one", base) || !limiter.reserve("192.0.2.2", "two", base) {
+		t.Fatal("initial reservations were rejected")
+	}
+	if limiter.reserve("192.0.2.3", "three", base) {
+		t.Fatal("limiter exceeded its configured capacity")
+	}
+	if ipCount, userCount := limiter.lengths(); ipCount != 2 || userCount != 2 {
+		t.Fatalf("store lengths = (%d,%d), want (2,2)", ipCount, userCount)
+	}
+	if !limiter.reserve("192.0.2.3", "three", base.Add(loginFailureWindow)) {
+		t.Fatal("expired entries should be reclaimed before a new attempt")
+	}
+	if ipCount, userCount := limiter.lengths(); ipCount > 2 || userCount > 2 {
+		t.Fatalf("store exceeded capacity after reclamation: (%d,%d)", ipCount, userCount)
 	}
 }
 

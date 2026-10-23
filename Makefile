@@ -11,8 +11,8 @@ MISSPELL_VERSION ?= v0.3.4
 
 # Build a beta version of goreleaser
 build:
-	go build cmd/nps/nps.go
-	go build cmd/npc/npc.go
+	go build ./cmd/nps
+	go build ./cmd/npc
 .PHONY: build
 
 # Install all the build and lint dependencies

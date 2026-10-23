@@ -119,7 +119,7 @@ P2P 依赖 NAT 类型，不能保证所有网络都能直连。
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `log_level` | 日志级别，`0` 最少，`7` 最详细 | `6` |
+| `log_level` | 日志级别，`0` 最少，`7` 最详细；兼容上游 `trace`/`debug`/`info`/`warn`/`error`/`fatal`/`panic`/`off` | `6` |
 | `log_path` | 日志路径 | `nps.log` |
 | `flow_store_interval` | 流量数据持久化间隔，单位分钟；留空或 `0` 关闭定时持久化 | `1` |
 | `system_info_display` | 是否在仪表盘显示系统信息 | `true`（默认开启） |

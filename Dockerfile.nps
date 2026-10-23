@@ -21,7 +21,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     goarm="${goarm#v}"; \
     if [ "$TARGETARCH" != "arm" ]; then goarm=""; fi; \
     CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" GOARM="$goarm" \
-        go build -trimpath -ldflags="-w -s -extldflags -static" -o /out/nps ./cmd/nps/nps.go
+        go build -trimpath -ldflags="-w -s -extldflags -static" -o /out/nps ./cmd/nps
 
 FROM scratch
 COPY --from=builder /out/nps /nps

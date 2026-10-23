@@ -123,6 +123,10 @@ func (s *GlobalController) Index() {
 	global := file.GetDb().GetGlobal()
 	if global != nil {
 		s.Data["globalBlackIpList"] = strings.Join(global.BlackIpList, "\r\n")
+		s.Data["globalWhiteIpList"] = strings.Join(global.WhiteIpList, "\r\n")
+		s.Data["globalIpListPriority"] = global.IpListPriority
+		s.Data["globalMaxConn"] = global.MaxConn
+		s.Data["globalRateLimit"] = global.RateLimit
 		s.Data["serverUrl"] = global.ServerUrl
 	}
 	s.Data["platformDomains"] = platformDomainStatuses()
@@ -147,8 +151,26 @@ func (s *GlobalController) Save() {
 		platformDomains = file.GetDb().GetPlatformDomains()
 	}
 
+	maxConn := s.GetIntNoErr("globalMaxConn")
+	rateLimit := s.GetIntNoErr("globalRateLimit")
+	if maxConn < 0 {
+		s.AjaxErr("全局最大连接数不能小于 0")
+		return
+	}
+	if rateLimit < 0 {
+		s.AjaxErr("全局限速不能小于 0")
+		return
+	}
+	priority := s.GetIntNoErr("globalIpListPriority")
+	if priority != 1 {
+		priority = 0
+	}
 	t := &file.Glob{
-		BlackIpList:     RemoveRepeatedElement(strings.Split(s.getEscapeString("globalBlackIpList"), "\r\n")),
+		BlackIpList:     parseIPRules(s.getEscapeString("globalBlackIpList")),
+		WhiteIpList:     parseIPRules(s.getEscapeString("globalWhiteIpList")),
+		IpListPriority:  priority,
+		MaxConn:         maxConn,
+		RateLimit:       rateLimit,
 		ServerUrl:       s.getEscapeString("serverUrl"),
 		PlatformDomains: platformDomains,
 	}
@@ -165,4 +187,22 @@ func (s *GlobalController) Save() {
 	}
 	s.auditMutation("global.update", "global", 0, 0, "", nil, map[string]string{"server_url": t.ServerUrl, "platform_domains": fmt.Sprintf("%d", len(t.PlatformDomains))})
 	s.AjaxOk("save success")
+}
+
+func parseIPRules(raw string) []string {
+	parts := strings.FieldsFunc(raw, func(r rune) bool { return r == '\r' || r == '\n' || r == ',' })
+	seen := make(map[string]struct{}, len(parts))
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		rule := strings.TrimSpace(part)
+		if rule == "" {
+			continue
+		}
+		if _, exists := seen[rule]; exists {
+			continue
+		}
+		seen[rule] = struct{}{}
+		result = append(result, rule)
+	}
+	return result
 }

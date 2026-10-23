@@ -118,3 +118,37 @@ server_port=10022
 		t.Fatalf("commented host should remain a tunnel: hosts=%d tasks=%d", len(c.Hosts), len(c.Tasks))
 	}
 }
+
+func TestNewConfigParsesResourceRateLimits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "npc.conf")
+	content := `[common]
+server_addr=127.0.0.1:8024
+vkey=replace-with-verify-key
+
+[tcp_api]
+mode=tcp
+target_addr=127.0.0.1:8080
+server_port=10080
+upload_limit=256
+download_limit=2048
+
+[web_api]
+host=api.example.com
+target_addr=127.0.0.1:8081
+upload_limit=64
+download_limit=512
+`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("write test config: %v", err)
+	}
+	c, err := NewConfig(path)
+	if err != nil {
+		t.Fatalf("parse test config: %v", err)
+	}
+	if len(c.Tasks) != 1 || c.Tasks[0].UploadLimit != 256 || c.Tasks[0].DownloadLimit != 2048 {
+		t.Fatalf("task rate limits were not parsed: %#v", c.Tasks)
+	}
+	if len(c.Hosts) != 1 || c.Hosts[0].UploadLimit != 64 || c.Hosts[0].DownloadLimit != 512 {
+		t.Fatalf("host rate limits were not parsed: %#v", c.Hosts)
+	}
+}

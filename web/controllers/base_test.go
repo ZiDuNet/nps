@@ -2,11 +2,33 @@ package controllers
 
 import (
 	"bytes"
+	"encoding/json"
 	"html/template"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"ehang.io/nps/lib/file"
+	"github.com/astaxie/beego"
 )
+
+func TestPublicAccessPortFallsBackToListenerAndHonorsReverseProxyPort(t *testing.T) {
+	oldAccess := beego.AppConfig.String("http_proxy_access_port")
+	oldListener := beego.AppConfig.String("http_proxy_port")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("http_proxy_access_port", oldAccess)
+		_ = beego.AppConfig.Set("http_proxy_port", oldListener)
+	})
+	_ = beego.AppConfig.Set("http_proxy_port", "80")
+	_ = beego.AppConfig.Set("http_proxy_access_port", "")
+	if got := publicAccessPort("http_proxy_access_port", "http_proxy_port"); got != "80" {
+		t.Fatalf("fallback public port = %q, want 80", got)
+	}
+	_ = beego.AppConfig.Set("http_proxy_access_port", "30111")
+	if got := publicAccessPort("http_proxy_access_port", "http_proxy_port"); got != "30111" {
+		t.Fatalf("configured public port = %q, want 30111", got)
+	}
+}
 
 func TestSessionBoolAcceptsCommonSessionValues(t *testing.T) {
 	tests := []struct {
@@ -29,6 +51,104 @@ func TestSessionBoolAcceptsCommonSessionValues(t *testing.T) {
 				t.Fatalf("sessionBool(%#v) = %v, want %v", test.value, got, test.want)
 			}
 		})
+	}
+}
+
+func TestPublicServerHostSeparatesHostnameFromSchemeAndPort(t *testing.T) {
+	tests := []struct {
+		address string
+		want    string
+	}{
+		{address: "nps.example.com", want: "nps.example.com"},
+		{address: "nps.example.com:8024", want: "nps.example.com"},
+		{address: "https://nps.example.com:30111/nps", want: "nps.example.com"},
+		{address: "[2001:db8::1]:8024", want: "2001:db8::1"},
+		{address: "", want: ""},
+	}
+	for _, test := range tests {
+		if got := publicServerHost(test.address); got != test.want {
+			t.Errorf("publicServerHost(%q) = %q, want %q", test.address, got, test.want)
+		}
+	}
+}
+
+func TestTunnelListRowsExposeConfiguredPublicAccessAddress(t *testing.T) {
+	db := file.GetDb()
+	oldGlobal := db.GetGlobal()
+	t.Cleanup(func() { _ = db.SaveGlobal(oldGlobal) })
+	if err := db.SaveGlobal(&file.Glob{ServerUrl: "https://nps.example.com:8081/nps"}); err != nil {
+		t.Fatalf("save global: %v", err)
+	}
+	tunnel := &file.Tunnel{Id: 7, Port: 10022, Mode: "tcp"}
+	rows := newTunnelListRows([]*file.Tunnel{tunnel}, "fallback.example.com:9999")
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rows))
+	}
+	if rows[0].AccessHost != "nps.example.com" {
+		t.Fatalf("access host = %q, want nps.example.com", rows[0].AccessHost)
+	}
+	if rows[0].AccessAddr != "nps.example.com:10022" || rows[0].AccessAddress != rows[0].AccessAddr {
+		t.Fatalf("access address = %q/%q, want nps.example.com:10022", rows[0].AccessAddr, rows[0].AccessAddress)
+	}
+	if rows[0].AccessURL != "tcp://nps.example.com:10022" {
+		t.Fatalf("access URL = %q, want tcp://nps.example.com:10022", rows[0].AccessURL)
+	}
+}
+
+func TestTunnelListRowsFallbackToRequestHostAndFormatIPv6(t *testing.T) {
+	db := file.GetDb()
+	oldGlobal := db.GetGlobal()
+	t.Cleanup(func() { _ = db.SaveGlobal(oldGlobal) })
+	if err := db.SaveGlobal(&file.Glob{}); err != nil {
+		t.Fatalf("save global: %v", err)
+	}
+	rows := newTunnelListRows([]*file.Tunnel{{Port: 443}}, "[2001:db8::10]:8081")
+	if len(rows) != 1 || rows[0].AccessAddr != "[2001:db8::10]:443" {
+		t.Fatalf("IPv6 access row = %#v", rows)
+	}
+}
+
+func TestTunnelListRowsAlwaysExposeResourceRateFields(t *testing.T) {
+	tunnel := &file.Tunnel{
+		Id:         9,
+		Port:       19001,
+		Mode:       "tcp",
+		RateLimits: file.RateLimits{UploadLimit: 128, DownloadLimit: 1024},
+	}
+	rows := newTunnelListRows([]*file.Tunnel{tunnel}, "nps.example.com")
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rows))
+	}
+	encoded, err := json.Marshal(rows[0])
+	if err != nil {
+		t.Fatalf("marshal tunnel row: %v", err)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("decode tunnel row: %v", err)
+	}
+	for _, key := range []string{"UploadLimit", "DownloadLimit", "UploadRate", "DownloadRate"} {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("tunnel API row is missing %s: %s", key, encoded)
+		}
+	}
+	if payload["UploadLimit"] != float64(128) || payload["DownloadLimit"] != float64(1024) {
+		t.Fatalf("unexpected resource limits in API row: %s", encoded)
+	}
+
+	zeroRows := newTunnelListRows([]*file.Tunnel{{Id: 10, Port: 19002, Mode: "tcp"}}, "nps.example.com")
+	zeroEncoded, err := json.Marshal(zeroRows[0])
+	if err != nil {
+		t.Fatalf("marshal unlimited tunnel row: %v", err)
+	}
+	var zeroPayload map[string]interface{}
+	if err := json.Unmarshal(zeroEncoded, &zeroPayload); err != nil {
+		t.Fatalf("decode unlimited tunnel row: %v", err)
+	}
+	for _, key := range []string{"UploadLimit", "DownloadLimit", "UploadRate", "DownloadRate"} {
+		if _, ok := zeroPayload[key]; !ok {
+			t.Fatalf("unlimited tunnel API row is missing %s: %s", key, zeroEncoded)
+		}
 	}
 }
 

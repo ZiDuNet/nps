@@ -50,3 +50,261 @@ func TestDefaultNpsConfMatchesCheckedInTemplate(t *testing.T) {
 		t.Fatalf("embedded default config differs from %s", templatePath)
 	}
 }
+
+func TestMergeMissingConfigFieldsPreservesValuesCommentsAndEmptyValues(t *testing.T) {
+	config := "# old config\r\nweb_port=19001\r\ncustom_setting=keep\r\ntotp_secret=\r\n#pow_bits=5\r\n"
+	template := "# Web\nweb_port=8081\n# TOTP\ntotp_secret=default\n# New option description\nnew_option=true\n# PoW\npow_bits=20\n"
+
+	merged, added := mergeMissingConfigFields(config, template)
+	if strings.Contains(merged, "web_port=8081") || !strings.Contains(merged, "web_port=19001\r\n") {
+		t.Fatalf("existing non-default value was not preserved: %q", merged)
+	}
+	if strings.Count(merged, "totp_secret=") != 1 || !strings.Contains(merged, "totp_secret=\r\n") {
+		t.Fatalf("explicit empty value was not preserved: %q", merged)
+	}
+	if !strings.Contains(merged, "#pow_bits=5\r\n") || !strings.Contains(merged, "pow_bits=20") {
+		t.Fatalf("commented key should not satisfy the active setting: %q", merged)
+	}
+	if !strings.Contains(merged, "new_option=true") || !strings.Contains(merged, "# New option description") {
+		t.Fatalf("missing setting and its documentation were not appended: %q", merged)
+	}
+	if !strings.Contains(merged, "custom_setting=keep\r\n") {
+		t.Fatalf("unknown existing setting was not preserved: %q", merged)
+	}
+	if len(added) != 2 || added[0] != "new_option" || added[1] != "pow_bits" {
+		t.Fatalf("added keys = %#v, want new_option and pow_bits", added)
+	}
+
+	again, addedAgain := mergeMissingConfigFields(merged, template)
+	if again != merged || len(addedAgain) != 0 {
+		t.Fatalf("migration is not idempotent: added=%#v", addedAgain)
+	}
+}
+
+func TestMergeMissingConfigFieldsDoesNotAppendCommentedTemplateOptions(t *testing.T) {
+	merged, added := mergeMissingConfigFields("existing=true\n", "# optional\n#optional_setting=false\n")
+	if merged != "existing=true\n" || len(added) != 0 {
+		t.Fatalf("comment-only options should not be migrated: %q, %#v", merged, added)
+	}
+}
+
+func TestMigrateConfigCompatibilityMapsUpstreamAliases(t *testing.T) {
+	config := "bridge_tcp_port=18024\r\nbridge_tls_port=18025\r\nbridge_tcp_ip=127.0.0.1\r\n"
+	merged, added := migrateConfigCompatibility(config)
+
+	for _, expected := range []string{
+		"bridge_port=18024\r\n",
+		"tls_bridge_port=18025\r\n",
+		"bridge_ip=127.0.0.1\r\n",
+	} {
+		if !strings.Contains(merged, expected) {
+			t.Fatalf("canonical compatibility setting %q missing from %q", expected, merged)
+		}
+	}
+	for _, source := range []string{"bridge_tcp_port=18024", "bridge_tls_port=18025", "bridge_tcp_ip=127.0.0.1"} {
+		if !strings.Contains(merged, source) {
+			t.Fatalf("source setting %q was not preserved: %q", source, merged)
+		}
+	}
+	if len(added) != 3 || added[0] != "bridge_port" || added[1] != "tls_bridge_port" || added[2] != "bridge_ip" {
+		t.Fatalf("compatibility settings added = %#v", added)
+	}
+
+	again, addedAgain := migrateConfigCompatibility(merged)
+	if again != merged || len(addedAgain) != 0 {
+		t.Fatalf("compatibility migration is not idempotent: added=%#v", addedAgain)
+	}
+}
+
+func TestMigrateConfigCompatibilityKeepsCanonicalValues(t *testing.T) {
+	config := "bridge_port=19024\nbridge_tcp_port=18024\n"
+	merged, added := migrateConfigCompatibility(config)
+	if merged != config || len(added) != 0 {
+		t.Fatalf("canonical value should win over alias: %q, %#v", merged, added)
+	}
+}
+
+func TestMigrateConfigCompatibilityPrefersBridgePortForSelectedTransport(t *testing.T) {
+	tests := []struct {
+		name       string
+		bridgeType string
+		input      string
+		want       string
+	}{
+		{
+			name:       "tcp selected when both upstream ports exist",
+			bridgeType: "tcp",
+			input:      "bridge_type=tcp\nbridge_tcp_port=18024\nbridge_kcp_port=18025\n",
+			want:       "bridge_port=18024",
+		},
+		{
+			name:       "kcp selected when both upstream ports exist",
+			bridgeType: "kcp",
+			input:      "bridge_type=kcp\nbridge_tcp_port=18024\nbridge_kcp_port=18025\n",
+			want:       "bridge_port=18025",
+		},
+		{
+			name:       "selected alias absent falls back to available port",
+			bridgeType: "kcp",
+			input:      "bridge_type=kcp\nbridge_tcp_port=18024\n",
+			want:       "bridge_port=18024",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			merged, added := migrateConfigCompatibility(test.input)
+			if !strings.Contains(merged, test.want) {
+				t.Fatalf("migrated config missing %q: %q", test.want, merged)
+			}
+			if len(added) == 0 || added[0] != "bridge_port" {
+				t.Fatalf("added aliases = %#v, want bridge_port", added)
+			}
+		})
+	}
+}
+
+func TestParseConfiguredLogLevelSupportsNumericAndUpstreamNames(t *testing.T) {
+	tests := []struct {
+		value string
+		want  int
+	}{
+		{value: "0", want: 0},
+		{value: "7", want: 7},
+		{value: "trace", want: 7},
+		{value: "DEBUG", want: 7},
+		{value: "info", want: 6},
+		{value: "warning", want: 4},
+		{value: "error", want: 3},
+		{value: "fatal", want: 2},
+		{value: "panic", want: 1},
+		{value: "off", want: -1},
+	}
+	for _, test := range tests {
+		got, ok := parseConfiguredLogLevel(test.value)
+		if !ok || got != test.want {
+			t.Errorf("parseConfiguredLogLevel(%q) = (%d, %v), want (%d, true)", test.value, got, ok, test.want)
+		}
+	}
+	for _, value := range []string{"", "verbose", "8", "-2"} {
+		if got, ok := parseConfiguredLogLevel(value); ok {
+			t.Errorf("parseConfiguredLogLevel(%q) = (%d, true), want invalid", value, got)
+		}
+	}
+}
+
+func TestWriteConfigAtomicallyPreservesModeAndSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real.conf")
+	link := filepath.Join(dir, "nps.conf")
+	if err := os.WriteFile(target, []byte("old"), 0640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeConfigAtomically(link, []byte("new")); err != nil {
+		t.Fatalf("atomic config write: %v", err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "new" {
+		t.Fatalf("target contents = %q, want new", data)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0640 {
+		t.Fatalf("target mode = %o, want 640", got)
+	}
+	linkInfo, err := os.Lstat(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linkInfo.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("config symlink was replaced instead of its target")
+	}
+}
+
+func TestMigrateConfigFileIsIdempotentAndPreservesExistingValues(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nps.conf")
+	old := "# deployment values\r\nweb_port=19001\r\nweb_password=custom-secret\r\ncustom_option=keep\r\n"
+	if err := os.WriteFile(path, []byte(old), 0640); err != nil {
+		t.Fatal(err)
+	}
+	template := "# panel\nweb_port=8081\n# generated\ntotp_secret=\n# new\nlog_rotate_daily=true\n"
+	changed, added, secrets, err := migrateConfigFile(path, template)
+	if err != nil {
+		t.Fatalf("migrate config: %v", err)
+	}
+	if !changed || len(secrets) != 0 || len(added) != 2 || added[0] != "totp_secret" || added[1] != "log_rotate_daily" {
+		t.Fatalf("migration result changed=%v added=%#v secrets=%#v", changed, added, secrets)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "web_port=19001\r\n") || !strings.Contains(got, "web_password=custom-secret\r\n") || !strings.Contains(got, "custom_option=keep\r\n") {
+		t.Fatalf("existing values were not preserved: %q", got)
+	}
+	if strings.Count(got, "totp_secret=") != 1 || !strings.Contains(got, "log_rotate_daily=true") {
+		t.Fatalf("missing options were not appended exactly once: %q", got)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0640 {
+		t.Fatalf("mode = %o, want 640", info.Mode().Perm())
+	}
+	changed, added, secrets, err = migrateConfigFile(path, template)
+	if err != nil {
+		t.Fatalf("second migration: %v", err)
+	}
+	if changed || len(added) != 0 || len(secrets) != 0 {
+		t.Fatalf("migration is not idempotent: changed=%v added=%#v secrets=%#v", changed, added, secrets)
+	}
+}
+
+func TestMigrateConfigFileSupportsUpstreamNps2PortNames(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nps.conf")
+	old := "bridge_tcp_port=18024\nbridge_tls_port=18025\nbridge_tcp_ip=127.0.0.1\nweb_password=custom-secret\n"
+	if err := os.WriteFile(path, []byte(old), 0600); err != nil {
+		t.Fatal(err)
+	}
+	template := "# bridge\nbridge_port=8024\nbridge_ip=0.0.0.0\ntls_bridge_port=8025\n# security\ntls_enable=true\n"
+
+	changed, added, secrets, err := migrateConfigFile(path, template)
+	if err != nil {
+		t.Fatalf("migrate upstream config: %v", err)
+	}
+	if !changed || len(secrets) != 0 {
+		t.Fatalf("migration result changed=%v secrets=%#v", changed, secrets)
+	}
+	for _, key := range []string{"bridge_port=18024", "tls_bridge_port=18025", "bridge_ip=127.0.0.1", "tls_enable=true"} {
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if !strings.Contains(string(data), key) {
+			t.Fatalf("migrated config missing %q: %q", key, data)
+		}
+	}
+	if len(added) != 4 {
+		t.Fatalf("added settings = %#v, want three aliases and tls_enable", added)
+	}
+
+	changed, added, secrets, err = migrateConfigFile(path, template)
+	if err != nil {
+		t.Fatalf("second upstream migration: %v", err)
+	}
+	if changed || len(added) != 0 || len(secrets) != 0 {
+		t.Fatalf("upstream migration is not idempotent: changed=%v added=%#v secrets=%#v", changed, added, secrets)
+	}
+}

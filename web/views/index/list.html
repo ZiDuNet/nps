@@ -17,6 +17,12 @@
                         <a href="#" onclick="batchDelete('{{.web_base_url}}/index/del');return false;" class="btn btn-danger dim">
                             <i class="fa fa-fw fa-lg fa-trash"></i> <span langtag="word-batchdelete"></span>
                         </a>
+                        <button type="button" onclick="batchResourceAction('{{.web_base_url}}/index/start', {}, '批量启用', 'Enable selected')" class="btn btn-outline btn-primary">
+                            <i class="fa fa-play" aria-hidden="true"></i> <span data-i18n-zh="批量启用" data-i18n-en="Enable selected">批量启用</span>
+                        </button>
+                        <button type="button" onclick="batchResourceAction('{{.web_base_url}}/index/stop', {}, '批量停用', 'Disable selected')" class="btn btn-outline btn-warning">
+                            <i class="fa fa-pause" aria-hidden="true"></i> <span data-i18n-zh="批量停用" data-i18n-en="Disable selected">批量停用</span>
+                        </button>
                         {{if eq true .isAdmin}}
                         <label class="nps-table-filter" for="tunnel-owner-filter">
                             <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
@@ -157,6 +163,8 @@
                     + identificationMarkup
                     + '<div><b langtag="word-exportflow"></b><span>' + tunnelText(changeunit(flow.ExportFlow)) + '</span></div>'
                     + '<div><b langtag="word-inletflow"></b><span>' + tunnelText(changeunit(flow.InletFlow)) + '</span></div>'
+                    + '<div><b data-i18n-zh="上行限速 / 当前" data-i18n-en="Upload limit / current"></b><span>' + tunnelText((row.UploadLimit || 0) + ' KB/s / ' + changeunit(row.UploadRate || 0) + '/s') + '</span></div>'
+                    + '<div><b data-i18n-zh="下行限速 / 当前" data-i18n-en="Download limit / current"></b><span>' + tunnelText((row.DownloadLimit || 0) + ' KB/s / ' + changeunit(row.DownloadRate || 0) + '/s') + '</span></div>'
                     + '<div><b langtag="word-crypt"></b><span>' + tunnelBoolean(config.Crypt) + '</span></div>'
                     + '<div><b langtag="word-compress"></b><span>' + tunnelBoolean(config.Compress) + '</span></div>'
                     + '<div><b langtag="word-basicusername"></b><span>' + tunnelText(config.U || '-') + '</span></div>'
@@ -268,7 +276,9 @@
                 sortable: false, //计算列，按 Port 排序即可
                 visible: tunnelListColumnVisible('address'),//false表示不显示
                 formatter: function (value, row, index) {
-                    var address = "{{.ip}}" + ":" + Number(row.Port);
+                    var publicHost = "{{.ip}}";
+                    if (publicHost.indexOf(':') >= 0 && publicHost.charAt(0) !== '[') publicHost = '[' + publicHost + ']';
+                    var address = publicHost + ":" + Number(row.Port);
                     var safeAddress = tunnelText(address);
                     return "<a href='http://" + safeAddress + "' target='_blank' rel='noopener noreferrer'>" + safeAddress + "</a>"
                 }

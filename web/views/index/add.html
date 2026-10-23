@@ -142,6 +142,32 @@
                     {{end}}
                     {{end}}
 
+                    <div class="form-section-title" data-tunnel-section="rate"><i class="fa fa-tachometer" aria-hidden="true"></i><span data-i18n-zh="资源限速" data-i18n-en="Resource limits">资源限速</span></div>
+                    <div class="form-group tunnel-mode-field" id="upload_limit" data-tunnel-field="upload_limit">
+                        <label class="form-label font-bold" for="tunnel-upload-limit" data-i18n-zh="上行限速（KB/s）" data-i18n-en="Upload limit (KB/s)">上行限速（KB/s）</label>
+                        <div class="form-group-wrapper"><input id="tunnel-upload-limit" class="form-control" type="number" min="0" step="1" name="upload_limit" value="0"><span class="help-block" data-i18n-zh="访问者到内网服务的速度；0 表示不限速。同一隧道的所有连接共享此额度。" data-i18n-en="Visitor to private service speed; 0 means unlimited. All connections on this tunnel share the limit.">访问者到内网服务的速度；0 表示不限速。同一隧道的所有连接共享此额度。</span></div>
+                    </div>
+                    <div class="form-group tunnel-mode-field" id="download_limit" data-tunnel-field="download_limit">
+                        <label class="form-label font-bold" for="tunnel-download-limit" data-i18n-zh="下行限速（KB/s）" data-i18n-en="Download limit (KB/s)">下行限速（KB/s）</label>
+                        <div class="form-group-wrapper"><input id="tunnel-download-limit" class="form-control" type="number" min="0" step="1" name="download_limit" value="0"><span class="help-block" data-i18n-zh="内网服务到访问者的速度；0 表示不限速。同一隧道的所有连接共享此额度。" data-i18n-en="Private service to visitor speed; 0 means unlimited. All connections on this tunnel share the limit.">内网服务到访问者的速度；0 表示不限速。同一隧道的所有连接共享此额度。</span></div>
+                    </div>
+
+                    {{if or (not .dedicated) (eq .type "tcp")}}
+                    <div class="form-section-title" data-tunnel-section="health"><i class="fa fa-heartbeat" aria-hidden="true"></i><span data-i18n-zh="后端健康检查" data-i18n-en="Backend health check">后端健康检查</span></div>
+                    <div class="form-group tunnel-mode-field" id="health_check_type" data-tunnel-field="health_check_type">
+                        <label class="form-label font-bold" for="health-check-type" data-i18n-zh="检查类型" data-i18n-en="Check type">检查类型</label>
+                        <div class="form-group-wrapper"><select id="health-check-type" class="form-control" name="health_check_type"><option value="tcp" data-i18n-zh="TCP 连接" data-i18n-en="TCP connect">TCP 连接</option><option value="http" data-i18n-zh="HTTP 200" data-i18n-en="HTTP 200">HTTP 200</option></select><span class="help-block" data-i18n-zh="仅 TCP 隧道支持；由客户端 NPC 从内网探测目标并自动摘除故障地址。" data-i18n-en="Supported for TCP tunnels; NPC probes targets from the private network and removes failed addresses.">仅 TCP 隧道支持；由客户端 NPC 从内网探测目标并自动摘除故障地址。</span></div>
+                    </div>
+                    <div class="form-group form-group--wide tunnel-mode-field" id="health_check_target" data-tunnel-field="health_check_target">
+                        <label class="form-label font-bold" for="health-check-target" data-i18n-zh="检查目标" data-i18n-en="Check targets">检查目标</label>
+                        <div class="form-group-wrapper"><textarea id="health-check-target" class="form-control" name="health_check_target" rows="3" placeholder="127.0.0.1:8080&#10;127.0.0.1:8081"></textarea><span class="help-block" data-i18n-zh="每行一个 host:port；留空表示关闭健康检查。" data-i18n-en="One host:port per line; leave empty to disable health checks.">每行一个 host:port；留空表示关闭健康检查。</span></div>
+                    </div>
+                    <div class="form-group tunnel-mode-field" id="health_check_timeout" data-tunnel-field="health_check_timeout"><label class="form-label font-bold" for="health-check-timeout" data-i18n-zh="单次超时（秒）" data-i18n-en="Timeout (s)">单次超时（秒）</label><div class="form-group-wrapper"><input id="health-check-timeout" class="form-control" type="number" min="1" max="300" name="health_check_timeout" value="2"></div></div>
+                    <div class="form-group tunnel-mode-field" id="health_max_failed" data-tunnel-field="health_max_failed"><label class="form-label font-bold" for="health-max-failed" data-i18n-zh="连续失败次数" data-i18n-en="Max failures">连续失败次数</label><div class="form-group-wrapper"><input id="health-max-failed" class="form-control" type="number" min="1" max="100" name="health_max_failed" value="3"></div></div>
+                    <div class="form-group tunnel-mode-field" id="health_check_interval" data-tunnel-field="health_check_interval"><label class="form-label font-bold" for="health-check-interval" data-i18n-zh="检查间隔（秒）" data-i18n-en="Interval (s)">检查间隔（秒）</label><div class="form-group-wrapper"><input id="health-check-interval" class="form-control" type="number" min="1" max="3600" name="health_check_interval" value="10"></div></div>
+                    <div class="form-group tunnel-mode-field" id="health_http_url" data-tunnel-field="health_http_url"><label class="form-label font-bold" for="health-http-url" data-i18n-zh="HTTP 检查路径" data-i18n-en="HTTP check path">HTTP 检查路径</label><div class="form-group-wrapper"><input id="health-http-url" class="form-control" type="text" name="health_http_url" value="/" placeholder="/healthz"><span class="help-block" data-i18n-zh="HTTP 检查时请求 http://目标+此路径，并要求返回 200。" data-i18n-en="HTTP checks request http://target plus this path and require status 200.">HTTP 检查时请求 http://目标+此路径，并要求返回 200。</span></div></div>
+                    {{end}}
+
                     {{if or (not .dedicated) (eq .type "tcp") (eq .type "secret") (eq .type "p2p")}}
                     <div class="form-section-title" data-tunnel-section="security"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="安全配置" data-i18n-en="Security">安全配置</span></div>
                     {{if or (not .dedicated) (eq .type "secret") (eq .type "p2p")}}
@@ -185,18 +211,20 @@
 </section>
 <script>
     var fieldMap = {
-        tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "proto_version"],
-        udp: ["client_id", "server_ip", "port", "target", "local_proxy"],
-        httpProxy: ["client_id", "server_ip", "port"],
-        socks5: ["client_id", "server_ip", "port"],
-        secret: ["client_id", "server_ip", "target", "password"],
-        p2p: ["client_id", "server_ip", "target", "password"],
-        file: ["client_id", "server_ip", "port", "local_path", "strip_pre"]
+        tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
+        udp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit"],
+        httpProxy: ["client_id", "server_ip", "port", "upload_limit", "download_limit"],
+        socks5: ["client_id", "server_ip", "port", "upload_limit", "download_limit"],
+        secret: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"],
+        p2p: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"],
+        file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "upload_limit", "download_limit"]
     };
     var tunnelTypeClasses = "tunnel-type-tcp tunnel-type-udp tunnel-type-httpProxy tunnel-type-socks5 tunnel-type-secret tunnel-type-p2p tunnel-type-file";
     var tunnelSectionFields = {
         target: ["target", "local_path", "strip_pre"],
-        security: ["password", "proto_version"]
+        rate: ["upload_limit", "download_limit"],
+        security: ["password", "proto_version"],
+        health: ["health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]
     };
 
     function applyTypeClass(type) {

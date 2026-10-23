@@ -112,7 +112,18 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		http.Error(rw, "IP address is blocked", http.StatusForbidden)
 		return
 	}
-	if config.U != "" && config.P != "" && !common.CheckAuth(req, config.U, config.P) {
+	// A Host rule may define multiple Basic accounts. It takes precedence over
+	// the legacy single client account for both ordinary HTTP and WebSocket
+	// upgrades. The challenge is sent before any client slot or tunnel is
+	// reserved so failed authentication cannot consume resources.
+	if authValue, configured := hostBasicAuth(host); configured {
+		if !file.CheckBasicAuth(req, authValue) {
+			rw.Header().Set("WWW-Authenticate", `Basic realm="nps host"`)
+			http.Error(rw, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+	} else if config.U != "" && config.P != "" && !common.CheckAuth(req, config.U, config.P) {
+		rw.Header().Set("WWW-Authenticate", `Basic realm="nps"`)
 		rw.WriteHeader(http.StatusUnauthorized)
 		rw.Write([]byte("Unauthorized"))
 		return
@@ -264,7 +275,7 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 				if target == nil {
 					return nil, NewHTTPError(http.StatusBadGateway, "server returned an empty connection")
 				}
-				connClient := conn.GetConn(target, lk.Crypt, lk.Compress, state.clientRate, true)
+				connClient := conn.GetConnWithLimits(target, lk.Crypt, lk.Compress, state.clientRate, true, nil, state.host)
 				return &flowConn{
 					ReadWriteCloser: connClient,
 					fakeAddr:        local,
@@ -293,7 +304,7 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 		if target == nil {
 			return nil, NewHTTPError(http.StatusBadGateway, "server returned an empty connection")
 		}
-		connClient := conn.GetConn(target, lk.Crypt, lk.Compress, state.clientRate, true)
+		connClient := conn.GetConnWithLimits(target, lk.Crypt, lk.Compress, state.clientRate, true, nil, state.host)
 		return &flowConn{
 			ReadWriteCloser: connClient,
 			fakeAddr:        local,
@@ -362,7 +373,10 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request, host
 		p.serveWebSocket(rw, req, host)
 		return
 	}
-	http.Error(rw, "websocket upgrade required", http.StatusBadRequest)
+	// Ordinary requests use net/http's reverse-proxy implementation. The host
+	// handler selects this path for compatibility mode, where preserving HTTP
+	// semantics (streaming responses, request bodies, and headers) matters.
+	p.ReverseProxy.ServeHTTP(rw, req)
 }
 
 func (p *ReverseProxy) serveWebSocket(rw http.ResponseWriter, req *http.Request, host *file.Host) {

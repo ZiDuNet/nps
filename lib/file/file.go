@@ -67,6 +67,8 @@ func (s *JsonDb) LoadTaskFromJsonFile() {
 		if post.Flow == nil {
 			post.Flow = NewFlow()
 		}
+		// Resource limit buckets are runtime-only and are created lazily on the
+		// first connection. Keep the persisted KB/s values untouched.
 		post.Flow.NormalizeLegacyAccounting()
 		// Runtime connection counts and startup errors never survive a restart.
 		post.CurrentConnections = 0
@@ -94,6 +96,9 @@ func (s *JsonDb) LoadClientFromJsonFile() {
 			post.Flow = NewFlow()
 		}
 		post.Flow.NormalizeLegacyAccounting()
+		if post.ConnectionHistory == nil {
+			post.ConnectionHistory = &ConnectionHistory{}
+		}
 		post.NowConn = 0
 		s.Clients.Store(post.Id, post)
 		if post.Id > int(s.ClientIncreaseId) {
@@ -135,6 +140,7 @@ func (s *JsonDb) LoadHostFromJsonFile() {
 		if post.Flow == nil {
 			post.Flow = NewFlow()
 		}
+		post.SetRateLimits(post.UploadLimit, post.DownloadLimit)
 		post.Flow.NormalizeLegacyAccounting()
 		loaded = append(loaded, post)
 		if post.Id > int(s.HostIncreaseId) {
@@ -172,6 +178,8 @@ func (s *JsonDb) LoadGlobalFromJsonFile() {
 			post.PlatformDomains = platformDomains
 		}
 		s.setGlobal(post)
+		SetGlobalMaxConn(post.MaxConn)
+		rate.SetGlobalLimit(int64(post.RateLimit) * 1024)
 	})
 }
 
@@ -223,9 +231,17 @@ func (s *JsonDb) GetClient(id int) (c *Client, err error) {
 var hostLock sync.Mutex
 
 func (s *JsonDb) StoreHostToJsonFile() {
+	_ = s.StoreHostToJsonFileErr()
+}
+
+// StoreHostToJsonFileErr persists the current host set and reports failures to
+// mutation paths that must not claim success when the JSON file was not
+// replaced. The legacy no-return wrapper remains for callers whose API cannot
+// yet surface persistence errors.
+func (s *JsonDb) StoreHostToJsonFileErr() error {
 	hostLock.Lock()
-	storeSyncMapToFile(&s.Hosts, s.HostFilePath)
-	hostLock.Unlock()
+	defer hostLock.Unlock()
+	return storeSyncMapToFile(&s.Hosts, s.HostFilePath)
 }
 
 var taskLock sync.Mutex
@@ -268,6 +284,10 @@ func cloneGlobal(global *Glob) *Glob {
 	copy := &Glob{
 		ServerUrl:              global.ServerUrl,
 		BlackIpList:            append([]string(nil), global.BlackIpList...),
+		WhiteIpList:            append([]string(nil), global.WhiteIpList...),
+		IpListPriority:         global.IpListPriority,
+		MaxConn:                global.MaxConn,
+		RateLimit:              global.RateLimit,
 		PlatformDomains:        append([]PlatformDomain(nil), global.PlatformDomains...),
 		DashboardKeyHash:       global.DashboardKeyHash,
 		DashboardKeyCiphertext: global.DashboardKeyCiphertext,
@@ -333,18 +353,19 @@ func loadSyncMapFromFileWithSingleJson(filePath string, f func(value string)) {
 	f(string(b))
 }
 
-func storeSyncMapToFile(m *sync.Map, filePath string) {
+func storeSyncMapToFile(m *sync.Map, filePath string) error {
 	file, err := os.Create(filePath + ".tmp")
 	// first create a temporary file to store
 	if err != nil {
 		logs.Error(err, "create temp file err")
-		return
+		return err
 	}
-	var writeErr bool
+	tempPath := filePath + ".tmp"
+	var writeErr error
 	defer func() {
-		if writeErr {
+		if writeErr != nil {
 			_ = file.Close()
-			_ = os.Remove(filePath + ".tmp")
+			_ = os.Remove(tempPath)
 			return
 		}
 	}()
@@ -427,31 +448,43 @@ func storeSyncMapToFile(m *sync.Map, filePath string) {
 		}
 		if err != nil {
 			logs.Error(err, "marshal json err")
-			return true
+			writeErr = err
+			return false
 		}
 		_, err = file.Write(b)
 		if err != nil {
 			logs.Error(err, "write file err")
-			writeErr = true
+			writeErr = err
 			return false
 		}
 		_, err = file.Write([]byte("\n" + common.CONN_DATA_SEQ))
 		if err != nil {
 			logs.Error(err, "write file err")
-			writeErr = true
+			writeErr = err
 			return false
 		}
 		return true
 	})
-	if writeErr {
-		return
+	if writeErr != nil {
+		return writeErr
 	}
-	_ = file.Sync()
-	_ = file.Close()
-	err = os.Rename(filePath+".tmp", filePath)
+	if err = file.Sync(); err != nil {
+		logs.Error(err, "sync file err")
+		writeErr = err
+		return err
+	}
+	if err = file.Close(); err != nil {
+		logs.Error(err, "close file err")
+		writeErr = err
+		return err
+	}
+	err = os.Rename(tempPath, filePath)
 	if err != nil {
 		logs.Error(err, "store to file err, data will lost")
+		writeErr = err
+		return err
 	}
+	return nil
 }
 
 func storeGlobalToFile(m *Glob, filePath string) {

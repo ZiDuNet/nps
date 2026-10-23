@@ -819,6 +819,11 @@ body.zui-app .diagnostic-rule-details__wide { grid-column: 1 / -1; }
 body.zui-app .client-detail__section-title { color: var(--nps-primary); border-bottom-color: var(--nps-line); }
 body.zui-app .client-detail__label, body.zui-app .client-detail__command-label { color: var(--nps-muted); }
 body.zui-app .client-detail__value, body.zui-app .client-detail__line span:last-child { color: var(--nps-ink); }
+body.zui-app .client-detail__history-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: center; gap: 8px 16px; padding: 9px 0; border-bottom: 1px solid var(--nps-line); color: var(--nps-ink); font-size: 12px; }
+body.zui-app .client-detail__history-row:last-child { border-bottom: 0; }
+body.zui-app .client-detail__history-state { justify-self: end; color: var(--nps-muted); }
+body.zui-app .client-detail__history-state--online { color: var(--nps-success, #218838); font-weight: 650; }
+body.zui-app .client-detail__history-empty { color: var(--nps-muted); font-size: 12px; }
 body.zui-app .client-detail__command code, body.zui-app .help-command { color: var(--nps-ink); background: var(--nps-surface-subtle); border-color: var(--nps-line); }
 body.zui-app .help-guide-card__icon, body.zui-app .error-page-card__icon { color: var(--nps-primary); background: var(--nps-primary-soft); }
 body.zui-app .help-guide-card__title, body.zui-app .error-page-card h1, body.zui-app .tile-title { color: var(--nps-ink) !important; }
@@ -2677,6 +2682,10 @@ body.zui-app .tunnel-detail-summary .badge {
 }
 @media (max-width: 1199px) and (min-width: 992px) {
     body.zui-app .tunnel-detail-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+    body.zui-app .client-detail__history-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    body.zui-app .client-detail__history-state { justify-self: start; }
 }
 @media (max-width: 991px) {
     body.zui-app .tunnel-detail-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }

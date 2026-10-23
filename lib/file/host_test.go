@@ -184,6 +184,94 @@ func TestNewHostRejectsOverlappingCrossTenantRoute(t *testing.T) {
 	}
 }
 
+func TestNewHostRejectsDuplicatePlatformPrefixWithoutPersistingRecord(t *testing.T) {
+	runPath := t.TempDir()
+	db := NewJsonDb(runPath)
+	utils := &DbUtils{JsonDb: db}
+	domain := testPlatformDomainWithCertificate(t, "platform-host-regression", "*.example.com")
+	if err := utils.SaveGlobal(&Glob{PlatformDomains: []PlatformDomain{domain}}); err != nil {
+		t.Fatal(err)
+	}
+	first := testPlatformHost(1, "taken.example.com", domain.ID)
+	db.Clients.Store(first.Client.Id, first.Client)
+	db.StoreClientsToJsonFile()
+	if err := utils.NewHost(first); err != nil {
+		t.Fatal(err)
+	}
+	duplicate := testPlatformHost(2, "taken.example.com", domain.ID)
+	if err := utils.NewHost(duplicate); err == nil {
+		t.Fatal("duplicate platform prefix must be rejected")
+	}
+	if _, exists := db.Hosts.Load(2); exists {
+		t.Fatal("rejected platform host must not remain in memory")
+	}
+	loaded := NewJsonDb(runPath)
+	loaded.LoadClientFromJsonFile()
+	loaded.LoadGlobalFromJsonFile()
+	loaded.LoadHostFromJsonFile()
+	if _, exists := loaded.Hosts.Load(2); exists {
+		t.Fatal("rejected platform host must not remain in hosts.json")
+	}
+	if _, exists := loaded.Hosts.Load(1); !exists {
+		t.Fatal("existing platform host must remain persisted")
+	}
+}
+
+func TestNewHostRejectsIDCollisionWithoutOverwritingExistingHost(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	existing := &Host{Id: 1, Host: "one.example.com", Scheme: "http", Location: "/", Client: &Client{Id: 1}, Target: &Target{TargetStr: "127.0.0.1:8080"}}
+	if err := utils.NewHost(existing); err != nil {
+		t.Fatal(err)
+	}
+	replacement := &Host{Id: 1, Host: "two.example.com", Scheme: "http", Location: "/", Client: &Client{Id: 2}, Target: &Target{TargetStr: "127.0.0.1:8081"}}
+	if err := utils.NewHost(replacement); err == nil {
+		t.Fatal("duplicate host ID must be rejected")
+	}
+	stored, err := utils.GetHostById(1)
+	if err != nil || stored.Host != "one.example.com" {
+		t.Fatalf("existing host was overwritten: host=%#v err=%v", stored, err)
+	}
+}
+
+func TestNewHostRollsBackInMemoryRecordWhenPersistenceFails(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	// Renaming the temporary JSON file over an existing directory reliably
+	// fails after the candidate record has been serialized.
+	db.HostFilePath = t.TempDir()
+	utils := &DbUtils{JsonDb: db}
+	host := &Host{Id: 1, Host: "persist.example.com", Scheme: "http", Location: "/", Client: &Client{Id: 1}, Target: &Target{TargetStr: "127.0.0.1:8080"}}
+	if err := utils.NewHost(host); err == nil {
+		t.Fatal("persistence failure must be returned to the caller")
+	}
+	if _, exists := db.Hosts.Load(1); exists {
+		t.Fatal("failed create must roll back the in-memory record")
+	}
+}
+
+func TestNewHostValidatesDomainSchemeTargetAndPath(t *testing.T) {
+	tests := []struct {
+		name string
+		host *Host
+	}{
+		{name: "host with embedded port", host: &Host{Host: "app.example.com:8080", Scheme: "http", Location: "/", Client: &Client{Id: 1}, Target: &Target{TargetStr: "127.0.0.1:8080"}}},
+		{name: "unknown scheme", host: &Host{Host: "app.example.com", Scheme: "ftp", Location: "/", Client: &Client{Id: 1}, Target: &Target{TargetStr: "127.0.0.1:8080"}}},
+		{name: "invalid target", host: &Host{Host: "app.example.com", Scheme: "http", Location: "/", Client: &Client{Id: 1}, Target: &Target{TargetStr: "127.0.0.1"}}},
+		{name: "traversal path", host: &Host{Host: "app.example.com", Scheme: "http", Location: "/api/../admin", Client: &Client{Id: 1}, Target: &Target{TargetStr: "127.0.0.1:8080"}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			db := NewJsonDb(t.TempDir())
+			if err := (&DbUtils{JsonDb: db}).NewHost(test.host); err == nil {
+				t.Fatal("invalid host mutation was accepted")
+			}
+			if _, exists := db.Hosts.Load(1); exists {
+				t.Fatal("invalid host mutation left a record behind")
+			}
+		})
+	}
+}
+
 func TestLoadHostSkipsPersistedCrossTenantOverlap(t *testing.T) {
 	runPath := t.TempDir()
 	source := NewJsonDb(runPath)

@@ -5,6 +5,7 @@ import (
 	"ehang.io/nps/bridge"
 	"ehang.io/nps/lib/daemon"
 	"ehang.io/nps/server"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/fatih/color"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -38,6 +40,7 @@ import (
 var (
 	level      string
 	ver        = flag.Bool("version", false, "show current version")
+	gen2fa     = flag.Bool("gen2fa", false, "generate a TOTP secret for Web administrator login")
 	confPath   = flag.String("conf_path", "", "set current confPath")
 	serverCmd  = flag.Bool("server", false, "NPS管理脚本")
 	npsLogPath = flag.String("log_path", "", "nps log path")
@@ -51,6 +54,18 @@ func main() {
 	// init log
 	if *ver {
 		common.PrintVersion()
+		return
+	}
+	if *gen2fa {
+		secret, err := crypt.GenerateTOTPSecret()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "generate TOTP secret failed:", err)
+			os.Exit(1)
+		}
+		fmt.Println("TOTP secret:", secret)
+		fmt.Println("Authenticator URI:", crypt.BuildTOTPURI("NPS", "admin", secret))
+		fmt.Println("Add this line to conf/nps.conf and restart NPS:")
+		fmt.Println("totp_secret=" + secret)
 		return
 	}
 
@@ -85,10 +100,17 @@ func main() {
 	if err := beego.LoadAppConfig("ini", filepath.Join(common.GetRunPath(), "conf", "nps.conf")); err != nil {
 		log.Fatalln("load config file error", err.Error())
 	}
+	file.SetConnectionHistoryLimit(beego.AppConfig.DefaultInt("client_history_limit", 5))
 	audit.Configure(beego.AppConfig.String("audit_log_path"))
 
 	common.InitPProfFromFile()
 	if level = beego.AppConfig.String("log_level"); level == "" {
+		level = "7"
+	}
+	if logLevel, ok := parseConfiguredLogLevel(level); ok {
+		level = strconv.Itoa(logLevel)
+	} else {
+		fmt.Fprintf(os.Stderr, "invalid log_level %q; using debug level 7\n", level)
 		level = "7"
 	}
 	logs.Reset()
@@ -99,9 +121,6 @@ func main() {
 		logPath = beego.AppConfig.String("log_path")
 		if logPath == "" {
 			logPath = common.GetLogPath()
-		}
-		if common.IsWindows() {
-			logPath = strings.Replace(logPath, "\\", "\\\\", -1)
 		}
 	}
 
@@ -126,7 +145,11 @@ func main() {
 
 	svcConfig.Arguments = append(svcConfig.Arguments, "service")
 	if len(os.Args) > 1 && os.Args[1] == "service" {
-		_ = logs.SetLogger(logs.AdapterFile, `{"level":`+level+`,"filename":"`+logPath+`","daily":false,"maxlines":100000,"color":true}`)
+		if err := setRotatingFileLogger(logPath, level); err != nil {
+			fmt.Fprintln(os.Stderr, "configure rotating NPS log failed:", err)
+			_ = logs.SetLogger(logs.AdapterConsole, `{"level":7,"color":false}`)
+			logs.Error("Falling back to console logging because the configured log file is unavailable")
+		}
 	} else {
 		_ = logs.SetLogger(logs.AdapterConsole, `{"level":`+level+`,"color":true}`)
 	}
@@ -485,6 +508,61 @@ func run() error {
 	return nil
 }
 
+func setRotatingFileLogger(logPath, configuredLevel string) error {
+	logLevel, ok := parseConfiguredLogLevel(configuredLevel)
+	if !ok {
+		return fmt.Errorf("invalid log_level %q: expected a number from 0 to 7 or a supported level name", configuredLevel)
+	}
+	config := rotatingLogConfig{
+		Filename:    logPath,
+		MaxSizeMB:   int64(beego.AppConfig.DefaultInt("log_max_size", 2)),
+		MaxAgeDays:  beego.AppConfig.DefaultInt("log_max_days", 7),
+		MaxBackups:  beego.AppConfig.DefaultInt("log_max_files", 10),
+		Compress:    beego.AppConfig.DefaultBool("log_compress", false),
+		RotateDaily: beego.AppConfig.DefaultBool("log_rotate_daily", true),
+		Level:       logLevel,
+		Perm:        0640,
+	}
+	encoded, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("encode rotating log config: %w", err)
+	}
+	return logs.SetLogger(rotatingLogAdapter, string(encoded))
+}
+
+// parseConfiguredLogLevel accepts both ZiDuNet's historical Beego numeric
+// levels and the text names used by upstream nps2. The numeric range retains
+// Beego's convention: 0 is least verbose and 7 is most verbose.
+func parseConfiguredLogLevel(configured string) (int, bool) {
+	value := strings.ToLower(strings.TrimSpace(configured))
+	switch value {
+	case "trace", "debug":
+		return logs.LevelDebug, true
+	case "info", "informational":
+		return logs.LevelInformational, true
+	case "notice":
+		return logs.LevelNotice, true
+	case "warn", "warning":
+		return logs.LevelWarning, true
+	case "error":
+		return logs.LevelError, true
+	case "fatal", "critical":
+		return logs.LevelCritical, true
+	case "panic", "alert":
+		return logs.LevelAlert, true
+	case "emergency":
+		return logs.LevelEmergency, true
+	case "off", "none":
+		return -1, true
+	}
+
+	level, err := strconv.Atoi(value)
+	if err != nil || level < logs.LevelEmergency || level > logs.LevelDebug {
+		return 0, false
+	}
+	return level, true
+}
+
 func initConfig(confDir string) {
 	if !common.FileExists(confDir) {
 		if err := os.MkdirAll(confDir, 0750); err != nil {
@@ -509,21 +587,19 @@ func initConfig(confDir string) {
 		_ = os.Chmod(confPath, 0600)
 		logs.Info("Auto-generated default config file:", confPath)
 		logGeneratedSecrets(secrets)
-	} else if content, err := os.ReadFile(confPath); err == nil {
-		updated, secrets := rotateInsecureConfig(string(content))
+	} else if changed, added, secrets, err := migrateConfigFile(confPath, defaultNpsConf); err != nil {
+		logs.Error("migrate config file failed:", err)
+	} else if changed {
+		if len(added) > 0 {
+			logs.Info("Added missing settings to config file:", strings.Join(added, ", "))
+		}
 		if len(secrets) > 0 {
-			if err := os.WriteFile(confPath, []byte(updated), 0600); err != nil {
-				logs.Error("rotate insecure config secrets failed:", err)
-			} else {
-				_ = os.Chmod(confPath, 0600)
-				logs.Warn("rotated known default config secrets in:", confPath)
-				logGeneratedSecrets(secrets)
-			}
-		} else {
-			_ = os.Chmod(confPath, 0600)
+			logs.Warn("rotated known default config secrets in:", confPath)
+			logGeneratedSecrets(secrets)
 		}
 	} else {
-		logs.Warn("read config file for secret check failed:", err)
+		// The file was already current.  Keep startup quiet rather than
+		// rewriting it on every restart.
 	}
 	web.ExtractWebFiles(common.GetRunPath())
 }

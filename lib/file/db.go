@@ -8,8 +8,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -991,6 +993,9 @@ func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 	if t == nil || t.Client == nil || t.Target == nil {
 		return errors.New("隧道记录无效")
 	}
+	if err := NormalizeHealth(&t.Health); err != nil {
+		return err
+	}
 	s.JsonDb.Tasks.Range(func(key, value interface{}) bool {
 		v, ok := value.(*Tunnel)
 		if !ok || v == nil {
@@ -1009,6 +1014,7 @@ func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 		return
 	}
 	t.Flow = NewFlow()
+	t.SetRateLimits(t.UploadLimit, t.DownloadLimit)
 	s.JsonDb.Tasks.Store(t.Id, t)
 	s.JsonDb.StoreTasksToJsonFile()
 	return
@@ -1018,6 +1024,15 @@ func (s *DbUtils) UpdateTask(t *Tunnel) error {
 	if t == nil || t.Client == nil || t.Target == nil {
 		return errors.New("隧道记录无效")
 	}
+	if err := NormalizeHealth(&t.Health); err != nil {
+		return err
+	}
+	if old, ok := s.JsonDb.Tasks.Load(t.Id); ok {
+		if previous, valid := old.(*Tunnel); valid && previous != nil && previous != t {
+			t.RateLimits.adopt(&previous.RateLimits)
+		}
+	}
+	t.SetRateLimits(t.UploadLimit, t.DownloadLimit)
 	s.JsonDb.Tasks.Store(t.Id, t)
 	s.JsonDb.StoreTasksToJsonFile()
 	return nil
@@ -1026,6 +1041,12 @@ func (s *DbUtils) UpdateTask(t *Tunnel) error {
 func (s *DbUtils) SaveGlobal(t *Glob) error {
 	if t == nil {
 		return errors.New("全局参数无效")
+	}
+	if t.MaxConn < 0 {
+		return errors.New("全局最大连接数不能小于 0")
+	}
+	if t.RateLimit < 0 {
+		return errors.New("全局限速不能小于 0")
 	}
 	platformDomains, err := normalizePlatformDomains(t.PlatformDomains)
 	if err != nil {
@@ -1052,6 +1073,8 @@ func (s *DbUtils) SaveGlobal(t *Glob) error {
 	}
 	t.PlatformDomains = platformDomains
 	s.JsonDb.setGlobal(t)
+	SetGlobalMaxConn(t.MaxConn)
+	rate.SetGlobalLimit(int64(t.RateLimit) * 1024)
 
 	platformByID := make(map[string]PlatformDomain, len(platformDomains))
 	for _, domain := range platformDomains {
@@ -1205,7 +1228,233 @@ func validHostRule(rule string) bool {
 	if rule == "" {
 		return false
 	}
-	return !strings.Contains(rule, "*") || (strings.HasPrefix(rule, "*.") && strings.Count(rule, "*") == 1 && strings.TrimPrefix(rule, "*.") != "")
+	if net.ParseIP(rule) != nil {
+		return true
+	}
+	if strings.ContainsAny(rule, ":/%?#\\\r\n\t ") {
+		return false
+	}
+	if strings.Contains(rule, "*") {
+		if !strings.HasPrefix(rule, "*.") || strings.Count(rule, "*") != 1 {
+			return false
+		}
+		rule = strings.TrimPrefix(rule, "*.")
+	}
+	if len(rule) == 0 || len(rule) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(rule, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, char := range label {
+			if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func normalizeHostScheme(scheme string) (string, error) {
+	scheme = strings.ToLower(strings.TrimSpace(scheme))
+	if scheme == "" {
+		// Historical clients omitted this field; the old runtime treated an
+		// empty value as both HTTP and HTTPS.
+		return "all", nil
+	}
+	switch scheme {
+	case "http", "https", "all":
+		return scheme, nil
+	default:
+		return "", errors.New("域名协议必须是 http、https 或 all")
+	}
+}
+
+func validHostTargets(targets string) bool {
+	targets = strings.ReplaceAll(targets, "\r\n", "\n")
+	targets = strings.TrimSpace(targets)
+	if targets == "" {
+		return false
+	}
+	for _, target := range strings.Split(targets, "\n") {
+		target = strings.TrimSpace(target)
+		if target == "" {
+			continue
+		}
+		host, portText, err := net.SplitHostPort(target)
+		if err != nil || strings.TrimSpace(host) == "" {
+			return false
+		}
+		port, err := strconv.Atoi(portText)
+		if err != nil || port < 1 || port > 65535 {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeHostMutation(host *Host) error {
+	if host == nil || host.Client == nil || host.Target == nil {
+		return errors.New("主机记录无效")
+	}
+	host.Host = normalizeHostName(host.Host)
+	if !validHostRule(host.Host) {
+		return errors.New("主机域名无效")
+	}
+	scheme, err := normalizeHostScheme(host.Scheme)
+	if err != nil {
+		return err
+	}
+	host.Scheme = scheme
+	if host.Location == "" {
+		host.Location = "/"
+	}
+	host.Location = normalizeHostLocation(host.Location)
+	if !strings.HasPrefix(host.Location, "/") || strings.ContainsAny(host.Location, "?#\\\r\n") {
+		return errors.New("路径规则必须是合法的绝对路径")
+	}
+	for _, segment := range strings.Split(host.Location, "/") {
+		if segment == "." || segment == ".." {
+			return errors.New("路径规则不能包含 . 或 .. 路径段")
+		}
+	}
+	host.Target.TargetStr = strings.ReplaceAll(host.Target.TargetStr, "\r\n", "\n")
+	host.Target.TargetStr = strings.TrimSpace(host.Target.TargetStr)
+	if !validHostTargets(host.Target.TargetStr) {
+		return errors.New("内网目标必须是 host:port 地址，每行一个")
+	}
+	if host.Scheme == "http" {
+		host.AutoHttps = false
+	}
+	if strings.TrimSpace(host.Auth) != "" {
+		if _, err := ParseBasicAuth(host.Auth); err != nil {
+			return err
+		}
+		host.Auth = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(host.Auth, "\r\n", "\n"), "\r", "\n"))
+	}
+	if err := NormalizeHealth(&host.Health); err != nil {
+		return err
+	}
+	return nil
+}
+
+// NormalizeHealth validates and canonicalizes a resource health-check
+// profile. Health checks are executed by NPC because only the client can
+// reach the private target; the server stores the profile and distributes it
+// over the additive control message used by newer NPC versions.
+func NormalizeHealth(health *Health) error {
+	if health == nil {
+		return nil
+	}
+	health.Lock()
+	defer health.Unlock()
+	health.HealthCheckType = strings.ToLower(strings.TrimSpace(health.HealthCheckType))
+	health.HealthCheckTarget = strings.ReplaceAll(health.HealthCheckTarget, "\r\n", "\n")
+	health.HealthCheckTarget = strings.ReplaceAll(health.HealthCheckTarget, "\n", ",")
+	parts := strings.Split(health.HealthCheckTarget, ",")
+	targets := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		host, portText, err := net.SplitHostPort(part)
+		if err != nil || strings.TrimSpace(host) == "" {
+			return errors.New("健康检查目标必须是 host:port 地址")
+		}
+		port, err := strconv.Atoi(portText)
+		if err != nil || port < 1 || port > 65535 {
+			return errors.New("健康检查目标端口无效")
+		}
+		targets = append(targets, net.JoinHostPort(strings.TrimSpace(host), strconv.Itoa(port)))
+	}
+	if len(targets) == 0 {
+		// Empty values disable health checking. Clear all stale settings so a
+		// resource can be explicitly reset from the Web form.
+		health.HealthCheckType = ""
+		health.HealthCheckTarget = ""
+		health.HealthCheckTimeout = 0
+		health.HealthMaxFail = 0
+		health.HealthCheckInterval = 0
+		health.HttpHealthUrl = ""
+		return nil
+	}
+	if health.HealthCheckType == "" {
+		health.HealthCheckType = "http"
+	}
+	if health.HealthCheckType != "http" && health.HealthCheckType != "tcp" {
+		return errors.New("健康检查类型必须是 http 或 tcp")
+	}
+	if health.HealthCheckTimeout <= 0 {
+		health.HealthCheckTimeout = 2
+	}
+	if health.HealthMaxFail <= 0 {
+		health.HealthMaxFail = 3
+	}
+	if health.HealthCheckInterval <= 0 {
+		health.HealthCheckInterval = 10
+	}
+	if health.HealthCheckTimeout > 300 || health.HealthMaxFail > 100 || health.HealthCheckInterval > 3600 {
+		return errors.New("健康检查参数超出允许范围")
+	}
+	if health.HealthCheckType == "http" {
+		health.HttpHealthUrl = strings.TrimSpace(health.HttpHealthUrl)
+		if health.HttpHealthUrl == "" {
+			health.HttpHealthUrl = "/"
+		}
+		if !strings.HasPrefix(health.HttpHealthUrl, "/") || strings.ContainsAny(health.HttpHealthUrl, "\r\n") {
+			return errors.New("HTTP 健康检查路径必须以 / 开头")
+		}
+	} else {
+		health.HttpHealthUrl = ""
+	}
+	health.HealthCheckTarget = strings.Join(targets, ",")
+	return nil
+}
+
+// HealthConfigSnapshot returns only the persisted/distributed health profile;
+// runtime failure counters and timers are deliberately excluded.
+func HealthConfigSnapshot(health *Health) Health {
+	if health == nil {
+		return Health{}
+	}
+	health.RLock()
+	snapshot := Health{
+		HealthCheckTimeout:  health.HealthCheckTimeout,
+		HealthMaxFail:       health.HealthMaxFail,
+		HealthCheckInterval: health.HealthCheckInterval,
+		HttpHealthUrl:       health.HttpHealthUrl,
+		HealthCheckType:     health.HealthCheckType,
+		HealthCheckTarget:   health.HealthCheckTarget,
+	}
+	health.RUnlock()
+	return snapshot
+}
+
+func setHealthConfig(dst *Health, src Health) {
+	if dst == nil {
+		return
+	}
+	dst.Lock()
+	dst.HealthCheckTimeout = src.HealthCheckTimeout
+	dst.HealthMaxFail = src.HealthMaxFail
+	dst.HealthCheckInterval = src.HealthCheckInterval
+	dst.HttpHealthUrl = src.HttpHealthUrl
+	dst.HealthCheckType = src.HealthCheckType
+	dst.HealthCheckTarget = src.HealthCheckTarget
+	dst.HealthNextTime = time.Time{}
+	dst.HealthMap = nil
+	dst.HealthRemoveArr = nil
+	dst.Unlock()
+}
+
+func HealthConfigEnabled(health *Health) bool {
+	if health == nil {
+		return false
+	}
+	snapshot := HealthConfigSnapshot(health)
+	return snapshot.HealthCheckTarget != "" && snapshot.HealthCheckTimeout > 0 && snapshot.HealthMaxFail > 0 && snapshot.HealthCheckInterval > 0
 }
 
 func hostRulesOverlap(a, b string) bool {
@@ -1554,18 +1803,25 @@ func (s *DbUtils) preparePlatformHost(host *Host, previous *Host) error {
 }
 
 func (s *DbUtils) NewHost(t *Host) error {
-	if t == nil || t.Client == nil || t.Target == nil {
-		return errors.New("主机记录无效")
+	if err := normalizeHostMutation(t); err != nil {
+		return err
 	}
-	if !validHostRule(t.Host) {
-		return errors.New("主机域名无效")
-	}
-	if t.Location == "" {
-		t.Location = "/"
-	}
-	t.Location = normalizeHostLocation(t.Location)
 	hostMutationMu.Lock()
 	defer hostMutationMu.Unlock()
+	if t.Id <= 0 {
+		t.Id = int(s.JsonDb.GetHostId())
+	}
+	if t.Id > int(^uint32(0)>>1) {
+		return errors.New("主机 ID 超出支持范围")
+	}
+	if _, exists := s.JsonDb.Hosts.Load(t.Id); exists {
+		return fmt.Errorf("主机 ID %d 已存在", t.Id)
+	}
+	for current := atomic.LoadInt32(&s.JsonDb.HostIncreaseId); t.Id > int(current); current = atomic.LoadInt32(&s.JsonDb.HostIncreaseId) {
+		if atomic.CompareAndSwapInt32(&s.JsonDb.HostIncreaseId, current, int32(t.Id)) {
+			break
+		}
+	}
 	if err := s.preparePlatformHost(t, nil); err != nil {
 		return err
 	}
@@ -1576,8 +1832,12 @@ func (s *DbUtils) NewHost(t *Host) error {
 		return errors.New("host route overlaps another tenant")
 	}
 	t.Flow = NewFlow()
+	t.SetRateLimits(t.UploadLimit, t.DownloadLimit)
 	s.JsonDb.Hosts.Store(t.Id, t)
-	s.JsonDb.StoreHostToJsonFile()
+	if err := s.JsonDb.StoreHostToJsonFileErr(); err != nil {
+		s.JsonDb.Hosts.Delete(t.Id)
+		return fmt.Errorf("保存域名规则失败: %w", err)
+	}
 	return nil
 }
 
@@ -1585,13 +1845,9 @@ func (s *DbUtils) NewHost(t *Host) error {
 // same mutation lock used by NewHost. Runtime workers can continue using the
 // existing object, while concurrent edits cannot race the conflict check.
 func (s *DbUtils) UpdateHost(t *Host) error {
-	if t == nil || t.Client == nil || t.Target == nil {
-		return errors.New("主机记录无效")
+	if err := normalizeHostMutation(t); err != nil {
+		return err
 	}
-	if !validHostRule(t.Host) {
-		return errors.New("主机域名无效")
-	}
-	t.Location = normalizeHostLocation(t.Location)
 	hostMutationMu.Lock()
 	defer hostMutationMu.Unlock()
 	storedValue, ok := s.JsonDb.Hosts.Load(t.Id)
@@ -1608,6 +1864,19 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	if s.IsHostRouteConflict(t) {
 		return errors.New("host route overlaps another tenant")
 	}
+	stored.RLock()
+	previous := Host{
+		RateLimits: stored.RateLimits.copyConfig(),
+		Host:       stored.Host, PlatformDomainID: stored.PlatformDomainID,
+		HeaderChange: stored.HeaderChange, ResponseHeaderChange: stored.ResponseHeaderChange,
+		HostChange: stored.HostChange, Location: stored.Location, PathRewrite: stored.PathRewrite,
+		RedirectURL: stored.RedirectURL, Remark: stored.Remark, Auth: stored.Auth, Scheme: stored.Scheme,
+		CertFilePath: stored.CertFilePath, KeyFilePath: stored.KeyFilePath,
+		AutoHttps: stored.AutoHttps, AutoCORS: stored.AutoCORS, CompatMode: stored.CompatMode,
+		Client: stored.Client, Target: stored.Target,
+	}
+	previousHealth := HealthConfigSnapshot(&stored.Health)
+	stored.RUnlock()
 	stored.Lock()
 	stored.Host = t.Host
 	stored.PlatformDomainID = t.PlatformDomainID
@@ -1617,6 +1886,7 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	stored.ResponseHeaderChange = t.ResponseHeaderChange
 	stored.HostChange = t.HostChange
 	stored.Remark = t.Remark
+	stored.Auth = t.Auth
 	stored.Location = t.Location
 	stored.PathRewrite = t.PathRewrite
 	stored.RedirectURL = t.RedirectURL
@@ -1626,11 +1896,37 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	stored.AutoHttps = t.AutoHttps
 	stored.AutoCORS = t.AutoCORS
 	stored.CompatMode = t.CompatMode
+	stored.SetRateLimits(t.UploadLimit, t.DownloadLimit)
 	if stored.Flow == nil {
 		stored.Flow = NewFlow()
 	}
 	stored.Unlock()
-	s.JsonDb.StoreHostToJsonFile()
+	setHealthConfig(&stored.Health, HealthConfigSnapshot(&t.Health))
+	if err := s.JsonDb.StoreHostToJsonFileErr(); err != nil {
+		stored.Lock()
+		stored.Host = previous.Host
+		stored.PlatformDomainID = previous.PlatformDomainID
+		stored.HeaderChange = previous.HeaderChange
+		stored.ResponseHeaderChange = previous.ResponseHeaderChange
+		stored.HostChange = previous.HostChange
+		stored.Location = previous.Location
+		stored.PathRewrite = previous.PathRewrite
+		stored.RedirectURL = previous.RedirectURL
+		stored.Remark = previous.Remark
+		stored.Auth = previous.Auth
+		stored.Scheme = previous.Scheme
+		stored.CertFilePath = previous.CertFilePath
+		stored.KeyFilePath = previous.KeyFilePath
+		stored.AutoHttps = previous.AutoHttps
+		stored.AutoCORS = previous.AutoCORS
+		stored.CompatMode = previous.CompatMode
+		stored.SetRateLimits(previous.UploadLimit, previous.DownloadLimit)
+		stored.Client = previous.Client
+		stored.Target = previous.Target
+		stored.Unlock()
+		setHealthConfig(&stored.Health, previousHealth)
+		return fmt.Errorf("保存域名规则失败: %w", err)
+	}
 	return nil
 }
 
@@ -1741,6 +2037,9 @@ func (s *DbUtils) delClientLocked(id int) error {
 func (s *DbUtils) NewClient(c *Client) error {
 	if c == nil {
 		return errors.New("客户端记录无效")
+	}
+	if c.ConnectionHistory == nil {
+		c.ConnectionHistory = &ConnectionHistory{}
 	}
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()

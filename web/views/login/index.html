@@ -129,6 +129,20 @@
                             <input id="auth-password" name="password" type="password" class="form-control has-icon" placeholder="password" required="" autocomplete="current-password" langtag="word-password">
                         </div>
                     </div>
+                    {{if .pow_enabled}}
+                    <input type="hidden" name="pow_nonce" id="auth-pow-nonce">
+                    <input type="hidden" name="pow_solution" id="auth-pow-solution">
+                    <div class="auth-form-hint" id="auth-pow-status" data-i18n-zh="正在准备登录安全校验…" data-i18n-en="Preparing login security check…">正在准备登录安全校验…</div>
+                    {{end}}
+                    {{if .totp_enabled}}
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" for="auth-totp" data-i18n-zh="动态验证码" data-i18n-en="Authenticator code">动态验证码</label>
+                        <div class="auth-control input-icon-wrap">
+                            <i class="fa fa-shield-alt input-icon" aria-hidden="true"></i>
+                            <input id="auth-totp" name="totp" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="form-control has-icon" placeholder="000000" autocomplete="one-time-code" required>
+                        </div>
+                    </div>
+                    {{end}}
                     {{if eq true .captcha_open}}
                     <div class="form-group auth-field auth-field--captcha">
                         <label class="auth-field__label" for="auth-captcha" langtag="word-captcha"></label>
@@ -165,6 +179,10 @@
 
     function login() {
         if (!validateNpsForm(document.querySelector('.login-form-wrap form'), true)) return false;
+        if (window.npsPowEnabled && (!document.getElementById('auth-pow-nonce').value || !document.getElementById('auth-pow-solution').value)) {
+            prepareLoginPow();
+            return false;
+        }
         $.ajax({
             type: "POST",
             url: "{{.web_base_url}}/login/verify",
@@ -182,6 +200,11 @@
                     }
                     var captchaInput = document.querySelector('input[name="captcha"]');
                     if (captchaInput) captchaInput.value = '';
+                    if (window.npsPowEnabled) {
+                        document.getElementById('auth-pow-nonce').value = '';
+                        document.getElementById('auth-pow-solution').value = '';
+                        prepareLoginPow();
+                    }
                 }
             },
             error: function () {
@@ -190,6 +213,40 @@
         })
         return false
     }
+
+    window.npsPowEnabled = {{if .pow_enabled}}true{{else}}false{{end}};
+    window.npsPowBits = {{.pow_bits}};
+    async function prepareLoginPow() {
+        if (!window.npsPowEnabled) return;
+        var status = document.getElementById('auth-pow-status');
+        try {
+            var challenge = await fetch("{{.web_base_url}}/login/pow", {credentials: 'same-origin'}).then(function (response) { return response.json(); });
+            if (!challenge.enabled) return;
+            var nonce = challenge.nonce;
+            var username = document.getElementById('auth-username').value || '';
+            var solution = 0;
+            var digest = new TextEncoder();
+            while (true) {
+                var input = digest.encode(nonce + '\x00' + solution);
+                var hash = new Uint8Array(await crypto.subtle.digest('SHA-256', input));
+                var remaining = challenge.bits;
+                var valid = true;
+                for (var i = 0; i < hash.length && remaining > 0; i++) {
+                    if (remaining >= 8) { if (hash[i] !== 0) { valid = false; break; } remaining -= 8; }
+                    else if ((hash[i] & (255 << (8 - remaining))) !== 0) { valid = false; break; }
+                    else remaining = 0;
+                }
+                if (valid) break;
+                solution++;
+            }
+            document.getElementById('auth-pow-nonce').value = nonce;
+            document.getElementById('auth-pow-solution').value = String(solution);
+            if (status) status.textContent = npsIsEnglish() ? 'Security check ready' : '安全校验完成';
+        } catch (error) {
+            if (status) status.textContent = npsIsEnglish() ? 'Security check failed, retry' : '安全校验失败，请重试';
+        }
+    }
+    if (window.npsPowEnabled) prepareLoginPow();
 
     function toggleLoginTheme() {
         var html = document.documentElement;

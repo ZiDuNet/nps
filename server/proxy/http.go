@@ -456,7 +456,7 @@ reset:
 	// keep-alive stream. The slot is released when the host changes or when the
 	// stream exits; this avoids accounting against the newly selected host.
 	accountedClient = hostClient
-	if err = s.auth(r, c, clientConfig.U, clientConfig.P); err != nil {
+	if err = s.authHostRequest(r, c, host, clientConfig.U, clientConfig.P); err != nil {
 		logs.Warn("auth error", err, r.RemoteAddr)
 		return
 	}
@@ -478,7 +478,7 @@ reset:
 		logs.Warn("bridge returned nil HTTP target for %s", lk.Host)
 		return
 	}
-	connClient = conn.GetConn(target, lk.Crypt, lk.Compress, clientRate, true)
+	connClient = conn.GetConnWithLimits(target, lk.Crypt, lk.Compress, clientRate, true, nil, host)
 	currentHost := host
 
 	// Read response bytes from the client-side target connection.

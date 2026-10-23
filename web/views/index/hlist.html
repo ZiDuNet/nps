@@ -14,6 +14,8 @@
         <div id="toolbar" class="management-table-toolbar">
             <a href="{{.web_base_url}}/index/addhost?client_id={{.client_id}}" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i><span data-i18n-zh="新增规则" data-i18n-en="New rule">新增规则</span></a>
             <button type="button" onclick="batchDelete('{{.web_base_url}}/index/delhost');" class="btn btn-outline btn-danger"><i class="fa fa-trash" aria-hidden="true"></i><span data-i18n-zh="批量删除" data-i18n-en="Delete selected">批量删除</span></button>
+            <button type="button" onclick="batchResourceAction('{{.web_base_url}}/index/hoststart', {}, '批量启用', 'Enable selected');" class="btn btn-outline btn-primary"><i class="fa fa-play" aria-hidden="true"></i><span data-i18n-zh="批量启用" data-i18n-en="Enable selected">批量启用</span></button>
+            <button type="button" onclick="batchResourceAction('{{.web_base_url}}/index/hoststop', {}, '批量停用', 'Disable selected');" class="btn btn-outline btn-warning"><i class="fa fa-pause" aria-hidden="true"></i><span data-i18n-zh="批量停用" data-i18n-en="Disable selected">批量停用</span></button>
             {{if eq true .isAdmin}}
             <label class="nps-table-filter" for="host-owner-filter">
                 <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
@@ -22,6 +24,15 @@
                     <option value="0" data-i18n-zh="未分配" data-i18n-en="Unassigned">未分配</option>
                     {{range .users}}
                     <option value="{{.Id}}">{{.Id}} · {{.UserName}}</option>
+                    {{end}}
+                </select>
+            </label>
+            <label class="nps-table-filter" for="host-client-filter">
+                <span class="nps-table-filter__label" data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>
+                <select id="host-client-filter" class="form-control nps-table-filter__control" data-nps-table-filter="filter_client_id" {{if .client_id}}disabled{{end}}>
+                    <option value="0" data-i18n-zh="全部客户端" data-i18n-en="All clients">全部客户端</option>
+                    {{range .clients}}
+                    <option value="{{.Id}}">{{.Id}} · {{.Remark}}</option>
                     {{end}}
                 </select>
             </label>
@@ -63,7 +74,10 @@ $('#table').npsTable({
     // anchored to the host-list endpoint so the first visit cannot post to
     // the page that was previously open.
     toolbar: '#toolbar', method: 'post', url: '{{.web_base_url}}/index/hostlist',
-    queryParams: function (params) { return {offset: params.offset, limit: params.limit, search: params.search, client_id: hostListClientId}; },
+    queryParams: function (params) {
+        var clientFilter = $('#host-client-filter').val();
+        return {offset: params.offset, limit: params.limit, search: params.search, client_id: hostListClientId, filter_client_id: clientFilter};
+    },
     search: true, contentType: 'application/x-www-form-urlencoded', striped: true, showHeader: true, showColumns: false, showRefresh: true,
     pagination: true, sidePagination: 'server', pageNumber: 1, pageList: [10, 20, 50], storageKey: 'host', detailView: true, smartDisplay: true,
     // A dense card record is clearer than a compressed multi-column grid on phones.
@@ -77,6 +91,7 @@ $('#table').npsTable({
         var source = row.PlatformManaged ? (npsIsEnglish() ? 'Platform domain / managed certificate' : '平台域名 / 托管证书') : (npsIsEnglish() ? 'Custom domain / self-managed certificate' : '自定义域名 / 自管证书');
         var redirect = row.AutoHttps ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
         var localProxy = (row.Target || {}).LocalProxy ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
+        var basicAuth = row.BasicAuthSet ? (npsIsEnglish() ? 'Configured' : '已配置') : (npsIsEnglish() ? 'Not configured' : '未配置');
         var client = row.Client || {}, clientName = client.Id ? String(client.Id) + ' · ' + String(client.Remark || '-') : '-';
         var clientState = client.IsConnect ? (npsIsEnglish() ? 'Online' : '在线') : (npsIsEnglish() ? 'Offline' : '离线');
         var ruleState = row.IsClose ? (npsIsEnglish() ? 'Disabled' : '已停用') : (npsIsEnglish() ? 'Active' : '运行中');
@@ -89,15 +104,19 @@ $('#table').npsTable({
             + '<div><span>' + (npsIsEnglish() ? 'Path rule' : '路径规则') + '</span><strong>' + npsEscapeHtml(row.Location || '/') + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'HTTP to HTTPS' : 'HTTP 跳转 HTTPS') + '</span><strong>' + npsEscapeHtml(redirect) + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'Local proxy' : '本地代理') + '</span><strong>' + npsEscapeHtml(localProxy) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Basic authentication' : 'Basic 认证') + '</span><strong>' + npsEscapeHtml(basicAuth) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Upload limit / current' : '上行限速 / 当前') + '</span><strong>' + npsEscapeHtml(String(row.UploadLimit || 0) + ' KB/s / ' + changeunit(row.UploadRate || 0) + '/s') + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Download limit / current' : '下行限速 / 当前') + '</span><strong>' + npsEscapeHtml(String(row.DownloadLimit || 0) + ' KB/s / ' + changeunit(row.DownloadRate || 0) + '/s') + '</strong></div>'
             + '<div class="host-detail-grid__wide"><span>' + (npsIsEnglish() ? 'Internal target' : '内网目标') + '</span><code>' + npsEscapeHtml(target || '-') + '</code></div>'
             + '</div>';
     },
     columns: [
         {checkbox: true, align: 'center', valign: 'middle'},
+        {field: 'Id', title: '<span data-i18n-zh="ID" data-i18n-en="ID">ID</span>', align: 'center', class: 'host-list__id', width: '72px', sortable: true},
         {field: 'Host', title: '<span data-i18n-zh="访问入口" data-i18n-en="Public entry">访问入口</span>', class: 'host-list__entry', formatter: function (value, row) {
             var scheme = String(row.Scheme || 'all'); var links = '';
-            if (scheme === 'all' || scheme === 'http') links += hostEndpointLink('HTTP', hostPublicURL(row.Host, hostHttpPort, 'http', row.Location));
-            if (scheme === 'all' || scheme === 'https') links += hostEndpointLink('HTTPS', hostPublicURL(row.Host, hostHttpsPort, 'https', row.Location));
+            if (scheme === 'all' || scheme === 'http') links += hostEndpointLink('HTTP', hostPublicURL(row.Host, row.HttpPort || hostHttpPort, 'http', row.Location));
+            if (scheme === 'all' || scheme === 'https') links += hostEndpointLink('HTTPS', hostPublicURL(row.Host, row.HttpsPort || hostHttpsPort, 'https', row.Location));
             var managed = row.PlatformManaged ? '<span class="badge badge-primary host-platform-badge">' + (npsIsEnglish() ? 'Platform' : '平台') + '</span>' : '';
             return '<div class="host-entry"><div class="host-entry__name">' + npsEscapeHtml(row.Host || '-') + managed + '</div><div class="host-entry__links">' + links + '</div></div>';
         }},
@@ -108,6 +127,7 @@ $('#table').npsTable({
             return '<div class="host-client"><span>' + npsEscapeHtml(name) + '</span><small class="' + (client.IsConnect ? 'is-online' : 'is-offline') + '">' + state + '</small></div>';
         }},
         {field: 'Target', title: '<span data-i18n-zh="内网目标" data-i18n-en="Internal target">内网目标</span>', class: 'host-list__target', formatter: function (value, row) { return '<code class="host-target-cell">' + npsEscapeHtml((row.Target || {}).TargetStr || '-') + '</code>'; }},
+        {field: 'BasicAuthSet', title: '<span data-i18n-zh="认证" data-i18n-en="Auth">认证</span>', align: 'center', class: 'host-list__auth', formatter: function (value) { return value ? '<span class="badge badge-info" data-i18n-zh="已配置" data-i18n-en="Configured">已配置</span>' : '<span class="text-muted" data-i18n-zh="未配置" data-i18n-en="Not configured">未配置</span>'; }},
         {field: 'IsClose', title: '<span data-i18n-zh="状态" data-i18n-en="Status">状态</span>', align: 'center', class: 'host-list__status', formatter: function (value) { return value ? '<span class="badge badge-warning" data-i18n-zh="已停用" data-i18n-en="Disabled">已停用</span>' : '<span class="badge badge-success" data-i18n-zh="运行中" data-i18n-en="Active">运行中</span>'; }},
         {field: 'option', title: '<span data-i18n-zh="操作" data-i18n-en="Actions">操作</span>', align: 'center', class: 'host-list__actions', formatter: function (value, row) {
             var id = Number(row.Id); if (!isFinite(id) || Math.floor(id) !== id || id <= 0) return '';

@@ -1,6 +1,9 @@
 package controllers
 
 import (
+	crand "crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"github.com/astaxie/beego/cache"
 	"github.com/astaxie/beego/utils/captcha"
 	"net"
@@ -10,6 +13,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server"
@@ -21,18 +25,141 @@ type LoginController struct {
 	beego.Controller
 }
 
-var ipRecord sync.Map
+// Login attempt state is deliberately kept in a bounded store.  The old
+// implementation used a sync.Map and scanned every entry on every request;
+// an attacker could therefore grow the map indefinitely and turn the cleanup
+// path into request-amplified work.  The store keeps the same small API used
+// by the tests and the login flow while enforcing a hard capacity and doing
+// expiry cleanup at most once per interval.
+var loginAttempts = newLoginAttemptLimiter(maxLoginRecords)
+var powChallenges = newPoWChallengeStore(maxPoWChallenges)
 var cpt *captcha.Captcha
 
 const (
 	maxLoginFailures   = 10
 	loginFailureWindow = time.Minute
+	maxLoginRecords    = 4096
+	loginCleanupPeriod = 15 * time.Second
+	maxPoWChallenges   = 4096
 )
 
-type record struct {
-	mu                sync.Mutex
-	hasLoginFailTimes int
-	lastLoginTime     time.Time
+const powChallengeTTL = 2 * time.Minute
+
+type loginAttemptRecord struct {
+	count      int
+	windowFrom time.Time
+}
+
+type loginAttemptLimiter struct {
+	mu              sync.Mutex
+	byIP            map[string]*loginAttemptRecord
+	byUsername      map[string]*loginAttemptRecord
+	capacity        int
+	nextCleanupTime time.Time
+}
+
+func newLoginAttemptLimiter(capacity int) *loginAttemptLimiter {
+	if capacity < 1 {
+		capacity = 1
+	}
+	return &loginAttemptLimiter{
+		byIP:       make(map[string]*loginAttemptRecord),
+		byUsername: make(map[string]*loginAttemptRecord),
+		capacity:   capacity,
+	}
+}
+
+func (s *loginAttemptLimiter) cleanupLocked(now time.Time) {
+	if now.Before(s.nextCleanupTime) {
+		return
+	}
+	s.removeExpiredLocked(now)
+	s.nextCleanupTime = now.Add(loginCleanupPeriod)
+}
+
+func (s *loginAttemptLimiter) removeExpiredLocked(now time.Time) {
+	for key, entry := range s.byIP {
+		if entry == nil || !now.Before(entry.windowFrom.Add(loginFailureWindow)) {
+			delete(s.byIP, key)
+		}
+	}
+	for key, entry := range s.byUsername {
+		if entry == nil || !now.Before(entry.windowFrom.Add(loginFailureWindow)) {
+			delete(s.byUsername, key)
+		}
+	}
+}
+
+func (s *loginAttemptLimiter) reserve(ip, username string, now time.Time) bool {
+	ip = strings.TrimSpace(ip)
+	username = loginUsernameKey(username)
+	if ip == "" {
+		ip = "unknown"
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cleanupLocked(now)
+	ipEntry, hasIP := s.byIP[ip]
+	userEntry, hasUsername := s.byUsername[username]
+	if hasIP && now.Before(ipEntry.windowFrom.Add(loginFailureWindow)) && ipEntry.count >= maxLoginFailures {
+		return false
+	}
+	if hasUsername && now.Before(userEntry.windowFrom.Add(loginFailureWindow)) && userEntry.count >= maxLoginFailures {
+		return false
+	}
+	if (!hasIP && len(s.byIP) >= s.capacity) || (!hasUsername && len(s.byUsername) >= s.capacity) {
+		// A full store triggers one opportunistic expiry pass before failing
+		// closed. Unlike the old code this is not an every-request full scan.
+		s.removeExpiredLocked(now)
+		ipEntry, hasIP = s.byIP[ip]
+		userEntry, hasUsername = s.byUsername[username]
+		if (!hasIP && len(s.byIP) >= s.capacity) || (!hasUsername && len(s.byUsername) >= s.capacity) {
+			return false
+		}
+	}
+	if !hasIP {
+		ipEntry = &loginAttemptRecord{windowFrom: now}
+		s.byIP[ip] = ipEntry
+	} else if !now.Before(ipEntry.windowFrom.Add(loginFailureWindow)) {
+		ipEntry.count, ipEntry.windowFrom = 0, now
+	}
+	if !hasUsername {
+		userEntry = &loginAttemptRecord{windowFrom: now}
+		s.byUsername[username] = userEntry
+	} else if !now.Before(userEntry.windowFrom.Add(loginFailureWindow)) {
+		userEntry.count, userEntry.windowFrom = 0, now
+	}
+	ipEntry.count++
+	userEntry.count++
+	return true
+}
+
+func (s *loginAttemptLimiter) clear(ip, username string) {
+	ip = strings.TrimSpace(ip)
+	username = loginUsernameKey(username)
+	s.mu.Lock()
+	delete(s.byIP, ip)
+	delete(s.byUsername, username)
+	s.mu.Unlock()
+}
+
+func (s *loginAttemptLimiter) clearExpired(now time.Time) {
+	s.mu.Lock()
+	s.removeExpiredLocked(now)
+	s.nextCleanupTime = now.Add(loginCleanupPeriod)
+	s.mu.Unlock()
+}
+
+func (s *loginAttemptLimiter) lengths() (int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.byIP), len(s.byUsername)
+}
+
+func loginUsernameKey(username string) string {
+	canonical := strings.ToLower(strings.TrimSpace(username))
+	digest := sha256.Sum256([]byte(canonical))
+	return hex.EncodeToString(digest[:])
 }
 
 // InitCaptcha registers the captcha route after the application configuration
@@ -61,6 +188,9 @@ func (self *LoginController) Index() {
 	self.Data["web_base_url"] = webBaseUrl
 	self.Data["register_allow"], _ = beego.AppConfig.Bool("allow_user_register")
 	self.Data["captcha_open"], _ = beego.AppConfig.Bool("open_captcha")
+	self.Data["totp_enabled"] = strings.TrimSpace(beego.AppConfig.String("totp_secret")) != ""
+	self.Data["pow_enabled"] = beego.AppConfig.DefaultBool("force_pow", false)
+	self.Data["pow_bits"] = powDifficulty()
 	self.Data["version"] = version.VERSION
 	self.TplName = "login/index.html"
 }
@@ -71,6 +201,12 @@ func (self *LoginController) Verify() {
 	}
 	username := self.GetString("username")
 	password := self.GetString("password")
+	totpCode := strings.TrimSpace(self.GetString("totp"))
+	if beego.AppConfig.DefaultBool("force_pow", false) && !verifyLoginPoW(username, self.GetString("pow_nonce"), self.GetString("pow_solution")) {
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "工作量证明校验失败，请重试"}
+		self.ServeJSON()
+		return
+	}
 	captchaOpen, _ := beego.AppConfig.Bool("open_captcha")
 	if captchaOpen {
 		if !cpt.VerifyReq(self.Ctx.Request) {
@@ -79,7 +215,7 @@ func (self *LoginController) Verify() {
 			return
 		}
 	}
-	if self.doLogin(username, password, true) {
+	if self.doLoginWithTOTP(username, password, totpCode, true) {
 		appendLoginAudit(self, username, true, "")
 		self.Data["json"] = map[string]interface{}{"status": 1, "msg": "login success"}
 	} else {
@@ -89,13 +225,172 @@ func (self *LoginController) Verify() {
 	self.ServeJSON()
 }
 
+// Pow returns a short-lived login challenge. It is intentionally a separate
+// endpoint so the browser can compute the solution without embedding a
+// server-side secret in the login page.
+func (self *LoginController) Pow() {
+	if self.Ctx.Request.Method != http.MethodGet {
+		self.Ctx.Output.SetStatus(http.StatusMethodNotAllowed)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "method not allowed"}
+		self.ServeJSON()
+		return
+	}
+	if !beego.AppConfig.DefaultBool("force_pow", false) {
+		self.Data["json"] = map[string]interface{}{"status": 1, "enabled": false}
+		self.ServeJSON()
+		return
+	}
+	nonce, err := newPoWNonce()
+	if err != nil {
+		self.Ctx.Output.SetStatus(http.StatusInternalServerError)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "生成登录挑战失败"}
+		self.ServeJSON()
+		return
+	}
+	now := time.Now()
+	if !powChallenges.store(nonce, now.Add(powChallengeTTL), now) {
+		self.Ctx.Output.SetStatus(http.StatusServiceUnavailable)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "登录校验繁忙，请稍后重试"}
+		self.ServeJSON()
+		return
+	}
+	self.Data["json"] = map[string]interface{}{"status": 1, "enabled": true, "nonce": nonce, "bits": powDifficulty()}
+	self.ServeJSON()
+}
+
+type powChallengeStore struct {
+	mu              sync.Mutex
+	entries         map[string]time.Time
+	capacity        int
+	nextCleanupTime time.Time
+}
+
+func newPoWChallengeStore(capacity int) *powChallengeStore {
+	if capacity < 1 {
+		capacity = 1
+	}
+	return &powChallengeStore{
+		entries:  make(map[string]time.Time),
+		capacity: capacity,
+	}
+}
+
+func (s *powChallengeStore) store(nonce string, expires, now time.Time) bool {
+	if nonce == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !now.Before(s.nextCleanupTime) || len(s.entries) >= s.capacity {
+		s.clearExpiredLocked(now)
+		s.nextCleanupTime = now.Add(15 * time.Second)
+	}
+	if _, exists := s.entries[nonce]; !exists && len(s.entries) >= s.capacity {
+		return false
+	}
+	s.entries[nonce] = expires
+	return true
+}
+
+func (s *powChallengeStore) consume(nonce string, now time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	expires, exists := s.entries[nonce]
+	delete(s.entries, nonce)
+	return exists && now.Before(expires)
+}
+
+func (s *powChallengeStore) clearExpired(now time.Time) {
+	s.mu.Lock()
+	s.clearExpiredLocked(now)
+	s.nextCleanupTime = now.Add(15 * time.Second)
+	s.mu.Unlock()
+}
+
+func (s *powChallengeStore) clearExpiredLocked(now time.Time) {
+	for nonce, expires := range s.entries {
+		if !now.Before(expires) {
+			delete(s.entries, nonce)
+		}
+	}
+}
+
+func (s *powChallengeStore) len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.entries)
+}
+
+func newPoWNonce() (string, error) {
+	var raw [16]byte
+	if _, err := cryptoRandRead(raw[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(raw[:]), nil
+}
+
+var cryptoRandRead = func(p []byte) (int, error) {
+	return crand.Read(p)
+}
+
+func powDifficulty() int {
+	bits := beego.AppConfig.DefaultInt("pow_bits", 20)
+	if bits < 1 {
+		return 1
+	}
+	if bits > 248 {
+		return 248
+	}
+	return bits
+}
+
+func verifyLoginPoW(_ string, nonce, solution string) bool {
+	nonce, solution = strings.TrimSpace(nonce), strings.TrimSpace(solution)
+	if nonce == "" || solution == "" || len(solution) > 64 {
+		return false
+	}
+	if !powChallenges.consume(nonce, time.Now()) {
+		return false
+	}
+	digest := sha256.Sum256([]byte(nonce + "\x00" + solution))
+	remaining := powDifficulty()
+	for _, b := range digest[:] {
+		if remaining >= 8 {
+			if b != 0 {
+				return false
+			}
+			remaining -= 8
+			continue
+		}
+		if remaining == 0 {
+			return true
+		}
+		return b&(0xff<<(8-remaining)) == 0
+	}
+	return true
+}
+
+func clearExpiredPoWChallenges(now time.Time) {
+	powChallenges.clearExpired(now)
+}
+
 func (self *LoginController) doLogin(username, password string, explicit bool) bool {
+	return self.doLoginWithTOTP(username, password, "", explicit)
+}
+
+func (self *LoginController) doLoginWithTOTP(username, password, totpCode string, explicit bool) bool {
 	ip := loginAttemptIP(self.Ctx.Request.RemoteAddr)
-	if !allowLoginAttempt(ip, explicit, time.Now()) {
+	if !allowLoginAttempt(ip, username, explicit, time.Now()) {
 		return false
 	}
 	var auth bool
 	if password == beego.AppConfig.String("web_password") && username == beego.AppConfig.String("web_username") {
+		if secret := strings.TrimSpace(beego.AppConfig.String("totp_secret")); secret != "" {
+			valid, err := crypt.ValidateTOTPCode(secret, totpCode)
+			if err != nil || !valid {
+				return false
+			}
+		}
 		self.regenerateSession()
 		clearAuthenticationSession(self.DelSession)
 		self.SetSession("isAdmin", true)
@@ -158,7 +453,7 @@ func (self *LoginController) doLogin(username, password string, explicit bool) b
 	if auth {
 		self.SetSession("auth", true)
 		if explicit {
-			ipRecord.Delete(ip)
+			loginAttempts.clear(ip, username)
 		}
 		return true
 
@@ -174,42 +469,20 @@ func loginAttemptIP(remoteAddr string) string {
 	return remoteAddr
 }
 
-func allowLoginAttempt(ip string, explicit bool, now time.Time) bool {
+func allowLoginAttempt(ip, username string, explicit bool, now time.Time) bool {
+	return allowLoginAttemptWith(loginAttempts, ip, username, explicit, now)
+}
+
+func allowLoginAttemptWith(limiter *loginAttemptLimiter, ip, username string, explicit bool, now time.Time) bool {
 	if !explicit {
 		return true
 	}
-	clearIprecord()
-	return reserveLoginAttempt(ip, now)
+	return limiter.reserve(ip, username, now)
 }
 
 // reserveLoginAttempt atomically admits at most maxLoginFailures explicit
 // attempts in one window. A successful login removes the reservation again.
 // Implicit no-auth checks on the login page must never count as failures.
-func reserveLoginAttempt(ip string, now time.Time) bool {
-	v, _ := ipRecord.LoadOrStore(ip, &record{})
-	return v.(*record).reserve(now)
-}
-
-func (r *record) reserve(now time.Time) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if !r.lastLoginTime.IsZero() && now.Sub(r.lastLoginTime) >= loginFailureWindow {
-		r.hasLoginFailTimes = 0
-	}
-	if r.hasLoginFailTimes >= maxLoginFailures {
-		return false
-	}
-	r.hasLoginFailTimes++
-	r.lastLoginTime = now
-	return true
-}
-
-func (r *record) expired(now time.Time) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return !r.lastLoginTime.IsZero() && now.Sub(r.lastLoginTime) >= loginFailureWindow
-}
-
 func (self *LoginController) Register() {
 	if self.Ctx.Request.Method == "GET" {
 		self.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
@@ -304,14 +577,4 @@ func (self *LoginController) requirePost() bool {
 		return false
 	}
 	return true
-}
-
-func clearIprecord() {
-	now := time.Now()
-	ipRecord.Range(func(key, value interface{}) bool {
-		if v, ok := value.(*record); ok && v.expired(now) {
-			ipRecord.CompareAndDelete(key, value)
-		}
-		return true
-	})
 }

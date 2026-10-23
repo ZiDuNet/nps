@@ -56,6 +56,8 @@ server_port=9001
 
 服务端是否执行 `max_conn`、`rate_limit` 和 `flow_limit`，取决于对应的 `allow_*` 开关。具体配额语义见[运行说明](../extend/description.md#流量、带宽和连接数)。
 
+`upload_limit` 和 `download_limit` 写在隧道或 Host 规则节中，而不是 `[common]`。同一条规则的所有连接共享对应方向的令牌桶；它们与客户端级 `rate_limit`、服务端全局带宽限制叠加生效。限速器只在 NPS 服务端转发链路上生效，P2P 成功直连时不经过 NPS，因此不受服务端资源限速影响。
+
 ## HTTP(S) 域名规则
 
 域名规则包含 `host`，不需要 `mode`：
@@ -79,6 +81,8 @@ header_X-Proxy-Source=nps
 | `location` | 路径匹配前缀，例如 `/api`。 |
 | `host_change` | 转发给后端时替换 HTTP Host。 |
 | `header_名称` | 新增或替换请求 Header，例如 `header_X-Env=prod`。 |
+| `upload_limit` | 此 Host 规则上行限速，单位 KiB/s；访问者到内网服务，`0` 或留空表示不限速。 |
+| `download_limit` | 此 Host 规则下行限速，单位 KiB/s；内网服务到访问者，`0` 或留空表示不限速。 |
 
 配置文件只描述路由规则。HTTP/HTTPS 监听端口、证书和自动 HTTPS 仍由 NPS 服务端配置控制。DNS、非 80/443 端口和证书流程见[隧道模式](../tunnel.md#http-s-域名代理)。
 
@@ -102,6 +106,8 @@ server_port=5353
 | `server_port` | NPS 对公网监听的端口；云安全组和系统防火墙也必须放行。 |
 | `target_addr` | NPC 所在网络可访问的目标地址。 |
 | `server_ip` | 可选。服务端开启 `allow_multi_ip=true` 后，将规则绑定到指定 NPS 网卡地址。 |
+| `upload_limit` | 此隧道上行限速，单位 KiB/s；访问者到内网服务，`0` 或留空表示不限速。 |
+| `download_limit` | 此隧道下行限速，单位 KiB/s；内网服务到访问者，`0` 或留空表示不限速。 |
 
 ## HTTP 正向代理、SOCKS5 与文件访问
 
@@ -155,7 +161,7 @@ target_addr=127.0.0.1:22
 
 ## 健康检查
 
-健康检查节名称必须以 `health` 开头。它只在配置文件模式下生效，可将不健康的后端临时从目标池移除：
+健康检查节名称必须以 `health` 开头。配置文件模式下可将不健康的后端临时从目标池移除；Web 面板为隧道或域名规则保存的健康检查也会通过兼容的新控制消息下发到 NPC。旧版 NPC 会忽略这部分 Web 配置并继续使用本地配置，不会影响普通隧道连接：
 
 ~~~ini
 [health_api]

@@ -226,6 +226,14 @@ POST /index/add
 | `strip_pre` | 文件访问路径前缀 |
 | `local_proxy` | 是否代理到服务端本地 |
 | `proto_version` | 协议版本 |
+| `upload_limit` | 资源上行限速，单位 KB/s；`0` 或留空表示不限速 |
+| `download_limit` | 资源下行限速，单位 KB/s；`0` 或留空表示不限速 |
+| `health_check_type` | 健康检查类型：`http` 或 `tcp`；留空目标时关闭 |
+| `health_check_target` | 健康检查目标，多个 `host:port` 可用逗号或换行分隔 |
+| `health_check_timeout` | 单次检查超时秒数，默认 2，最大 300 |
+| `health_max_failed` | 连续失败次数，默认 3，最大 100 |
+| `health_check_interval` | 检查间隔秒数，默认 10，最大 3600 |
+| `health_http_url` | HTTP 检查路径，默认 `/` |
 
 ### 修改、删除、启动、停止
 
@@ -237,6 +245,12 @@ POST /index/stop
 ```
 
 这些接口均使用 `id` 指定隧道。
+
+修改隧道时可继续提交新增接口中的 `upload_limit`、`download_limit` 和健康检查字段；缺少这些字段时保留原值，兼容旧调用方。
+
+隧道列表和单条查询在保留历史 `Tunnel` 字段的同时，增加 `AccessHost`、`AccessAddr`、`AccessAddress` 和 `AccessURL`。例如服务地址为 `https://nps.example.com:8081/panel`、隧道端口为 `10022` 时，返回 `AccessHost=nps.example.com`、`AccessAddr=nps.example.com:10022`、`AccessURL=tcp://nps.example.com:10022`。这些字段只用于展示访问入口，不会改变隧道监听端口。
+
+列表和单条查询还会返回 `UploadLimit`、`DownloadLimit`、`UploadRate`、`DownloadRate`。前两个是配置值，单位 KB/s，`0` 表示不限速；后两个是最近一秒的近似字节速率，空闲时为 `0`。
 
 ## Host 域名接口
 
@@ -270,8 +284,20 @@ POST /index/addhost
 | `cert_file_path` | 证书路径 |
 | `key_file_path` | 私钥路径 |
 | `AutoHttps` | 是否自动 HTTPS |
+| `upload_limit` | 资源上行限速，单位 KB/s；`0` 或留空表示不限速 |
+| `download_limit` | 资源下行限速，单位 KB/s；`0` 或留空表示不限速 |
+| `health_check_type` | 健康检查类型：`http` 或 `tcp` |
+| `health_check_target` | 健康检查目标，多个 `host:port` 可用逗号或换行分隔 |
+| `health_check_timeout` | 单次检查超时秒数，默认 2，最大 300 |
+| `health_max_failed` | 连续失败次数，默认 3，最大 100 |
+| `health_check_interval` | 检查间隔秒数，默认 10，最大 3600 |
+| `health_http_url` | HTTP 检查路径，默认 `/` |
 
 平台域名使用 `domain_mode=platform`、`platform_domain_id` 和 `platform_prefix`；此时证书路径由管理员维护的平台泛域名锁定。完整参数、实时查重和规则诊断接口见[Web API 清单](extend/webapi.md#host-域名解析管理)与[平台泛域名说明](extend/platform-domain.md)。
+
+Host 列表与单条查询返回规则 `Id`、`Scheme` 以及 `HttpPort` / `HttpsPort`。当入口使用标准 80/443 时端口字段为空；非标准端口以 `:端口` 返回，例如 `:30111`，便于 API 调用方分别组装 HTTP 和 HTTPS 访问地址。TCP 隧道的访问主机名来自全局「服务地址」中的主机部分，协议、路径和配置端口会被剥离，隧道自身的服务端口由规则单独提供。
+
+Host 列表和单条查询同时返回 `UploadLimit`、`DownloadLimit`、`UploadRate`、`DownloadRate`。限速单位为 KB/s，当前速率是近似的一秒采样值，空闲时为 `0`。
 
 ### 修改、删除、启动、停止 Host
 

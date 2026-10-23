@@ -104,8 +104,8 @@ docker run -d \
 ```shell
 git clone https://github.com/ZiDuNet/nps.git
 cd nps
-go build -o nps ./cmd/nps/nps.go
-go build -o npc ./cmd/npc/npc.go
+go build -o nps ./cmd/nps
+go build -o npc ./cmd/npc
 ```
 
 也可使用：

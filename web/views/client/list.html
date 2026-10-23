@@ -22,6 +22,12 @@
                         </span>
                         {{end}}
                         {{if eq true .isAdmin}}
+                        <button type="button" onclick="batchResourceAction('{{.web_base_url}}/client/changestatus', {status: 1}, '批量启用', 'Enable selected')" class="btn btn-outline btn-primary">
+                            <i class="fa fa-play" aria-hidden="true"></i> <span data-i18n-zh="批量启用" data-i18n-en="Enable selected">批量启用</span>
+                        </button>
+                        <button type="button" onclick="batchResourceAction('{{.web_base_url}}/client/changestatus', {status: 0}, '批量停用', 'Disable selected')" class="btn btn-outline btn-warning">
+                            <i class="fa fa-pause" aria-hidden="true"></i> <span data-i18n-zh="批量停用" data-i18n-en="Disable selected">批量停用</span>
+                        </button>
                         <label class="nps-table-filter" for="client-owner-filter">
                             <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
                             <select id="client-owner-filter" class="form-control nps-table-filter__control" data-nps-table-filter="user_id">
@@ -152,6 +158,17 @@
                     + kv('<span langtag="word-lastonlinetime"></span>', text(row.LastOnlineTime, '-'))
                     + kv(english ? 'Client expiry' : '客户端有效期', configuredExpiry)
                     + kv(english ? 'Effective expiry' : '实际有效期', effectiveExpiry))
+                + section('history', english ? 'Recent connections' : '最近连接记录', (row.ConnectionHistory || []).length
+                    ? row.ConnectionHistory.slice().reverse().map(function (event) {
+                        var state = event.OfflineTime
+                            ? '<span class="client-detail__history-state">' + (english ? 'Offline' : '已断开') + '</span>'
+                            : '<span class="client-detail__history-state client-detail__history-state--online">' + (english ? 'Online' : '当前在线') + '</span>';
+                        return '<div class="client-detail__history-row">'
+                            + '<span>' + (english ? 'Connected' : '上线') + '：' + text(event.OnlineTime, '-') + '</span>'
+                            + '<span>' + (english ? 'Disconnected' : '断开') + '：' + text(event.OfflineTime, english ? '—' : '尚未记录') + '</span>'
+                            + state + '</div>';
+                    }).join('')
+                    : '<div class="client-detail__history-empty">' + (english ? 'No connection history yet.' : '暂无连接记录。') + '</div>')
                 + section('terminal', english ? 'Connection commands' : '连接命令',
                     cmdRow('<span langtag="word-quicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.p}}|' + (row.VerifyKey || '') + '|false'))
                     + cmdRow('<span langtag="word-tlsquicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.tls_p}}|' + (row.VerifyKey || '') + '|true'))

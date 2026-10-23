@@ -625,35 +625,66 @@
 
     $.fn.npsTable.Constructor = NpsTable;
 
-    window.batchDelete = window.batchDelete || function (url) {
+    function selectedTableIds() {
         var ids = [];
         $('#table').closest('.nps-table').find('.nps-table__row-select:checked').each(function () {
             var id = Number($(this).val());
             if (isFinite(id) && id > 0) ids.push(Math.floor(id));
         });
-        ids = ids.filter(function (id, index) { return ids.indexOf(id) === index; });
+        return ids.filter(function (id, index) { return ids.indexOf(id) === index; });
+    }
+
+    // Apply an existing single-record endpoint to the current page selection.
+    // Keeping this deliberately sequential avoids a burst of concurrent state
+    // changes against the JSON store and lets the server perform its normal
+    // per-record authorization/audit checks for every item.
+    window.batchResourceAction = window.batchResourceAction || function (url, payload, chineseLabel, englishLabel) {
+        var ids = selectedTableIds();
         if (!ids.length) {
-            if (typeof window.npsNotify === 'function') window.npsNotify('warning', localText('请先选择要删除的记录。', 'Select at least one record first.'));
+            if (typeof window.npsNotify === 'function') window.npsNotify('warning', localText('请先选择要操作的记录。', 'Select at least one record first.'));
             return false;
         }
-        if (!window.confirm(localText('确定要删除选中的 ' + ids.length + ' 条记录吗？', 'Delete ' + ids.length + ' selected record(s)?'))) return false;
-        var removeNext = function (index) {
+        var zh = chineseLabel || '批量操作';
+        var en = englishLabel || 'Apply action';
+        if (!window.confirm(localText('确定要对选中的 ' + ids.length + ' 条记录执行“' + zh + '”吗？', 'Apply "' + en + '" to ' + ids.length + ' selected record(s)?'))) return false;
+        payload = payload && typeof payload === 'object' ? payload : {};
+        var succeeded = 0;
+        var failed = 0;
+        var failureMessages = [];
+        var applyNext = function (index) {
             if (index >= ids.length) {
                 $('#table').npsTable('refresh');
-                if (typeof window.npsNotify === 'function') window.npsNotify('success', localText('删除成功。', 'Deleted successfully.'));
+                if (typeof window.npsNotify === 'function') {
+                    if (!failed) {
+                        window.npsNotify('success', localText(zh + '成功。', en + ' completed successfully.'));
+                    } else if (succeeded) {
+                        window.npsNotify('warning', localText(zh + '完成：成功 ' + succeeded + ' 条，失败 ' + failed + ' 条。', en + ' completed: ' + succeeded + ' succeeded, ' + failed + ' failed.'));
+                    } else {
+                        window.npsNotify('error', localText(zh + '失败。', en + ' failed.'));
+                    }
+                }
                 return;
             }
-            $.ajax({type: 'POST', url: url, data: {id: ids[index]}, dataType: 'json'}).done(function (result) {
+            var requestData = $.extend({}, payload, {id: ids[index]});
+            $.ajax({type: 'POST', url: url, data: requestData, dataType: 'json'}).done(function (result) {
                 if (!result || !result.status) {
-                    if (typeof window.npsNotify === 'function') window.npsNotify('error', (result && result.msg) || localText('删除失败。', 'Delete failed.'));
+                    failed++;
+                    if (result && result.msg && failureMessages.length < 3) failureMessages.push(result.msg);
+                    applyNext(index + 1);
                     return;
                 }
-                removeNext(index + 1);
+                succeeded++;
+                applyNext(index + 1);
             }).fail(function () {
-                if (typeof window.npsNotify === 'function') window.npsNotify('error', localText('删除请求失败。', 'Delete request failed.'));
+                failed++;
+                applyNext(index + 1);
             });
         };
-        removeNext(0);
+        applyNext(0);
         return false;
+    };
+
+    window.batchDelete = window.batchDelete || function (url) {
+        return window.batchResourceAction(url, {}, '删除', 'Delete');
     };
 })(window.jQuery, window, document);

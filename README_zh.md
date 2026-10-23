@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.28</sub>
+﻿# NPS <sub>v1.1.29</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -138,8 +138,8 @@ nps/
 
 ```bash
 # 快速构建
-go build cmd/nps/nps.go    # 服务端
-go build cmd/npc/npc.go    # 客户端
+go build ./cmd/nps       # 服务端
+go build ./cmd/npc       # 客户端
 
 # Makefile（推荐）
 make build                 # 构建 nps + npc
@@ -147,8 +147,8 @@ make test                  # 带竞态检测和覆盖率测试
 make lint                  # golangci-lint
 
 # 交叉编译
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" ./cmd/nps/nps.go
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" ./cmd/npc/npc.go
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" ./cmd/nps
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" ./cmd/npc
 
 # GUI 客户端（需安装 Wails）
 cd cmd/npc/npc-gui && wails build
@@ -193,6 +193,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.29** (2026-10-24) - 新增 Web 配置的后端健康检查与规则级上下行限速，按版本门槛同步到 NPC；补齐原子校验、启停刷新、API 速率字段和 TCP/Host 访问元数据。
 
 - **v1.1.28** (2026-10-22) - 客户端详情安全显示 Basic/旧版用户名，并在域名解析页面补充跨域与兼容模式说明。
 - **v1.1.27** (2026-10-22) - 修复 NPC 服务日志权限，并完善 CLI、GUI 手动/远程升级流程；下载升级包后校验 SHA-256 再替换。

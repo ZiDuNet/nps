@@ -10,8 +10,8 @@ NPS（内网穿透代理服务器）是一个轻量级、高性能的内网穿�
 
 ```bash
 # 快速构建
-go build cmd/nps/nps.go          # 服务端
-go build cmd/npc/npc.go          # 客户端
+go build ./cmd/nps               # 服务端
+go build ./cmd/npc               # 客户端
 
 # Makefile（推荐）
 make build                       # 构建 nps + npc
@@ -26,8 +26,8 @@ go test -failfast -race -coverpkg=./... -covermode=atomic -coverprofile=coverage
 gofmt -w -s <file>
 
 # 交叉编译
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" ./cmd/nps/nps.go
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" ./cmd/npc/npc.go
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" ./cmd/nps
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" ./cmd/npc
 
 # GUI 客户端（Wails）
 cd cmd/npc/npc-gui && wails dev   # 开发

@@ -113,6 +113,132 @@ func (s *Bridge) RequestClientUpdate(id int) error {
 	return nil
 }
 
+func supportsHealthConfig(versionText string) bool {
+	comparison, err := version.Compare(versionText, version.HealthConfigMinVersion)
+	return err == nil && comparison >= 0
+}
+
+// healthProfilesForClient returns the active, persisted health-check profiles
+// that belong to one client. Runtime failure counters are deliberately
+// omitted: the NPC owns those counters while the server owns the target pool.
+// Duplicate profiles are collapsed so a target shared by two resources is
+// probed only once by the NPC.
+func healthProfilesForClientFromDB(db *file.DbUtils, clientID int) []file.Health {
+	if db == nil || db.JsonDb == nil || clientID <= 0 {
+		return nil
+	}
+	profiles := make([]file.Health, 0)
+	seen := make(map[string]struct{})
+	appendProfile := func(health *file.Health) {
+		if !file.HealthConfigEnabled(health) {
+			return
+		}
+		snapshot := file.HealthConfigSnapshot(health)
+		// Resources may have been created by older clients or imported from
+		// hand-edited JSON. Normalize the copy before deduplicating and sending
+		// it so equivalent values such as "HTTP" and "http" share one profile.
+		if err := file.NormalizeHealth(&snapshot); err != nil || !file.HealthConfigEnabled(&snapshot) {
+			return
+		}
+		key := fmt.Sprintf("%s\x00%s\x00%d\x00%d\x00%d\x00%s",
+			snapshot.HealthCheckType,
+			snapshot.HealthCheckTarget,
+			snapshot.HealthCheckTimeout,
+			snapshot.HealthMaxFail,
+			snapshot.HealthCheckInterval,
+			snapshot.HttpHealthUrl,
+		)
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		profiles = append(profiles, snapshot)
+	}
+
+	db.JsonDb.Tasks.Range(func(_, value interface{}) bool {
+		tunnel, ok := value.(*file.Tunnel)
+		if !ok || tunnel == nil {
+			return true
+		}
+		tunnel.RLock()
+		client := tunnel.Client
+		mode, active := tunnel.Mode, tunnel.Status
+		tunnel.RUnlock()
+		if !active || mode != "tcp" || client == nil {
+			return true
+		}
+		client.RLock()
+		owned := client.Id == clientID
+		client.RUnlock()
+		if owned {
+			appendProfile(&tunnel.Health)
+		}
+		return true
+	})
+	db.JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*file.Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.RLock()
+		client := host.Client
+		active := !host.IsClose
+		host.RUnlock()
+		if !active || client == nil {
+			return true
+		}
+		client.RLock()
+		owned := client.Id == clientID
+		client.RUnlock()
+		if owned {
+			appendProfile(&host.Health)
+		}
+		return true
+	})
+	return profiles
+}
+
+func healthProfilesForClient(clientID int) []file.Health {
+	return healthProfilesForClientFromDB(file.GetDb(), clientID)
+}
+
+// RequestClientHealthConfig sends the current effective health configuration
+// to a connected, compatible NPC. Offline clients receive the same payload on
+// their next WORK_MAIN connection, so callers may safely ignore an offline
+// error after persisting a resource change.
+func (s *Bridge) RequestClientHealthConfig(id int) error {
+	return s.requestClientHealthConfig(id, file.GetDb())
+}
+
+func (s *Bridge) requestClientHealthConfig(id int, db *file.DbUtils) error {
+	if s == nil {
+		return errors.New("服务端 Bridge 尚未初始化")
+	}
+	value, ok := s.Client.Load(id)
+	if !ok {
+		return fmt.Errorf("客户端 %d 当前未连接", id)
+	}
+	client, ok := bridgeClient(value)
+	if !ok {
+		return fmt.Errorf("客户端 %d 控制连接无效", id)
+	}
+	if !supportsHealthConfig(client.VersionSnapshot()) {
+		// Older NPCs intentionally keep their local [health_*] configuration;
+		// sending the new flag would corrupt their control stream.
+		return nil
+	}
+	profiles := healthProfilesForClientFromDB(db, id)
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.signal == nil || client.signal.Conn == nil {
+		return fmt.Errorf("客户端 %d 当前未连接", id)
+	}
+	if _, err := client.signal.SendInfo(profiles, common.HEALTH_CONFIG); err != nil {
+		return fmt.Errorf("发送健康检查配置失败：%w", err)
+	}
+	return nil
+}
+
 type Bridge struct {
 	TunnelPort     int //通信隧道端口
 	Client         sync.Map
@@ -360,6 +486,17 @@ func (s *Bridge) verifySuccess(c *conn.Conn) {
 }
 
 func (s *Bridge) cliProcess(c *conn.Conn) {
+	if c == nil || c.Conn == nil {
+		return
+	}
+	// Apply the administrator's global source policy before reading the
+	// handshake. This protects the bridge/control plane as well as visitor
+	// proxy listeners and avoids spending handshake resources on denied peers.
+	if file.GetDb().GlobalIPDenied(c.Conn.RemoteAddr().String()) {
+		logs.Warn("[访问控制] 拒绝桥接来源 %s", c.Conn.RemoteAddr())
+		_ = c.Close()
+		return
+	}
 	// Bound the handshake so half-open/scanning connections do not retain a goroutine.
 	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	//read test flag
@@ -441,8 +578,12 @@ func (s *Bridge) delClientIfSnapshot(id int, snapshot clientSessionSnapshot) {
 	}
 	s.Client.Delete(id)
 	signal, tunnel, fileMux := cl.signal, cl.tunnel, cl.file
+	wasOnline := signal != nil
 	cl.signal, cl.tunnel, cl.file = nil, nil, nil
 	cl.mu.Unlock()
+	if wasOnline {
+		s.recordClientConnection(id, false)
+	}
 	s.clientsMu.Unlock()
 
 	if signal != nil {
@@ -490,8 +631,12 @@ func (s *Bridge) delClient(id int, expectedSignal *conn.Conn) {
 	}
 	s.Client.Delete(id)
 	signal, tunnel, fileMux := cl.signal, cl.tunnel, cl.file
+	wasOnline := signal != nil
 	cl.signal, cl.tunnel, cl.file = nil, nil, nil
 	cl.mu.Unlock()
+	if wasOnline {
+		s.recordClientConnection(id, false)
+	}
 	s.clientsMu.Unlock()
 
 	if signal != nil {
@@ -511,6 +656,14 @@ func (s *Bridge) delClient(id int, expectedSignal *conn.Conn) {
 		case s.CloseClient <- c.Id:
 		default:
 		}
+	}
+}
+
+// recordClientConnection runs under clientsMu so a rapid reconnect cannot
+// reorder an older offline event after the new online transition.
+func (s *Bridge) recordClientConnection(id int, online bool) {
+	if client, err := file.GetDb().GetClient(id); err == nil && client != nil {
+		client.RecordConnection(online, time.Now())
 	}
 }
 
@@ -534,10 +687,12 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 		// old socket so that reader can exit without retaining resources.
 		var oldSignal *conn.Conn
 		s.clientsMu.Lock()
+		wasOnline := false
 		if v, ok := s.Client.Load(id); ok {
 			if cl, valid := bridgeClient(v); valid {
 				cl.mu.Lock()
 				oldSignal = cl.signal
+				wasOnline = oldSignal != nil
 				cl.signal = c
 				cl.Version = vs
 				cl.mu.Unlock()
@@ -548,11 +703,19 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 		} else {
 			s.Client.Store(id, NewClient(nil, nil, c, vs))
 		}
+		if !wasOnline {
+			s.recordClientConnection(id, true)
+		}
 		s.clientsMu.Unlock()
 		if oldSignal != nil && oldSignal != c {
 			_ = oldSignal.Close()
 		}
 		s.requestClientLocalAddr(id, c)
+		if err := s.RequestClientHealthConfig(id); err != nil {
+			// An offline/reconnecting data channel must not make the control
+			// connection fail. The next reconnect repeats this synchronization.
+			logs.Trace("[配置] clientId %d 健康检查配置未下发：%v", id, err)
+		}
 		go s.GetHealthFromClient(id, c)
 		logs.Info("[连接] clientId %d 已连接，来源：%s", id, c.Conn.RemoteAddr())
 	case common.WORK_CHAN:
@@ -1010,6 +1173,7 @@ loop:
 					tl.LocalPath = t.LocalPath
 					tl.StripPre = t.StripPre
 					tl.MultiAccount = t.MultiAccount
+					tl.Health = file.HealthConfigSnapshot(&t.Health)
 					s.configMu.Lock()
 					hasTunnel := client.HasTunnel(tl)
 					if !hasTunnel {

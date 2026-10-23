@@ -121,6 +121,36 @@ func TestSidebarTemplateContainsAddEditMenuBindings(t *testing.T) {
 	}
 }
 
+func TestManagementListsExposeBatchLifecycleActions(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		path    string
+		markers []string
+	}{
+		{name: "tunnel", path: "../views/index/list.html", markers: []string{
+			"batchResourceAction('{{.web_base_url}}/index/start'",
+			"batchResourceAction('{{.web_base_url}}/index/stop'",
+		}},
+		{name: "host", path: "../views/index/hlist.html", markers: []string{
+			"batchResourceAction('{{.web_base_url}}/index/hoststart'",
+			"batchResourceAction('{{.web_base_url}}/index/hoststop'",
+		}},
+		{name: "client", path: "../views/client/list.html", markers: []string{
+			"batchResourceAction('{{.web_base_url}}/client/changestatus', {status: 1}",
+			"batchResourceAction('{{.web_base_url}}/client/changestatus', {status: 0}",
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			content := readTemplateForTest(t, test.path)
+			for _, marker := range test.markers {
+				if !strings.Contains(content, marker) {
+					t.Fatalf("%s template misses batch action marker %q", test.name, marker)
+				}
+			}
+		})
+	}
+}
+
 func TestLayoutSupportsContentOnlyNavigation(t *testing.T) {
 	content := readTemplateForTest(t, "../views/public/layout.html")
 	for _, marker := range []string{
@@ -158,22 +188,22 @@ func TestGenericTunnelAddBackLinkTracksSelectedMode(t *testing.T) {
 
 func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 	addExpected := map[string]string{
-		"tcp":       `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "proto_version"]`,
-		"udp":       `udp: ["client_id", "server_ip", "port", "target", "local_proxy"]`,
-		"socks5":    `socks5: ["client_id", "server_ip", "port"]`,
-		"httpProxy": `httpProxy: ["client_id", "server_ip", "port"]`,
-		"secret":    `secret: ["client_id", "server_ip", "target", "password"]`,
-		"p2p":       `p2p: ["client_id", "server_ip", "target", "password"]`,
-		"file":      `file: ["client_id", "server_ip", "port", "local_path", "strip_pre"]`,
+		"tcp":       `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
+		"udp":       `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit"]`,
+		"socks5":    `socks5: ["client_id", "server_ip", "port", "upload_limit", "download_limit"]`,
+		"httpProxy": `httpProxy: ["client_id", "server_ip", "port", "upload_limit", "download_limit"]`,
+		"secret":    `secret: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"]`,
+		"p2p":       `p2p: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"]`,
+		"file":      `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "upload_limit", "download_limit"]`,
 	}
 	editExpected := map[string]string{
-		"tcp":       `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "proto_version"]`,
-		"udp":       `udp: ["client_id", "server_ip", "port", "target", "local_proxy"]`,
-		"socks5":    `socks5: ["client_id", "server_ip", "port"]`,
-		"httpProxy": `httpProxy: ["client_id", "server_ip", "port"]`,
-		"secret":    `secret: ["client_id", "server_ip", "target", "password"]`,
-		"p2p":       `p2p: ["client_id", "server_ip", "target", "password"]`,
-		"file":      `file: ["client_id", "server_ip", "port", "local_path", "strip_pre"]`,
+		"tcp":       `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
+		"udp":       `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit"]`,
+		"socks5":    `socks5: ["client_id", "server_ip", "port", "upload_limit", "download_limit"]`,
+		"httpProxy": `httpProxy: ["client_id", "server_ip", "port", "upload_limit", "download_limit"]`,
+		"secret":    `secret: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"]`,
+		"p2p":       `p2p: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"]`,
+		"file":      `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "upload_limit", "download_limit"]`,
 	}
 
 	tests := []struct {
@@ -208,6 +238,22 @@ func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestTunnelEditTemplateAllowsClientMigration(t *testing.T) {
+	content := readTemplateForTest(t, "../views/index/edit.html")
+	for _, marker := range []string{
+		`<select id="tunnel-client" class="form-control" name="client_id" required>`,
+		`/client/list`,
+		`Changing the client moves this tunnel`,
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("tunnel edit page misses client migration control %q", marker)
+		}
+	}
+	if strings.Contains(content, "所属客户端在编辑时保持不变") {
+		t.Fatal("tunnel edit page still describes the client as immutable")
 	}
 }
 
@@ -246,6 +292,56 @@ func TestHostListTemplateUsesSafeDynamicOutput(t *testing.T) {
 		if strings.Contains(content, forbidden) {
 			t.Fatalf("host list must not render sensitive host fields: %s", forbidden)
 		}
+	}
+}
+
+func TestHostListTemplateIncludesIdentifiersClientFilterAndReturnedPorts(t *testing.T) {
+	content := readTemplateForTest(t, "../views/index/hlist.html")
+	for _, marker := range []string{
+		`data-nps-table-filter="filter_client_id"`,
+		`field: 'Id'`,
+		`row.HttpPort || hostHttpPort`,
+		`row.HttpsPort || hostHttpsPort`,
+		`filter_client_id: clientFilter`,
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("host list misses migration field %q", marker)
+		}
+	}
+}
+
+func TestHostDomainRequestRejectsMixedModesAndKeepsLegacyCustomPayload(t *testing.T) {
+	tests := []struct {
+		name   string
+		mode   string
+		host   string
+		id     string
+		prefix string
+		want   string
+		bad    bool
+	}{
+		{name: "explicit custom", mode: "custom", host: "app.example.com", want: "custom"},
+		{name: "legacy custom", host: "app.example.com", want: "custom"},
+		{name: "legacy platform", id: "platform-1", prefix: "app", want: "platform"},
+		{name: "custom with platform fields", mode: "custom", host: "app.example.com", id: "platform-1", prefix: "app", bad: true},
+		{name: "platform with custom host", mode: "platform", host: "app.example.com", id: "platform-1", prefix: "app", bad: true},
+		{name: "unknown mode", mode: "legacy", host: "app.example.com", bad: true},
+		{name: "missing custom host", mode: "custom", bad: true},
+		{name: "missing platform prefix", mode: "platform", id: "platform-1", bad: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := validateHostDomainRequest(test.mode, test.host, test.id, test.prefix)
+			if test.bad {
+				if err == nil {
+					t.Fatal("invalid domain request was accepted")
+				}
+				return
+			}
+			if err != nil || got != test.want {
+				t.Fatalf("validateHostDomainRequest() = %q, %v; want %q", got, err, test.want)
+			}
+		})
 	}
 }
 
@@ -320,6 +416,22 @@ func TestHostFormTemplatesRenderPlatformDomainFields(t *testing.T) {
 			}
 			if tt.name == "edit platform host" && strings.Contains(content, "/server/private.pem") {
 				t.Fatal("managed host edit form must not expose the administrator certificate path")
+			}
+			platformIndex := strings.Index(content, `name="domain_mode" value="platform"`)
+			customIndex := strings.Index(content, `name="domain_mode" value="custom"`)
+			if platformIndex < 0 || customIndex < 0 || platformIndex > customIndex {
+				t.Fatal("platform domain choice must be presented before custom domain")
+			}
+			if strings.Contains(content, `<option value="" data-i18n-zh="选择泛域名"`) || strings.Contains(content, `<option value="" data-i18n-zh="Choose a wildcard"`) {
+				t.Fatal("domain selector should not show a placeholder when a managed wildcard is available")
+			}
+			if tt.name == "create" {
+				if !strings.Contains(content, `name="domain_mode" value="platform" checked`) {
+					t.Fatal("new Host form should default to platform domain when one is available")
+				}
+				if !strings.Contains(content, `value="managed-example" data-wildcard="*.example.com" data-certificate-configured="false" selected`) {
+					t.Fatal("new Host form should select the first managed wildcard")
+				}
 			}
 		})
 	}
@@ -555,7 +667,7 @@ func TestTunnelListTemplateQuotesRuntimeJavaScriptValues(t *testing.T) {
 	for _, marker := range []string{
 		`var tunnelListMode = '`,
 		`var tunnelListClientId = Number('`,
-		`var address = "127.0.0.1" + ":"`,
+		`var publicHost = "127.0.0.1";`,
 		`-type=kcp -password=`,
 	} {
 		if !strings.Contains(content, marker) {

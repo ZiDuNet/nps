@@ -38,7 +38,7 @@ func HandleTrans(c *conn.Conn, s *TunnelModeServer) error {
 		target.RLock()
 		localProxy := target.LocalProxy
 		target.RUnlock()
-		return s.DealClient(c, client, addr, nil, common.CONN_TCP, nil, nil, localProxy, nil, nil)
+		return s.DealClient(c, client, addr, nil, common.CONN_TCP, nil, nil, localProxy, s.task, nil)
 	}
 }
 

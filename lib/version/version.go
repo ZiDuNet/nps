@@ -6,12 +6,18 @@ import (
 	"strings"
 )
 
-const VERSION = "1.1.28"
+const VERSION = "1.1.29"
 
 // ClientUpdateMinVersion is the first client release that understands the
 // server-pushed self-update signal. Older clients must be updated manually
 // once before remote updates can be used.
 const ClientUpdateMinVersion = "1.1.23"
+
+// HealthConfigMinVersion is the first NPC release that understands the
+// additive HEALTH_CONFIG control message. Servers must not send that flag to
+// older clients because their control reader would interpret the payload as a
+// different message and desynchronise the connection.
+const HealthConfigMinVersion = "1.1.29"
 
 // GitHubRepository is the canonical source for release metadata and binaries.
 const GitHubRepository = "ZiDuNet/nps"

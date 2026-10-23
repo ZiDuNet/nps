@@ -409,9 +409,14 @@ func SetUdpSession(sess *kcp.UDPSession) {
 // conn1 mux conn
 func CopyWaitGroup(conn1, conn2 net.Conn, crypt bool, snappy bool, rate *rate.Rate,
 	flow *file.Flow, isServer bool, rb []byte, task *file.Tunnel, host *file.Host, tlsFingerprint ...string) {
+	CopyWaitGroupWithLimits(conn1, conn2, crypt, snappy, rate, flow, isServer, rb, task, host, tlsFingerprint...)
+}
+
+func CopyWaitGroupWithLimits(conn1, conn2 net.Conn, crypt bool, snappy bool, rt *rate.Rate,
+	flow *file.Flow, isServer bool, rb []byte, task *file.Tunnel, host *file.Host, tlsFingerprint ...string) {
 	//var in, out int64
 	//var wg sync.WaitGroup
-	connHandle := GetConn(conn1, crypt, snappy, rate, isServer, tlsFingerprint...)
+	connHandle := GetConnWithLimits(conn1, crypt, snappy, rt, isServer, task, host, tlsFingerprint...)
 	if rb != nil {
 		connHandle.Write(rb)
 	}
@@ -440,15 +445,33 @@ func CopyWaitGroup(conn1, conn2 net.Conn, crypt bool, snappy bool, rate *rate.Ra
 
 // get crypt or snappy conn
 func GetConn(conn net.Conn, cpt, snappy bool, rt *rate.Rate, isServer bool, tlsFingerprint ...string) io.ReadWriteCloser {
+	return GetConnWithLimits(conn, cpt, snappy, rt, isServer, nil, nil, tlsFingerprint...)
+}
+
+// GetConnWithLimits wraps a bridge connection with encryption/compression,
+// the legacy client/global limiter, and optional per-resource directional
+// limits. Reads on the NPS side are backend-to-visitor downloads and writes
+// are visitor-to-backend uploads.
+func GetConnWithLimits(conn net.Conn, cpt, snappy bool, rt *rate.Rate, isServer bool,
+	task *file.Tunnel, host *file.Host, tlsFingerprint ...string) io.ReadWriteCloser {
+	var wrapped io.ReadWriteCloser = conn
 	if cpt {
 		if isServer {
-			return rate.NewRateConn(crypt.NewTlsServerConn(conn), rt)
+			wrapped = crypt.NewTlsServerConn(conn)
+		} else {
+			wrapped = crypt.NewTlsClientConnWithFingerprint(conn, tlsFingerprint...)
 		}
-		return rate.NewRateConn(crypt.NewTlsClientConnWithFingerprint(conn, tlsFingerprint...), rt)
 	} else if snappy {
-		return rate.NewRateConn(NewSnappyConn(conn), rt)
+		wrapped = NewSnappyConn(conn)
 	}
-	return rate.NewRateConn(conn, rt)
+	var entry []*rate.Directional
+	if task != nil {
+		entry = append(entry, task.RateLimiter())
+	}
+	if host != nil {
+		entry = append(entry, host.RateLimiter())
+	}
+	return rate.NewRateConn(wrapped, rt, entry...)
 }
 
 type LenConn struct {

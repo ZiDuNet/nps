@@ -47,6 +47,7 @@ type clientListRow struct {
 	BlackIpList         []string
 	CreateTime          string
 	LastOnlineTime      string
+	ConnectionHistory   []file.ConnectionEvent
 	IpWhite             bool
 	IpWhiteList         []string
 	ExpireTime          string
@@ -318,6 +319,7 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 			ExpireTime:       client.ExpireTime,
 		}
 		client.RUnlock()
+		row.ConnectionHistory = client.ConnectionHistorySnapshot()
 		if userID > 0 {
 			if user, err := file.GetDb().GetUser(userID); err == nil && user != nil {
 				user.RLock()

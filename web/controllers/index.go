@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -69,17 +70,30 @@ func tunnelTemplatePath(mode, action string) string {
 // must never serialize filesystem certificate paths, private keys, or client
 // credentials to the browser.
 type hostListRow struct {
-	Id               int
-	Host             string
-	PlatformDomainID string
-	Remark           string
-	Location         string
-	Scheme           string
-	IsClose          bool
-	AutoHttps        bool
-	PlatformManaged  bool
-	Client           hostListClient
-	Target           hostListTarget
+	Id                  int
+	Host                string
+	PlatformDomainID    string
+	Remark              string
+	Location            string
+	Scheme              string
+	IsClose             bool
+	AutoHttps           bool
+	PlatformManaged     bool
+	BasicAuthSet        bool
+	HttpPort            string
+	HttpsPort           string
+	HealthCheckType     string
+	HealthCheckTarget   string
+	HealthCheckTimeout  int
+	HealthMaxFail       int
+	HealthCheckInterval int
+	HttpHealthUrl       string
+	UploadLimit         int
+	DownloadLimit       int
+	UploadRate          int64
+	DownloadRate        int64
+	Client              hostListClient
+	Target              hostListTarget
 }
 
 type hostListClient struct {
@@ -91,6 +105,26 @@ type hostListClient struct {
 type hostListTarget struct {
 	TargetStr  string
 	LocalProxy bool
+}
+
+// tunnelListRow adds public access metadata to the historical Tunnel JSON
+// shape without mutating the persisted model.  Existing clients still receive
+// every Tunnel field they already used, while newer clients can consume an
+// address that is assembled from the configured public host and tunnel port.
+type tunnelListRow struct {
+	*file.Tunnel
+	AccessHost    string `json:"AccessHost,omitempty"`
+	AccessAddr    string `json:"AccessAddr,omitempty"`
+	AccessAddress string `json:"AccessAddress,omitempty"`
+	AccessURL     string `json:"AccessURL,omitempty"`
+	// Keep the resource-level rate fields explicit on the API row instead of
+	// relying on the embedded Tunnel's omitempty fields.  A zero value means
+	// "unlimited" (for limits) or "no bytes in the last sample" (for rates),
+	// and callers should be able to distinguish that from a missing field.
+	UploadLimit   int   `json:"UploadLimit"`
+	DownloadLimit int   `json:"DownloadLimit"`
+	UploadRate    int64 `json:"UploadRate"`
+	DownloadRate  int64 `json:"DownloadRate"`
 }
 
 type platformDomainOption struct {
@@ -137,8 +171,20 @@ func newHostListRows(hosts []*file.Host) []*hostListRow {
 			IsClose:          host.IsClose,
 			AutoHttps:        host.AutoHttps,
 			PlatformManaged:  host.PlatformDomainID != "",
+			BasicAuthSet:     file.BasicAuthConfigured(host.Auth),
+			HttpPort:         publicProxyPort(publicAccessPort("http_proxy_access_port", "http_proxy_port"), "80"),
+			HttpsPort:        publicProxyPort(publicAccessPort("https_proxy_access_port", "https_proxy_port"), "443"),
 		}
 		host.RUnlock()
+		row.UploadLimit, row.DownloadLimit = host.RateLimitSnapshot()
+		health := file.HealthConfigSnapshot(&host.Health)
+		row.HealthCheckType = health.HealthCheckType
+		row.HealthCheckTarget = health.HealthCheckTarget
+		row.HealthCheckTimeout = health.HealthCheckTimeout
+		row.HealthMaxFail = health.HealthMaxFail
+		row.HealthCheckInterval = health.HealthCheckInterval
+		row.HttpHealthUrl = health.HttpHealthUrl
+		row.UploadRate, row.DownloadRate = host.CurrentRates()
 
 		if client != nil {
 			client.RLock()
@@ -153,6 +199,62 @@ func newHostListRows(hosts []*file.Host) []*hostListRow {
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+func publicTunnelHost(requestHost string) string {
+	if global := file.GetDb().GetGlobal(); global != nil {
+		if host := publicServerHost(global.ServerUrl); host != "" {
+			return host
+		}
+	}
+	return publicServerHost(requestHost)
+}
+
+func tunnelAccessAddress(host string, port int) string {
+	if port <= 0 {
+		return ""
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+func newTunnelListRows(tunnels []*file.Tunnel, requestHost string) []*tunnelListRow {
+	host := publicTunnelHost(requestHost)
+	rows := make([]*tunnelListRow, 0, len(tunnels))
+	for _, tunnel := range tunnels {
+		if tunnel == nil {
+			continue
+		}
+		tunnel.RLock()
+		port := tunnel.Port
+		tunnel.RUnlock()
+		uploadRate, downloadRate := tunnel.CurrentRates()
+		uploadLimit, downloadLimit := tunnel.RateLimitSnapshot()
+		accessAddr := tunnelAccessAddress(host, port)
+		row := &tunnelListRow{
+			Tunnel:        tunnel,
+			AccessHost:    host,
+			AccessAddr:    accessAddr,
+			AccessAddress: accessAddr,
+			AccessURL:     "",
+			UploadLimit:   uploadLimit,
+			DownloadLimit: downloadLimit,
+			UploadRate:    uploadRate,
+			DownloadRate:  downloadRate,
+		}
+		if accessAddr != "" {
+			row.AccessURL = "tcp://" + accessAddr
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func publicProxyPort(configuredPort, defaultPort string) string {
+	configuredPort = strings.TrimSpace(configuredPort)
+	if configuredPort == "" || configuredPort == defaultPort {
+		return ""
+	}
+	return ":" + configuredPort
 }
 
 func platformDomainOptions() []platformDomainOption {
@@ -246,12 +348,16 @@ func (s *IndexController) authorizedTask(id int) (*file.Tunnel, error) {
 }
 
 func (s *IndexController) hostDomainFromRequest(excludeHostID int) (string, string, error) {
-	mode := strings.TrimSpace(s.GetString("domain_mode"))
-	if mode != "platform" {
-		return s.getEscapeString("host"), "", nil
-	}
 	platformID := strings.TrimSpace(s.GetString("platform_domain_id"))
 	prefix := strings.TrimSpace(s.GetString("platform_prefix"))
+	hostName := strings.TrimSpace(s.GetString("host"))
+	mode, err := validateHostDomainRequest(s.GetString("domain_mode"), hostName, platformID, prefix)
+	if err != nil {
+		return "", "", err
+	}
+	if mode == "custom" {
+		return s.getEscapeString("host"), "", nil
+	}
 	host, err := file.GetDb().ResolvePlatformHost(platformID, prefix)
 	if err != nil {
 		return "", "", err
@@ -266,8 +372,150 @@ func (s *IndexController) hostDomainFromRequest(excludeHostID int) (string, stri
 	return host, platformID, nil
 }
 
+func validateHostDomainRequest(requestedMode, hostName, platformID, prefix string) (string, error) {
+	mode := strings.TrimSpace(requestedMode)
+	hostName, platformID, prefix = strings.TrimSpace(hostName), strings.TrimSpace(platformID), strings.TrimSpace(prefix)
+	if mode == "" {
+		// Compatibility for older clients: platform fields identify the
+		// managed-domain form; otherwise a plain host is a legacy custom rule.
+		if platformID != "" || prefix != "" {
+			mode = "platform"
+		} else {
+			mode = "custom"
+		}
+	}
+	switch mode {
+	case "custom":
+		if platformID != "" || prefix != "" {
+			return "", errors.New("自定义域名模式不能同时提交平台域名字段")
+		}
+		if hostName == "" {
+			return "", errors.New("自定义域名不能为空")
+		}
+		return mode, nil
+	case "platform":
+		if hostName != "" {
+			return "", errors.New("平台域名模式不能同时提交自定义域名")
+		}
+		if platformID == "" || prefix == "" {
+			return "", errors.New("平台域名和前缀不能为空")
+		}
+	default:
+		return "", errors.New("域名模式必须是 platform 或 custom")
+	}
+	return mode, nil
+}
+
 func requestedLocalProxy(requested bool) bool {
 	return requested && beego.AppConfig.DefaultBool("allow_local_proxy", false)
+}
+
+func healthFieldsSubmitted(request *http.Request) bool {
+	if request == nil {
+		return false
+	}
+	_ = request.ParseForm()
+	for _, key := range []string{
+		"health_check_type", "health_check_target", "health_check_timeout",
+		"health_max_failed", "health_check_interval", "health_http_url",
+	} {
+		if _, ok := request.Form[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func parseHealthFromRequest(s *IndexController) (file.Health, error) {
+	health := file.Health{
+		HealthCheckType:     strings.TrimSpace(s.getEscapeString("health_check_type")),
+		HealthCheckTarget:   s.getEscapeString("health_check_target"),
+		HealthCheckTimeout:  s.GetIntNoErr("health_check_timeout"),
+		HealthMaxFail:       s.GetIntNoErr("health_max_failed"),
+		HealthCheckInterval: s.GetIntNoErr("health_check_interval"),
+		HttpHealthUrl:       strings.TrimSpace(s.getEscapeString("health_http_url")),
+	}
+	if err := file.NormalizeHealth(&health); err != nil {
+		return file.Health{}, err
+	}
+	return health, nil
+}
+
+func parseResourceRateLimits(s *IndexController, upload, download int) (int, int, error) {
+	if s == nil {
+		return 0, 0, errors.New("资源限速请求无效")
+	}
+	if s.Ctx != nil && s.Ctx.Request != nil {
+		_ = s.Ctx.Request.ParseForm()
+	}
+	parse := func(key string, current int) (int, error) {
+		if s.Ctx == nil || s.Ctx.Request == nil {
+			return current, nil
+		}
+		values, submitted := s.Ctx.Request.Form[key]
+		if !submitted || len(values) == 0 {
+			return current, nil
+		}
+		value := strings.TrimSpace(values[len(values)-1])
+		if value == "" {
+			return 0, nil
+		}
+		parsed, parseErr := strconv.Atoi(value)
+		if parseErr != nil || parsed < 0 {
+			return 0, fmt.Errorf("%s 必须是大于或等于 0 的整数", key)
+		}
+		return parsed, nil
+	}
+	var err error
+	if upload, err = parse("upload_limit", upload); err != nil {
+		return 0, 0, err
+	}
+	if download, err = parse("download_limit", download); err != nil {
+		return 0, 0, err
+	}
+	return upload, download, nil
+}
+
+func copyHealthConfig(dst *file.Health, src *file.Health) {
+	if dst == nil {
+		return
+	}
+	snapshot := file.Health{}
+	if src != nil {
+		snapshot = file.HealthConfigSnapshot(src)
+	}
+	dst.Lock()
+	dst.HealthCheckTimeout = snapshot.HealthCheckTimeout
+	dst.HealthMaxFail = snapshot.HealthMaxFail
+	dst.HealthCheckInterval = snapshot.HealthCheckInterval
+	dst.HttpHealthUrl = snapshot.HttpHealthUrl
+	dst.HealthCheckType = snapshot.HealthCheckType
+	dst.HealthCheckTarget = snapshot.HealthCheckTarget
+	dst.HealthNextTime = time.Time{}
+	dst.HealthMap = nil
+	dst.HealthRemoveArr = nil
+	dst.Unlock()
+}
+
+// refreshHealthConfig is best-effort: persistence and listener lifecycle are
+// the primary mutation, while an offline/legacy NPC will receive the same
+// effective profile on its next compatible connection (or keep its local
+// [health_*] settings when it is too old to understand the new message).
+func refreshHealthConfig(clientIDs ...int) {
+	if server.Bridge == nil {
+		return
+	}
+	seen := make(map[int]struct{}, len(clientIDs))
+	for _, clientID := range clientIDs {
+		if clientID <= 0 {
+			continue
+		}
+		if _, exists := seen[clientID]; exists {
+			continue
+		}
+		seen[clientID] = struct{}{}
+		_ = server.Bridge.RequestClientHealthConfig(clientID)
+	}
 }
 
 func clientTunnelLimitReached(client *file.Client) (bool, int) {
@@ -466,7 +714,7 @@ func (s *IndexController) GetTunnel() {
 		}
 	}
 	list, cnt := server.GetTunnelByOwnerFilter(start, length, taskType, clientId, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"), owner, allowed)
-	s.AjaxTable(list, cnt, cnt, nil)
+	s.AjaxTable(newTunnelListRows(list, s.Ctx.Request.Host), cnt, cnt, nil)
 }
 
 // TrafficDebug streams a transient, task-scoped traffic inspection session.
@@ -580,6 +828,20 @@ func (s *IndexController) Add() {
 			s.AjaxErr("unsupported tunnel mode")
 			return
 		}
+		health, healthErr := parseHealthFromRequest(s)
+		if healthErr != nil {
+			s.AjaxErr(healthErr.Error())
+			return
+		}
+		uploadLimit, downloadLimit, limitErr := parseResourceRateLimits(s, 0, 0)
+		if limitErr != nil {
+			s.AjaxErr(limitErr.Error())
+			return
+		}
+		if file.HealthConfigEnabled(&health) && tunnelMode != "tcp" {
+			s.AjaxErr("健康检查目前仅支持 TCP 隧道")
+			return
+		}
 		id := int(file.GetDb().JsonDb.GetTaskId())
 		t := &file.Tunnel{
 			Port:         s.GetIntNoErr("port"),
@@ -594,6 +856,8 @@ func (s *IndexController) Add() {
 			StripPre:     s.getEscapeString("strip_pre"),
 			ProtoVersion: s.getEscapeString("proto_version"),
 			Flow:         &file.Flow{},
+			RateLimits:   file.RateLimits{UploadLimit: uploadLimit, DownloadLimit: downloadLimit},
+			Health:       health,
 		}
 
 		if t.Port <= 0 {
@@ -628,6 +892,7 @@ func (s *IndexController) Add() {
 			s.AjaxErr(err.Error())
 			return
 		} else {
+			refreshHealthConfig(t.Client.Id)
 			t.Client.RLock()
 			ownerID := t.Client.UserId
 			t.Client.RUnlock()
@@ -657,6 +922,8 @@ func (s *IndexController) Copy() {
 	oldStripPre := oldTask.StripPre
 	oldProtoVersion := oldTask.ProtoVersion
 	oldTarget := oldTask.Target
+	oldUploadLimit, oldDownloadLimit := oldTask.RateLimitSnapshot()
+	oldHealth := file.HealthConfigSnapshot(&oldTask.Health)
 	oldTask.RUnlock()
 	if oldClient == nil {
 		s.AjaxErr("modified error,the client is not exist")
@@ -692,6 +959,8 @@ func (s *IndexController) Copy() {
 			StripPre:     oldStripPre,
 			ProtoVersion: oldProtoVersion,
 			Flow:         &file.Flow{},
+			RateLimits:   file.RateLimits{UploadLimit: oldUploadLimit, DownloadLimit: oldDownloadLimit},
+			Health:       oldHealth,
 		}
 		if !tool.TestServerPort(newTask.Port, newTask.Mode) {
 			s.AjaxErr("The port cannot be opened because it may has been occupied or is no longer allowed.")
@@ -713,6 +982,7 @@ func (s *IndexController) Copy() {
 			s.AjaxErr(err.Error())
 			return
 		} else {
+			refreshHealthConfig(oldClientID)
 			client.RLock()
 			ownerID := client.UserId
 			client.RUnlock()
@@ -729,7 +999,12 @@ func (s *IndexController) GetOneTunnel() {
 		data["code"] = 0
 	} else {
 		data["code"] = 1
-		data["data"] = t
+		rows := newTunnelListRows([]*file.Tunnel{t}, s.Ctx.Request.Host)
+		if len(rows) == 1 {
+			data["data"] = rows[0]
+		} else {
+			data["code"] = 0
+		}
 	}
 	s.Data["json"] = data
 	s.ServeJSON()
@@ -769,11 +1044,45 @@ func (s *IndexController) Edit() {
 			return
 		} else {
 			t.RLock()
-			desiredClient := t.Client
+			currentClient := t.Client
 			t.RUnlock()
-			if desiredClient == nil {
+			if currentClient == nil {
 				s.AjaxErr("modified error,the client is not exist")
 				return
+			}
+			desiredClient := currentClient
+			requestedClientIDText := strings.TrimSpace(s.GetString("client_id"))
+			if requestedClientIDText != "" {
+				requestedClientID, parseErr := strconv.Atoi(requestedClientIDText)
+				if parseErr != nil || requestedClientID <= 0 {
+					s.AjaxErr("modified error,客户端 ID 无效")
+					return
+				}
+				desiredClient, err = file.GetDb().GetClient(requestedClientID)
+				if err != nil {
+					s.AjaxErr("modified error,the client can not be found")
+					return
+				}
+			}
+			if !s.IsAdmin() && !isAllowedClient(desiredClient.Id, s.GetAllowedClientIds()) {
+				s.AjaxErr("permission denied")
+				return
+			}
+			currentClient.RLock()
+			currentClientID, currentUserID := currentClient.Id, currentClient.UserId
+			currentClient.RUnlock()
+			desiredClient.RLock()
+			desiredClientID, desiredUserID := desiredClient.Id, desiredClient.UserId
+			desiredClient.RUnlock()
+			if desiredClientID != currentClientID {
+				if reached, _ := clientTunnelLimitReached(desiredClient); reached {
+					s.AjaxErr("The number of tunnels exceeds the limit")
+					return
+				}
+				if desiredUserID != 0 && desiredUserID != currentUserID && file.GetDb().IsUserTunnelLimitReached(desiredUserID) {
+					s.AjaxErr("The number of user tunnels exceeds the limit")
+					return
+				}
 			}
 			desiredPort := s.GetIntNoErr("port")
 			desiredMode := strings.TrimSpace(s.getEscapeString("type"))
@@ -797,6 +1106,25 @@ func (s *IndexController) Edit() {
 					return
 				}
 			}
+			desiredHealth := file.HealthConfigSnapshot(&t.Health)
+			if healthFieldsSubmitted(s.Ctx.Request) {
+				parsedHealth, healthErr := parseHealthFromRequest(s)
+				if healthErr != nil {
+					s.AjaxErr(healthErr.Error())
+					return
+				}
+				desiredHealth = parsedHealth
+			}
+			if file.HealthConfigEnabled(&desiredHealth) && desiredMode != "tcp" {
+				s.AjaxErr("健康检查目前仅支持 TCP 隧道")
+				return
+			}
+			currentUploadLimit, currentDownloadLimit := t.RateLimitSnapshot()
+			desiredUploadLimit, desiredDownloadLimit, limitErr := parseResourceRateLimits(s, currentUploadLimit, currentDownloadLimit)
+			if limitErr != nil {
+				s.AjaxErr(limitErr.Error())
+				return
+			}
 			desiredTarget := &file.Target{TargetStr: s.getEscapeString("target")}
 			desiredTarget.LocalProxy = requestedLocalProxy(s.GetBoolNoErr("local_proxy"))
 			// Build the replacement atomically. Proxy workers take the same
@@ -813,6 +1141,8 @@ func (s *IndexController) Edit() {
 			t.ProtoVersion = s.getEscapeString("proto_version")
 			t.StripPre = s.getEscapeString("strip_pre")
 			t.Remark = s.getEscapeString("remark")
+			t.SetRateLimits(desiredUploadLimit, desiredDownloadLimit)
+			copyHealthConfig(&t.Health, &desiredHealth)
 			t.Unlock()
 			if err := file.GetDb().UpdateTask(t); err != nil {
 				s.AjaxErr("modified error")
@@ -830,6 +1160,7 @@ func (s *IndexController) Edit() {
 				s.AjaxErr("start error")
 				return
 			}
+			refreshHealthConfig(currentClientID, desiredClientID)
 			t.RLock()
 			ownerID, mode, remark := 0, t.Mode, t.Remark
 			if t.Client != nil {
@@ -862,6 +1193,13 @@ func (s *IndexController) Stop() {
 		s.AjaxErr("stop error")
 		return
 	}
+	task.RLock()
+	clientID := 0
+	if task.Client != nil {
+		clientID = task.Client.Id
+	}
+	task.RUnlock()
+	refreshHealthConfig(clientID)
 	s.auditTunnelAction("tunnel.stop", task)
 	s.AjaxOk("stop success")
 }
@@ -884,6 +1222,13 @@ func (s *IndexController) Del() {
 		s.AjaxErr("delete error")
 		return
 	}
+	task.RLock()
+	clientID := 0
+	if task.Client != nil {
+		clientID = task.Client.Id
+	}
+	task.RUnlock()
+	refreshHealthConfig(clientID)
 	s.auditTunnelAction("tunnel.delete", task)
 	s.AjaxOk("delete success")
 }
@@ -906,6 +1251,13 @@ func (s *IndexController) Start() {
 		s.AjaxErr("start error")
 		return
 	}
+	task.RLock()
+	clientID := 0
+	if task.Client != nil {
+		clientID = task.Client.Id
+	}
+	task.RUnlock()
+	refreshHealthConfig(clientID)
 	s.auditTunnelAction("tunnel.start", task)
 	s.AjaxOk("start success")
 }
@@ -930,6 +1282,7 @@ func (s *IndexController) auditTunnelAction(action string, task *file.Tunnel) {
 func (s *IndexController) HostList() {
 	if s.Ctx.Request.Method == "GET" {
 		s.setOwnerFilterData()
+		s.setClientFilterData()
 		s.Data["client_id"] = s.getEscapeString("client_id")
 		s.Data["menu"] = "host"
 		s.SetInfo("host list")
@@ -937,6 +1290,17 @@ func (s *IndexController) HostList() {
 	} else {
 		start, length := s.GetAjaxParams()
 		clientId := s.GetIntNoErr("client_id")
+		if clientId == 0 {
+			filterClientID := strings.TrimSpace(s.GetString("filter_client_id"))
+			if filterClientID != "" {
+				parsed, err := strconv.Atoi(filterClientID)
+				if err != nil || parsed < 0 {
+					s.AjaxErr("客户端筛选无效")
+					return
+				}
+				clientId = parsed
+			}
+		}
 		var allowed map[int]struct{}
 		if !s.IsAdmin() {
 			allowed = s.GetAllowedClientIds()
@@ -986,6 +1350,13 @@ func (s *IndexController) DelHost() {
 		s.AjaxErr("delete error")
 		return
 	}
+	host.RLock()
+	clientID := 0
+	if host.Client != nil {
+		clientID = host.Client.Id
+	}
+	host.RUnlock()
+	refreshHealthConfig(clientID)
 	s.auditHostAction("host.delete", host)
 	s.AjaxOk("delete success")
 }
@@ -999,10 +1370,17 @@ func (s *IndexController) HostStop() {
 		s.AjaxErr(err.Error())
 		return
 	} else {
+		h.RLock()
+		clientID := 0
+		if h.Client != nil {
+			clientID = h.Client.Id
+		}
+		h.RUnlock()
 		h.Lock()
 		h.IsClose = true
 		h.Unlock()
 		file.GetDb().JsonDb.StoreHostToJsonFile()
+		refreshHealthConfig(clientID)
 		s.auditHostAction("host.stop", h)
 	}
 	s.AjaxOk("stop success")
@@ -1017,10 +1395,17 @@ func (s *IndexController) HostStart() {
 		s.AjaxErr(err.Error())
 		return
 	} else {
+		h.RLock()
+		clientID := 0
+		if h.Client != nil {
+			clientID = h.Client.Id
+		}
+		h.RUnlock()
 		h.Lock()
 		h.IsClose = false
 		h.Unlock()
 		file.GetDb().JsonDb.StoreHostToJsonFile()
+		refreshHealthConfig(clientID)
 		s.auditHostAction("host.start", h)
 	}
 	s.AjaxOk("start success")
@@ -1042,6 +1427,16 @@ func (s *IndexController) AddHost() {
 			s.AjaxErr("add fail, " + err.Error())
 			return
 		}
+		health, healthErr := parseHealthFromRequest(s)
+		if healthErr != nil {
+			s.AjaxErr("add fail, " + healthErr.Error())
+			return
+		}
+		uploadLimit, downloadLimit, limitErr := parseResourceRateLimits(s, 0, 0)
+		if limitErr != nil {
+			s.AjaxErr("add fail, " + limitErr.Error())
+			return
+		}
 		id := int(file.GetDb().JsonDb.GetHostId())
 		h := &file.Host{
 			Id:                   id,
@@ -1055,13 +1450,16 @@ func (s *IndexController) AddHost() {
 			Location:             s.getEscapeString("location"),
 			PathRewrite:          s.getEscapeString("path_rewrite"),
 			RedirectURL:          s.getEscapeString("redirect_url"),
+			Auth:                 strings.TrimSpace(s.GetString("auth")),
 			Flow:                 &file.Flow{},
+			RateLimits:           file.RateLimits{UploadLimit: uploadLimit, DownloadLimit: downloadLimit},
 			Scheme:               s.getEscapeString("scheme"),
 			KeyFilePath:          s.getEscapeString("key_file_path"),
 			CertFilePath:         s.getEscapeString("cert_file_path"),
 			AutoHttps:            s.GetBoolNoErr("AutoHttps"),
 			AutoCORS:             s.GetBoolNoErr("auto_cors"),
 			CompatMode:           s.GetBoolNoErr("compat_mode"),
+			Health:               health,
 		}
 
 		if h.Scheme == "http" {
@@ -1088,6 +1486,7 @@ func (s *IndexController) AddHost() {
 			s.AjaxErr("add fail" + err.Error())
 			return
 		}
+		refreshHealthConfig(h.Client.Id)
 		s.auditHostAction("host.create", h)
 		s.AjaxOkWithId("add success", id)
 	}
@@ -1130,17 +1529,68 @@ func (s *IndexController) EditHost() {
 			desiredLocation := s.getEscapeString("location")
 			desiredScheme := s.getEscapeString("scheme")
 			storedHost.RLock()
-			desiredClient := storedHost.Client
+			currentClient := storedHost.Client
+			currentAuth := storedHost.Auth
 			storedHost.RUnlock()
-			if desiredClient == nil {
+			if currentClient == nil {
 				s.AjaxErr("modified error,the client is not exist")
 				return
+			}
+			currentUploadLimit, currentDownloadLimit := storedHost.RateLimitSnapshot()
+			desiredUploadLimit, desiredDownloadLimit, limitErr := parseResourceRateLimits(s, currentUploadLimit, currentDownloadLimit)
+			if limitErr != nil {
+				s.AjaxErr("modified error," + limitErr.Error())
+				return
+			}
+			desiredClient := currentClient
+			requestedClientIDText := strings.TrimSpace(s.GetString("client_id"))
+			if requestedClientIDText != "" {
+				requestedClientID, parseErr := strconv.Atoi(requestedClientIDText)
+				if parseErr != nil || requestedClientID <= 0 {
+					s.AjaxErr("modified error,客户端 ID 无效")
+					return
+				}
+				desiredClient, err = file.GetDb().GetClient(requestedClientID)
+				if err != nil {
+					s.AjaxErr("modified error,the client can not be found")
+					return
+				}
 			}
 			if !s.IsAdmin() && !isAllowedClient(desiredClient.Id, s.GetAllowedClientIds()) {
 				s.AjaxErr("permission denied")
 				return
 			}
+			currentClient.RLock()
+			currentClientID, currentUserID := currentClient.Id, currentClient.UserId
+			currentClient.RUnlock()
+			desiredClient.RLock()
+			desiredClientID, desiredUserID := desiredClient.Id, desiredClient.UserId
+			desiredClient.RUnlock()
+			if desiredClientID != currentClientID {
+				if reached, _ := clientTunnelLimitReached(desiredClient); reached {
+					s.AjaxErr("The number of tunnels exceeds the limit")
+					return
+				}
+				if desiredUserID != 0 && desiredUserID != currentUserID && file.GetDb().IsUserTunnelLimitReached(desiredUserID) {
+					s.AjaxErr("The number of user tunnels exceeds the limit")
+					return
+				}
+			}
 			desiredTarget := &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))}
+			desiredAuth := strings.TrimSpace(s.GetString("auth"))
+			clearHostAuth := strings.EqualFold(strings.TrimSpace(s.GetString("clear_host_auth")), "1") || strings.EqualFold(strings.TrimSpace(s.GetString("clear_host_auth")), "true")
+			if desiredAuth == "" && !clearHostAuth {
+				desiredAuth = currentAuth
+			}
+			desiredHealth := file.HealthConfigSnapshot(&storedHost.Health)
+			if healthFieldsSubmitted(s.Ctx.Request) {
+				parsedHealth, healthErr := parseHealthFromRequest(s)
+				if healthErr != nil {
+					s.AjaxErr("modified error," + healthErr.Error())
+					return
+				}
+				desiredHealth = parsedHealth
+			}
 			autoHTTPS := s.GetBoolNoErr("AutoHttps")
 			if desiredScheme == "http" {
 				autoHTTPS = false
@@ -1158,17 +1608,21 @@ func (s *IndexController) EditHost() {
 				Location:             desiredLocation,
 				PathRewrite:          s.getEscapeString("path_rewrite"),
 				RedirectURL:          s.getEscapeString("redirect_url"),
+				Auth:                 desiredAuth,
+				RateLimits:           file.RateLimits{UploadLimit: desiredUploadLimit, DownloadLimit: desiredDownloadLimit},
 				Scheme:               desiredScheme,
 				KeyFilePath:          s.getEscapeString("key_file_path"),
 				CertFilePath:         s.getEscapeString("cert_file_path"),
 				AutoHttps:            autoHTTPS,
 				AutoCORS:             s.GetBoolNoErr("auto_cors"),
 				CompatMode:           s.GetBoolNoErr("compat_mode"),
+				Health:               desiredHealth,
 			}
 			if err := file.GetDb().UpdateHost(replacement); err != nil {
 				s.AjaxErr("modified error," + err.Error())
 				return
 			}
+			refreshHealthConfig(currentClientID, desiredClientID)
 			s.auditHostAction("host.update", replacement)
 		}
 		s.AjaxOk("modified success")

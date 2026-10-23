@@ -174,35 +174,36 @@ type Config struct {
 }
 
 type Client struct {
-	Cnf             *Config
-	Id              int        //id
-	UserId          int        //关联的普通用户 id
-	UserName        string     `json:"-"` //关联用户名称，仅用于展示
-	VerifyKey       string     //verify key
-	Addr            string     //the ip of client
-	LocalAddr       string     // client private/LAN addresses reported by npc
-	Remark          string     //remark
-	Status          bool       //is allow connect
-	IsConnect       bool       //is the client connect
-	RateLimit       int        //rate /kb
-	Flow            *Flow      //flow setting
-	Rate            *rate.Rate //rate limit
-	NoStore         bool       //no store to file
-	NoDisplay       bool       //no display on web
-	MaxConn         int        //the max connection num of client allow
-	NowConn         int32      //the connection num of now
-	WebUserName     string     //the username of web login
-	WebPassword     string     //the password of web login
-	ConfigConnAllow bool       //is allow connected by config file
-	MaxTunnelNum    int
-	Version         string
-	BlackIpList     []string
-	CreateTime      string
-	LastOnlineTime  string
-	IpWhite         bool     // 是否启用ip白名单
-	IpWhitePass     string   // ip授权密码
-	IpWhiteList     []string // ip白名单
-	ExpireTime      string   // 到期时间,留空表示永不过期,格式 2006-01-02 15:04:05
+	Cnf               *Config
+	Id                int        //id
+	UserId            int        //关联的普通用户 id
+	UserName          string     `json:"-"` //关联用户名称，仅用于展示
+	VerifyKey         string     //verify key
+	Addr              string     //the ip of client
+	LocalAddr         string     // client private/LAN addresses reported by npc
+	Remark            string     //remark
+	Status            bool       //is allow connect
+	IsConnect         bool       //is the client connect
+	RateLimit         int        //rate /kb
+	Flow              *Flow      //flow setting
+	Rate              *rate.Rate //rate limit
+	NoStore           bool       //no store to file
+	NoDisplay         bool       //no display on web
+	MaxConn           int        //the max connection num of client allow
+	NowConn           int32      //the connection num of now
+	WebUserName       string     //the username of web login
+	WebPassword       string     //the password of web login
+	ConfigConnAllow   bool       //is allow connected by config file
+	MaxTunnelNum      int
+	Version           string
+	ConnectionHistory *ConnectionHistory `json:",omitempty"`
+	BlackIpList       []string
+	CreateTime        string
+	LastOnlineTime    string
+	IpWhite           bool     // 是否启用ip白名单
+	IpWhitePass       string   // ip授权密码
+	IpWhiteList       []string // ip白名单
+	ExpireTime        string   // 到期时间,留空表示永不过期,格式 2006-01-02 15:04:05
 	sync.RWMutex
 }
 
@@ -230,20 +231,21 @@ type User struct {
 
 func NewClient(vKey string, noStore bool, noDisplay bool) *Client {
 	return &Client{
-		Cnf:       new(Config),
-		Id:        0,
-		VerifyKey: vKey,
-		Addr:      "",
-		LocalAddr: "",
-		Remark:    "",
-		Status:    true,
-		IsConnect: false,
-		RateLimit: 0,
-		Flow:      NewFlow(),
-		Rate:      nil,
-		NoStore:   noStore,
-		RWMutex:   sync.RWMutex{},
-		NoDisplay: noDisplay,
+		Cnf:               new(Config),
+		Id:                0,
+		VerifyKey:         vKey,
+		Addr:              "",
+		LocalAddr:         "",
+		Remark:            "",
+		Status:            true,
+		IsConnect:         false,
+		RateLimit:         0,
+		Flow:              NewFlow(),
+		ConnectionHistory: &ConnectionHistory{},
+		Rate:              nil,
+		NoStore:           noStore,
+		RWMutex:           sync.RWMutex{},
+		NoDisplay:         noDisplay,
 	}
 }
 
@@ -253,6 +255,7 @@ func (s *Client) CutConn() {
 
 func (s *Client) AddConn() {
 	atomic.AddInt32(&s.NowConn, -1)
+	releaseGlobalConn()
 }
 
 func (s *Client) GetConn() bool {
@@ -261,7 +264,11 @@ func (s *Client) GetConn() bool {
 	s.RUnlock()
 	if maxConn <= 0 {
 		s.CutConn()
-		return true
+		if acquireGlobalConn() {
+			return true
+		}
+		atomic.AddInt32(&s.NowConn, -1)
+		return false
 	}
 	for {
 		current := atomic.LoadInt32(&s.NowConn)
@@ -269,7 +276,11 @@ func (s *Client) GetConn() bool {
 			return false
 		}
 		if atomic.CompareAndSwapInt32(&s.NowConn, current, current+1) {
-			return true
+			if acquireGlobalConn() {
+				return true
+			}
+			atomic.AddInt32(&s.NowConn, -1)
+			return false
 		}
 	}
 }
@@ -391,6 +402,7 @@ func (s *Client) HasHost(h *Host) bool {
 }
 
 type Tunnel struct {
+	RateLimits
 	Id                 int
 	Port               int
 	ServerIp           string
@@ -416,19 +428,20 @@ type Tunnel struct {
 }
 
 type Health struct {
-	HealthCheckTimeout  int
-	HealthMaxFail       int
-	HealthCheckInterval int
-	HealthNextTime      time.Time
-	HealthMap           map[string]int
-	HttpHealthUrl       string
-	HealthRemoveArr     []string
-	HealthCheckType     string
-	HealthCheckTarget   string
+	HealthCheckTimeout  int            `json:"HealthCheckTimeout,omitempty"`
+	HealthMaxFail       int            `json:"HealthMaxFail,omitempty"`
+	HealthCheckInterval int            `json:"HealthCheckInterval,omitempty"`
+	HealthNextTime      time.Time      `json:"-"`
+	HealthMap           map[string]int `json:"-"`
+	HttpHealthUrl       string         `json:"HttpHealthUrl,omitempty"`
+	HealthRemoveArr     []string       `json:"-"`
+	HealthCheckType     string         `json:"HealthCheckType,omitempty"`
+	HealthCheckTarget   string         `json:"HealthCheckTarget,omitempty"`
 	sync.RWMutex
 }
 
 type Host struct {
+	RateLimits
 	Id   int
 	Host string //host
 	// PlatformDomainID identifies a managed wildcard domain. An empty value
@@ -441,18 +454,21 @@ type Host struct {
 	PathRewrite          string //path rewrite rules
 	RedirectURL          string //redirect target
 	Remark               string //remark
-	Scheme               string //http https all
-	CertFilePath         string
-	KeyFilePath          string
-	NoStore              bool
-	IsClose              bool
-	AutoHttps            bool // 自动https
-	AutoCORS             bool // add permissive CORS response headers
-	CompatMode           bool // use net/http reverse proxy compatibility path
-	Flow                 *Flow
-	Client               *Client
-	Target               *Target //目标
-	Health               `json:"-"`
+	// Auth stores optional host-level Basic accounts as newline-separated
+	// username:password pairs. It is never included in list/API projections.
+	Auth         string
+	Scheme       string //http https all
+	CertFilePath string
+	KeyFilePath  string
+	NoStore      bool
+	IsClose      bool
+	AutoHttps    bool // 自动https
+	AutoCORS     bool // add permissive CORS response headers
+	CompatMode   bool // use net/http reverse proxy compatibility path
+	Flow         *Flow
+	Client       *Client
+	Target       *Target //目标
+	Health
 	sync.RWMutex
 }
 
@@ -534,6 +550,10 @@ type PlatformDomain struct {
 
 type Glob struct {
 	BlackIpList     []string
+	WhiteIpList     []string
+	IpListPriority  int
+	MaxConn         int
+	RateLimit       int // aggregate forwarding rate in KB/s; zero means unlimited
 	ServerUrl       string
 	PlatformDomains []PlatformDomain
 	// DashboardKeyHash is the administrator's read-only topology credential.

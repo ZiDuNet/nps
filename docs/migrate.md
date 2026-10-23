@@ -56,6 +56,26 @@ v1.1.1 已新增 `users.json`。服务启动时会自动执行一次兼容迁移
 该恢复只会在 `users.json` **完全不存在** 时执行：文件存在但用户被删除、停用、到期
 或到期时间格式不正确时，服务仍会拒绝该客户端连接，不会自行重新启用被撤销的账号。
 
+### `nps.conf` 自动兼容迁移
+
+服务启动时会把内置模板中缺少的有效配置项追加到现有 `conf/nps.conf`，保留原有
+值（包括显式空值）、注释、自定义项和文件权限。来自上游 `nps2` 的配置也可以直接
+升级：`bridge_tcp_port` / `bridge_kcp_port` 会补写当前版本使用的 `bridge_port`，
+`bridge_tls_port` 会补写为 `tls_bridge_port`，`bridge_tcp_ip` / `bridge_kcp_ip`
+会补写为 `bridge_ip`。旧字段不会删除；若当前版本字段已经存在，则当前版本字段
+始终优先。迁移采用同目录临时文件原子替换，重复启动是幂等的。
+
+上游 `nps2` 可能同时配置 `bridge_tcp_port` 和 `bridge_kcp_port`；迁移时会根据
+`bridge_type` 选择对应端口写入 `bridge_port`，若指定类型的端口未配置则回退到另一个
+可用端口。上游文字型 `log_level`（`trace`、`debug`、`info`、`warn`、`error`、
+`fatal`、`panic`、`off`）也可以直接使用；原配置值保留，NPS 启动时按当前日志级别
+转换规则解释，不会将 `trace` 错误地解析成最低日志级别。
+
+资源级限速字段也兼容旧数据：旧版 `tasks.json` 或 `hosts.json` 没有
+`UploadLimit`/`DownloadLimit` 时按 `0`（不限速）读取；升级后的 Web 面板保存时才会
+写入新字段。NPC 配置文件中的规则节可以新增 `upload_limit` 和 `download_limit`，旧版
+NPC 不认识这两个字段时会忽略它们，原有连接协议和目标配置不受影响。
+
 ## 升级步骤
 
 ### 二进制部署

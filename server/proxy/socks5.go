@@ -12,6 +12,7 @@ import (
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
 	"github.com/astaxie/beego/logs"
 )
 
@@ -63,6 +64,8 @@ type socksTaskSnapshot struct {
 	clientConfig file.Config
 	clientFlow   *file.Flow
 	taskFlow     *file.Flow
+	taskRate     *rate.Directional
+	clientRate   *rate.Rate
 	localProxy   bool
 	serverIP     string
 	multiAccount map[string]string
@@ -76,6 +79,7 @@ func (s *Sock5ModeServer) snapshotTask() (socksTaskSnapshot, error) {
 	s.task.RLock()
 	snapshot.client = s.task.Client
 	snapshot.taskFlow = s.task.Flow
+	snapshot.taskRate = s.task.RateLimiter()
 	snapshot.serverIP = s.task.ServerIp
 	snapshot.bridgeTask = &file.Tunnel{Mode: s.task.Mode}
 	target := s.task.Target
@@ -101,6 +105,7 @@ func (s *Sock5ModeServer) snapshotTask() (socksTaskSnapshot, error) {
 	}
 	snapshot.clientConfig = *snapshot.client.Cnf
 	snapshot.clientFlow = snapshot.client.Flow
+	snapshot.clientRate = snapshot.client.Rate
 	snapshot.client.RUnlock()
 	if snapshot.serverIP == "" {
 		snapshot.serverIP = "0.0.0.0"
@@ -284,7 +289,7 @@ func (s *Sock5ModeServer) doConnectWithSnapshot(c net.Conn, command uint8, snaps
 	}
 	s.DealClient(conn.NewConn(c), client, addr, nil, ltype, func() {
 		s.sendReply(c, succeeded)
-	}, snapshot.taskFlow, snapshot.localProxy, nil, nil)
+	}, snapshot.taskFlow, snapshot.localProxy, s.task, nil)
 	return
 }
 
@@ -425,7 +430,8 @@ func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSn
 		logs.Warn("get nil connection from client id %d", client.Id)
 		return
 	}
-	defer target.Close()
+	targetStream := rate.NewRateConn(target, snapshot.clientRate, snapshot.taskRate)
+	defer targetStream.Close()
 
 	// A SOCKS success reply means the bridge is already available.  Sending it
 	// earlier leaves clients with a seemingly valid UDP relay that cannot carry
@@ -463,7 +469,7 @@ func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSn
 				clientAddr = laddr
 			}
 			clientAddrMu.Unlock()
-			if _, err := target.Write(b[:n]); err != nil {
+			if _, err := targetStream.Write(b[:n]); err != nil {
 				logs.Error("write data to client error", err.Error())
 				return
 			}
@@ -476,7 +482,7 @@ func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSn
 		defer common.BufPoolUdp.Put(b)
 		defer c.Close()
 		for {
-			if err := binary.Read(target, binary.LittleEndian, &l); err != nil || l >= common.PoolSizeUdp || l <= 0 {
+			if err := binary.Read(targetStream, binary.LittleEndian, &l); err != nil || l >= common.PoolSizeUdp || l <= 0 {
 				if err != nil {
 					logs.Warn("read len bytes error", err.Error())
 				} else {
@@ -484,7 +490,7 @@ func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSn
 				}
 				return
 			}
-			if err := binary.Read(target, binary.LittleEndian, b[:l]); err != nil {
+			if err := binary.Read(targetStream, binary.LittleEndian, b[:l]); err != nil {
 				logs.Warn("read data form client error", err.Error())
 				return
 			}

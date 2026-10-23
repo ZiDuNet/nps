@@ -34,6 +34,13 @@ type managementRunListKey struct{ _ byte }
 
 var managementServiceKey managementRunListKey
 
+func refreshClientHealthConfig(clientID int) {
+	if Bridge == nil || clientID <= 0 {
+		return
+	}
+	_ = Bridge.RequestClientHealthConfig(clientID)
+}
+
 // managementService owns both listeners that are started for the default
 // server process: the HTTP/HTTPS virtual-host proxy and the Web management
 // panel. Its RunList entry uses managementServiceKey, which is outside the
@@ -166,7 +173,7 @@ func DealBridgeTask() {
 					secretConn := s.Conn
 					go func() {
 						defer client.AddConn()
-						if err := base.DealClient(secretConn, client, targetStr, nil, common.CONN_TCP, nil, flow, localProxy, nil, nil); err != nil {
+						if err := base.DealClient(secretConn, client, targetStr, nil, common.CONN_TCP, nil, flow, localProxy, t, nil); err != nil {
 							logs.Warn("secret connection failed: %s", err)
 						}
 					}()
@@ -312,6 +319,7 @@ func stopServer(id int) error {
 			t.Unlock()
 			logs.Info("close port %d,remark %s,client id %d,task id %d", port, remark, clientID, taskID)
 			file.GetDb().UpdateTask(t)
+			refreshClientHealthConfig(clientID)
 		}
 		return nil
 	}
@@ -359,6 +367,7 @@ func addTask(t *file.Tunnel) error {
 		}
 		taskID := t.Id
 		t.RUnlock()
+		refreshClientHealthConfig(clientID)
 		go func() {
 			if err := svr.Start(); err != nil {
 				logs.Error("clientId %d taskId %d start error %s", clientID, taskID, err)
@@ -431,12 +440,24 @@ func DelTask(id int) error {
 	}
 	taskLifecycleMu.Lock()
 	defer taskLifecycleMu.Unlock()
+	clientID := 0
+	if task, err := file.GetDb().GetTask(id); err == nil && task != nil {
+		task.RLock()
+		if task.Client != nil {
+			clientID = task.Client.Id
+		}
+		task.RUnlock()
+	}
 	if _, ok := RunList.Load(id); ok {
 		if err := stopServer(id); err != nil {
 			return err
 		}
 	}
-	return file.GetDb().DelTask(id)
+	err := file.GetDb().DelTask(id)
+	if err == nil {
+		refreshClientHealthConfig(clientID)
+	}
+	return err
 }
 
 // get task list by page num

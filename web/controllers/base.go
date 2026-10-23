@@ -5,7 +5,9 @@ import (
 	"errors"
 	"html"
 	"math"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -143,14 +145,26 @@ func (s *BaseController) Prepare() {
 	s.Data["allow_local_proxy"], _ = beego.AppConfig.Bool("allow_local_proxy")
 	s.Data["allow_user_change_username"], _ = beego.AppConfig.Bool("allow_user_change_username")
 	showHttpProxyPort := beego.AppConfig.DefaultBool("show_http_proxy_port", true)
-	httpPort := beego.AppConfig.String("http_proxy_port")
+	httpPort := publicAccessPort("http_proxy_access_port", "http_proxy_port")
 	if httpPort != "80" && showHttpProxyPort {
 		s.Data["http_proxy_port"] = ":" + httpPort
 	}
-	httpsPort := beego.AppConfig.String("https_proxy_port")
+	httpsPort := publicAccessPort("https_proxy_access_port", "https_proxy_port")
 	if httpsPort != "" && httpsPort != "443" {
 		s.Data["https_proxy_port"] = ":" + httpsPort
 	}
+}
+
+// publicAccessPort is deliberately separate from the listener port.  NPS can
+// listen on an internal port while a reverse proxy exposes the same Host rule
+// on another public port; the setting is used only when building links for
+// users, never when binding sockets or routing requests.
+func publicAccessPort(accessKey, listenerKey string) string {
+	access := strings.TrimSpace(beego.AppConfig.String(accessKey))
+	if access != "" {
+		return access
+	}
+	return strings.TrimSpace(beego.AppConfig.String(listenerKey))
 }
 
 // auditMutation records a control-plane action after authorization has been
@@ -518,17 +532,14 @@ func (s *BaseController) display(tpl ...string) {
 	} else {
 		tplname = s.controllerName + "/" + s.actionName + ".html"
 	}
-	ip := s.Ctx.Request.Host
-	s.Data["ip"] = common.GetIpByAddr(ip)
-
+	ip := common.GetIpByAddr(s.Ctx.Request.Host)
 	global := file.GetDb().GetGlobal()
-	if global != nil && global.ServerUrl != "" && global.ServerUrl != ip {
-		// 替换掉 http:// 或者 https://
-		ip = global.ServerUrl
-		ip = strings.ReplaceAll(ip, "http://", "")
-		ip = strings.ReplaceAll(ip, "https://", "")
-		s.Data["ip"] = ip
+	if global != nil {
+		if configuredHost := publicServerHost(global.ServerUrl); configuredHost != "" {
+			ip = configuredHost
+		}
 	}
+	s.Data["ip"] = ip
 
 	s.Data["bridgeType"] = beego.AppConfig.String("bridge_type")
 	if common.IsWindows() {
@@ -554,6 +565,28 @@ func (s *BaseController) display(tpl ...string) {
 	s.Data["proxyPort"] = beego.AppConfig.String("hostPort")
 	s.Layout = "public/layout.html"
 	s.TplName = tplname
+}
+
+// publicServerHost extracts only the public hostname/IP used to build TCP
+// tunnel access addresses. The tunnel's own port is appended separately; a
+// URL scheme or management/bridge port must never become part of that address.
+func publicServerHost(serverAddress string) string {
+	serverAddress = strings.TrimSpace(serverAddress)
+	if serverAddress == "" {
+		return ""
+	}
+	if ip := net.ParseIP(strings.Trim(serverAddress, "[]")); ip != nil {
+		return ip.String()
+	}
+	candidate := serverAddress
+	parseValue := serverAddress
+	if !strings.Contains(parseValue, "://") {
+		parseValue = "//" + parseValue
+	}
+	if parsed, err := url.Parse(parseValue); err == nil && parsed.Host != "" {
+		candidate = parsed.Host
+	}
+	return common.GetIpByAddr(candidate)
 }
 
 // 错误

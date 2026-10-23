@@ -1,6 +1,7 @@
 package client
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -12,6 +13,124 @@ import (
 	"github.com/astaxie/beego/logs"
 	"github.com/pkg/errors"
 )
+
+func healthProfileKey(health *file.Health) string {
+	if health == nil {
+		return ""
+	}
+	snapshot := file.HealthConfigSnapshot(health)
+	return fmt.Sprintf("%s\x00%s\x00%d\x00%d\x00%d\x00%s",
+		snapshot.HealthCheckType,
+		snapshot.HealthCheckTarget,
+		snapshot.HealthCheckTimeout,
+		snapshot.HealthMaxFail,
+		snapshot.HealthCheckInterval,
+		snapshot.HttpHealthUrl,
+	)
+}
+
+func normalizedHealthCopy(health *file.Health) *file.Health {
+	if health == nil {
+		return nil
+	}
+	snapshot := file.HealthConfigSnapshot(health)
+	if err := file.NormalizeHealth(&snapshot); err != nil || !file.HealthConfigEnabled(&snapshot) {
+		return nil
+	}
+	return &snapshot
+}
+
+// healthProfiles returns one isolated runtime profile per distinct local or
+// server-provided configuration. Isolating the copies prevents a remote
+// refresh from racing the counters maintained by an existing check session.
+func (s *TRPClient) healthProfiles() []*file.Health {
+	if s == nil {
+		return nil
+	}
+	profiles := make([]*file.Health, 0)
+	seen := make(map[string]struct{})
+	appendProfile := func(source *file.Health) {
+		profile := normalizedHealthCopy(source)
+		if profile == nil {
+			return
+		}
+		key := healthProfileKey(profile)
+		if key == "" {
+			return
+		}
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		profiles = append(profiles, profile)
+	}
+	if s.cnf != nil {
+		for _, health := range s.cnf.Healths {
+			appendProfile(health)
+		}
+	}
+	for _, health := range s.remoteHealths {
+		appendProfile(health)
+	}
+	return profiles
+}
+
+// stopHealthChecks stops the current check session. Closing this dedicated
+// channel is separate from closeCh so a server-side configuration refresh can
+// restart checks without ending the NPC process.
+func (s *TRPClient) stopHealthChecks() {
+	if s == nil {
+		return
+	}
+	s.healthMu.Lock()
+	if s.healthStop != nil {
+		close(s.healthStop)
+		s.healthStop = nil
+	}
+	s.healthMu.Unlock()
+}
+
+func (s *TRPClient) startHealthChecks(signal *conn.Conn) {
+	if s == nil {
+		return
+	}
+	s.healthMu.Lock()
+	if s.healthStop != nil {
+		close(s.healthStop)
+		s.healthStop = nil
+	}
+	if signal == nil || s.closed.Load() {
+		s.healthMu.Unlock()
+		return
+	}
+	profiles := s.healthProfiles()
+	if len(profiles) == 0 {
+		s.healthMu.Unlock()
+		return
+	}
+	stop := make(chan struct{})
+	s.healthStop = stop
+	s.healthMu.Unlock()
+	go heathCheck(profiles, signal, stop)
+}
+
+func (s *TRPClient) applyRemoteHealthConfig(profiles []file.Health) {
+	if s == nil {
+		return
+	}
+	normalized := make([]*file.Health, 0, len(profiles))
+	for i := range profiles {
+		profile := profiles[i]
+		if err := file.NormalizeHealth(&profile); err != nil || !file.HealthConfigEnabled(&profile) {
+			continue
+		}
+		normalized = append(normalized, &profile)
+	}
+	s.healthMu.Lock()
+	s.remoteHealths = normalized
+	s.healthMu.Unlock()
+	s.startHealthChecks(s.currentSignal())
+}
 
 type healthReporter struct {
 	conn *conn.Conn

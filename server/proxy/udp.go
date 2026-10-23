@@ -13,6 +13,7 @@ import (
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
 	"github.com/astaxie/beego/logs"
 )
 
@@ -129,6 +130,7 @@ type udpTaskSnapshot struct {
 	clientConfig file.Config
 	clientFlow   *file.Flow
 	taskFlow     *file.Flow
+	clientRate   *rate.Rate
 	targetStr    string
 	localProxy   bool
 	serverIP     string
@@ -169,6 +171,7 @@ func (s *UdpModeServer) snapshotTask() (udpTaskSnapshot, error) {
 	snapshot.clientConfig = *snapshot.client.Cnf
 	snapshot.clientID = snapshot.client.Id
 	snapshot.clientFlow = snapshot.client.Flow
+	snapshot.clientRate = snapshot.client.Rate
 	snapshot.client.RUnlock()
 	target.RLock()
 	snapshot.targetStr = target.TargetStr
@@ -361,7 +364,7 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 		return
 	}
 
-	target := conn.GetConn(clientConn, snapshot.clientConfig.Crypt, snapshot.clientConfig.Compress, nil, true)
+	target := conn.GetConnWithLimits(clientConn, snapshot.clientConfig.Crypt, snapshot.clientConfig.Compress, snapshot.clientRate, true, s.task, nil)
 	if !sess.installTarget(target) {
 		close(sess.ready)
 		common.BufPoolUdp.Put(buf)

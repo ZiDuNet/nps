@@ -3,6 +3,7 @@ package client
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -23,6 +24,7 @@ import (
 	"ehang.io/nps/lib/config"
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/crypt"
+	"ehang.io/nps/lib/file"
 )
 
 // ClientLogger receives logs emitted by one TRP client instance. It lets
@@ -96,6 +98,9 @@ type TRPClient struct {
 	closed         atomic.Bool
 	closeCh        chan struct{} // closed when client is shutting down; stops ping
 	logger         ClientLogger  // 每个客户端独立的 logger
+	healthMu       sync.Mutex
+	healthStop     chan struct{}
+	remoteHealths  []*file.Health
 }
 
 // new client
@@ -232,6 +237,7 @@ func (s *TRPClient) detach(expectedSignal *conn.Conn, expectedTunnel *nps_mux.Mu
 }
 
 func (s *TRPClient) closeDetached(signal *conn.Conn, tunnel *nps_mux.Mux) {
+	s.stopHealthChecks()
 	s.once.Do(func() {
 		s.closed.Store(true)
 		CloseClient.Store(true)
@@ -299,10 +305,10 @@ retry:
 	}
 	//start a channel connection
 	go s.newChan()
-	//start health check if the it's open
-	if s.cnf != nil && len(s.cnf.Healths) > 0 {
-		go heathCheck(s.cnf.Healths, c, s.closeCh)
-	}
+	// Start local checks immediately. The server may subsequently replace the
+	// remote portion through HEALTH_CONFIG; that update restarts this session
+	// without touching the tunnel/data channels.
+	s.startHealthChecks(c)
 	NowStatus.Store(1)
 	//msg connection, eg udp
 	s.handleMain()
@@ -340,6 +346,29 @@ mainLoop:
 			// main control reader or tunnel traffic. The process is restarted only
 			// after the new binary has been downloaded and verified.
 			requestRemoteUpdate(s)
+		case common.HEALTH_CONFIG:
+			length, readErr := signal.GetLen()
+			if readErr != nil {
+				s.logWarn("读取服务端健康配置长度失败：%s", readErr.Error())
+				break mainLoop
+			}
+			if length < 0 || length > 1<<20 {
+				s.logWarn("服务端健康配置长度无效：%d", length)
+				break mainLoop
+			}
+			payload := make([]byte, length)
+			_, readErr = io.ReadFull(signal, payload)
+			if readErr != nil {
+				s.logWarn("读取服务端健康配置失败：%s", readErr.Error())
+				break mainLoop
+			}
+			var profiles []file.Health
+			if readErr = json.Unmarshal(payload, &profiles); readErr != nil {
+				s.logWarn("解析服务端健康配置失败：%s", readErr.Error())
+				break mainLoop
+			}
+			s.applyRemoteHealthConfig(profiles)
+			s.logTrace("[配置] 已同步 %d 个远程健康检查配置", len(profiles))
 		case common.REPORT_LOCAL_IP:
 			// Newer servers request the client's private/LAN addresses. Older
 			// servers never send this flag, so this is protocol-compatible.

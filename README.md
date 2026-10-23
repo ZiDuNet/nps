@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.28</sub>
+﻿# NPS <sub>v1.1.29</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -127,8 +127,8 @@ Requires Go 1.24+
 
 ```bash
 # Quick build
-go build cmd/nps/nps.go    # Server
-go build cmd/npc/npc.go    # Client
+go build ./cmd/nps       # Server
+go build ./cmd/npc       # Client
 
 # Makefile (recommended)
 make build                 # Build nps + npc
@@ -136,8 +136,8 @@ make test                  # Test with race detection & coverage
 make lint                  # golangci-lint
 
 # Cross compile
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" ./cmd/nps/nps.go
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" ./cmd/npc/npc.go
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" ./cmd/nps
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" ./cmd/npc
 
 # GUI client (requires Wails)
 cd cmd/npc/npc-gui && wails build
@@ -178,6 +178,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.29** (2026-10-24) - Added Web-configured backend health checks and per-resource directional limits with version-gated NPC synchronization, atomic validation, API rate fields, and TCP/Host access metadata.
 
 - **v1.1.28** (2026-10-22) - Added safe Basic/legacy client username visibility and clarified domain proxy CORS and compatibility settings in the Web UI.
 - **v1.1.27** (2026-10-22) - Fixed NPC service log permissions and completed CLI/GUI/server-triggered update flows; release packages are checksum-verified before replacement.

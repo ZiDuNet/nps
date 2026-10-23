@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 
 	"ehang.io/nps/bridge"
@@ -101,6 +102,37 @@ func (s *BaseServer) writeConnFailContent(c net.Conn, content []byte) {
 // auth check for reverse-proxy hosts (401 + WWW-Authenticate).
 func (s *BaseServer) auth(r *http.Request, c *conn.Conn, u, p string) error {
 	return s.doAuth(r, c, u, p, common.UnauthorizedBytes, "401 Unauthorized")
+}
+
+// hostBasicAuth snapshots the optional host-level account list. A non-empty
+// value is considered configured even when legacy data is malformed; such a
+// rule must fail closed instead of silently falling back to client auth.
+func hostBasicAuth(host *file.Host) (value string, configured bool) {
+	if host == nil {
+		return "", false
+	}
+	host.RLock()
+	value = strings.TrimSpace(host.Auth)
+	host.RUnlock()
+	return value, value != ""
+}
+
+// authHostRequest applies the host-level Basic account list when present and
+// falls back to the historical client-level account otherwise. It is used by
+// hijacked HTTP connections where the failure response must be written on the
+// raw socket.
+func (s *BaseServer) authHostRequest(r *http.Request, c *conn.Conn, host *file.Host, u, p string) error {
+	if authValue, configured := hostBasicAuth(host); configured {
+		if file.CheckBasicAuth(r, authValue) {
+			return nil
+		}
+		if c != nil {
+			c.Write([]byte(common.UnauthorizedBytes))
+			_ = c.Close()
+		}
+		return errors.New("401 Unauthorized")
+	}
+	return s.auth(r, c, u, p)
 }
 
 // proxyAuth check for HTTP forward proxy (407 + Proxy-Authenticate).
@@ -294,25 +326,18 @@ func (s *BaseServer) DealClient(c *conn.Conn, client *file.Client, addr string,
 		if flow == nil {
 			flow = clientFlow
 		}
-		conn.CopyWaitGroup(target, c.Conn, link.Crypt, link.Compress, clientRate, flow, true, rb, task, host)
+		conn.CopyWaitGroupWithLimits(target, c.Conn, link.Crypt, link.Compress, clientRate, flow, true, rb, task, host)
 	}
 	return nil
 }
 
 // 判断访问地址是否在全局黑名单内
 func IsGlobalBlackIp(ipPort string) bool {
-	// 判断访问地址是否在全局黑名单内
-	global := file.GetDb().GetGlobal()
-	if global != nil {
-		ip := common.GetIpByAddr(ipPort)
-		global.RLock()
-		blacklist := append([]string(nil), global.BlackIpList...)
-		global.RUnlock()
-		if in(ip, blacklist) {
-			logs.Error("IP地址[" + ip + "]在全局黑名单列表内")
-			return true
-		}
+	// Keep the historical function name for callers, but evaluate the complete
+	// global policy (blacklist, whitelist, CIDR and priority) here.
+	if file.GetDb().GlobalIPDenied(ipPort) {
+		logs.Error("IP地址[" + common.GetIpByAddr(ipPort) + "]未通过全局访问控制")
+		return true
 	}
-
 	return false
 }

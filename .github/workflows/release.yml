@@ -199,6 +199,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=nps
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/nps:${{ env.RELEASE_VERSION }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/nps:latest
       - name: Build and push npc
         uses: docker/build-push-action@v6
         with:
@@ -212,6 +213,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=npc
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/npc:${{ env.RELEASE_VERSION }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/npc:latest
       - name: Update Docker Hub description for nps
         uses: peter-evans/dockerhub-description@v4
         with:

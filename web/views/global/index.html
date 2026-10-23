@@ -18,6 +18,22 @@
                 <label class="form-label font-bold" for="black-ip-list" data-i18n-zh="IP 黑名单" data-i18n-en="IP denylist">IP 黑名单</label>
                 <div class="form-group-wrapper"><textarea id="black-ip-list" class="form-control" rows="6" name="globalBlackIpList" placeholder="203.0.113.10">{{.globalBlackIpList}}</textarea><span class="help-block" data-i18n-zh="每行一个 IP。此限制对服务端的入口连接生效。" data-i18n-en="One IP per line. This restriction applies to server entry connections.">每行一个 IP。此限制对服务端的入口连接生效。</span></div>
             </div>
+            <div class="form-group form-group--wide">
+                <label class="form-label font-bold" for="white-ip-list" data-i18n-zh="IP 白名单" data-i18n-en="IP allowlist">IP 白名单</label>
+                <div class="form-group-wrapper"><textarea id="white-ip-list" class="form-control" rows="6" name="globalWhiteIpList" placeholder="198.51.100.0/24">{{.globalWhiteIpList}}</textarea><span class="help-block" data-i18n-zh="每行一个 IP 或 CIDR。只有配置白名单时，未命中的来源会被拒绝。" data-i18n-en="One IP or CIDR per line. When an allowlist is configured, non-matching sources are rejected.">每行一个 IP 或 CIDR。只有配置白名单时，未命中的来源会被拒绝。</span></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label font-bold" for="global-ip-list-priority" data-i18n-zh="名单优先级" data-i18n-en="List priority">名单优先级</label>
+                <div class="form-group-wrapper"><select id="global-ip-list-priority" class="form-control" name="globalIpListPriority"><option value="0"{{if ne .globalIpListPriority 1}} selected{{end}} data-i18n-zh="黑名单优先" data-i18n-en="Deny first">黑名单优先</option><option value="1"{{if eq .globalIpListPriority 1}} selected{{end}} data-i18n-zh="白名单优先" data-i18n-en="Allow first">白名单优先</option></select><span class="help-block" data-i18n-zh="两张名单同时命中时生效；黑名单优先会拒绝黑名单命中，白名单优先允许白名单命中覆盖黑名单。" data-i18n-en="Used when both lists match; deny-first rejects a deny match, allow-first lets an allow match override it.">两张名单同时命中时生效；黑名单优先会拒绝黑名单命中，白名单优先允许白名单命中覆盖它。</span></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label font-bold" for="global-max-conn" data-i18n-zh="全局最大连接数" data-i18n-en="Global max connections">全局最大连接数</label>
+                <div class="form-group-wrapper"><input id="global-max-conn" class="form-control" type="number" min="0" step="1" name="globalMaxConn" value="{{.globalMaxConn}}"><span class="help-block" data-i18n-zh="所有客户端和代理入口共用的并发上限；0 表示不限。" data-i18n-en="Shared concurrent connection limit across all clients and proxy listeners; 0 means unlimited.">所有客户端和代理入口共用的并发上限；0 表示不限。</span></div>
+            </div>
+            <div class="form-group">
+                <label class="form-label font-bold" for="global-rate-limit" data-i18n-zh="全局限速 (KB/s)" data-i18n-en="Global rate limit (KB/s)">全局限速 (KB/s)</label>
+                <div class="form-group-wrapper"><input id="global-rate-limit" class="form-control" type="number" min="0" step="1" name="globalRateLimit" value="{{.globalRateLimit}}"><span class="help-block" data-i18n-zh="所有转发流量共享的总带宽上限，叠加在客户端限速之上；0 表示不限。" data-i18n-en="Shared aggregate bandwidth limit applied in addition to each client limit; 0 means unlimited.">所有转发流量共享的总带宽上限，叠加在客户端限速之上；0 表示不限。</span></div>
+            </div>
 
             <div class="form-section-title"><i class="fa fa-cloud" aria-hidden="true"></i><span data-i18n-zh="平台泛域名" data-i18n-en="Platform wildcard domains">平台泛域名</span></div>
             <div class="form-group form-group--wide"><label class="form-label font-bold" data-i18n-zh="域名池" data-i18n-en="Domain pool">域名池</label><div class="form-group-wrapper">

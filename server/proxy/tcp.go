@@ -4,6 +4,8 @@
 package proxy
 
 import (
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -18,6 +20,7 @@ import (
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/instancekey"
 	"ehang.io/nps/server/connection"
 	"ehang.io/nps/server/traffic"
 	"ehang.io/nps/web"
@@ -121,6 +124,9 @@ func (s *WebServer) Start() error {
 		logs.Warn("Web management panel is exposed over plaintext HTTP; use HTTPS or a loopback listener behind a TLS reverse proxy")
 	}
 	configureWebSessionTLS(useTLS)
+	if err := configureWebSessionSecurity(useTLS); err != nil {
+		return err
+	}
 	web.InitBeegoAssets()
 	err := errors.New("Web management startup failure ")
 	var l net.Listener
@@ -166,6 +172,67 @@ func resolveWebTLSPath(path string) string {
 
 func configureWebSessionTLS(useTLS bool) {
 	beego.BConfig.Listen.EnableHTTPS = useTLS
+}
+
+// configureWebSessionSecurity switches the panel to Beego's encrypted cookie
+// provider and derives its keys from an installation-local instance key. The
+// default memory provider uses an unsigned session identifier, which lets an
+// attacker forge the identifier after learning the process's session state.
+// Existing deployments can keep an explicit sessionConfig for compatibility;
+// otherwise the key is created under conf/instance.key and survives restarts.
+func configureWebSessionSecurity(useTLS bool) error {
+	if strings.TrimSpace(beego.AppConfig.String("sessionConfig")) != "" {
+		return nil
+	}
+	keyPath := strings.TrimSpace(beego.AppConfig.String("instance_key_file"))
+	if keyPath == "" {
+		keyPath = filepath.Join(common.GetRunPath(), "conf", "instance.key")
+	} else if !filepath.IsAbs(keyPath) {
+		keyPath = filepath.Join(common.GetRunPath(), keyPath)
+	}
+	key, err := instancekey.LoadOrCreate(keyPath)
+	if err != nil {
+		return err
+	}
+	securityKey, err := key.DeriveKey("web-session-signing", 32)
+	if err != nil {
+		return err
+	}
+	blockKey, err := key.DeriveKey("web-session-encryption", 32)
+	if err != nil {
+		return err
+	}
+	securityName, err := key.DeriveKey("web-session-name", 16)
+	if err != nil {
+		return err
+	}
+	providerConfig, err := json.Marshal(map[string]interface{}{
+		"securityKey":  hex.EncodeToString(securityKey),
+		"blockKey":     hex.EncodeToString(blockKey),
+		"securityName": hex.EncodeToString(securityName),
+		"cookieName":   "nps_session",
+		"secure":       useTLS,
+	})
+	if err != nil {
+		return err
+	}
+	managerConfig, err := json.Marshal(map[string]interface{}{
+		"cookieName":      "nps_session",
+		"enableSetCookie": true,
+		"gclifetime":      beego.BConfig.WebConfig.Session.SessionGCMaxLifetime,
+		"maxLifetime":     beego.BConfig.WebConfig.Session.SessionGCMaxLifetime,
+		"secure":          useTLS,
+		"cookieLifeTime":  beego.BConfig.WebConfig.Session.SessionCookieLifeTime,
+		"providerConfig":  string(providerConfig),
+	})
+	if err != nil {
+		return err
+	}
+	if err := beego.AppConfig.Set("sessionConfig", string(managerConfig)); err != nil {
+		return err
+	}
+	beego.BConfig.WebConfig.Session.SessionProvider = "cookie"
+	return nil
 }
 
 func newManagedHTTPServer(handler http.Handler) *http.Server {
@@ -355,7 +422,7 @@ func ProcessHttp(c *conn.Conn, s *TunnelModeServer) error {
 		ContentType:  r.Header.Get("Content-Type"),
 		Headers:      traffic.SafeHeaders(r.Header),
 	})
-	err = s.DealClient(c, client, addr, rb, common.CONN_TCP, nil, nil, localProxy, nil, nil)
+	err = s.DealClient(c, client, addr, rb, common.CONN_TCP, nil, nil, localProxy, s.task, nil)
 	end := traffic.Event{
 		Type:       "connection_end",
 		Time:       time.Now().UTC(),

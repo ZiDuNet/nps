@@ -2,6 +2,19 @@
 
 所有重要变更记录在此。
 
+## [1.1.29] - 2026-10-24
+
+### Added
+
+- Web 隧道与域名规则支持 HTTP 200/TCP 后端健康检查，并将有效配置同步到兼容的新 NPC。
+- TCP 隧道 API 返回 `AccessHost`、`AccessAddr`、`AccessAddress` 和 `AccessURL`，Host API 返回健康检查字段。
+- 普通隧道和域名规则支持独立的上行/下行限速与当前速率采样，旧 JSON 数据默认按不限速兼容。
+
+### Changed
+
+- 资源新增、编辑、启停和删除后会刷新客户端健康检查配置；旧版 NPC 不接收新控制帧，继续使用原有配置。
+- API 列表和单条查询始终返回 `UploadLimit`、`DownloadLimit`、`UploadRate`、`DownloadRate`，并补齐 NPC 配置文件和升级迁移说明。
+
 ## [1.1.28] - 2026-10-22
 
 ### Added
