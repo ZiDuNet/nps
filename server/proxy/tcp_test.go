@@ -6,7 +6,9 @@ package proxy
 import (
 	"bufio"
 	"bytes"
+	"crypto/aes"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -338,6 +340,40 @@ func TestWebServerTLSConfigEnablesSecureSessionCookies(t *testing.T) {
 	configureWebSessionTLS(false)
 	if beego.BConfig.Listen.EnableHTTPS {
 		t.Fatal("non-TLS web mode must not mark session cookies Secure")
+	}
+}
+
+func TestConfigureWebSessionSecurityUsesValidCookieBlockKey(t *testing.T) {
+	oldConfPath := common.ConfPath
+	oldSessionConfig := beego.AppConfig.String("sessionConfig")
+	oldProvider := beego.BConfig.WebConfig.Session.SessionProvider
+	common.ConfPath = t.TempDir()
+	beego.AppConfig.Set("sessionConfig", "")
+	beego.AppConfig.Set("instance_key_file", "")
+	t.Cleanup(func() {
+		common.ConfPath = oldConfPath
+		_ = beego.AppConfig.Set("sessionConfig", oldSessionConfig)
+		beego.BConfig.WebConfig.Session.SessionProvider = oldProvider
+	})
+
+	if err := configureWebSessionSecurity(false); err != nil {
+		t.Fatalf("configureWebSessionSecurity() error = %v", err)
+	}
+
+	var manager struct {
+		ProviderConfig string `json:"providerConfig"`
+	}
+	if err := json.Unmarshal([]byte(beego.AppConfig.String("sessionConfig")), &manager); err != nil {
+		t.Fatalf("decode session manager config: %v", err)
+	}
+	var provider struct {
+		BlockKey string `json:"blockKey"`
+	}
+	if err := json.Unmarshal([]byte(manager.ProviderConfig), &provider); err != nil {
+		t.Fatalf("decode cookie provider config: %v", err)
+	}
+	if _, err := aes.NewCipher([]byte(provider.BlockKey)); err != nil {
+		t.Fatalf("cookie provider block key is not a valid AES key: %v", err)
 	}
 }
 

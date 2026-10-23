@@ -15,6 +15,10 @@
 - 资源新增、编辑、启停和删除后会刷新客户端健康检查配置；旧版 NPC 不接收新控制帧，继续使用原有配置。
 - API 列表和单条查询始终返回 `UploadLimit`、`DownloadLimit`、`UploadRate`、`DownloadRate`，并补齐 NPC 配置文件和升级迁移说明。
 
+### Fixed
+
+- 修复首次启动 Web 管理面板时 Cookie 会话加密密钥长度错误导致服务端 panic 的问题。
+
 ## [1.1.28] - 2026-10-22
 
 ### Added

@@ -38,6 +38,7 @@
 9. [Docker 部署](docker.md)
 10. [GUI 客户端](gui.md)
 11. [升级迁移](migrate.md)
+12. [1.1.29 本地升级与 nps2 差异](upgrade-1.1.29.md)
 
 ## 文档目录
 
@@ -85,6 +86,7 @@
 - [用户体系](user.md)
 - [系统架构](architecture.md)
 - [升级迁移](migrate.md)
+- [1.1.29 本地升级与 nps2 差异](upgrade-1.1.29.md)
 - [构建发布](build.md)
 - [本项目更新日志](changelog.md)
 - [上游更新日志](changelog/)

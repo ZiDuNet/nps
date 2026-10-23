@@ -198,7 +198,11 @@ func configureWebSessionSecurity(useTLS bool) error {
 	if err != nil {
 		return err
 	}
-	blockKey, err := key.DeriveKey("web-session-encryption", 32)
+	// Beego's cookie provider consumes blockKey as the literal AES key rather
+	// than decoding it from hex. Keep it printable for JSON while using a valid
+	// AES-256 length; encoding 32 raw bytes as hex would produce a 64-byte key
+	// and panic during InitBeforeHTTPRun.
+	blockKey, err := key.DeriveKey("web-session-encryption", 16)
 	if err != nil {
 		return err
 	}
