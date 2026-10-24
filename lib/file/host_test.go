@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"ehang.io/nps/lib/acl"
 )
 
 func TestPreviewTargetDoesNotAdvanceRoundRobin(t *testing.T) {
@@ -181,6 +183,95 @@ func TestNewHostRejectsOverlappingCrossTenantRoute(t *testing.T) {
 	second := &Host{Id: 2, Host: "app.example.com", Location: "/admin", Scheme: "https", Client: &Client{Id: 2, UserId: 2}, Target: &Target{TargetStr: "127.0.0.1:8081"}}
 	if err := utils.NewHost(second); err == nil {
 		t.Fatal("NewHost must reject a cross-tenant overlapping route")
+	}
+}
+
+func TestUpdateHostPersistsAccessListsAndRegisteredOnly(t *testing.T) {
+	runPath := t.TempDir()
+	db := NewJsonDb(runPath)
+	utils := &DbUtils{JsonDb: db}
+	client := &Client{Id: 1, Status: true}
+	db.Clients.Store(client.Id, client)
+	db.StoreClientsToJsonFile()
+	stored := &Host{
+		Id: 1, Host: "app.example.com", Scheme: "http", Location: "/",
+		Client: client, Target: &Target{TargetStr: "127.0.0.1:8080"},
+	}
+	stored.SetSourceLists(acl.DenyFirst, nil, []string{"198.51.100.0/24"}, acl.ScopeUser, "host")
+	if err := utils.NewHost(stored); err != nil {
+		t.Fatal(err)
+	}
+
+	replacement := &Host{
+		Id: 1, Host: stored.Host, Scheme: stored.Scheme, Location: stored.Location,
+		Client: client, Target: &Target{TargetStr: "127.0.0.1:8080"}, RegisteredOnly: true,
+	}
+	replacement.SetSourceLists(acl.DenyFirst, []string{"203.0.113.9"}, []string{"203.0.113.0/24"}, acl.ScopeUser, "host")
+	if err := utils.UpdateHost(replacement); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := utils.GetHostById(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated.RegisteredOnly {
+		t.Fatal("UpdateHost did not copy RegisteredOnly")
+	}
+	if source := updated.SourceACL(); source == nil || !source.AllowsString("203.0.113.8:443") || source.AllowsString("198.51.100.8:443") || source.AllowsString("203.0.113.9:443") {
+		priority, black, white := updated.AccessListSnapshot()
+		var allowed, oldAllowed, blacklistedAllowed bool
+		if source != nil {
+			allowed = source.AllowsString("203.0.113.8:443")
+			oldAllowed = source.AllowsString("198.51.100.8:443")
+			blacklistedAllowed = source.AllowsString("203.0.113.9:443")
+		}
+		t.Fatalf("UpdateHost did not apply replacement source access lists: priority=%d black=%v white=%v allows=%t old=%t blacklisted=%t source=%#v", priority, black, white, allowed, oldAllowed, blacklistedAllowed, source)
+	}
+
+	loaded := NewJsonDb(runPath)
+	loaded.LoadClientFromJsonFile()
+	loaded.LoadHostFromJsonFile()
+	persisted, err := (&DbUtils{JsonDb: loaded}).GetHostById(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !persisted.RegisteredOnly {
+		t.Fatal("RegisteredOnly was not persisted")
+	}
+	if source := persisted.SourceACL(); source == nil || !source.AllowsString("203.0.113.8:443") {
+		t.Fatal("updated source access lists were not persisted")
+	}
+}
+
+func TestUpdateHostPersistenceFailureRestoresAccessLists(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	client := &Client{Id: 1, Status: true}
+	db.Clients.Store(client.Id, client)
+	stored := &Host{
+		Id: 1, Host: "app.example.com", Scheme: "http", Location: "/",
+		Client: client, Target: &Target{TargetStr: "127.0.0.1:8080"},
+	}
+	stored.SetSourceLists(acl.DenyFirst, nil, []string{"198.51.100.0/24"}, acl.ScopeUser, "host")
+	if err := utils.NewHost(stored); err != nil {
+		t.Fatal(err)
+	}
+	db.HostFilePath = t.TempDir()
+
+	replacement := &Host{
+		Id: 1, Host: stored.Host, Scheme: stored.Scheme, Location: stored.Location,
+		Client: client, Target: &Target{TargetStr: "127.0.0.1:8081"}, RegisteredOnly: true,
+	}
+	replacement.SetSourceLists(acl.DenyFirst, nil, []string{"203.0.113.0/24"}, acl.ScopeUser, "host")
+	if err := utils.UpdateHost(replacement); err == nil {
+		t.Fatal("UpdateHost should report a persistence failure")
+	}
+	if stored.RegisteredOnly {
+		t.Fatal("failed update left RegisteredOnly changed in memory")
+	}
+	if source := stored.SourceACL(); source == nil || !source.AllowsString("198.51.100.8:443") || source.AllowsString("203.0.113.8:443") {
+		t.Fatal("failed update did not restore source access lists")
 	}
 }
 

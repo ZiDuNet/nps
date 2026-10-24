@@ -1,0 +1,172 @@
+<style>
+    .server-config-page { max-width: 1480px; }
+    .server-config-header { align-items: flex-end; }
+    .server-config-path { display: inline-flex; align-items: center; gap: 7px; margin-top: 9px; color: var(--nps-faint); font: 12px/1.4 "Fira Code", monospace; overflow-wrap: anywhere; }
+    .server-config-path i { color: var(--nps-primary); }
+    .server-config-notice { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 18px; padding: 13px 16px; color: var(--nps-info); background: var(--nps-info-soft); border: 1px solid color-mix(in srgb, var(--nps-info) 24%, transparent); border-radius: var(--nps-radius); }
+    .server-config-notice i { margin-top: 3px; }
+    .server-config-notice strong { display: block; margin-bottom: 2px; color: var(--nps-ink); }
+    .server-config-notice p { margin: 0; color: var(--nps-muted); }
+    .server-config-stack { display: grid; gap: 14px; }
+    .server-config-section { overflow: hidden; }
+    .server-config-section__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 17px 20px; background: var(--nps-surface); border-bottom: 1px solid var(--nps-line); }
+    .server-config-section__heading { min-width: 0; }
+    .server-config-section__heading h2 { margin: 0; color: var(--nps-ink); font-size: 15px; font-weight: 750; }
+    .server-config-section__heading p { margin: 4px 0 0; color: var(--nps-muted); font-size: 12px; }
+    .server-config-section__toggle { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; min-height: 34px; padding: 0 11px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .server-config-section__toggle:hover { color: var(--nps-primary); border-color: var(--nps-primary); background: var(--nps-primary-soft); }
+    .server-config-section__toggle i { transition: transform .16s ease; }
+    .server-config-section.is-collapsed .server-config-section__toggle i { transform: rotate(-90deg); }
+    .server-config-section.is-collapsed .server-config-section__body { display: none; }
+    .server-config-section__body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; padding: 2px 20px 9px; background: var(--nps-surface); }
+    .server-config-field { display: grid; grid-template-columns: minmax(150px, .76fr) minmax(0, 1.24fr); gap: 18px; align-items: start; min-width: 0; padding: 16px 0; border-bottom: 1px solid var(--nps-line); }
+    .server-config-field:nth-last-child(-n + 2) { border-bottom: 0; }
+    .server-config-field__label { min-width: 0; }
+    .server-config-field__label label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--nps-ink); font-size: 13px; font-weight: 700; }
+    .server-config-field__label code { padding: 2px 5px; color: var(--nps-faint); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 4px; font: 10px/1.3 "Fira Code", monospace; font-weight: 500; }
+    .server-config-field__label p { margin: 5px 0 0; color: var(--nps-muted); font-size: 11px; line-height: 1.5; }
+    .server-config-field__control { min-width: 0; }
+    .server-config-field__control .form-control { width: 100%; min-width: 0; }
+    .server-config-field__control .help-block { margin: 6px 0 0; font-size: 11px; }
+    .server-config-optional { display: flex; align-items: center; gap: 7px; margin: 0 0 7px; color: var(--nps-muted); font-size: 11px; cursor: pointer; }
+    .server-config-optional input { accent-color: var(--nps-primary); }
+    .server-config-field.is-readonly { background: linear-gradient(90deg, transparent, var(--nps-surface-subtle)); }
+    .server-config-readonly { min-height: 34px; padding: 8px 10px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px dashed var(--nps-line-strong); border-radius: 5px; font: 11px/1.45 "Fira Code", monospace; overflow-wrap: anywhere; }
+    .server-config-secret-note { display: block; margin-top: 6px; color: var(--nps-warning); font-size: 11px; }
+    .server-config-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 18px; }
+    .server-config-restart-note { margin: 0; color: var(--nps-warning); font-size: 12px; }
+    .server-config-unknown { margin-top: 14px; }
+    .server-config-unknown .table { margin: 0; }
+    .server-config-unknown td, .server-config-unknown th { vertical-align: top !important; overflow-wrap: anywhere; }
+    @media (max-width: 1080px) {
+        .server-config-section__body { grid-template-columns: minmax(0, 1fr); }
+        .server-config-field:nth-last-child(-n + 2) { border-bottom: 1px solid var(--nps-line); }
+        .server-config-field:last-child { border-bottom: 0; }
+    }
+    @media (max-width: 640px) {
+        .server-config-section__header { align-items: flex-start; padding: 14px; }
+        .server-config-section__body { padding-right: 14px; padding-left: 14px; }
+        .server-config-field { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 14px 0; }
+    }
+</style>
+
+<section class="form-page form-page-global server-config-page" aria-labelledby="server-config-title">
+    <header class="dashboard-page-header form-page-header server-config-header">
+        <div class="form-page-heading">
+            <div class="dashboard-page-kicker" data-i18n-zh="系统配置" data-i18n-en="System settings">系统配置</div>
+            <h1 id="server-config-title" data-i18n-zh="服务端配置" data-i18n-en="Server configuration">服务端配置</h1>
+            <p data-i18n-zh="按功能分组维护 nps.conf。可在线修改的字段会保留注释和自定义项；只读字段仍在这里完整展示。" data-i18n-en="Maintain nps.conf by feature group. Editable fields preserve comments and custom entries; read-only fields remain visible here.">按功能分组维护 nps.conf。可在线修改的字段会保留注释和自定义项；只读字段仍在这里完整展示。</p>
+            <div class="server-config-path"><i class="fa fa-file-text-o" aria-hidden="true"></i><span>{{.config_path}}</span></div>
+        </div>
+        <div class="dashboard-page-actions form-page-actions">
+            <a class="btn btn-outline btn-primary form-page-back" href="{{.web_base_url}}/global/index"><i class="fa fa-arrow-left" aria-hidden="true"></i><span data-i18n-zh="返回全局参数" data-i18n-en="Back to global settings">返回全局参数</span></a>
+        </div>
+    </header>
+
+    {{if .config_error}}
+    <div class="alert alert-danger server-config-notice" role="alert"><i class="fa fa-exclamation-triangle" aria-hidden="true"></i><div><strong data-i18n-zh="无法读取配置文件" data-i18n-en="Unable to read configuration">无法读取配置文件</strong><p>{{.config_error}}</p></div></div>
+    {{else}}
+    <div class="server-config-notice" role="status">
+        <i class="fa fa-info-circle" aria-hidden="true"></i>
+        <div><strong data-i18n-zh="保存后需要重启 NPS" data-i18n-en="Restart NPS after saving">保存后需要重启 NPS</strong><p data-i18n-zh="关闭可选功能会从 nps.conf 移除对应字段；敏感字段不会回显，密码/密钥输入框留空表示保持原值。保存成功后页面会询问是否立即重启。" data-i18n-en="Disabling an optional feature removes its key from nps.conf. Sensitive values are never echoed; leave a password/key blank to keep the current value. After saving, the panel asks whether to restart now.">关闭可选功能会从 nps.conf 移除对应字段；敏感字段不会回显，密码/密钥输入框留空表示保持原值。保存成功后页面会询问是否立即重启。</p></div>
+    </div>
+
+    <form id="server-config-form" class="server-config-stack" autocomplete="off">
+        {{range $sectionIndex, $section := .config_sections}}
+        <section class="panel ibox float-e-margins zui-panel server-config-section{{if gt $sectionIndex 0}} is-collapsed{{end}}" data-config-section>
+            <header class="server-config-section__header">
+                <div class="server-config-section__heading"><h2>{{$section.Name}}</h2><p>{{$section.Description}}</p></div>
+                <button class="server-config-section__toggle" type="button" aria-expanded="{{if eq $sectionIndex 0}}true{{else}}false{{end}}" data-config-section-toggle><span data-i18n-zh="展开/收起" data-i18n-en="Toggle">展开/收起</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
+            </header>
+            <div class="server-config-section__body">
+                {{range $field := $section.Fields}}
+                <div class="server-config-field{{if not $field.Editable}} is-readonly{{end}}">
+                    <div class="server-config-field__label"><label for="server-config-{{$field.Key}}">{{$field.Label}} <code>{{$field.Key}}</code></label><p>{{$field.Description}}</p></div>
+                    <div class="server-config-field__control">
+                        {{if $field.Editable}}
+                            {{if $field.Optional}}<label class="server-config-optional"><input type="checkbox" name="config_enabled_{{$field.Key}}" value="1" data-config-enabled="{{$field.Key}}"{{if $field.Enabled}} checked{{end}}><span data-i18n-zh="启用此配置" data-i18n-en="Enable this setting">启用此配置</span></label>{{end}}
+                            {{if eq $field.Type "bool"}}
+                                <select id="server-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}"><option value="true"{{if eq $field.Value "true"}} selected{{end}}>true</option><option value="false"{{if eq $field.Value "false"}} selected{{end}}>false</option></select>
+                            {{else if eq $field.Type "select"}}
+                                <select id="server-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}">{{range $option := $field.Options}}<option value="{{$option}}"{{if eq $field.Value $option}} selected{{end}}>{{$option}}</option>{{end}}</select>
+                            {{else if eq $field.Type "secret"}}
+                                <div class="input-group"><input id="server-config-{{$field.Key}}" class="form-control" type="password" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}" placeholder="{{if $field.Present}}已配置，留空保持{{else}}未配置{{end}}" autocomplete="new-password"><button type="button" class="btn btn-outline server-config-reveal" data-target="server-config-{{$field.Key}}" aria-label="显示或隐藏值" title="显示或隐藏值"><i class="fa fa-eye" aria-hidden="true"></i></button></div>
+                                <span class="server-config-secret-note" data-i18n-zh="敏感值不会回显；留空保持当前值。" data-i18n-en="Secret values are never echoed; leave blank to keep the current value.">敏感值不会回显；留空保持当前值。</span>
+                            {{else}}
+                                <input id="server-config-{{$field.Key}}" class="form-control" type="{{if eq $field.Type "int"}}number{{else}}text{{end}}" name="config_{{$field.Key}}" value="{{$field.Value}}" data-config-input="{{$field.Key}}"{{if eq $field.Type "int"}} min="0" step="1"{{end}}>
+                            {{end}}
+                        {{else}}
+                            <div class="server-config-readonly" aria-readonly="true">{{$field.DisplayValue}}</div>
+                        {{end}}
+                    </div>
+                </div>
+                {{end}}
+            </div>
+        </section>
+        {{end}}
+
+        {{if .config_unknown}}
+        <section class="panel ibox float-e-margins zui-panel server-config-section server-config-unknown is-collapsed" data-config-section>
+            <header class="server-config-section__header"><div class="server-config-section__heading"><h2 data-i18n-zh="兼容与自定义字段" data-i18n-en="Compatibility and custom fields">兼容与自定义字段</h2><p data-i18n-zh="这些键来自历史版本或自定义部署，当前版本不会在线修改，但会在保存时原样保留。" data-i18n-en="These keys come from older releases or custom deployments. They are read-only here and are preserved verbatim when saving.">这些键来自历史版本或自定义部署，当前版本不会在线修改，但会在保存时原样保留。</p></div><button class="server-config-section__toggle" type="button" aria-expanded="false" data-config-section-toggle><span data-i18n-zh="展开/收起" data-i18n-en="Toggle">展开/收起</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button></header>
+            <div class="server-config-section__body"><div class="server-config-field" style="display:block;grid-column:1 / -1;border-bottom:0;padding-bottom:8px"><div class="table-responsive"><table class="table table-striped"><thead><tr><th data-i18n-zh="配置键" data-i18n-en="Key">配置键</th><th data-i18n-zh="当前值" data-i18n-en="Current value">当前值</th><th data-i18n-zh="状态" data-i18n-en="Status">状态</th></tr></thead><tbody>{{range .config_unknown}}<tr><td><code>{{.Key}}</code></td><td><code>{{.DisplayValue}}</code></td><td><span class="label label-default" data-i18n-zh="只读并保留" data-i18n-en="Read-only and preserved">只读并保留</span></td></tr>{{end}}</tbody></table></div></div></div>
+        </section>
+        {{end}}
+
+        <div class="server-config-actions">
+            <button class="btn btn-primary" type="submit" id="server-config-save"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存 nps.conf" data-i18n-en="Save nps.conf">保存 nps.conf</span></button>
+            <button class="btn btn-outline btn-warning" type="button" id="server-config-restart" hidden><i class="fa fa-refresh" aria-hidden="true"></i><span data-i18n-zh="重启 NPS" data-i18n-en="Restart NPS">重启 NPS</span></button>
+            <p class="server-config-restart-note" id="server-config-restart-note" hidden data-i18n-zh="配置已保存，重启后才会生效。" data-i18n-en="Configuration saved; restart NPS to apply it.">配置已保存，重启后才会生效。</p>
+        </div>
+    </form>
+    {{end}}
+</section>
+
+<script>
+$(function () {
+    var form = $('#server-config-form');
+    if (!form.length) return;
+    function syncOptional(key) {
+        var enabled = form.find('[data-config-enabled="' + key + '"]').prop('checked');
+        form.find('[data-config-input="' + key + '"]').prop('disabled', !enabled);
+    }
+    form.find('[data-config-enabled]').each(function () { syncOptional($(this).attr('data-config-enabled')); }).on('change', function () { syncOptional($(this).attr('data-config-enabled')); });
+    form.on('click', '[data-config-section-toggle]', function () {
+        var section = $(this).closest('[data-config-section]');
+        var open = section.hasClass('is-collapsed');
+        section.toggleClass('is-collapsed', !open);
+        $(this).attr('aria-expanded', open ? 'true' : 'false');
+    });
+    form.on('click', '.server-config-reveal', function () {
+        var input = document.getElementById($(this).attr('data-target'));
+        if (!input) return;
+        var visible = input.type === 'text';
+        input.type = visible ? 'password' : 'text';
+        $(this).find('i').toggleClass('fa-eye fa-eye-slash');
+    });
+    function postRestart() {
+        var button = $('#server-config-restart');
+        button.prop('disabled', true);
+        $.ajax({ type: 'POST', url: '{{.web_base_url}}/global/config/restart', dataType: 'json' }).done(function (response) {
+            if (response && response.status) {
+                npsNotify('success', response.msg || 'NPS 重启请求已发起');
+                window.setTimeout(function () { window.location.reload(); }, 1400);
+            } else {
+                npsNotify('warning', (response && response.msg) || '请手动重启 NPS');
+            }
+        }).fail(function (xhr) { npsNotify('error', (xhr.responseJSON && xhr.responseJSON.msg) || npsRequestErrorMessage()); }).always(function () { button.prop('disabled', false); });
+    }
+    form.on('submit', function (event) {
+        event.preventDefault();
+        var save = $('#server-config-save');
+        save.prop('disabled', true);
+        $.ajax({ type: 'POST', url: '{{.web_base_url}}/global/config/save', data: form.serializeArray(), dataType: 'json' }).done(function (response) {
+            if (!response || !response.status) { npsNotify('error', (response && response.msg) || '配置保存失败'); return; }
+            npsNotify('success', response.msg || '配置已保存');
+            if (!response.restart_required) return;
+            $('#server-config-restart, #server-config-restart-note').prop('hidden', false);
+            if (window.confirm(npsIsEnglish() ? 'Configuration saved. Restart NPS now? The console may disconnect briefly.' : '配置已保存。现在重启 NPS 使配置生效吗？管理面板可能会短暂断开。')) postRestart();
+        }).fail(function (xhr) { npsNotify('error', (xhr.responseJSON && xhr.responseJSON.msg) || npsRequestErrorMessage()); }).always(function () { save.prop('disabled', false); });
+    });
+    $('#server-config-restart').on('click', function () { if (window.confirm(npsIsEnglish() ? 'Restart NPS now?' : '现在重启 NPS 吗？')) postRestart(); });
+});
+</script>

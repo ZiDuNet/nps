@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"bufio"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -11,8 +12,239 @@ import (
 
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
+	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/version"
+	"github.com/pires/go-proxyproto"
 )
+
+func TestSecureClientHandshakeAuthenticatesClientAndServer(t *testing.T) {
+	const verifyKey = "secure-handshake-test-key"
+	db := &file.DbUtils{JsonDb: &file.JsonDb{}}
+	clientRecord := &file.Client{Id: 17, VerifyKey: verifyKey, Status: true}
+	db.JsonDb.Clients.Store(clientRecord.Id, clientRecord)
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	serverResult := make(chan struct {
+		id  int
+		err error
+	}, 1)
+	go func() {
+		id, err := (&Bridge{}).authenticateClient(conn.NewConn(serverConn), "1.1.29", db)
+		serverResult <- struct {
+			id  int
+			err error
+		}{id: id, err: err}
+	}()
+
+	client := conn.NewConn(clientConn)
+	marker, err := client.GetShortContent(32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(marker) != string(crypt.SecureHandshakeMarker()) {
+		t.Fatalf("server marker = %q, want secure marker", marker)
+	}
+	if err := client.WriteLenContent(crypt.SecureHandshakeKeyID(verifyKey)); err != nil {
+		t.Fatal(err)
+	}
+	challenge, err := client.GetShortLenContent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := crypt.SecureHandshakeClientPayload(verifyKey, version.GetVersion(), "1.1.29", time.Now().Unix(), challenge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.WriteLenContent(payload); err != nil {
+		t.Fatal(err)
+	}
+	flag, err := client.ReadFlag()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if flag != common.VERIFY_SUCCESS {
+		t.Fatalf("server verification result = %q, want success", flag)
+	}
+	serverProof, err := client.GetShortContent(32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := crypt.VerifySecureHandshakeServerProof(verifyKey, payload, challenge, serverProof); err != nil {
+		t.Fatalf("server proof verification failed: %v", err)
+	}
+	result := <-serverResult
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	if result.id != clientRecord.Id {
+		t.Fatalf("authenticated client ID = %d, want %d", result.id, clientRecord.Id)
+	}
+}
+
+func TestAuthenticateClientKeepsLegacyHandshakeThrough1128(t *testing.T) {
+	const verifyKey = "legacy-cutoff-test-key"
+	for _, clientVersion := range []string{"1.1.27", "1.1.28", "v1.1.28"} {
+		t.Run(clientVersion, func(t *testing.T) {
+			db := &file.DbUtils{JsonDb: &file.JsonDb{}}
+			clientRecord := &file.Client{Id: 29, VerifyKey: verifyKey, Status: true}
+			db.JsonDb.Clients.Store(clientRecord.Id, clientRecord)
+			serverConn, clientConn := net.Pipe()
+			defer serverConn.Close()
+			defer clientConn.Close()
+
+			serverResult := make(chan struct {
+				id  int
+				err error
+			}, 1)
+			go func() {
+				id, err := (&Bridge{}).authenticateClient(conn.NewConn(serverConn), clientVersion, db)
+				serverResult <- struct {
+					id  int
+					err error
+				}{id: id, err: err}
+			}()
+
+			client := conn.NewConn(clientConn)
+			serverHandshake, err := client.GetShortContent(32)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := crypt.Md5(version.GetVersion()); string(serverHandshake) != want {
+				t.Fatalf("legacy server response = %q, want %q", serverHandshake, want)
+			}
+			if _, err := client.Write([]byte(common.Getverifyval(verifyKey))); err != nil {
+				t.Fatal(err)
+			}
+			flag, err := client.ReadFlag()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if flag != common.VERIFY_SUCCESS {
+				t.Fatalf("verification result = %q, want success", flag)
+			}
+			result := <-serverResult
+			if result.err != nil {
+				t.Fatal(result.err)
+			}
+			if result.id != clientRecord.Id {
+				t.Fatalf("authenticated client ID = %d, want %d", result.id, clientRecord.Id)
+			}
+		})
+	}
+}
+
+func TestAuthenticateClientRejectsUnknownRelease(t *testing.T) {
+	db := &file.DbUtils{JsonDb: &file.JsonDb{}}
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	if _, err := (&Bridge{}).authenticateClient(conn.NewConn(serverConn), "1.1.29-beta", db); err == nil {
+		t.Fatal("a prerelease/unknown client version must not be treated as legacy")
+	}
+}
+
+func TestWriteLocalProxyProtocolHeader(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		version string
+		want    byte
+	}{
+		{name: "v1", version: "V1", want: 1},
+		{name: "v2", version: "V2", want: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+
+			type readResult struct {
+				header *proxyproto.Header
+				err    error
+			}
+			resultCh := make(chan readResult, 1)
+			go func() {
+				accepted, acceptErr := listener.Accept()
+				if acceptErr != nil {
+					resultCh <- readResult{err: acceptErr}
+					return
+				}
+				defer accepted.Close()
+				_ = accepted.SetReadDeadline(time.Now().Add(time.Second))
+				header, readErr := proxyproto.Read(bufio.NewReader(accepted))
+				resultCh <- readResult{header: header, err: readErr}
+			}()
+
+			backend, err := net.DialTimeout("tcp", listener.Addr().String(), time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer backend.Close()
+
+			const source = "198.51.100.23:45678"
+			if err := writeLocalProxyProtocolHeader(backend, source, test.version); err != nil {
+				t.Fatal(err)
+			}
+			result := <-resultCh
+			if result.err != nil {
+				t.Fatal(result.err)
+			}
+			if result.header == nil || result.header.Version != test.want {
+				t.Fatalf("header version = %#v, want %d", result.header, test.want)
+			}
+			if got := result.header.SourceAddr.String(); got != source {
+				t.Fatalf("source address = %q, want %q", got, source)
+			}
+			if got, want := result.header.DestinationAddr.String(), backend.RemoteAddr().String(); got != want {
+				t.Fatalf("destination address = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestWriteLocalProxyProtocolHeaderRejectsInvalidInput(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	acceptedCh := make(chan net.Conn, 1)
+	go func() {
+		accepted, acceptErr := listener.Accept()
+		if acceptErr == nil {
+			acceptedCh <- accepted
+		}
+	}()
+	backend, err := net.DialTimeout("tcp", listener.Addr().String(), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+	accepted := <-acceptedCh
+	defer accepted.Close()
+
+	for _, test := range []struct {
+		name    string
+		remote  string
+		version string
+	}{
+		{name: "unknown version", remote: "198.51.100.23:45678", version: "V3"},
+		{name: "malformed source address", remote: "invalid", version: "V1"},
+		{name: "mixed address families", remote: "[2001:db8::1]:45678", version: "V2"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := writeLocalProxyProtocolHeader(backend, test.remote, test.version); err == nil {
+				t.Fatal("expected invalid PROXY Protocol input to be rejected")
+			}
+		})
+	}
+}
 
 func bridgeHealthProfileKey(health file.Health) string {
 	snapshot := file.HealthConfigSnapshot(&health)

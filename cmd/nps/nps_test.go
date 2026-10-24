@@ -88,6 +88,17 @@ func TestMergeMissingConfigFieldsDoesNotAppendCommentedTemplateOptions(t *testin
 	}
 }
 
+func TestMergeMissingConfigFieldsDoesNotReaddDisabledOptionalSettings(t *testing.T) {
+	template := "# required\nweb_port=8081\n# optional listener\nhttp_proxy_port=80\n# optional debug\npprof_port=9999\n"
+	merged, added := mergeMissingConfigFields("web_port=19001\n", template)
+	if strings.Contains(merged, "http_proxy_port=") || strings.Contains(merged, "pprof_port=") {
+		t.Fatalf("disabled optional settings were re-added: %q", merged)
+	}
+	if !strings.Contains(merged, "web_port=19001\n") || len(added) != 0 {
+		t.Fatalf("required existing setting should remain untouched: %q, %#v", merged, added)
+	}
+}
+
 func TestMigrateConfigCompatibilityMapsUpstreamAliases(t *testing.T) {
 	config := "bridge_tcp_port=18024\r\nbridge_tls_port=18025\r\nbridge_tcp_ip=127.0.0.1\r\n"
 	merged, added := migrateConfigCompatibility(config)
@@ -149,6 +160,12 @@ func TestMigrateConfigCompatibilityPrefersBridgePortForSelectedTransport(t *test
 			input:      "bridge_type=kcp\nbridge_tcp_port=18024\n",
 			want:       "bridge_port=18024",
 		},
+		{
+			name:       "explicit tcp does not consume the parallel kcp port",
+			bridgeType: "tcp",
+			input:      "bridge_type=tcp\nbridge_kcp_port=18025\n",
+			want:       "bridge_kcp_port=18025",
+		},
 	}
 
 	for _, test := range tests {
@@ -157,10 +174,28 @@ func TestMigrateConfigCompatibilityPrefersBridgePortForSelectedTransport(t *test
 			if !strings.Contains(merged, test.want) {
 				t.Fatalf("migrated config missing %q: %q", test.want, merged)
 			}
-			if len(added) == 0 || added[0] != "bridge_port" {
+			if test.name == "explicit tcp does not consume the parallel kcp port" {
+				if len(added) != 0 || strings.Contains(merged, "bridge_port=") {
+					t.Fatalf("parallel KCP port was incorrectly migrated as the TCP port: %q, %#v", merged, added)
+				}
+			} else if len(added) == 0 || added[0] != "bridge_port" {
 				t.Fatalf("added aliases = %#v, want bridge_port", added)
 			}
 		})
+	}
+}
+
+func TestMigrateConfigCompatibilityPreservesTransportSpecificBridgeIPs(t *testing.T) {
+	input := "bridge_type=tcp\nbridge_kcp_ip=127.0.0.2\n"
+	merged, added := migrateConfigCompatibility(input)
+	if merged != input || len(added) != 0 {
+		t.Fatalf("explicit TCP config should not consume the parallel KCP IP: %q, %#v", merged, added)
+	}
+
+	input = "bridge_type=kcp\nbridge_kcp_ip=127.0.0.3\n"
+	merged, added = migrateConfigCompatibility(input)
+	if !strings.Contains(merged, "bridge_ip=127.0.0.3") || len(added) != 1 || added[0] != "bridge_ip" {
+		t.Fatalf("selected KCP listener IP was not migrated: %q, %#v", merged, added)
 	}
 }
 
@@ -236,12 +271,12 @@ func TestMigrateConfigFileIsIdempotentAndPreservesExistingValues(t *testing.T) {
 	if err := os.WriteFile(path, []byte(old), 0640); err != nil {
 		t.Fatal(err)
 	}
-	template := "# panel\nweb_port=8081\n# generated\ntotp_secret=\n# new\nlog_rotate_daily=true\n"
+	template := "# panel\nweb_port=8081\n# generated\ntotp_secret=\n# new\ndisconnect_timeout=60\n"
 	changed, added, secrets, err := migrateConfigFile(path, template)
 	if err != nil {
 		t.Fatalf("migrate config: %v", err)
 	}
-	if !changed || len(secrets) != 0 || len(added) != 2 || added[0] != "totp_secret" || added[1] != "log_rotate_daily" {
+	if !changed || len(secrets) != 0 || len(added) != 1 || added[0] != "disconnect_timeout" {
 		t.Fatalf("migration result changed=%v added=%#v secrets=%#v", changed, added, secrets)
 	}
 	data, err := os.ReadFile(path)
@@ -252,7 +287,7 @@ func TestMigrateConfigFileIsIdempotentAndPreservesExistingValues(t *testing.T) {
 	if !strings.Contains(got, "web_port=19001\r\n") || !strings.Contains(got, "web_password=custom-secret\r\n") || !strings.Contains(got, "custom_option=keep\r\n") {
 		t.Fatalf("existing values were not preserved: %q", got)
 	}
-	if strings.Count(got, "totp_secret=") != 1 || !strings.Contains(got, "log_rotate_daily=true") {
+	if strings.Contains(got, "totp_secret=") || !strings.Contains(got, "disconnect_timeout=60") {
 		t.Fatalf("missing options were not appended exactly once: %q", got)
 	}
 	info, err := os.Stat(path)
@@ -271,7 +306,7 @@ func TestMigrateConfigFileIsIdempotentAndPreservesExistingValues(t *testing.T) {
 	}
 }
 
-func TestMigrateConfigFileSupportsUpstreamNps2PortNames(t *testing.T) {
+func TestMigrateConfigFileSupportsLegacyBridgePortNames(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nps.conf")
 	old := "bridge_tcp_port=18024\nbridge_tls_port=18025\nbridge_tcp_ip=127.0.0.1\nweb_password=custom-secret\n"

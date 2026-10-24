@@ -27,6 +27,7 @@
                     {{end}}
                 </select>
             </label>
+            {{end}}
             <label class="nps-table-filter" for="host-client-filter">
                 <span class="nps-table-filter__label" data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>
                 <select id="host-client-filter" class="form-control nps-table-filter__control" data-nps-table-filter="filter_client_id" {{if .client_id}}disabled{{end}}>
@@ -36,7 +37,6 @@
                     {{end}}
                 </select>
             </label>
-            {{end}}
         </div>
         <table id="table"></table>
     </div></section></div></div>
@@ -91,6 +91,7 @@ $('#table').npsTable({
         var source = row.PlatformManaged ? (npsIsEnglish() ? 'Platform domain / managed certificate' : '平台域名 / 托管证书') : (npsIsEnglish() ? 'Custom domain / self-managed certificate' : '自定义域名 / 自管证书');
         var redirect = row.AutoHttps ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
         var localProxy = (row.Target || {}).LocalProxy ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
+        var proxyProtocol = Number((row.Target || {}).ProxyProtocol || 0) === 1 ? 'PROXY v1' : (Number((row.Target || {}).ProxyProtocol || 0) === 2 ? 'PROXY v2' : (npsIsEnglish() ? 'Disabled' : '关闭'));
         var basicAuth = row.BasicAuthSet ? (npsIsEnglish() ? 'Configured' : '已配置') : (npsIsEnglish() ? 'Not configured' : '未配置');
         var client = row.Client || {}, clientName = client.Id ? String(client.Id) + ' · ' + String(client.Remark || '-') : '-';
         var clientState = client.IsConnect ? (npsIsEnglish() ? 'Online' : '在线') : (npsIsEnglish() ? 'Offline' : '离线');
@@ -104,6 +105,7 @@ $('#table').npsTable({
             + '<div><span>' + (npsIsEnglish() ? 'Path rule' : '路径规则') + '</span><strong>' + npsEscapeHtml(row.Location || '/') + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'HTTP to HTTPS' : 'HTTP 跳转 HTTPS') + '</span><strong>' + npsEscapeHtml(redirect) + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'Local proxy' : '本地代理') + '</span><strong>' + npsEscapeHtml(localProxy) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Backend PROXY protocol' : '后端 PROXY Protocol') + '</span><strong>' + npsEscapeHtml(proxyProtocol) + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'Basic authentication' : 'Basic 认证') + '</span><strong>' + npsEscapeHtml(basicAuth) + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'Upload limit / current' : '上行限速 / 当前') + '</span><strong>' + npsEscapeHtml(String(row.UploadLimit || 0) + ' KB/s / ' + changeunit(row.UploadRate || 0) + '/s') + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'Download limit / current' : '下行限速 / 当前') + '</span><strong>' + npsEscapeHtml(String(row.DownloadLimit || 0) + ' KB/s / ' + changeunit(row.DownloadRate || 0) + '/s') + '</strong></div>'

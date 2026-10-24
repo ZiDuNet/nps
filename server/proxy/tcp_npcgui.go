@@ -49,6 +49,13 @@ func ProcessHttp(c *conn.Conn, s *TunnelModeServer) error {
 	return errors.New("http proxy server is not available in GUI build")
 }
 
+func ProcessMix(c *conn.Conn, s *TunnelModeServer) error {
+	if c != nil {
+		_ = c.Close()
+	}
+	return errors.New("mixed proxy server is not available in GUI build")
+}
+
 type WebServer struct{}
 
 func NewWebServer(bridge *bridge.Bridge) *WebServer {

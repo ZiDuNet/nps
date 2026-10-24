@@ -59,17 +59,17 @@ v1.1.1 已新增 `users.json`。服务启动时会自动执行一次兼容迁移
 ### `nps.conf` 自动兼容迁移
 
 服务启动时会把内置模板中缺少的有效配置项追加到现有 `conf/nps.conf`，保留原有
-值（包括显式空值）、注释、自定义项和文件权限。来自上游 `nps2` 的配置也可以直接
-升级：`bridge_tcp_port` / `bridge_kcp_port` 会补写当前版本使用的 `bridge_port`，
-`bridge_tls_port` 会补写为 `tls_bridge_port`，`bridge_tcp_ip` / `bridge_kcp_ip`
-会补写为 `bridge_ip`。旧字段不会删除；若当前版本字段已经存在，则当前版本字段
-始终优先。迁移采用同目录临时文件原子替换，重复启动是幂等的。
+值（包括显式空值）、注释、自定义项和文件权限。历史 Bridge 字段名按现有
+`bridge_type` 选择：显式 `tcp` 时使用 `bridge_tcp_port` / `bridge_tcp_ip`；显式
+`kcp` 时优先使用 `bridge_kcp_port` / `bridge_kcp_ip`。若旧配置没有指定传输，迁移
+会从实际存在的历史字段选择主监听值。`bridge_tls_port` 会补写为
+`tls_bridge_port`。旧字段不会删除；若当前版本字段已经存在，则当前版本字段始终
+优先。迁移采用同目录临时文件原子替换，重复启动是幂等的。
 
-上游 `nps2` 可能同时配置 `bridge_tcp_port` 和 `bridge_kcp_port`；迁移时会根据
-`bridge_type` 选择对应端口写入 `bridge_port`，若指定类型的端口未配置则回退到另一个
-可用端口。上游文字型 `log_level`（`trace`、`debug`、`info`、`warn`、`error`、
-`fatal`、`panic`、`off`）也可以直接使用；原配置值保留，NPS 启动时按当前日志级别
-转换规则解释，不会将 `trace` 错误地解析成最低日志级别。
+若显式配置 `bridge_type=tcp`，`bridge_kcp_port` 会保留为并行 KCP 监听设置，不会错误地
+复制成主 TCP 端口。`log_level` 也接受 `trace`、`debug`、`info`、`warn`、`error`、`fatal`、
+`panic`、`off` 等文字别名；原配置值保留，NPS 启动时按当前日志级别转换规则解释，
+不会将 `trace` 错误地解析成最低日志级别。
 
 资源级限速字段也兼容旧数据：旧版 `tasks.json` 或 `hosts.json` 没有
 `UploadLimit`/`DownloadLimit` 时按 `0`（不限速）读取；升级后的 Web 面板保存时才会

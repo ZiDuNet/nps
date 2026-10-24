@@ -43,6 +43,10 @@
 		<zh-CN>SOCKS 代理</zh-CN>
 		<en-US>SOCKS 5</en-US>
 	</lang>
+	<lang id="scheme-mixproxy">
+		<zh-CN>混合代理</zh-CN>
+		<en-US>Mixed proxy</en-US>
+	</lang>
 	<lang id="scheme-secret">
 		<zh-CN>私密代理</zh-CN>
 		<en-US>Secret</en-US>
@@ -99,6 +103,10 @@
 	<lang id="page-listsocks5">
 		<zh-CN>SOCKS 代理列表</zh-CN>
 		<en-US>SOCKS 5 list</en-US>
+	</lang>
+	<lang id="page-listmixproxy">
+		<zh-CN>混合代理列表</zh-CN>
+		<en-US>Mixed proxy list</en-US>
 	</lang>
 	<lang id="page-listsecret">
 		<zh-CN>私密代理列表</zh-CN>
@@ -649,6 +657,10 @@
 		<zh-CN>将公网服务器1.1.1.1的8004端口作为HTTP代理，访问内网网站。</zh-CN>
 		<en-US>Use port 8004 of public server 1.1.1.1 as HTTP proxy to visit intranet site.</en-US>
 	</lang>
+	<lang id="info-casemixproxy">
+		<zh-CN>HTTP 与 SOCKS5 可共用同一个公网端口作为代理入口；可分别启用协议，并按需限制允许访问的目标。</zh-CN>
+		<en-US>HTTP and SOCKS5 can share one public port. Enable either protocol and optionally restrict allowed destinations.</en-US>
+	</lang>
 	<lang id="info-casep2p">
 		<zh-CN>流量不经过公网服务器，受nat类型影响较大，不能保证100%成功，支持大部分nat类型。</zh-CN>
 		<en-US>The traffic does not pass through the public network server, which is greatly affected by the NAT type, and cannot guarantee 100% success. Most NAT types are supported. A client is also required to provide a port for access to the access side.</en-US>
@@ -660,6 +672,14 @@
 	<lang id="info-casesocks5">
 		<zh-CN>将公网服务器1.1.1.1的8003端口作为SOCKS5代理，访问内网任意设备或者资源。账号密码在所属客户端的认证配置里设置。</zh-CN>
 		<en-US>Use port 8003 of public server 1.1.1.1 as Socks5 proxy to access any device or resource in the Intranet. Username and password are configured in the owning client's auth settings.</en-US>
+	</lang>
+	<lang id="info-destacl">
+		<zh-CN>规则对混合代理的 HTTP、SOCKS5 TCP 和 SOCKS5 UDP 目标生效；被拒绝的 UDP 数据报会丢弃。</zh-CN>
+		<en-US>Rules apply to HTTP, SOCKS5 TCP and SOCKS5 UDP destinations. Denied UDP datagrams are dropped.</en-US>
+	</lang>
+	<lang id="info-destaclrules">
+		<zh-CN>每行一条：IP、CIDR、full:example.com（精确匹配）、domain:example.com（含自身和子域名）、*.example.com（仅子域名）、keyword:example（关键字）；不带前缀的域名按关键字匹配，# 开头为注释。当前不支持 GeoIP、Geosite 和正则规则。</zh-CN>
+		<en-US>One per line: IP, CIDR, full:example.com (exact), domain:example.com (domain and subdomains), *.example.com (subdomains only), keyword:example (substring). A bare domain is also treated as a keyword; lines starting with # are comments. GeoIP, Geosite and regular expressions are not supported yet.</en-US>
 	</lang>
 	<lang id="info-casetcp">
 		<zh-CN>通过公网服务器1.1.1.1的8001端口，连接内网机器10.1.50.101的22端口，实现SSH连接。</zh-CN>
@@ -847,6 +867,34 @@
 		<en-US>Leave blank for no expiration. The client will be paused automatically when expired.</en-US>
 	</lang>
 
+	<lang id="word-destacl">
+		<zh-CN>目标访问控制</zh-CN>
+		<en-US>Destination ACL</en-US>
+	</lang>
+	<lang id="word-destaclrules">
+		<zh-CN>目标访问控制规则</zh-CN>
+		<en-US>Destination ACL rules</en-US>
+	</lang>
+	<lang id="word-enablehttpproxy">
+		<zh-CN>HTTP 代理：是</zh-CN>
+		<en-US>HTTP proxy: Yes</en-US>
+	</lang>
+	<lang id="word-enablesocks5proxy">
+		<zh-CN>SOCKS5 代理：是</zh-CN>
+		<en-US>SOCKS5 proxy: Yes</en-US>
+	</lang>
+	<lang id="word-disable">
+		<zh-CN>关闭</zh-CN>
+		<en-US>Disabled</en-US>
+	</lang>
+	<lang id="word-whitelist">
+		<zh-CN>白名单</zh-CN>
+		<en-US>Allowlist</en-US>
+	</lang>
+	<lang id="word-blacklist">
+		<zh-CN>黑名单</zh-CN>
+		<en-US>Denylist</en-US>
+	</lang>
 	<lang id="word-ipwhite">
 		<zh-CN>启用IP白名单</zh-CN>
 		<en-US> Enable IP White </en-US>

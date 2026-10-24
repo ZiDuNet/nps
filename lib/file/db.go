@@ -3,6 +3,7 @@ package file
 import (
 	"crypto/md5"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
@@ -17,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/rate"
@@ -989,6 +991,36 @@ func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error)
 	return 0, errors.New("not found")
 }
 
+// GetClientBySecureKeyID resolves the non-secret identifier used by the
+// challenge-response Bridge handshake. It returns the current client record
+// and a snapshot of its VerifyKey; callers must validate the proof before
+// treating the connection as authenticated.
+func (s *DbUtils) GetClientBySecureKeyID(keyID []byte) (*Client, string, error) {
+	if s == nil || s.JsonDb == nil || len(keyID) != 32 {
+		return nil, "", errors.New("invalid client key identifier")
+	}
+	var matched *Client
+	var verifyKey string
+	s.JsonDb.Clients.Range(func(_, value interface{}) bool {
+		client, ok := value.(*Client)
+		if !ok || client == nil {
+			return true
+		}
+		client.RLock()
+		candidate := client.VerifyKey
+		client.RUnlock()
+		if candidate == "" || subtle.ConstantTimeCompare(crypt.SecureHandshakeKeyID(candidate), keyID) != 1 {
+			return true
+		}
+		matched, verifyKey = client, candidate
+		return false
+	})
+	if matched == nil {
+		return nil, "", errors.New("client not found")
+	}
+	return matched, verifyKey, nil
+}
+
 func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 	if t == nil || t.Client == nil || t.Target == nil {
 		return errors.New("隧道记录无效")
@@ -996,6 +1028,10 @@ func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 	if err := NormalizeHealth(&t.Health); err != nil {
 		return err
 	}
+	if t.Mode == "mixProxy" && !t.HttpProxy && !t.Socks5Proxy {
+		t.HttpProxy, t.Socks5Proxy = true, true
+	}
+	t.CompileDestinationACL()
 	s.JsonDb.Tasks.Range(func(key, value interface{}) bool {
 		v, ok := value.(*Tunnel)
 		if !ok || v == nil {
@@ -1027,6 +1063,7 @@ func (s *DbUtils) UpdateTask(t *Tunnel) error {
 	if err := NormalizeHealth(&t.Health); err != nil {
 		return err
 	}
+	t.CompileDestinationACL()
 	if old, ok := s.JsonDb.Tasks.Load(t.Id); ok {
 		if previous, valid := old.(*Tunnel); valid && previous != nil && previous != t {
 			t.RateLimits.adopt(&previous.RateLimits)
@@ -1347,8 +1384,8 @@ func NormalizeHealth(health *Health) error {
 	if health == nil {
 		return nil
 	}
-	health.Lock()
-	defer health.Unlock()
+	health.HealthLock()
+	defer health.HealthUnlock()
 	health.HealthCheckType = strings.ToLower(strings.TrimSpace(health.HealthCheckType))
 	health.HealthCheckTarget = strings.ReplaceAll(health.HealthCheckTarget, "\r\n", "\n")
 	health.HealthCheckTarget = strings.ReplaceAll(health.HealthCheckTarget, "\n", ",")
@@ -1419,7 +1456,7 @@ func HealthConfigSnapshot(health *Health) Health {
 	if health == nil {
 		return Health{}
 	}
-	health.RLock()
+	health.HealthRLock()
 	snapshot := Health{
 		HealthCheckTimeout:  health.HealthCheckTimeout,
 		HealthMaxFail:       health.HealthMaxFail,
@@ -1428,7 +1465,7 @@ func HealthConfigSnapshot(health *Health) Health {
 		HealthCheckType:     health.HealthCheckType,
 		HealthCheckTarget:   health.HealthCheckTarget,
 	}
-	health.RUnlock()
+	health.HealthRUnlock()
 	return snapshot
 }
 
@@ -1436,7 +1473,7 @@ func setHealthConfig(dst *Health, src Health) {
 	if dst == nil {
 		return
 	}
-	dst.Lock()
+	dst.HealthLock()
 	dst.HealthCheckTimeout = src.HealthCheckTimeout
 	dst.HealthMaxFail = src.HealthMaxFail
 	dst.HealthCheckInterval = src.HealthCheckInterval
@@ -1446,7 +1483,7 @@ func setHealthConfig(dst *Health, src Health) {
 	dst.HealthNextTime = time.Time{}
 	dst.HealthMap = nil
 	dst.HealthRemoveArr = nil
-	dst.Unlock()
+	dst.HealthUnlock()
 }
 
 func HealthConfigEnabled(health *Health) bool {
@@ -1864,7 +1901,9 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	if s.IsHostRouteConflict(t) {
 		return errors.New("host route overlaps another tenant")
 	}
+	previousACLPriority, previousBlack, previousWhite := sourceListSnapshot(&stored.SourceLists)
 	stored.RLock()
+	previousRegisteredOnly := stored.RegisteredOnly
 	previous := Host{
 		RateLimits: stored.RateLimits.copyConfig(),
 		Host:       stored.Host, PlatformDomainID: stored.PlatformDomainID,
@@ -1877,6 +1916,10 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	}
 	previousHealth := HealthConfigSnapshot(&stored.Health)
 	stored.RUnlock()
+	nextACLPriority, nextBlack, nextWhite := sourceListSnapshot(&t.SourceLists)
+	t.RLock()
+	nextRegisteredOnly := t.RegisteredOnly
+	t.RUnlock()
 	stored.Lock()
 	stored.Host = t.Host
 	stored.PlatformDomainID = t.PlatformDomainID
@@ -1896,11 +1939,13 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	stored.AutoHttps = t.AutoHttps
 	stored.AutoCORS = t.AutoCORS
 	stored.CompatMode = t.CompatMode
+	stored.RegisteredOnly = nextRegisteredOnly
 	stored.SetRateLimits(t.UploadLimit, t.DownloadLimit)
 	if stored.Flow == nil {
 		stored.Flow = NewFlow()
 	}
 	stored.Unlock()
+	stored.SetSourceLists(nextACLPriority, nextBlack, nextWhite, acl.ScopeUser, "host")
 	setHealthConfig(&stored.Health, HealthConfigSnapshot(&t.Health))
 	if err := s.JsonDb.StoreHostToJsonFileErr(); err != nil {
 		stored.Lock()
@@ -1920,10 +1965,12 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 		stored.AutoHttps = previous.AutoHttps
 		stored.AutoCORS = previous.AutoCORS
 		stored.CompatMode = previous.CompatMode
+		stored.RegisteredOnly = previousRegisteredOnly
 		stored.SetRateLimits(previous.UploadLimit, previous.DownloadLimit)
 		stored.Client = previous.Client
 		stored.Target = previous.Target
 		stored.Unlock()
+		stored.SetSourceLists(previousACLPriority, previousBlack, previousWhite, acl.ScopeUser, "host")
 		setHealthConfig(&stored.Health, previousHealth)
 		return fmt.Errorf("保存域名规则失败: %w", err)
 	}

@@ -2,6 +2,7 @@ package client
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
@@ -27,6 +28,8 @@ import (
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/version"
 	"github.com/astaxie/beego/logs"
+	"github.com/gorilla/websocket"
+	"github.com/quic-go/quic-go"
 	"github.com/xtaci/kcp-go"
 	"golang.org/x/net/proxy"
 )
@@ -215,7 +218,13 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 	var err error
 	var connection net.Conn
 	var sess *kcp.UDPSession
-	if tp == "tcp" {
+	transport := strings.ToLower(strings.TrimSpace(tp))
+	options := TLSOptions{}
+	if len(tlsOptions) > 0 {
+		options = tlsOptions[0]
+	}
+	switch transport {
+	case "tcp":
 		if proxyUrl != "" {
 			u, er := url.Parse(proxyUrl)
 			if er != nil {
@@ -252,10 +261,6 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 			//_, err = io.WriteString(connection, "HELO")
 		}
 		if err == nil && tlsEnabled {
-			options := TLSOptions{}
-			if len(tlsOptions) > 0 {
-				options = tlsOptions[0]
-			}
 			config, configErr := tlsClientConfig(server, options)
 			if configErr != nil {
 				return nil, configErr
@@ -270,12 +275,34 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 			}
 			connection = tlsConnection
 		}
-	} else {
+	case "ws", "wss":
+		connection, err = dialWebSocketBridge(transport, server, proxyUrl, options)
+	case "kcp":
 		sess, err = kcp.DialWithOptions(server, nil, 10, 3)
 		if err == nil {
 			conn.SetUdpSession(sess)
 			connection = sess
 		}
+	case "quic":
+		quicTLS, tlsErr := tlsClientConfig(server, options)
+		if tlsErr != nil {
+			return nil, tlsErr
+		}
+		alpn := strings.TrimSpace(options.QuicALPN)
+		if alpn == "" {
+			alpn = "nps"
+		}
+		quicTLS.NextProtos = []string{alpn}
+		quicConfig := &quic.Config{
+			KeepAlivePeriod:    10 * time.Second,
+			MaxIdleTimeout:     30 * time.Second,
+			MaxIncomingStreams: 100000,
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), clientDialTimeout)
+		connection, err = conn.DialQuic(ctx, server, quicTLS, quicConfig)
+		cancel()
+	default:
+		return nil, fmt.Errorf("unsupported Bridge transport %q; supported types are tcp, kcp, ws, wss, and quic", tp)
 	}
 	if err != nil {
 		return nil, err
@@ -301,22 +328,50 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 	if err := c.WriteLenContent([]byte(version.VERSION)); err != nil {
 		return nil, err
 	}
-	b, err := c.GetShortContent(32)
+	serverHandshake, err := c.GetShortContent(32)
 	if err != nil {
 		logs.Error(err)
 		return nil, err
 	}
-	if crypt.Md5(version.GetVersion()) != string(b) {
-		//logs.Error("The client does not match the server version. The current core version of the client is", version.GetVersion())
-		//return nil, err
-	}
-	if _, err := c.Write([]byte(common.Getverifyval(vkey))); err != nil {
-		return nil, err
-	}
-	if s, err := c.ReadFlag(); err != nil {
-		return nil, err
-	} else if s == common.VERIFY_EER {
-		return nil, errors.New(fmt.Sprintf("Validation key %s incorrect", vkey))
+	if version.UsesSecureHandshake(version.VERSION) && bytes.Equal(serverHandshake, crypt.SecureHandshakeMarker()) {
+		if err := c.WriteLenContent(crypt.SecureHandshakeKeyID(vkey)); err != nil {
+			return nil, fmt.Errorf("send secure client identifier: %w", err)
+		}
+		challenge, err := c.GetShortLenContent()
+		if err != nil {
+			return nil, fmt.Errorf("read secure server challenge: %w", err)
+		}
+		payload, err := crypt.SecureHandshakeClientPayload(vkey, version.GetVersion(), version.VERSION, time.Now().Unix(), challenge)
+		if err != nil {
+			return nil, err
+		}
+		if err := c.WriteLenContent(payload); err != nil {
+			return nil, fmt.Errorf("send secure client proof: %w", err)
+		}
+		if flag, err := c.ReadFlag(); err != nil {
+			return nil, err
+		} else if flag == common.VERIFY_EER {
+			return nil, errors.New("客户端验证失败，请检查 VerifyKey、客户端状态和服务器时间")
+		}
+		serverProof, err := c.GetShortContent(32)
+		if err != nil {
+			return nil, fmt.Errorf("read secure server proof: %w", err)
+		}
+		if err := crypt.VerifySecureHandshakeServerProof(vkey, payload, challenge, serverProof); err != nil {
+			return nil, err
+		}
+	} else {
+		// An older server answers with its historical 32-byte core-version
+		// digest. A 1.1.29+ client falls back only on this legacy response so it
+		// can still connect to a server that has not yet been upgraded.
+		if _, err := c.Write([]byte(common.Getverifyval(vkey))); err != nil {
+			return nil, err
+		}
+		if flag, err := c.ReadFlag(); err != nil {
+			return nil, err
+		} else if flag == common.VERIFY_EER {
+			return nil, errors.New("客户端验证失败，请检查 VerifyKey 或客户端状态")
+		}
 	}
 	if _, err := c.Write([]byte(connType)); err != nil {
 		return nil, err
@@ -324,6 +379,89 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 	c.SetAlive(tp)
 	connected = true
 	return c, nil
+}
+
+func dialWebSocketBridge(transport, server, proxyURL string, options TLSOptions) (net.Conn, error) {
+	path := strings.TrimSpace(options.BridgePath)
+	if path == "" {
+		path = "/ws"
+	}
+	parsedPath, err := url.ParseRequestURI(path)
+	if err != nil || !strings.HasPrefix(path, "/") || parsedPath.RawQuery != "" || parsedPath.Fragment != "" {
+		return nil, fmt.Errorf("invalid Bridge path %q: expected an absolute URL path", path)
+	}
+	server = strings.TrimSpace(server)
+	if strings.Contains(server, "://") {
+		parsedServer, parseErr := url.Parse(server)
+		if parseErr != nil || parsedServer.Host == "" {
+			return nil, fmt.Errorf("invalid WebSocket Bridge address %q", server)
+		}
+		server = parsedServer.Host
+		if options.BridgePath == "" && parsedServer.Path != "" && parsedServer.Path != "/" {
+			path = parsedServer.Path
+		}
+	}
+	if _, _, err := net.SplitHostPort(server); err != nil {
+		return nil, fmt.Errorf("WebSocket Bridge address must include a port: %w", err)
+	}
+	scheme := transport
+	endpoint := (&url.URL{Scheme: scheme, Host: server, Path: path}).String()
+	dialer := websocket.Dialer{
+		HandshakeTimeout:  clientDialTimeout,
+		ReadBufferSize:    4096,
+		WriteBufferSize:   4096,
+		EnableCompression: false,
+		Proxy:             http.ProxyFromEnvironment,
+	}
+	if transport == "wss" {
+		dialer.TLSClientConfig, err = tlsClientConfig(server, options)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if strings.TrimSpace(proxyURL) != "" {
+		proxyAddress, parseErr := url.Parse(proxyURL)
+		if parseErr != nil || proxyAddress.Host == "" {
+			return nil, fmt.Errorf("invalid proxy URL: %w", parseErr)
+		}
+		if proxyAddress.Scheme == "socks5" || proxyAddress.Scheme == "socks5h" {
+			proxyDialer, dialerErr := proxy.FromURL(proxyAddress, nil)
+			if dialerErr != nil {
+				return nil, dialerErr
+			}
+			dialer.Proxy = nil
+			dialer.NetDialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+				if contextDialer, ok := proxyDialer.(proxy.ContextDialer); ok {
+					return contextDialer.DialContext(ctx, network, address)
+				}
+				return proxyDialer.Dial(network, address)
+			}
+		} else {
+			dialer.Proxy = func(*http.Request) (*url.URL, error) { return proxyAddress, nil }
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), clientDialTimeout)
+	defer cancel()
+	websocketConn, response, err := dialer.DialContext(ctx, endpoint, nil)
+	if response != nil && response.Body != nil {
+		_ = response.Body.Close()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("connect to %s Bridge: %w", transport, err)
+	}
+	stream, err := conn.NewWebSocketStream(websocketConn)
+	if err != nil {
+		_ = websocketConn.Close()
+		return nil, err
+	}
+	return stream, nil
+}
+
+func muxTransportType(transport string) string {
+	if strings.EqualFold(strings.TrimSpace(transport), "kcp") {
+		return "kcp"
+	}
+	return "tcp"
 }
 
 // http proxy connection

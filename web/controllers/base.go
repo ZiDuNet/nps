@@ -717,11 +717,12 @@ func (s *BaseController) setOwnerFilterData() {
 	s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
 }
 
-// setClientFilterData supplies the administrator-only client options used by
-// tunnel list toolbars. The list endpoint still enforces ownership and status
-// on every request; these options are only presentation data for the filter.
+// setClientFilterData supplies only the clients visible to the current
+// principal. The list endpoint independently enforces this same ownership
+// boundary for every request; these options are presentation data only.
 func (s *BaseController) setClientFilterData() {
 	if !s.IsAdmin() {
+		s.Data["clients"], _ = file.GetDb().GetClientListForAllowedIds(0, 10000, "", "", "", 0, s.GetAllowedClientIds())
 		return
 	}
 	s.Data["clients"], _ = file.GetDb().GetClientList(0, 10000, "", "", "", 0)

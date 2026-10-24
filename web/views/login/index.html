@@ -164,6 +164,12 @@
                     <a class="auth-switch__link" href="{{.web_base_url}}/login/register" langtag="word-register"></a>
                 </div>
                 {{end}}
+                {{if eq true .ip_register_enabled}}
+                <div class="auth-switch register-link">
+                    <span class="auth-switch__copy" data-i18n-zh="访问前需要登记 IP？" data-i18n-en="Need to register an IP before access?">访问前需要登记 IP？</span>
+                    <a class="auth-switch__link" href="{{.web_base_url}}/ip/register" data-i18n-zh="打开 IP 登记" data-i18n-en="Open IP registration">打开 IP 登记</a>
+                </div>
+                {{end}}
             </section>
         </div>
     </main>

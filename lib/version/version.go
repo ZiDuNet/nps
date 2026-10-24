@@ -8,6 +8,26 @@ import (
 
 const VERSION = "1.1.29"
 
+// SecureHandshakeMinVersion is the first NPC release that uses the secure
+// Bridge handshake. Clients at or below 1.1.28 remain on the legacy handshake
+// so that upgrading NPS does not disconnect already deployed clients.
+const SecureHandshakeMinVersion = "1.1.29"
+
+// UsesSecureHandshake reports whether a stable product release uses the
+// timestamped, challenge-response Bridge handshake. Invalid release strings
+// are not silently classified as legacy by the server.
+func UsesSecureHandshake(release string) bool {
+	comparison, err := Compare(release, SecureHandshakeMinVersion)
+	return err == nil && comparison >= 0
+}
+
+// SupportsLegacyHandshake reports whether a stable product release is within
+// the compatibility window for the original Bridge handshake.
+func SupportsLegacyHandshake(release string) bool {
+	comparison, err := Compare(release, SecureHandshakeMinVersion)
+	return err == nil && comparison < 0
+}
+
 // ClientUpdateMinVersion is the first client release that understands the
 // server-pushed self-update signal. Older clients must be updated manually
 // once before remote updates can be used.

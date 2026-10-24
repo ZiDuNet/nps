@@ -105,7 +105,7 @@ func (https *HttpsServer) Start() error {
 			host.RLock()
 			certFilePath, keyFilePath := host.CertFilePath, host.KeyFilePath
 			host.RUnlock()
-			if IsGlobalBlackIp(c.RemoteAddr().String()) || isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) {
+			if SourceDenied(c.RemoteAddr(), hostClient, &host.SourceLists, "host") || IsGlobalBlackIp(c.RemoteAddr().String()) || isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) || isHostRegisteredOnlyBlocked(hostClient, host, c.RemoteAddr().String()) {
 				logs.Warn("https connection rejected by IP allowlist, host %s, remote addr %s", serverName, c.RemoteAddr().String())
 				_ = c.Close()
 				return
@@ -437,7 +437,7 @@ func (https *HttpsServer) handleHttps2(c net.Conn, hostName string, rb []byte, r
 		_ = c.Close()
 		return
 	}
-	if IsGlobalBlackIp(c.RemoteAddr().String()) || isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) {
+	if SourceDenied(c.RemoteAddr(), hostClient, &host.SourceLists, "host") || IsGlobalBlackIp(c.RemoteAddr().String()) || isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) || isHostRegisteredOnlyBlocked(hostClient, host, c.RemoteAddr().String()) {
 		logs.Warn("https connection rejected by IP allowlist, host %s, remote addr %s", hostName, c.RemoteAddr().String())
 		_ = c.Close()
 		return
@@ -568,7 +568,7 @@ func (https *HttpsServer) handleHttps(c net.Conn) {
 		_ = c.Close()
 		return
 	}
-	if IsGlobalBlackIp(c.RemoteAddr().String()) || isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) {
+	if SourceDenied(c.RemoteAddr(), hostClient, &host.SourceLists, "host") || IsGlobalBlackIp(c.RemoteAddr().String()) || isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) || isHostRegisteredOnlyBlocked(hostClient, host, c.RemoteAddr().String()) {
 		logs.Warn("https connection rejected by IP allowlist, host %s, remote addr %s", hostName, c.RemoteAddr().String())
 		_ = c.Close()
 		return

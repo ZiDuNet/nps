@@ -3,9 +3,21 @@
 配置文件路径：`<nps 可执行文件目录>/conf/nps.conf`
 
 
-> 首次启动时若 `conf/nps.conf` 不存在会**自动生成默认配置**。用户名默认为 `admin`，`web_password`、`auth_key`、`auth_crypt_key` 会随机生成并打印到终端。升级时会把新版模板中缺失的有效配置项追加到已有 `nps.conf`，不改已有值（包括显式空值）、注释和自定义项；仅已知的不安全占位密钥会按原有安全策略轮换。兼容上游 `nps2` 配置时，`bridge_tcp_port`、`bridge_kcp_port`、`bridge_tls_port` 和对应桥接 IP 会自动补写为当前版本使用的 `bridge_port`、`tls_bridge_port`、`bridge_ip`，原字段保留不删除。修改通过同目录临时文件替换，并保留原文件权限。升级前仍建议备份配置。
+> 首次启动时若 `conf/nps.conf` 不存在会**自动生成默认配置**。用户名默认为 `admin`，`web_password`、`auth_key`、`auth_crypt_key` 会随机生成并打印到终端。升级时会把新版模板中缺失的必需配置项追加到已有 `nps.conf`，不改已有值（包括显式空值）、注释和自定义项；通过 Web 面板关闭并移除的可选监听、证书、日志和调试配置不会在下次启动时被重新添加。仅已知的不安全占位密钥会按原有安全策略轮换。历史 Bridge 字段会按所选 `bridge_type` 迁移：明确使用 TCP 时只从 `bridge_tcp_port` / `bridge_tcp_ip` 获取主监听值；明确使用 KCP 时优先使用 `bridge_kcp_port` / `bridge_kcp_ip`；未指定类型时根据现有字段判断。旧字段保留不删除。修改通过同目录临时文件替换，并保留原文件权限。升级前仍建议备份配置。
 
 发布包中的已知占位值会在启动时自动轮换；显式填写的自定义值和空值不会被覆盖。生产环境建议将 Web 面板限制在管理网段、启用 HTTPS，并按最小权限开放端口。
+
+## Web 后台维护 nps.conf
+
+管理员登录后打开「全局参数 → 服务端配置」即可查看当前 `nps.conf`。页面按 HTTP(S) 入口、Bridge 与传输、客户端认证、日志、Web 管理、权限开关等功能分组：
+
+- 标记为“可维护”的字段可以直接编辑；保存会保留原文件中的注释、自定义键和文件权限，并通过同目录临时文件原子替换。
+- 可选监听、证书、密钥、日志归档和调试功能带有“启用此配置”开关。关闭后对应键会从有效配置文件移除，NPS 使用代码内置默认值或保持关闭。
+- 管理员密码、API 密钥、公共验证密钥、TOTP、私钥路径等敏感字段不会回显；密码/密钥输入框留空表示保持原值。明确关闭可选字段才会删除它。
+- 当前版本无法安全在线修改的历史键和自定义键会在“兼容与自定义字段”中只读展示，并在保存时原样保留。
+- 保存成功后必须重启 NPS 才会应用端口、Bridge、TLS、Web 和日志设置。由系统服务托管的进程可以在页面确认后发起重启；直接前台运行的进程会提示手动重启。
+
+配置页不会把生产环境配置复制到仓库或浏览器；页面只读取当前运行目录下的 `conf/nps.conf`。
 
 ## 通用配置
 
@@ -14,12 +26,23 @@
 | bridge_type | 客户端与服务端连接方式 `tcp` 或 `kcp` | `tcp` |
 | bridge_ip | 桥接监听 IP | `0.0.0.0` |
 | bridge_port | 服务端客户端通信端口 | `8024` |
+| bridge_kcp_port | 可选并行 KCP Bridge UDP 端口；`0` 表示关闭；与主 KCP Bridge 使用同端口时不会重复监听 | `0` |
+| bridge_ws_port | 可选 WebSocket Bridge TCP 端口；`0` 表示关闭 | `0` |
+| bridge_wss_port | 可选 TLS WebSocket Bridge TCP 端口；`0` 表示关闭，使用 Bridge TLS 证书 | `0` |
+| bridge_quic_port | 可选 QUIC Bridge UDP 端口；`0` 表示关闭 | `0` |
+| bridge_quic_ip | QUIC Bridge 监听 IP；为空时跟随 `bridge_ip` | 空 |
+| quic_alpn | QUIC Bridge 的 TLS ALPN 标识，服务端和 NPC 必须一致 | `nps` |
+| quic_keep_alive_period | QUIC 空闲保活周期（秒） | `10` |
+| quic_max_idle_timeout | QUIC 最大空闲超时（秒） | `30` |
+| quic_max_incoming_streams | 单个 QUIC 会话允许的最大并发流数 | `100000` |
+| bridge_path | WS/WSS Bridge URL 路径，NPC 与服务端必须一致 | `/ws` |
 | tls_enable | 是否开启 TLS。开启后客户端可通过 `-tls_enable=true` 连接 `tls_bridge_port` | `true` |
 | tls_bridge_port | TLS 桥接端口，默认 `8025`。**与 `bridge_port` 并存**：客户端可分别用 `bridge_port`（明文）或 `tls_bridge_port`（TLS）接入 | `8025` |
 | disconnect_timeout | 未收到 mux 心跳回包的最大次数；每次检查间隔为 5 秒，默认 `60`（即约 5 分钟） | `60` |
 | flow_store_interval | 流量数据持久化间隔，单位分钟；留空或 `0` 关闭定时持久化 | `1` |
 | client_history_limit | 客户端详情中保留的最近连接会话数；`0` 关闭，最大 `100` | `5` |
-| log_level | 日志级别：当前格式支持 `0`~`7`；兼容上游文字值 `trace`、`debug`、`info`、`warn`、`error`、`fatal`、`panic`、`off` | `6` |
+| auth_time_window | NPC `1.1.29` 及以上安全握手允许的时钟偏差秒数；`0` 关闭时间窗口校验但仍使用一次性随机挑战 | `300` |
+| log_level | 日志级别：当前格式支持 `0`~`7`，也接受文字别名 `trace`、`debug`、`info`、`warn`、`error`、`fatal`、`panic`、`off` | `6` |
 | log_path | 日志文件路径；`-log_path` 命令行参数优先，归档保存在同一目录 | `nps.log` |
 | log_max_size | 单个日志文件大小上限（MB）；`0` 关闭大小轮转 | `2` |
 | log_max_files | 最多保留的轮转归档数量；`0` 不限制 | `10` |
@@ -28,7 +51,14 @@
 | log_rotate_daily | 日期变化时是否轮转日志 | `true` |
 | ip_limit | 是否限制 IP 访问，`true` / `false` / 忽略 | - |
 
-服务安装/运行模式使用支持大小、日期轮转及保留策略的文件日志，压缩在后台日志工作线程执行；交互式前台运行仍写入控制台。升级时缺少的日志配置会自动追加到 `nps.conf`，不会覆盖现有值。
+`bridge_type` 选择主传输，默认 `tcp`。WS/WSS、并行 KCP 和 QUIC 是可选独立监听，配置后需同时在防火墙开放相应 TCP/UDP 端口。旧版 NPC（`1.1.28` 及以下）继续使用其原有 TCP/KCP 传输。
+
+服务安装/运行模式使用支持大小、日期轮转及保留策略的文件日志，压缩在后台日志工作线程执行；交互式前台运行仍写入控制台。升级时缺少的必需日志配置会自动追加到 `nps.conf`，不会覆盖现有值；通过 Web 面板关闭的可选日志路径与轮转配置保持移除状态。
+
+旧部署中可能还会看到 `runmode`、`appname`、`https_just_proxy`、
+`https_default_cert_file` 和 `https_default_key_file`。这些字段会被原样保留，便于回滚和人工核对，
+但当前版本不再读取它们作为运行开关。请使用本页列出的 `web_open_ssl` / `web_cert_file` /
+`web_key_file` 及 Host 证书字段配置 HTTPS；升级程序不会自动删除旧字段。
 
 
 ## HTTP(S) 代理
@@ -44,6 +74,8 @@
 | http_add_origin_header | 是否在 http(s) 请求头中追加 `X-Forwarded-For` / `X-Real-IP`，用于内网获取真实 IP | `true` |
 | http_cache | 是否开启静态文件缓存 | `false` |
 | http_cache_length | 缓存条目数上限，`0` 表示不限制 | `100` |
+
+HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCKS 混合代理”。一条混合代理隧道共用一个公网端口，可在表单中分别开启 HTTP、SOCKS5，至少保留一种。旧版本保存的 `httpProxy`、`socks5` 记录仍可访问；编辑后会迁移为混合代理记录，服务端和 API 继续兼容旧模式值。
 
 
 ## Web 管理后台

@@ -2,14 +2,96 @@ package controllers
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/ipreg"
 	"github.com/astaxie/beego"
+	beecontext "github.com/astaxie/beego/context"
+	"github.com/astaxie/beego/session"
 )
+
+func TestStandaloneIPRegisterHandlerUsesPeerIPAndOnlyPublicRoutes(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	db.JsonDb.Clients.Store(23, &file.Client{
+		Id:               23,
+		VerifyKey:        "client-register-key",
+		RegisterMaxHours: 1,
+		Status:           true,
+	})
+	oldMaxHours := beego.AppConfig.String("ip_register_max_hours")
+	oldPublicRegisterKey := beego.AppConfig.String("public_register_key")
+	oldPublicVKey := beego.AppConfig.String("public_vkey")
+	_ = beego.AppConfig.Set("ip_register_max_hours", "2")
+	_ = beego.AppConfig.Set("public_register_key", "")
+	_ = beego.AppConfig.Set("public_vkey", "")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("ip_register_max_hours", oldMaxHours)
+		_ = beego.AppConfig.Set("public_register_key", oldPublicRegisterKey)
+		_ = beego.AppConfig.Set("public_vkey", oldPublicVKey)
+		ipreg.Reset()
+	})
+	ipreg.Reset()
+
+	handler := IPRegisterStandaloneHandler()
+	get := httptest.NewRequest(http.MethodGet, "http://register.test/", nil)
+	get.RemoteAddr = "198.51.100.23:43210"
+	get.Header.Set("X-Forwarded-For", "203.0.113.90")
+	getResponse := httptest.NewRecorder()
+	handler.ServeHTTP(getResponse, get)
+	if getResponse.Code != http.StatusOK || !strings.Contains(getResponse.Body.String(), "198.51.100.23") {
+		t.Fatalf("registration page response = %d %q", getResponse.Code, getResponse.Body.String())
+	}
+	if strings.Contains(getResponse.Body.String(), "203.0.113.90") {
+		t.Fatal("standalone registration page trusted X-Forwarded-For")
+	}
+
+	form := url.Values{"key": {"client-register-key"}, "hours": {"99"}}
+	post := httptest.NewRequest(http.MethodPost, "http://register.test/ip/register", strings.NewReader(form.Encode()))
+	post.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	post.RemoteAddr = "198.51.100.23:43210"
+	post.Header.Set("X-Forwarded-For", "203.0.113.90")
+	postResponse := httptest.NewRecorder()
+	handler.ServeHTTP(postResponse, post)
+	var result map[string]interface{}
+	if err := json.Unmarshal(postResponse.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode registration response: %v; body=%q", err, postResponse.Body.String())
+	}
+	if postResponse.Code != http.StatusOK || result["status"] != float64(1) || result["ip"] != "198.51.100.23" {
+		t.Fatalf("registration response = %d %#v", postResponse.Code, result)
+	}
+	if !ipreg.RegisteredString(23, "198.51.100.23:8080") || ipreg.RegisteredString(23, "203.0.113.90:8080") {
+		t.Fatal("registration did not bind to the listener peer address")
+	}
+
+	privateRoute := httptest.NewRecorder()
+	handler.ServeHTTP(privateRoute, httptest.NewRequest(http.MethodGet, "http://register.test/client/list", nil))
+	if privateRoute.Code != http.StatusNotFound {
+		t.Fatalf("unrelated route returned %d, want 404", privateRoute.Code)
+	}
+}
+
+func TestRequestVisitorIPDoesNotTrustForwardedHeaders(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "http://console.test/ip/register", nil)
+	request.RemoteAddr = "198.51.100.23:43210"
+	request.Header.Set("X-Forwarded-For", "203.0.113.90")
+	recorder := httptest.NewRecorder()
+	ctx := beecontext.NewContext()
+	ctx.Reset(recorder, request)
+
+	if got := requestVisitorIP(ctx); got != "198.51.100.23" {
+		t.Fatalf("requestVisitorIP() = %q, want TCP peer IP; forwarded header must be ignored", got)
+	}
+}
 
 func TestVerifyLoginPoWConsumesShortLivedChallenge(t *testing.T) {
 	oldBits := beego.AppConfig.String("pow_bits")
@@ -209,6 +291,76 @@ func TestLoginAttemptIP(t *testing.T) {
 func TestRegenerateSessionWithoutManagerIsSafe(t *testing.T) {
 	var controller LoginController
 	controller.regenerateSession()
+}
+
+func TestRegenerateSessionWithCookieProviderKeepsAuthenticationStore(t *testing.T) {
+	oldManager := beego.GlobalSessions
+	t.Cleanup(func() { beego.GlobalSessions = oldManager })
+
+	providerConfig, err := json.Marshal(map[string]string{
+		"securityKey":  "login-test-signing-key",
+		"blockKey":     "0123456789abcdef",
+		"securityName": "login-test-session",
+		"cookieName":   "nps_session",
+	})
+	if err != nil {
+		t.Fatalf("encode cookie provider config: %v", err)
+	}
+	manager, err := session.NewManager("cookie", &session.ManagerConfig{
+		CookieName:      "nps_session",
+		EnableSetCookie: true,
+		Gclifetime:      3600,
+		Maxlifetime:     3600,
+		CookieLifeTime:  3600,
+		ProviderConfig:  string(providerConfig),
+	})
+	if err != nil {
+		t.Fatalf("create cookie session manager: %v", err)
+	}
+	beego.GlobalSessions = manager
+
+	store, err := manager.GetProvider().SessionRead("pre-login-cookie")
+	if err != nil {
+		t.Fatalf("read cookie session: %v", err)
+	}
+	if err := store.Set("preAuthValue", "must be cleared"); err != nil {
+		t.Fatalf("seed cookie session: %v", err)
+	}
+
+	controller := &LoginController{}
+	controller.CruSession = store
+	controller.regenerateSession()
+	if controller.CruSession == nil {
+		t.Fatal("cookie provider session was lost during regeneration")
+	}
+	if got := controller.GetSession("preAuthValue"); got != nil {
+		t.Fatalf("pre-login session data survived regeneration: %#v", got)
+	}
+
+	clearAuthenticationSession(controller.DelSession)
+	controller.SetSession("auth", true)
+	request := httptest.NewRequest("POST", "http://console.test/login/verify", nil)
+	recorder := httptest.NewRecorder()
+	ctx := beecontext.NewContext()
+	ctx.Reset(recorder, request)
+	controller.Ctx = ctx
+	controller.releaseCookieSession()
+	cookies := recorder.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("cookie provider did not write an authentication cookie")
+	}
+	encoded := cookies[len(cookies)-1].Value
+	decoded, err := url.QueryUnescape(encoded)
+	if err != nil {
+		t.Fatalf("decode authentication cookie: %v", err)
+	}
+	restored, err := manager.GetProvider().SessionRead(decoded)
+	if err != nil {
+		t.Fatalf("read regenerated authentication cookie: %v", err)
+	}
+	if got := restored.Get("auth"); got != true {
+		t.Fatalf("authentication state in regenerated cookie = %#v, want true", got)
+	}
 }
 
 func TestCaptchaFilterPathFollowsWebBaseURL(t *testing.T) {

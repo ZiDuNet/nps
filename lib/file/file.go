@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/rate"
 )
@@ -64,6 +65,16 @@ func (s *JsonDb) LoadTaskFromJsonFile() {
 		if post.Target == nil {
 			return
 		}
+		post.CompileSourceLists(acl.ScopeUser, "tunnel")
+		post.CompileDestinationACL()
+		if post.Mode == "mixProxy" && !post.HttpProxy && !post.Socks5Proxy {
+			// Older imports may contain a mixProxy record without the protocol
+			// flags. Keep it usable with the mode's documented defaults; Web/API
+			// writes reject explicitly disabling both protocols.
+			post.HttpProxy = true
+			post.Socks5Proxy = true
+			logs.Warn("Tunnel %d has no enabled mixProxy protocol; enabling HTTP and SOCKS5 for compatibility", post.Id)
+		}
 		if post.Flow == nil {
 			post.Flow = NewFlow()
 		}
@@ -99,6 +110,8 @@ func (s *JsonDb) LoadClientFromJsonFile() {
 		if post.ConnectionHistory == nil {
 			post.ConnectionHistory = &ConnectionHistory{}
 		}
+		post.syncSourceListsFromFields()
+		post.CompileSourceLists(acl.ScopeUser, "client")
 		post.NowConn = 0
 		s.Clients.Store(post.Id, post)
 		if post.Id > int(s.ClientIncreaseId) {
@@ -137,6 +150,7 @@ func (s *JsonDb) LoadHostFromJsonFile() {
 		if post.Target == nil {
 			return
 		}
+		post.CompileSourceLists(acl.ScopeUser, "host")
 		if post.Flow == nil {
 			post.Flow = NewFlow()
 		}
@@ -178,6 +192,8 @@ func (s *JsonDb) LoadGlobalFromJsonFile() {
 			post.PlatformDomains = platformDomains
 		}
 		s.setGlobal(post)
+		post.syncSourceListsFromFields()
+		post.CompileSourceLists(acl.ScopeGlobal, "global")
 		SetGlobalMaxConn(post.MaxConn)
 		rate.SetGlobalLimit(int64(post.RateLimit) * 1024)
 	})

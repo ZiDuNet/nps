@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
 	npsversion "ehang.io/nps/lib/version"
@@ -45,11 +46,16 @@ type clientListRow struct {
 	BasicUserName       string
 	BasicPasswordSet    bool
 	BlackIpList         []string
+	WhiteIpList         []string
+	IpListPriority      int
 	CreateTime          string
 	LastOnlineTime      string
 	ConnectionHistory   []file.ConnectionEvent
 	IpWhite             bool
 	IpWhiteList         []string
+	RegisteredOnly      bool
+	RegisterKeySet      bool
+	RegisterMaxHours    int
 	ExpireTime          string
 	UserExpireTime      string
 	EffectiveExpireTime string
@@ -58,6 +64,38 @@ type clientListRow struct {
 func supportsRemoteClientUpdate(clientVersion string) bool {
 	comparison, err := npsversion.Compare(clientVersion, npsversion.ClientUpdateMinVersion)
 	return err == nil && comparison >= 0
+}
+
+// validateClientRegisterKey keeps registration links unambiguous.  A
+// registration key must not equal any client's verify key or another
+// client's registration key; an empty key simply disables client-specific
+// registration while the administrator/public key can still be used.
+func validateClientRegisterKey(id int, key, verifyKey string) error {
+	key = strings.TrimSpace(key)
+	verifyKey = strings.TrimSpace(verifyKey)
+	if key == "" {
+		return nil
+	}
+	if key == verifyKey {
+		return errors.New("IP 登记密钥不能与客户端验证密钥相同")
+	}
+	duplicate := false
+	file.GetDb().JsonDb.Clients.Range(func(_, value interface{}) bool {
+		other, ok := value.(*file.Client)
+		if !ok || other == nil {
+			return true
+		}
+		other.RLock()
+		if other.Id != id && (strings.TrimSpace(other.RegisterKey) == key || strings.TrimSpace(other.VerifyKey) == key) {
+			duplicate = true
+		}
+		other.RUnlock()
+		return !duplicate
+	})
+	if duplicate {
+		return errors.New("IP 登记密钥已被其他客户端使用")
+	}
+	return nil
 }
 
 type clientListFlow struct {
@@ -76,43 +114,53 @@ type clientListRate struct {
 // pointer, so replacing it in the map would leave running proxies on stale
 // settings.
 type clientEditSnapshot struct {
-	verifyKey       string
-	userID          int
-	remark          string
-	rateLimit       int
-	flow            *file.Flow
-	flowLimit       int64
-	maxConn         int
-	configConnAllow bool
-	maxTunnelNum    int
-	webUserName     string
-	webPassword     string
-	cnf             *file.Config
-	blackIPList     []string
-	ipWhite         bool
-	ipWhitePass     string
-	ipWhiteList     []string
-	expireTime      string
+	verifyKey        string
+	userID           int
+	remark           string
+	rateLimit        int
+	flow             *file.Flow
+	flowLimit        int64
+	maxConn          int
+	configConnAllow  bool
+	maxTunnelNum     int
+	webUserName      string
+	webPassword      string
+	cnf              *file.Config
+	blackIPList      []string
+	whiteIPList      []string
+	ipListPriority   int
+	ipWhite          bool
+	ipWhitePass      string
+	ipWhiteList      []string
+	registerKey      string
+	registerMaxHours int
+	registeredOnly   bool
+	expireTime       string
 }
 
 func snapshotClientForEdit(client *file.Client) clientEditSnapshot {
 	client.RLock()
 	snapshot := clientEditSnapshot{
-		verifyKey:       client.VerifyKey,
-		userID:          client.UserId,
-		remark:          client.Remark,
-		rateLimit:       client.RateLimit,
-		flow:            client.Flow,
-		maxConn:         client.MaxConn,
-		configConnAllow: client.ConfigConnAllow,
-		maxTunnelNum:    client.MaxTunnelNum,
-		webUserName:     client.WebUserName,
-		webPassword:     client.WebPassword,
-		blackIPList:     append([]string(nil), client.BlackIpList...),
-		ipWhite:         client.IpWhite,
-		ipWhitePass:     client.IpWhitePass,
-		ipWhiteList:     append([]string(nil), client.IpWhiteList...),
-		expireTime:      client.ExpireTime,
+		verifyKey:        client.VerifyKey,
+		userID:           client.UserId,
+		remark:           client.Remark,
+		rateLimit:        client.RateLimit,
+		flow:             client.Flow,
+		maxConn:          client.MaxConn,
+		configConnAllow:  client.ConfigConnAllow,
+		maxTunnelNum:     client.MaxTunnelNum,
+		webUserName:      client.WebUserName,
+		webPassword:      client.WebPassword,
+		blackIPList:      append([]string(nil), client.BlackIpList...),
+		whiteIPList:      append([]string(nil), client.WhiteIpList...),
+		ipListPriority:   client.IpListPriority,
+		ipWhite:          client.IpWhite,
+		ipWhitePass:      client.IpWhitePass,
+		ipWhiteList:      append([]string(nil), client.IpWhiteList...),
+		registerKey:      client.RegisterKey,
+		registerMaxHours: client.RegisterMaxHours,
+		registeredOnly:   client.RegisteredOnly,
+		expireTime:       client.ExpireTime,
 	}
 	if client.Cnf != nil {
 		config := *client.Cnf
@@ -142,11 +190,17 @@ func (snapshot clientEditSnapshot) restore(client *file.Client) {
 		client.Cnf = &config
 	}
 	client.BlackIpList = append([]string(nil), snapshot.blackIPList...)
+	client.WhiteIpList = append([]string(nil), snapshot.whiteIPList...)
+	client.IpListPriority = snapshot.ipListPriority
 	client.IpWhite = snapshot.ipWhite
 	client.IpWhitePass = snapshot.ipWhitePass
 	client.IpWhiteList = append([]string(nil), snapshot.ipWhiteList...)
+	client.RegisterKey = snapshot.registerKey
+	client.RegisterMaxHours = snapshot.registerMaxHours
+	client.RegisteredOnly = snapshot.registeredOnly
 	client.ExpireTime = snapshot.expireTime
 	client.Unlock()
+	client.SetSourceLists(snapshot.ipListPriority, snapshot.blackIPList, snapshot.whiteIPList, acl.ScopeUser, "client")
 	if snapshot.flow != nil {
 		snapshot.flow.SetLimit(snapshot.flowLimit)
 	}
@@ -215,28 +269,38 @@ func clientOwnerFieldSubmitted(s *ClientController) bool {
 // allowed to set on a client they own. Administrative ownership, quota,
 // verification, expiry, and legacy-login fields are intentionally absent.
 type userClientSettings struct {
-	Remark      string
-	BasicUser   string
-	BasicPass   string
-	Compress    bool
-	Crypt       bool
-	IpWhite     bool
-	IpWhitePass string
-	IpWhiteList []string
-	BlackIPList []string
+	Remark           string
+	BasicUser        string
+	BasicPass        string
+	Compress         bool
+	Crypt            bool
+	IpWhite          bool
+	IpWhitePass      string
+	IpWhiteList      []string
+	BlackIPList      []string
+	WhiteIPList      []string
+	IpListPriority   int
+	RegisterKey      string
+	RegisterMaxHours int
+	RegisteredOnly   bool
 }
 
 func userClientSettingsFromRequest(s *ClientController) userClientSettings {
 	return userClientSettings{
-		Remark:      s.getEscapeString("remark"),
-		BasicUser:   s.getEscapeString("u"),
-		BasicPass:   s.getEscapeString("p"),
-		Compress:    common.GetBoolByStr(s.getEscapeString("compress")),
-		Crypt:       s.GetBoolNoErr("crypt"),
-		IpWhite:     s.GetBoolNoErr("ipwhite"),
-		IpWhitePass: s.getEscapeString("ipwhitepass"),
-		IpWhiteList: RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n")),
-		BlackIPList: RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n")),
+		Remark:           s.getEscapeString("remark"),
+		BasicUser:        s.getEscapeString("u"),
+		BasicPass:        s.getEscapeString("p"),
+		Compress:         common.GetBoolByStr(s.getEscapeString("compress")),
+		Crypt:            s.GetBoolNoErr("crypt"),
+		IpWhite:          s.GetBoolNoErr("ipwhite"),
+		IpWhitePass:      s.getEscapeString("ipwhitepass"),
+		IpWhiteList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n")),
+		BlackIPList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n")),
+		WhiteIPList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("whiteiplist"), "\r\n")),
+		IpListPriority:   s.GetIntNoErr("iplistpriority"),
+		RegisterKey:      strings.TrimSpace(s.getEscapeString("register_key")),
+		RegisterMaxHours: max(s.GetIntNoErr("register_max_hours"), 0),
+		RegisteredOnly:   s.GetBoolNoErr("registered_only"),
 	}
 }
 
@@ -257,6 +321,12 @@ func newUserOwnedClient(userID int, settings userClientSettings, createdAt time.
 	client.IpWhitePass = settings.IpWhitePass
 	client.IpWhiteList = settings.IpWhiteList
 	client.BlackIpList = settings.BlackIPList
+	client.WhiteIpList = settings.WhiteIPList
+	client.IpListPriority = settings.IpListPriority
+	client.RegisterKey = settings.RegisterKey
+	client.RegisterMaxHours = settings.RegisterMaxHours
+	client.RegisteredOnly = settings.RegisteredOnly
+	client.SetSourceLists(settings.IpListPriority, settings.BlackIPList, settings.WhiteIPList, acl.ScopeUser, "client")
 	client.CreateTime = createdAt.Format("2006-01-02 15:04:05")
 	return client
 }
@@ -312,10 +382,15 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 			BasicUserName:    basicUserName,
 			BasicPasswordSet: basicPasswordSet,
 			BlackIpList:      append([]string(nil), client.BlackIpList...),
+			WhiteIpList:      append([]string(nil), client.WhiteIpList...),
+			IpListPriority:   client.IpListPriority,
 			CreateTime:       client.CreateTime,
 			LastOnlineTime:   client.LastOnlineTime,
 			IpWhite:          client.IpWhite,
 			IpWhiteList:      append([]string(nil), client.IpWhiteList...),
+			RegisteredOnly:   client.RegisteredOnly,
+			RegisterKeySet:   strings.TrimSpace(client.RegisterKey) != "",
+			RegisterMaxHours: client.RegisterMaxHours,
 			ExpireTime:       client.ExpireTime,
 		}
 		client.RUnlock()
@@ -474,13 +549,19 @@ func (s *ClientController) Add() {
 					InletFlow:  0,
 					FlowLimit:  int64(s.GetIntNoErr("flow_limit")),
 				},
-				BlackIpList: RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n")),
-				IpWhite:     s.GetBoolNoErr("ipwhite"),
-				IpWhitePass: s.getEscapeString("ipwhitepass"),
-				IpWhiteList: RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n")),
-				ExpireTime:  expireTime,
-				CreateTime:  time.Now().Format("2006-01-02 15:04:05"),
+				BlackIpList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n")),
+				WhiteIpList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("whiteiplist"), "\r\n")),
+				IpListPriority:   s.GetIntNoErr("iplistpriority"),
+				IpWhite:          s.GetBoolNoErr("ipwhite"),
+				IpWhitePass:      s.getEscapeString("ipwhitepass"),
+				IpWhiteList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n")),
+				RegisterKey:      strings.TrimSpace(s.getEscapeString("register_key")),
+				RegisterMaxHours: max(s.GetIntNoErr("register_max_hours"), 0),
+				RegisteredOnly:   s.GetBoolNoErr("registered_only"),
+				ExpireTime:       expireTime,
+				CreateTime:       time.Now().Format("2006-01-02 15:04:05"),
 			}
+			t.SetSourceLists(t.IpListPriority, t.BlackIpList, t.WhiteIpList, acl.ScopeUser, "client")
 		} else {
 			userID, err := s.currentUserClientOwner()
 			if err != nil {
@@ -488,6 +569,14 @@ func (s *ClientController) Add() {
 				return
 			}
 			t = newUserOwnedClient(userID, userClientSettingsFromRequest(s), time.Now())
+		}
+		if err := validateSourceAccessLists(acl.ScopeUser, t.IpListPriority, t.BlackIpList, t.WhiteIpList); err != nil {
+			s.AjaxErr("客户端 IP 名单无效: " + err.Error())
+			return
+		}
+		if err := validateClientRegisterKey(t.Id, t.RegisterKey, t.VerifyKey); err != nil {
+			s.AjaxErr(err.Error())
+			return
 		}
 		if err := file.GetDb().NewClient(t); err != nil {
 			s.AjaxErr(err.Error())
@@ -536,6 +625,7 @@ func (s *ClientController) Edit() {
 				s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
 			}
 			s.Data["BlackIpList"] = strings.Join(c.BlackIpList, "\r\n")
+			s.Data["WhiteIpList"] = strings.Join(c.WhiteIpList, "\r\n")
 			s.Data["IpWhiteList"] = strings.Join(c.IpWhiteList, "\r\n")
 		}
 		s.SetInfo("edit client")
@@ -576,6 +666,38 @@ func (s *ClientController) Edit() {
 		ipWhitePass := s.getEscapeString("ipwhitepass")
 		ipWhiteList := RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n"))
 		blackIPList := RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n"))
+		whiteIPList := RemoveRepeatedElement(strings.Split(s.getEscapeString("whiteiplist"), "\r\n"))
+		ipListPriority := s.GetIntNoErr("iplistpriority")
+		registerKey := strings.TrimSpace(s.getEscapeString("register_key"))
+		registerMaxHours := max(s.GetIntNoErr("register_max_hours"), 0)
+		registeredOnly := s.GetBoolNoErr("registered_only")
+		_ = s.Ctx.Request.ParseForm()
+		if _, submitted := s.Ctx.Request.Form["blackiplist"]; !submitted {
+			blackIPList = append([]string(nil), before.blackIPList...)
+		}
+		if _, submitted := s.Ctx.Request.Form["whiteiplist"]; !submitted {
+			whiteIPList = append([]string(nil), before.whiteIPList...)
+		}
+		if _, submitted := s.Ctx.Request.Form["iplistpriority"]; !submitted {
+			ipListPriority = before.ipListPriority
+		}
+		verifyKey := before.verifyKey
+		if isAdmin {
+			verifyKey = s.getEscapeString("vkey")
+		} else {
+			// Older user-facing forms did not submit registration controls. Keep
+			// their existing values when an old client calls this endpoint.
+			_ = s.Ctx.Request.ParseForm()
+			if _, submitted := s.Ctx.Request.Form["register_key"]; !submitted {
+				registerKey = before.registerKey
+			}
+			if _, submitted := s.Ctx.Request.Form["register_max_hours"]; !submitted {
+				registerMaxHours = before.registerMaxHours
+			}
+			if _, submitted := s.Ctx.Request.Form["registered_only"]; !submitted {
+				registeredOnly = before.registeredOnly
+			}
+		}
 
 		selectedUserID := before.userID
 		legacyUsername, legacyPassword, expireTime := "", "", before.expireTime
@@ -616,6 +738,14 @@ func (s *ClientController) Edit() {
 			s.AjaxErr(err.Error())
 			return
 		}
+		if err := validateSourceAccessLists(acl.ScopeUser, ipListPriority, blackIPList, whiteIPList); err != nil {
+			s.AjaxErr("客户端 IP 名单无效: " + err.Error())
+			return
+		}
+		if err := validateClientRegisterKey(c.Id, registerKey, verifyKey); err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
 
 		c.Lock()
 		if c.Cnf == nil {
@@ -645,7 +775,13 @@ func (s *ClientController) Edit() {
 		c.IpWhitePass = ipWhitePass
 		c.IpWhiteList = ipWhiteList
 		c.BlackIpList = blackIPList
+		c.WhiteIpList = whiteIPList
+		c.IpListPriority = ipListPriority
+		c.RegisterKey = registerKey
+		c.RegisterMaxHours = registerMaxHours
+		c.RegisteredOnly = registeredOnly
 		c.Unlock()
+		c.SetSourceLists(ipListPriority, blackIPList, whiteIPList, acl.ScopeUser, "client")
 		if err := file.GetDb().UpdateClient(c); err != nil {
 			before.restore(c)
 			s.AjaxErr(err.Error())

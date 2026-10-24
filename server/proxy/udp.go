@@ -125,6 +125,7 @@ type UdpModeServer struct {
 
 type udpTaskSnapshot struct {
 	bridgeTask   *file.Tunnel
+	sourceLists  *file.SourceLists
 	client       *file.Client
 	clientID     int
 	clientConfig file.Config
@@ -152,7 +153,8 @@ func (s *UdpModeServer) snapshotTask() (udpTaskSnapshot, error) {
 		return snapshot, errors.New("udp server is not configured")
 	}
 	s.task.RLock()
-	snapshot.bridgeTask = &file.Tunnel{Mode: s.task.Mode}
+	snapshot.bridgeTask = &file.Tunnel{Mode: s.task.Mode, RegisteredOnly: s.task.RegisteredOnly}
+	snapshot.sourceLists = &s.task.SourceLists
 	snapshot.client = s.task.Client
 	snapshot.taskFlow = s.task.Flow
 	snapshot.serverIP = s.task.ServerIp
@@ -222,7 +224,7 @@ func (s *UdpModeServer) Start() error {
 			continue
 		}
 
-		if IsGlobalBlackIp(addr.String()) {
+		if SourceDenied(addr, snapshot.client, snapshot.sourceLists, "udp") || IsGlobalBlackIp(addr.String()) {
 			common.BufPoolUdp.Put(buf)
 			continue
 		}
@@ -233,6 +235,10 @@ func (s *UdpModeServer) Start() error {
 			continue
 		}
 		if isClientBlackBlocked(snapshot.client, addr.String()) {
+			common.BufPoolUdp.Put(buf)
+			continue
+		}
+		if snapshot.bridgeTask.RegisteredOnly && isRegisteredOnlyBlocked(snapshot.client, addr.String(), true) {
 			common.BufPoolUdp.Put(buf)
 			continue
 		}

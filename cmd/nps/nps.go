@@ -26,6 +26,7 @@ import (
 	"ehang.io/nps/server/connection"
 	"ehang.io/nps/server/tool"
 	"ehang.io/nps/web/audit"
+	"ehang.io/nps/web/controllers"
 	"ehang.io/nps/web/routers"
 
 	"ehang.io/nps/lib/common"
@@ -38,12 +39,14 @@ import (
 )
 
 var (
-	level      string
-	ver        = flag.Bool("version", false, "show current version")
-	gen2fa     = flag.Bool("gen2fa", false, "generate a TOTP secret for Web administrator login")
-	confPath   = flag.String("conf_path", "", "set current confPath")
-	serverCmd  = flag.Bool("server", false, "NPS管理脚本")
-	npsLogPath = flag.String("log_path", "", "nps log path")
+	level            string
+	ver              = flag.Bool("version", false, "show current version")
+	gen2fa           = flag.Bool("gen2fa", false, "generate a TOTP secret for Web administrator login")
+	confPath         = flag.String("conf_path", "", "set current confPath")
+	serverCmd        = flag.Bool("server", false, "NPS管理脚本")
+	npsLogPath       = flag.String("log_path", "", "nps log path")
+	ipRegisterMu     sync.Mutex
+	ipRegisterServer *server.IPRegistrationServer
 )
 
 func main() {
@@ -449,6 +452,7 @@ func (p *nps) Start(s service.Service) error {
 }
 func (p *nps) Stop(s service.Service) error {
 	_, _ = s.Status()
+	closeIPRegistrationServer()
 	p.stopOnce.Do(func() { close(p.exit) })
 	if service.Interactive() {
 		os.Exit(0)
@@ -502,10 +506,32 @@ func run() error {
 	if err != nil {
 		timeout = 60
 	}
+	registrationServer, err := server.StartIPRegistrationServer(controllers.IPRegisterStandaloneHandler())
+	if err != nil {
+		return fmt.Errorf("start standalone IP registration page: %w", err)
+	}
 	if err := server.StartNewServer(bridgePort, task, beego.AppConfig.String("bridge_type"), timeout); err != nil {
+		if registrationServer != nil {
+			_ = registrationServer.Close()
+		}
 		return fmt.Errorf("start NPS server: %w", err)
 	}
+	ipRegisterMu.Lock()
+	ipRegisterServer = registrationServer
+	ipRegisterMu.Unlock()
 	return nil
+}
+
+func closeIPRegistrationServer() {
+	ipRegisterMu.Lock()
+	registrationServer := ipRegisterServer
+	ipRegisterServer = nil
+	ipRegisterMu.Unlock()
+	if registrationServer != nil {
+		if err := registrationServer.Close(); err != nil {
+			logs.Warning("stop IP registration listener: %v", err)
+		}
+	}
 }
 
 func setRotatingFileLogger(logPath, configuredLevel string) error {
@@ -530,9 +556,9 @@ func setRotatingFileLogger(logPath, configuredLevel string) error {
 	return logs.SetLogger(rotatingLogAdapter, string(encoded))
 }
 
-// parseConfiguredLogLevel accepts both ZiDuNet's historical Beego numeric
-// levels and the text names used by upstream nps2. The numeric range retains
-// Beego's convention: 0 is least verbose and 7 is most verbose.
+// parseConfiguredLogLevel accepts the historical Beego numeric levels and
+// common text aliases. The numeric range retains Beego's convention: 0 is
+// least verbose and 7 is most verbose.
 func parseConfiguredLogLevel(configured string) (int, bool) {
 	value := strings.ToLower(strings.TrimSpace(configured))
 	switch value {

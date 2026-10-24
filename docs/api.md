@@ -274,6 +274,7 @@ POST /index/addhost
 | `location` | URL 路由，空值默认为 `/` |
 | `client_id` | 客户端 ID |
 | `target` | 内网目标 |
+| `proxy_protocol` | Host 后端 PROXY Protocol：`0` 关闭、`1` v1、`2` v2。只有后端明确支持时才应开启 |
 | `header` | 请求 Header 修改 |
 | `hostchange` | 请求 Host 修改 |
 | `path_rewrite` | 后端请求路径重写规则，例如 `/api => /v1/api` |

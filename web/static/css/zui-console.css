@@ -503,6 +503,30 @@ body.zui-app .form-section-title,
 body.zui-app .form-title { margin: 31px 0 16px !important; padding: 0 0 10px !important; color: var(--nps-primary) !important; border-bottom: 1px solid var(--nps-line); font-size: 13px !important; font-weight: 750 !important; letter-spacing: 0 !important; }
 body.zui-app .form-section-title:first-child { margin-top: 0 !important; }
 body.zui-app .form-section-title i { width: 18px; margin-right: 6px; text-align: center; }
+body.zui-app .form-section-title.is-collapsible { display: block !important; padding: 0 !important; }
+body.zui-app .form-section-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 44px;
+    padding: 9px 13px;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    border-radius: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+body.zui-app .form-section-toggle:focus-visible { outline: 2px solid var(--nps-primary) !important; outline-offset: 2px; }
+body.zui-app .form-section-toggle__chevron { flex: 0 0 auto; margin: 0 !important; transition: transform .16s ease; }
+body.zui-app .form-section-title:not(.is-collapsed) .form-section-toggle__chevron { transform: rotate(180deg); }
+body.zui-app .form-workflow-form > .form-section-content-collapsed { display: none !important; }
+@media (prefers-reduced-motion: reduce) {
+    body.zui-app .form-section-toggle__chevron { transition: none; }
+}
 body.zui-app .hr-line-dashed { margin: 28px 0 !important; border-top: 1px solid var(--nps-line) !important; background: none !important; }
 body.zui-app .toggle-field { display: inline-flex; align-items: center; gap: 9px; min-height: 39px; }
 body.zui-app .toggle-slider { background: var(--nps-line-strong); }
@@ -1056,6 +1080,19 @@ body.zui-app .client-detail__copy {
         flex-wrap: nowrap;
         justify-content: center;
     }
+}
+
+/* Final rules for accessible progressive disclosure in operational forms. */
+body.zui-app .form-page .form-workflow-form > .form-section-title.is-collapsible {
+    display: block !important;
+    padding: 0 !important;
+}
+body.zui-app .form-page .form-workflow-form > .form-section-title.is-collapsible > .form-section-toggle {
+    min-height: 44px;
+    padding: 9px 13px;
+}
+body.zui-app .form-page .form-workflow-form > .form-section-content-collapsed {
+    display: none !important;
 }
 
 @media (max-width: 991px) {
@@ -2817,11 +2854,23 @@ body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-field="target
 body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-field="local_proxy"],
 body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-field="password"],
 body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-field="proto_version"],
+body.zui-app .form-page .tunnel-form:not(.tunnel-type-mixProxy) [data-tunnel-field="mix_proxy"],
+body.zui-app .form-page .tunnel-form:not(.tunnel-type-mixProxy) [data-tunnel-field="dest_acl_mode"],
+body.zui-app .form-page .tunnel-form:not(.tunnel-type-mixProxy) [data-tunnel-field="dest_acl_rules"],
+body.zui-app .form-page .tunnel-form.tunnel-type-mixProxy [data-tunnel-field="target"],
+body.zui-app .form-page .tunnel-form.tunnel-type-mixProxy [data-tunnel-field="local_proxy"],
+body.zui-app .form-page .tunnel-form.tunnel-type-mixProxy [data-tunnel-field="local_path"],
+body.zui-app .form-page .tunnel-form.tunnel-type-mixProxy [data-tunnel-field="strip_pre"],
+body.zui-app .form-page .tunnel-form.tunnel-type-mixProxy [data-tunnel-field="password"],
+body.zui-app .form-page .tunnel-form.tunnel-type-mixProxy [data-tunnel-field="proto_version"],
 body.zui-app .form-page .tunnel-form.tunnel-type-udp [data-tunnel-section="security"],
 body.zui-app .form-page .tunnel-form.tunnel-type-httpProxy [data-tunnel-section="target"],
 body.zui-app .form-page .tunnel-form.tunnel-type-httpProxy [data-tunnel-section="security"],
 body.zui-app .form-page .tunnel-form.tunnel-type-socks5 [data-tunnel-section="target"],
 body.zui-app .form-page .tunnel-form.tunnel-type-socks5 [data-tunnel-section="security"],
+body.zui-app .form-page .tunnel-form.tunnel-type-mixProxy [data-tunnel-section="target"],
+body.zui-app .form-page .tunnel-form.tunnel-type-mixProxy [data-tunnel-section="security"],
+body.zui-app .form-page .tunnel-form.tunnel-type-mixProxy [data-tunnel-section="health"],
 body.zui-app .form-page .tunnel-form.tunnel-type-file [data-tunnel-section="security"] {
     display: none !important;
 }

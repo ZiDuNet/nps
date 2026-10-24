@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        (function () {
+            var theme = null;
+            try { theme = window.localStorage && window.localStorage.getItem('nps-theme'); } catch (error) {}
+            theme = theme || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+        }());
+    </script>
+    <title data-i18n-zh="IP 登记 - NPS" data-i18n-en="IP registration - NPS">IP 登记 - NPS</title>
+    <link rel="icon" type="image/png" href="{{.web_base_url}}/static/img/nps-logo.png">
+    <link href="{{.web_base_url}}/static/css/zui-3.0.0.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/toastr.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20260904-3" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/zui-console.css?v={{.version}}&ui=20260904-3" rel="stylesheet">
+    <script src="{{.web_base_url}}/static/js/zui-3.0.0.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20260904-3"></script>
+    <style>
+        .ip-register-card { max-width: 620px; margin: 8vh auto; }
+        .ip-register-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+        .ip-register-meta__item { padding: 14px 16px; border: 1px solid var(--nps-border, #e5e7eb); border-radius: 10px; background: var(--nps-surface-muted, #f8fafc); }
+        .ip-register-meta__label { display: block; font-size: 12px; opacity: .68; margin-bottom: 4px; }
+        .ip-register-meta__value { font-weight: 600; word-break: break-all; }
+        .ip-register-note { margin: 0 0 18px; color: var(--nps-text-muted, #64748b); line-height: 1.7; }
+        @media (max-width: 640px) { .ip-register-meta { grid-template-columns: 1fr; } .ip-register-card { margin: 24px 12px; } }
+    </style>
+</head>
+<body class="gray-bg auth-body zui-app">
+<div class="auth-page">
+    <header class="auth-page__header">
+        <div class="auth-brand" aria-label="NPS">
+            <span class="auth-brand__mark" aria-hidden="true"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt="NPS"></span>
+            <span class="auth-brand__name" langtag="application"></span>
+            <span class="nps-pro-badge" aria-label="Pro edition">Pro</span>
+        </div>
+        <div class="auth-page__tools">
+            <button type="button" onclick="toggleTheme()" class="auth-icon-button theme-toggle" id="theme-toggle" title="切换主题" aria-label="切换主题" aria-pressed="false"><i class="fa fa-moon" id="theme-icon" aria-hidden="true"></i></button>
+            <div class="auth-language btn-group dropdown">
+                <button id="languagemenu" class="btn btn-default dropdown-toggle auth-language__toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="语言" aria-label="语言"><i class="fa fa-globe-asia" aria-hidden="true"></i><span></span></button>
+                <ul class="dropdown-menu"><li lang="zh-CN"><a href="#">简体中文</a></li><li lang="en-US"><a href="#">English</a></li></ul>
+            </div>
+        </div>
+    </header>
+    <main class="auth-page__main">
+        <section class="auth-panel login-form-wrap ip-register-card" aria-labelledby="ip-register-title">
+            <header class="auth-panel__header">
+                <span class="auth-panel__badge nps-pro-badge" aria-label="IP registration"><i class="fa fa-shield-alt"></i> IP</span>
+                <h1 class="auth-panel__title" id="ip-register-title" data-i18n-zh="登记访问 IP" data-i18n-en="Register access IP">登记访问 IP</h1>
+                <p class="auth-panel__description" data-i18n-zh="登记成功后，当前公网 IP 才能访问启用了“仅允许已登记 IP”的隧道和域名规则。" data-i18n-en="After registration, this public IP can access tunnels and host rules that require registered IPs.">登记成功后，当前公网 IP 才能访问启用了“仅允许已登记 IP”的隧道和域名规则。</p>
+            </header>
+            <div class="ip-register-meta">
+                <div class="ip-register-meta__item"><span class="ip-register-meta__label" data-i18n-zh="检测到的访问 IP" data-i18n-en="Detected IP">检测到的访问 IP</span><span class="ip-register-meta__value">{{.ip}}</span></div>
+                <div class="ip-register-meta__item"><span class="ip-register-meta__label" data-i18n-zh="服务端默认最长时长" data-i18n-en="Server default maximum">服务端默认最长时长</span><span class="ip-register-meta__value">{{.default_hours}}h</span></div>
+            </div>
+            <p class="ip-register-note" data-i18n-zh="登记记录只保存在服务端内存中，过期或服务端重启后需要重新登记。密钥由服务管理员提供。" data-i18n-en="Registrations stay in server memory and expire automatically; register again after expiry or restart. Ask the server administrator for the key.">登记记录只保存在服务端内存中，过期或服务端重启后需要重新登记。密钥由服务管理员提供。</p>
+            <form class="form auth-form zui-form" onsubmit="return registerIP()">
+                <div class="form-group auth-field"><label class="auth-field__label" for="ip-register-key" data-i18n-zh="登记密钥" data-i18n-en="Registration key">登记密钥</label><div class="auth-control input-icon-wrap"><i class="fa fa-key input-icon" aria-hidden="true"></i><input id="ip-register-key" name="key" class="form-control has-icon" type="password" autocomplete="off" required></div></div>
+                <div class="form-group auth-field"><label class="auth-field__label" for="ip-register-hours" data-i18n-zh="登记时长（小时）" data-i18n-en="Registration hours">登记时长（小时）</label><div class="auth-control input-icon-wrap"><i class="fa fa-clock input-icon" aria-hidden="true"></i><input id="ip-register-hours" name="hours" class="form-control has-icon" type="number" min="1" step="1" value="{{.default_hours}}"><span class="help-block" data-i18n-zh="超过客户端或服务端上限时会自动按上限登记。" data-i18n-en="Values above the client or server limit are capped automatically.">超过客户端或服务端上限时会自动按上限登记。</span></div></div>
+                <button type="submit" class="auth-submit login-btn" data-i18n-zh="登记当前 IP" data-i18n-en="Register current IP">登记当前 IP</button>
+            </form>
+            <div class="auth-switch register-link"><a class="auth-switch__link" href="{{.login_url}}" data-i18n-zh="返回登录" data-i18n-en="Back to login">返回登录</a></div>
+        </section>
+    </main>
+    <footer class="auth-page__footer"><span><strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2026</span><span><a href="https://github.com/ZiDuNet/nps" target="_blank" rel="noopener">GitHub</a></span></footer>
+</div>
+<script>
+    window.nps = {web_base_url: "{{.web_base_url}}", version: "{{.version}}"};
+    function registerIP() {
+        $.ajax({type: 'POST', url: "{{.web_base_url}}/ip/register", data: $('.auth-form').serializeArray(), dataType: 'json'}).done(function (res) {
+            if (res && res.status) {
+                npsNotify('success', (res.msg || 'IP 登记成功') + (res.until ? '（有效期至 ' + res.until + '）' : ''));
+            } else {
+                npsNotify('error', res && res.msg ? res.msg : 'IP 登记失败');
+            }
+        }).fail(function () { npsNotify('error', npsRequestErrorMessage()); });
+        return false;
+    }
+    function toggleTheme() {
+        var html = document.documentElement, dark = html.getAttribute('data-theme') === 'dark', next = dark ? 'light' : 'dark';
+        html.setAttribute('data-theme', next); try { window.localStorage.setItem('nps-theme', next); } catch (error) {}
+        var icon = document.getElementById('theme-icon'), button = document.getElementById('theme-toggle');
+        if (icon) icon.className = next === 'dark' ? 'fa fa-sun' : 'fa fa-moon'; if (button) button.setAttribute('aria-pressed', next === 'dark' ? 'true' : 'false');
+    }
+    (function () { var dark = document.documentElement.getAttribute('data-theme') === 'dark'; var icon = document.getElementById('theme-icon'); if (icon) icon.className = dark ? 'fa fa-sun' : 'fa fa-moon'; }());
+</script>
+</body>
+</html>

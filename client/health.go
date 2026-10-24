@@ -157,13 +157,13 @@ func heathCheck(healths []*file.Health, c *conn.Conn, stop ...<-chan struct{}) b
 		if health == nil {
 			continue
 		}
-		health.Lock()
+		health.HealthLock()
 		if health.HealthMaxFail > 0 && health.HealthCheckTimeout > 0 && health.HealthCheckInterval > 0 {
 			health.HealthNextTime = now.Add(time.Duration(health.HealthCheckInterval) * time.Second)
 			health.HealthMap = make(map[string]int)
 			validHealths = append(validHealths, health)
 		}
-		health.Unlock()
+		health.HealthUnlock()
 	}
 	if len(validHealths) == 0 {
 		return false
@@ -187,12 +187,12 @@ func session(healths []*file.Health, reporter *healthReporter, stop <-chan struc
 				if health == nil {
 					continue
 				}
-				health.Lock()
+				health.HealthLock()
 				due := !health.HealthNextTime.After(now)
 				if due {
 					health.HealthNextTime = now.Add(time.Duration(health.HealthCheckInterval) * time.Second)
 				}
-				health.Unlock()
+				health.HealthUnlock()
 				if due {
 					go check(health, reporter)
 				}
@@ -212,7 +212,7 @@ func check(health *file.Health, reporter *healthReporter) {
 	arr := strings.Split(health.HealthCheckTarget, ",")
 	var healthTimeout, maxFail int
 	var healthType, healthURL string
-	health.Lock()
+	health.HealthLock()
 	healthTimeout = health.HealthCheckTimeout
 	maxFail = health.HealthMaxFail
 	healthType = health.HealthCheckType
@@ -220,7 +220,7 @@ func check(health *file.Health, reporter *healthReporter) {
 	if health.HealthMap == nil {
 		health.HealthMap = make(map[string]int)
 	}
-	health.Unlock()
+	health.HealthUnlock()
 
 	for _, target := range arr {
 		var checkErr error
@@ -245,7 +245,7 @@ func check(health *file.Health, reporter *healthReporter) {
 		}
 
 		var sendStatus string
-		health.Lock()
+		health.HealthLock()
 		if checkErr != nil && maxFail > 0 {
 			health.HealthMap[target]++
 		} else if checkErr == nil && health.HealthMap[target] >= maxFail {
@@ -256,7 +256,7 @@ func check(health *file.Health, reporter *healthReporter) {
 		if checkErr != nil && maxFail > 0 && health.HealthMap[target] > 0 && health.HealthMap[target]%maxFail == 0 {
 			sendStatus = "0"
 		}
-		health.Unlock()
+		health.HealthUnlock()
 		if sendStatus != "" {
 			if err := reporter.send(target, sendStatus); err != nil {
 				logs.Debug("send health status failed for %s: %v", target, err)

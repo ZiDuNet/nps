@@ -15,8 +15,9 @@ func TestTunnelSidebarMenu(t *testing.T) {
 	}{
 		{mode: "tcp", want: "tcp"},
 		{mode: "udp", want: "udp"},
-		{mode: "httpProxy", want: "http"},
-		{mode: "socks5", want: "socks5"},
+		{mode: "httpProxy", want: "mixProxy"},
+		{mode: "socks5", want: "mixProxy"},
+		{mode: "mixProxy", want: "mixProxy"},
 		{mode: "secret", want: "secret"},
 		{mode: "p2p", want: "p2p"},
 		{mode: "file", want: "file"},
@@ -34,7 +35,7 @@ func TestTunnelSidebarMenu(t *testing.T) {
 }
 
 func TestSupportedTunnelModeRejectsUnknownModes(t *testing.T) {
-	for _, mode := range []string{"tcp", "udp", "httpProxy", "socks5", "secret", "p2p", "file"} {
+	for _, mode := range []string{"tcp", "udp", "httpProxy", "socks5", "mixProxy", "secret", "p2p", "file"} {
 		if !supportedTunnelMode(mode) {
 			t.Fatalf("supportedTunnelMode(%q) = false", mode)
 		}
@@ -43,6 +44,20 @@ func TestSupportedTunnelModeRejectsUnknownModes(t *testing.T) {
 		if supportedTunnelMode(mode) {
 			t.Fatalf("supportedTunnelMode(%q) = true, want false", mode)
 		}
+	}
+}
+
+func TestTunnelModeChangeAllowsLegacyProxyMigrationOnly(t *testing.T) {
+	for _, mode := range []string{"httpProxy", "socks5"} {
+		if !tunnelModeChangeAllowed(mode, "mixProxy") {
+			t.Fatalf("legacy mode %q should migrate to mixProxy", mode)
+		}
+	}
+	if tunnelModeChangeAllowed("tcp", "mixProxy") {
+		t.Fatal("TCP mode must not be silently changed to mixProxy")
+	}
+	if !tunnelModeChangeAllowed("mixProxy", "mixProxy") {
+		t.Fatal("unchanged mixProxy mode should remain allowed")
 	}
 }
 
@@ -64,6 +79,9 @@ func TestTunnelModeTemplateEntrypointsIncludeSharedViews(t *testing.T) {
 		{mode: "socks5", action: "add", parent: "index/add.html"},
 		{mode: "socks5", action: "edit", parent: "index/edit.html"},
 		{mode: "socks5", action: "list", parent: "index/list.html"},
+		{mode: "mixProxy", action: "add", parent: "index/add.html"},
+		{mode: "mixProxy", action: "edit", parent: "index/edit.html"},
+		{mode: "mixProxy", action: "list", parent: "index/list.html"},
 		{mode: "secret", action: "add", parent: "index/add.html"},
 		{mode: "secret", action: "edit", parent: "index/edit.html"},
 		{mode: "secret", action: "list", parent: "index/list.html"},
@@ -113,7 +131,7 @@ func TestTunnelModeFieldStylesAvoidFirstPaintFlash(t *testing.T) {
 
 func TestSidebarTemplateContainsAddEditMenuBindings(t *testing.T) {
 	content := readTemplateForTest(t, "../views/public/layout.html")
-	for _, menu := range []string{"index", "client", "user", "host", "tcp", "udp", "http", "socks5", "secret", "p2p", "file", "global", "help"} {
+	for _, menu := range []string{"index", "client", "user", "host", "tcp", "udp", "mixProxy", "secret", "p2p", "file", "global", "help"} {
 		marker := `{{if eq "` + menu + `" .menu}}active{{end}}`
 		if !strings.Contains(content, marker) {
 			t.Fatalf("sidebar template misses active binding for menu %q", menu)
@@ -188,22 +206,20 @@ func TestGenericTunnelAddBackLinkTracksSelectedMode(t *testing.T) {
 
 func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 	addExpected := map[string]string{
-		"tcp":       `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
-		"udp":       `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit"]`,
-		"socks5":    `socks5: ["client_id", "server_ip", "port", "upload_limit", "download_limit"]`,
-		"httpProxy": `httpProxy: ["client_id", "server_ip", "port", "upload_limit", "download_limit"]`,
-		"secret":    `secret: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"]`,
-		"p2p":       `p2p: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"]`,
-		"file":      `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "upload_limit", "download_limit"]`,
+		"tcp":      `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "acl", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
+		"udp":      `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "acl", "upload_limit", "download_limit"]`,
+		"mixProxy": `mixProxy: ["client_id", "server_ip", "port", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "upload_limit", "download_limit"]`,
+		"secret":   `secret: ["client_id", "server_ip", "target", "password", "acl", "upload_limit", "download_limit"]`,
+		"p2p":      `p2p: ["client_id", "server_ip", "target", "password", "acl", "upload_limit", "download_limit"]`,
+		"file":     `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "acl", "upload_limit", "download_limit"]`,
 	}
 	editExpected := map[string]string{
-		"tcp":       `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
-		"udp":       `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit"]`,
-		"socks5":    `socks5: ["client_id", "server_ip", "port", "upload_limit", "download_limit"]`,
-		"httpProxy": `httpProxy: ["client_id", "server_ip", "port", "upload_limit", "download_limit"]`,
-		"secret":    `secret: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"]`,
-		"p2p":       `p2p: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"]`,
-		"file":      `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "upload_limit", "download_limit"]`,
+		"tcp":      `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "acl", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
+		"udp":      `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "acl", "upload_limit", "download_limit"]`,
+		"mixProxy": `mixProxy: ["client_id", "server_ip", "port", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "upload_limit", "download_limit"]`,
+		"secret":   `secret: ["client_id", "server_ip", "target", "password", "acl", "upload_limit", "download_limit"]`,
+		"p2p":      `p2p: ["client_id", "server_ip", "target", "password", "acl", "upload_limit", "download_limit"]`,
+		"file":     `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "acl", "upload_limit", "download_limit"]`,
 	}
 
 	tests := []struct {
@@ -448,13 +464,13 @@ func TestTunnelFormTemplatesRenderInitialTypeVisibility(t *testing.T) {
 		{
 			name:          "add",
 			path:          "../views/index/add.html",
-			typeClass:     `class="form-page-grid tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}"`,
+			typeClass:     `class="form-page-grid tunnel-form tunnel-type-{{if $mode}}{{$mode}}{{else}}tcp{{end}}"`,
 			expectedRules: nil,
 		},
 		{
 			name:           "edit",
 			path:           "../views/index/edit.html",
-			typeClass:      `class="form-page-grid tunnel-form tunnel-type-{{.t.Mode}}"`,
+			typeClass:      `class="form-page-grid tunnel-form tunnel-type-{{$mode}}"`,
 			forbiddenRules: nil,
 		},
 	}

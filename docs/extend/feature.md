@@ -90,7 +90,9 @@ crypt=true
 
 这会影响客户端与 NPS 的代理数据传输。需要使用标准 TLS 保护 Bridge 时，在服务端启用 `tls_enable=true`，客户端改连 `tls_bridge_port` 并传入 `-tls_enable=true`；自签名证书建议设置 `-tls_fingerprint` 或 `-tls_ca_file`，不要在生产环境使用 `-tls_insecure_skip_verify=true`。
 
-Bridge 控制连接支持 `tcp` 与 `kcp`。KCP 需要服务端 `bridge_type=kcp`，客户端对应使用 `-type=kcp` 或 `conn_type=kcp`；它占用 UDP Bridge 端口，部署时要放行 UDP。
+Bridge 控制连接支持 `tcp`、`kcp`、`ws`、`wss` 和 `quic`。TCP TLS 可使用独立的 TLS Bridge 端口；WS/WSS 使用独立端口与 `bridge_path`（默认 `/ws`），WSS 使用服务端 Bridge 证书。KCP 可作为主 Bridge（`bridge_type=kcp`），也可通过 `bridge_kcp_port` 与 TCP 并行监听；WS/WSS 和 QUIC 也可设置独立监听端口。KCP/QUIC 使用 UDP；WS/WSS 使用 TCP，并需在前置反向代理放行 WebSocket Upgrade。QUIC Bridge 是加密的 UDP 字节流入口，NPC 使用 `-type=quic`，服务端和客户端的 `quic_alpn` 必须一致；它不是面向浏览器的 HTTP/3 反向代理。
+
+NPC `1.1.29` 及以上支持配置文件中的 `conn_type=ws` / `wss`、命令行 `-type=ws` / `-type=wss`，以及 `bridge_path` / `-bridge_path`。`1.1.28` 及以下仍按原 TCP/KCP 连接方式工作，不会收到新控制消息。
 
 ### 多路复用
 
@@ -98,9 +100,9 @@ NPS 的数据连接默认使用多路复用，无需单独开启。高并发时�
 
 ### PROXY Protocol
 
-TCP 隧道可在 Web 面板中选择 PROXY Protocol V1 或 V2。开启后，NPC 在连接本地 TCP 后端前写入来源地址头，后端（例如 Nginx、HAProxy）必须显式启用对应协议解析。
+TCP 隧道和域名反代可选择 PROXY Protocol V1 或 V2。开启后，NPC 在连接本地 TCP 后端前写入来源地址头，后端（例如 Nginx、HAProxy）必须显式启用对应协议解析。
 
-它只适用于支持 PROXY Protocol 的 TCP 后端；未支持的服务会把该头当成业务数据，从而导致协议错误。该选项当前由 Web 面板的 TCP 隧道提供，配置文件模式请以发布模板和实际版本为准。
+它只适用于支持 PROXY Protocol 的 TCP 后端；未支持的服务会把该头当成业务数据，从而导致协议错误。域名规则默认关闭，旧规则行为不变；UDP 隧道不支持该协议。
 
 ### 环境变量模板
 
@@ -160,9 +162,9 @@ target_ip=10.1.50.2
 allow_ports=9001-9009,10001,11000-12000
 ```
 
-### 端口复用
+### 受限端口复用
 
-NPS 支持将 Bridge、HTTP(S) 或 Web 管理端口复用在同一监听端口，由协议和 `web_host` 区分。它适合端口数受到严格限制的环境，但会增加排障和反向代理配置难度；新部署建议优先使用独立端口，确认需求后再设计复用方案。
+现有端口分流器可以在部分配置下，让主 TCP Bridge、HTTP/HTTPS 域名代理和 Web 管理共用一个 TCP 端口；Web 管理流量使用配置的 `web_host` 区分。它不是任意 TCP 协议的通用首字节嗅探器，也不会把 KCP、WS/WSS 额外监听自动复用到同一端口。新部署建议使用独立端口；需要复用时应按[服务端配置](../server/server_config.md)逐项验证实际绑定与 Host/SNI 路由。
 
 ## 资源、访问与账号控制
 
@@ -205,7 +207,7 @@ NPS 支持将 Bridge、HTTP(S) 或 Web 管理端口复用在同一监听端口�
 下列项目不应当作已支持功能部署：
 
 - QUIC Bridge。
-- WebSocket 作为 Bridge 传输。HTTP Host 代理可转发业务层 WebSocket，但这不是 WebSocket Bridge。
+- 通过任意 TCP 端口嗅探自动复用 TCP、UDP、KCP、WS/WSS 等全部传输。现有复用范围仅限受支持的 TCP Bridge、HTTP(S) 和管理面板分流。
 - mTLS/客户端证书双向校验。
 - 完整的 `nps.conf` 热重载；端口、监听器和 TLS/P2P 启停都需要重启 NPS。
 - NPC 的 `reload` 子命令。修改 NPC 配置文件后应重启对应 NPC 进程或系统服务。

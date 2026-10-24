@@ -1,3 +1,4 @@
+{{ $mode := .type }}{{ if or (eq $mode "httpProxy") (eq $mode "socks5") }}{{ $mode = "mixProxy" }}{{ end }}
 <style>
     /* The selected mode is the single source of truth for field visibility.
        Hidden fields are also disabled by the script so stale values are not
@@ -17,7 +18,7 @@
             <p data-i18n-zh="选择代理模式并填写连接目标，完成后即可开始转发流量。" data-i18n-en="Choose a proxy mode and connection target to start forwarding traffic.">选择代理模式并填写连接目标，完成后即可开始转发流量。</p>
         </div>
         <div class="dashboard-page-actions form-page-actions">
-            <a id="tunnel-back-link" class="btn btn-outline btn-primary form-page-back" href="{{.web_base_url}}/index/{{if eq .type "httpProxy"}}http{{else if .type}}{{.type}}{{else}}tcp{{end}}">
+            <a id="tunnel-back-link" class="btn btn-outline btn-primary form-page-back" href="{{.web_base_url}}/index/{{if $mode}}{{$mode}}{{else}}tcp{{end}}">
                 <i class="fa fa-arrow-left" aria-hidden="true"></i>
                 <span data-i18n-zh="返回列表" data-i18n-en="Back to list">返回列表</span>
             </a>
@@ -32,13 +33,14 @@
                 <span id="caseudp" data-tunnel-case="udp" langtag="info-caseudp"></span>
                 <span id="casehttpProxy" data-tunnel-case="httpProxy" langtag="info-casehttpproxy"></span>
                 <span id="casesocks5" data-tunnel-case="socks5" langtag="info-casesocks5"></span>
+                <span id="casemixProxy" data-tunnel-case="mixProxy" langtag="info-casemixproxy"></span>
                 <span id="casesecret" data-tunnel-case="secret" langtag="info-casesecret"></span>
                 <span id="casep2p" data-tunnel-case="p2p" langtag="info-casep2p"></span>
                 <span id="casefile" data-tunnel-case="file" langtag="info-casefile"></span>
             </p>
         </div>
     </aside>
-    <div class="form-page-grid tunnel-form tunnel-type-{{if .type}}{{.type}}{{else}}tcp{{end}}">
+    <div class="form-page-grid tunnel-form tunnel-type-{{if $mode}}{{$mode}}{{else}}tcp{{end}}">
     <div class="form-page-column">
         <div class="panel ibox float-e-margins form-workflow-card zui-panel">
             <div class="ibox-content form-workflow-content">
@@ -54,8 +56,7 @@
                             <select class="form-control" name="type" id="type">
                                 <option value="tcp" langtag="scheme-tcp"></option>
                                 <option value="udp" langtag="scheme-udp"></option>
-                                <option value="httpProxy" langtag="scheme-httpProxy"></option>
-                                <option value="socks5" langtag="scheme-socks5"></option>
+                                <option value="mixProxy" langtag="scheme-mixproxy"></option>
                                 <option value="secret" langtag="scheme-secret"></option>
                                 <option value="p2p" langtag="scheme-p2p"></option>
                                 <option value="file" langtag="scheme-file"></option>
@@ -72,6 +73,37 @@
                                     langtag="word-belongclient"></select>
                         </div>
                     </div>
+                    <div class="form-group" id="registered_only">
+                        <label class="form-label font-bold" data-i18n-zh="仅允许已登记 IP" data-i18n-en="Registered IPs only">仅允许已登记 IP</label>
+                        <div class="form-group-wrapper"><div class="toggle-field"><input type="hidden" name="registered_only" value="0"><label class="toggle-switch"><input type="checkbox"><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="no">否</span></div><span class="help-block" data-i18n-zh="开启后，访问者必须先在 IP 登记页面登记，才能访问此隧道。" data-i18n-en="Visitors must register their IP before accessing this tunnel.">开启后，访问者必须先在 IP 登记页面登记，才能访问此隧道。</span></div>
+                    </div>
+                    <div class="form-group form-group--wide" data-tunnel-field="mix_proxy">
+                        <label class="form-label font-bold" data-i18n-zh="混合代理协议" data-i18n-en="Mixed proxy protocols">混合代理协议</label>
+                        <div class="form-group-wrapper">
+                            <div class="host-option-toggles">
+                                <div class="host-option-toggle"><div class="toggle-field"><input type="hidden" name="enable_http" value="1"><label class="toggle-switch"><input type="checkbox" checked><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="yes" data-i18n-zh="HTTP 代理：是" data-i18n-en="HTTP proxy: Yes">HTTP 代理：是</span></div></div>
+                                <div class="host-option-toggle"><div class="toggle-field"><input type="hidden" name="enable_socks5" value="1"><label class="toggle-switch"><input type="checkbox" checked><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="yes" data-i18n-zh="SOCKS5 代理：是" data-i18n-en="SOCKS5 proxy: Yes">SOCKS5 代理：是</span></div></div>
+                            </div>
+                            <span class="help-block" data-i18n-zh="HTTP 与 SOCKS5 共用同一个公网端口；至少启用一种协议。" data-i18n-en="HTTP and SOCKS5 share one public port; enable at least one protocol.">HTTP 与 SOCKS5 共用同一个公网端口；至少启用一种协议。</span>
+                        </div>
+                    </div>
+                    <div class="form-group" data-tunnel-field="dest_acl_mode">
+                        <label class="form-label font-bold" for="tunnel-dest-acl-mode" langtag="word-destacl"></label>
+                        <div class="form-group-wrapper"><select id="tunnel-dest-acl-mode" class="form-control" name="dest_acl_mode"><option value="0" langtag="word-disable"></option><option value="1" langtag="word-whitelist"></option><option value="2" langtag="word-blacklist"></option></select><span class="help-block" langtag="info-destacl"></span></div>
+                    </div>
+                    <div class="form-group form-group--wide" data-tunnel-field="dest_acl_rules">
+                        <label class="form-label font-bold" for="tunnel-dest-acl-rules" langtag="word-destaclrules"></label>
+                        <div class="form-group-wrapper"><textarea id="tunnel-dest-acl-rules" class="form-control" rows="4" name="dest_acl_rules"></textarea><span class="help-block" langtag="info-destaclrules"></span></div>
+                    </div>
+                    <div class="form-group form-group--wide" data-tunnel-field="acl">
+                        <label class="form-label font-bold" for="tunnel-acl-black" data-i18n-zh="隧道黑名单（IP/CIDR）" data-i18n-en="Tunnel denylist (IP/CIDR)">隧道黑名单（IP/CIDR）</label>
+                        <div class="form-group-wrapper"><textarea id="tunnel-acl-black" class="form-control" rows="2" name="blackiplist" placeholder="203.0.113.10"></textarea></div>
+                    </div>
+                    <div class="form-group form-group--wide" data-tunnel-field="acl">
+                        <label class="form-label font-bold" for="tunnel-acl-white" data-i18n-zh="隧道白名单（IP/CIDR）" data-i18n-en="Tunnel allowlist (IP/CIDR)">隧道白名单（IP/CIDR）</label>
+                        <div class="form-group-wrapper"><textarea id="tunnel-acl-white" class="form-control" rows="2" name="whiteiplist" placeholder="198.51.100.0/24"></textarea><span class="help-block" data-i18n-zh="留空表示不增加这一层限制。" data-i18n-en="Leave empty to disable this level.">留空表示不增加这一层限制。</span></div>
+                    </div>
+                    <div class="form-group" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-priority" data-i18n-zh="名单冲突策略" data-i18n-en="List conflict policy">名单冲突策略</label><div class="form-group-wrapper"><select id="tunnel-acl-priority" class="form-control" name="iplistpriority"><option value="0">黑名单优先</option><option value="1">白名单优先</option></select></div></div>
                     <div class="form-group" id="remark_group">
                         <label class="form-label font-bold" for="tunnel-remark" langtag="word-remark"></label>
                         <div class="form-group-wrapper">
@@ -88,7 +120,7 @@
                         </div>
                     </div>
                     {{end}}
-                    {{if or (not .dedicated) (eq .type "tcp") (eq .type "udp") (eq .type "httpProxy") (eq .type "socks5") (eq .type "file")}}
+                    {{if or (not .dedicated) (eq $mode "tcp") (eq $mode "udp") (eq $mode "mixProxy") (eq $mode "file")}}
                     <div class="form-group tunnel-mode-field" id="port" data-tunnel-field="port">
                         <label class="form-label font-bold" for="tunnel-port" langtag="word-serverport"></label>
                         <div class="form-group-wrapper">
@@ -98,7 +130,7 @@
                     </div>
                     {{end}}
                     {{if eq true .allow_local_proxy}}
-                    {{if or (not .dedicated) (eq .type "tcp") (eq .type "udp")}}
+                    {{if or (not .dedicated) (eq $mode "tcp") (eq $mode "udp")}}
                     <div class="form-group tunnel-mode-field" id="local_proxy" data-tunnel-field="local_proxy">
                         <label class="form-label font-bold" for="tunnel-local-proxy" langtag="word-proxytolocal"></label>
                         <div class="form-group-wrapper">
@@ -112,9 +144,9 @@
                     {{end}}
                     {{end}}
 
-                    {{if or (not .dedicated) (eq .type "tcp") (eq .type "udp") (eq .type "secret") (eq .type "p2p") (eq .type "file")}}
-                    <div class="form-section-title" data-tunnel-section="target"><i class="fa fa-bullseye" aria-hidden="true"></i><span data-i18n-zh="目标配置" data-i18n-en="Target">目标配置</span></div>
-                    {{if or (not .dedicated) (eq .type "tcp") (eq .type "udp") (eq .type "secret") (eq .type "p2p")}}
+                    {{if or (not .dedicated) (eq $mode "tcp") (eq $mode "udp") (eq $mode "secret") (eq $mode "p2p") (eq $mode "file")}}
+                    <div class="form-section-title" data-tunnel-section="target" data-default-open="true"><i class="fa fa-bullseye" aria-hidden="true"></i><span data-i18n-zh="目标配置" data-i18n-en="Target">目标配置</span></div>
+                    {{if or (not .dedicated) (eq $mode "tcp") (eq $mode "udp") (eq $mode "secret") (eq $mode "p2p")}}
                     <div class="form-group form-group--wide tunnel-mode-field" id="target" data-tunnel-field="target">
                         <label class="form-label font-bold" for="tunnel-target" langtag="word-target"></label>
                         <div class="form-group-wrapper">
@@ -124,7 +156,7 @@
                         </div>
                     </div>
                     {{end}}
-                    {{if or (not .dedicated) (eq .type "file")}}
+                    {{if or (not .dedicated) (eq $mode "file")}}
                     <div class="form-group tunnel-mode-field" id="local_path" data-tunnel-field="local_path">
                         <label class="form-label font-bold" for="tunnel-local-path" langtag="word-localpath"></label>
                         <div class="form-group-wrapper">
@@ -152,7 +184,7 @@
                         <div class="form-group-wrapper"><input id="tunnel-download-limit" class="form-control" type="number" min="0" step="1" name="download_limit" value="0"><span class="help-block" data-i18n-zh="内网服务到访问者的速度；0 表示不限速。同一隧道的所有连接共享此额度。" data-i18n-en="Private service to visitor speed; 0 means unlimited. All connections on this tunnel share the limit.">内网服务到访问者的速度；0 表示不限速。同一隧道的所有连接共享此额度。</span></div>
                     </div>
 
-                    {{if or (not .dedicated) (eq .type "tcp")}}
+                    {{if or (not .dedicated) (eq $mode "tcp")}}
                     <div class="form-section-title" data-tunnel-section="health"><i class="fa fa-heartbeat" aria-hidden="true"></i><span data-i18n-zh="后端健康检查" data-i18n-en="Backend health check">后端健康检查</span></div>
                     <div class="form-group tunnel-mode-field" id="health_check_type" data-tunnel-field="health_check_type">
                         <label class="form-label font-bold" for="health-check-type" data-i18n-zh="检查类型" data-i18n-en="Check type">检查类型</label>
@@ -168,9 +200,9 @@
                     <div class="form-group tunnel-mode-field" id="health_http_url" data-tunnel-field="health_http_url"><label class="form-label font-bold" for="health-http-url" data-i18n-zh="HTTP 检查路径" data-i18n-en="HTTP check path">HTTP 检查路径</label><div class="form-group-wrapper"><input id="health-http-url" class="form-control" type="text" name="health_http_url" value="/" placeholder="/healthz"><span class="help-block" data-i18n-zh="HTTP 检查时请求 http://目标+此路径，并要求返回 200。" data-i18n-en="HTTP checks request http://target plus this path and require status 200.">HTTP 检查时请求 http://目标+此路径，并要求返回 200。</span></div></div>
                     {{end}}
 
-                    {{if or (not .dedicated) (eq .type "tcp") (eq .type "secret") (eq .type "p2p")}}
+                    {{if or (not .dedicated) (eq $mode "tcp") (eq $mode "secret") (eq $mode "p2p")}}
                     <div class="form-section-title" data-tunnel-section="security"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="安全配置" data-i18n-en="Security">安全配置</span></div>
-                    {{if or (not .dedicated) (eq .type "secret") (eq .type "p2p")}}
+                    {{if or (not .dedicated) (eq $mode "secret") (eq $mode "p2p")}}
                     <div class="form-group tunnel-mode-field" id="password" data-tunnel-field="password">
                         <label class="form-label font-bold" for="tunnel-password" langtag="word-identificationkey"></label>
                         <div class="form-group-wrapper">
@@ -179,7 +211,7 @@
                         </div>
                     </div>
                     {{end}}
-                    {{if or (not .dedicated) (eq .type "tcp")}}
+                    {{if or (not .dedicated) (eq $mode "tcp")}}
                     <div class="form-group tunnel-mode-field" id="proto_version" data-tunnel-field="proto_version">
                         <label class="form-label font-bold" for="ProtoVersion" data-i18n-zh="Proxy Protocol" data-i18n-en="Proxy Protocol">Proxy Protocol</label>
                         <div class="form-group-wrapper">
@@ -211,15 +243,14 @@
 </section>
 <script>
     var fieldMap = {
-        tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
-        udp: ["client_id", "server_ip", "port", "target", "local_proxy", "upload_limit", "download_limit"],
-        httpProxy: ["client_id", "server_ip", "port", "upload_limit", "download_limit"],
-        socks5: ["client_id", "server_ip", "port", "upload_limit", "download_limit"],
-        secret: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"],
-        p2p: ["client_id", "server_ip", "target", "password", "upload_limit", "download_limit"],
-        file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "upload_limit", "download_limit"]
+        tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "acl", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
+        udp: ["client_id", "server_ip", "port", "target", "local_proxy", "acl", "upload_limit", "download_limit"],
+        mixProxy: ["client_id", "server_ip", "port", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "upload_limit", "download_limit"],
+        secret: ["client_id", "server_ip", "target", "password", "acl", "upload_limit", "download_limit"],
+        p2p: ["client_id", "server_ip", "target", "password", "acl", "upload_limit", "download_limit"],
+        file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "acl", "upload_limit", "download_limit"]
     };
-    var tunnelTypeClasses = "tunnel-type-tcp tunnel-type-udp tunnel-type-httpProxy tunnel-type-socks5 tunnel-type-secret tunnel-type-p2p tunnel-type-file";
+    var tunnelTypeClasses = "tunnel-type-tcp tunnel-type-udp tunnel-type-httpProxy tunnel-type-socks5 tunnel-type-mixProxy tunnel-type-secret tunnel-type-p2p tunnel-type-file";
     var tunnelSectionFields = {
         target: ["target", "local_path", "strip_pre"],
         rate: ["upload_limit", "download_limit"],

@@ -10,6 +10,7 @@ NPS 支持多种代理模式。普通 TCP/UDP/HTTP 代理需要占用公网端�
 | UDP 隧道 | `udp` | DNS、游戏、VoIP | 是 |
 | HTTP 正向代理 | `httpProxy` | 通过 HTTP 代理访问内网 | 是 |
 | SOCKS5 | `socks5` | 代理访问多种内网资源 | 是 |
+| 混合代理 | `mixProxy` | HTTP 正向代理和 SOCKS5 共用一个端口 | 是 |
 | 域名代理 | Host 规则 | Web 站点、接口回调 | 共用 80/443 |
 | Secret | `secret` | 临时安全连接 | 否 |
 | P2P | `p2p` | 点对点直连 | 否 |
@@ -66,6 +67,22 @@ SOCKS5 的账号密码不在「新增 SOCKS5 隧道」页面单独设置，而�
 
 同一个客户端下的 HTTP 正向代理、SOCKS5 代理和域名代理会复用这组认证信息。
 
+## 混合代理（HTTP + SOCKS5）
+
+混合代理把 HTTP 正向代理和 SOCKS5 放在同一个服务端 TCP 端口上，客户端根据连接开头的协议握手自动分流。创建规则时可只启用 HTTP、只启用 SOCKS5，或两者都启用；不能两者同时关闭。它不会替换原有的 `httpProxy`、`socks5` 模式，旧规则的监听端口与认证方式保持不变。
+
+混合代理使用所属客户端的 Basic 认证用户名和密码。公网开放前应配置强密码并限制来源 IP。可选的“目标 ACL”用于限制代理最终访问的目标主机：关闭时不增加目标限制；白名单模式只放行匹配项；黑名单模式拒绝匹配项。规则每行一条，支持：
+
+```text
+full:api.example.com
+domain:example.com
+keyword:internal
+*.example.net
+10.0.0.0/8
+```
+
+`full:` 精确匹配主机名；`domain:` 匹配主域名及其子域名；`keyword:` 按主机名子串匹配；通配域名和 IP/CIDR 也可直接填写。目标 ACL 同时应用于 HTTP 代理请求和 SOCKS5 CONNECT；SOCKS5 UDP 会按每个数据报中的实际目标逐个判断。当前 ACL 不解析域名对应的 IP，也不支持 GeoIP/Geosite；规则只匹配代理请求携带的目标主机名或 IP。
+
 ## HTTP(S) 域名代理
 
 域名代理通过 Host 规则维护，不在普通隧道列表中。多个域名共用服务端 `80` 和 `443`。
@@ -111,6 +128,12 @@ curl -i -H 'Host: app.example.com' http://127.0.0.1:30111/
 HTTPS 可由 NPS 终结，也可让内网服务自行处理 TLS。使用非标准 HTTPS 端口时，访问地址同样必须包含端口，例如 `https://app.example.com:30443/`。证书、自动 HTTPS 和 Nginx/Caddy 前置反代配置见[服务端增强功能](server/nps_extend.md)。
 
 当 80/443 被 Nginx、Caddy 或其他服务占用时，NPS 可以监听 `30111`/`30443`，由前置反代转发并保留 Host。此时域名仍解析到前置反代所在地址，NPS 不需要直接占用 80/443。
+
+#### 将访问者 IP 传给后端（PROXY Protocol）
+
+Host 规则可以选择关闭、PROXY v1 或 PROXY v2。开启后，每个新建的后端 TCP 连接开始时，NPS 会先发送一段 PROXY Protocol 头，携带 NPS 看到的来源地址和后端地址；后端必须明确支持并配置为接收对应版本。未启用的旧规则继续不发送 PROXY 头。
+
+只应对支持 PROXY Protocol 的后端开启。普通 HTTP 服务通常会把这段头当成非法 HTTP 数据，导致请求失败。若后端位于 NPS 本机并通过“本地代理”访问，NPS 同样会发送该头。
 
 ### 实时请求调试
 

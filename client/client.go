@@ -435,7 +435,7 @@ func (s *TRPClient) newUdpConn(localAddr, rAddr string, md5Password string) {
 		conn.SetUdpSession(udpTunnel)
 		s.logTrace("successful connection with client ,address %s", udpTunnel.RemoteAddr().String())
 		//read link info from remote
-		conn.Accept(nps_mux.NewMux(udpTunnel, s.bridgeConnType, s.disconnectTime), func(c net.Conn) {
+		conn.Accept(nps_mux.NewMux(udpTunnel, muxTransportType(s.bridgeConnType), s.disconnectTime), func(c net.Conn) {
 			go s.handleChan(c)
 		})
 		return
@@ -466,7 +466,7 @@ func (s *TRPClient) newChan() {
 		s.Close()
 		return
 	}
-	newMux := nps_mux.NewMux(tunnel.Conn, s.bridgeConnType, s.disconnectTime)
+	newMux := nps_mux.NewMux(tunnel.Conn, muxTransportType(s.bridgeConnType), s.disconnectTime)
 	// Install the new mux atomically, then close the previous one outside the
 	// state lock. If the client was closed while dialing, discard the new mux.
 	oldTunnel, installed := s.installTunnel(newMux)
@@ -505,6 +505,14 @@ func (s *TRPClient) handleChan(src net.Conn) {
 			s.logWarn("connect to %s error %s", lk.Host, err.Error())
 			src.Close()
 		} else {
+			if lk.ProtoVersion == "V1" || lk.ProtoVersion == "V2" {
+				if err := writeProxyProtocolHeader(targetConn, lk.RemoteAddr, lk.ProtoVersion); err != nil {
+					s.logError("write PROXY protocol header for HTTP backend %s: %v", lk.Host, err)
+					_ = targetConn.Close()
+					_ = src.Close()
+					return
+				}
+			}
 			srcConn := conn.GetConn(src, lk.Crypt, lk.Compress, nil, false, lk.TLSFingerprint)
 			var targetCloseOnce sync.Once
 			targetWriteClosed := false
@@ -570,46 +578,59 @@ func (s *TRPClient) handleChan(src net.Conn) {
 		s.logTrace("new %s connection with the goal of %s, remote address:%s", lk.ConnType, lk.Host, lk.RemoteAddr)
 
 		if lk.ProtoVersion == "V1" || lk.ProtoVersion == "V2" {
-			var addr = targetConn.RemoteAddr()
-			if lk.RemoteAddr != "" {
-				if parsed, parseErr := net.ResolveTCPAddr("tcp", lk.RemoteAddr); parseErr == nil {
-					addr = parsed
-				} else {
-					s.logWarn("invalid remote address %q for PROXY header: %v", lk.RemoteAddr, parseErr)
-				}
-			}
-
-			var version byte
-
-			if lk.ProtoVersion == "V1" {
-				version = 1
-			} else if lk.ProtoVersion == "V2" {
-				version = 2
-			}
-
-			transportProtocol := proxyproto.TCPv4
-			if strings.Contains(addr.String(), ".") {
-				transportProtocol = proxyproto.TCPv4
-			} else {
-				transportProtocol = proxyproto.TCPv6
-			}
-
-			header := &proxyproto.Header{
-				Command:           proxyproto.PROXY,
-				SourceAddr:        addr,
-				DestinationAddr:   targetConn.RemoteAddr(),
-				Version:           version,
-				TransportProtocol: transportProtocol,
-			}
-
-			_, err2 := header.WriteTo(targetConn)
-			if err2 != nil {
-				s.logError(err2.Error())
+			if err := writeProxyProtocolHeader(targetConn, lk.RemoteAddr, lk.ProtoVersion); err != nil {
+				s.logError("write PROXY protocol header for backend %s: %v", lk.Host, err)
+				_ = targetConn.Close()
+				_ = src.Close()
+				return
 			}
 		}
 
 		conn.CopyWaitGroup(src, targetConn, lk.Crypt, lk.Compress, nil, nil, false, nil, nil, nil, lk.TLSFingerprint)
 	}
+}
+
+func writeProxyProtocolHeader(target net.Conn, remoteAddr, protoVersion string) error {
+	if target == nil {
+		return errors.New("PROXY protocol target is nil")
+	}
+	var version byte
+	switch protoVersion {
+	case "V1":
+		version = 1
+	case "V2":
+		version = 2
+	default:
+		return errors.New("unsupported PROXY protocol version " + protoVersion)
+	}
+	sourceAddr, err := net.ResolveTCPAddr("tcp", strings.TrimSpace(remoteAddr))
+	if err != nil || sourceAddr == nil || sourceAddr.IP == nil {
+		return errors.New("invalid source address for PROXY protocol: " + remoteAddr)
+	}
+	destinationAddr, ok := target.RemoteAddr().(*net.TCPAddr)
+	if !ok || destinationAddr == nil || destinationAddr.IP == nil {
+		return errors.New("invalid destination address for PROXY protocol")
+	}
+	sourceIsIPv4 := sourceAddr.IP.To4() != nil
+	destinationIsIPv4 := destinationAddr.IP.To4() != nil
+	if sourceIsIPv4 != destinationIsIPv4 {
+		return errors.New("PROXY protocol cannot represent mixed address families")
+	}
+	transport := proxyproto.TCPv4
+	if !sourceIsIPv4 {
+		transport = proxyproto.TCPv6
+	}
+	header := &proxyproto.Header{
+		Command:           proxyproto.PROXY,
+		SourceAddr:        sourceAddr,
+		DestinationAddr:   destinationAddr,
+		Version:           version,
+		TransportProtocol: transport,
+	}
+	if _, err := header.WriteTo(target); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *TRPClient) handleUdp(serverConn io.ReadWriteCloser) {

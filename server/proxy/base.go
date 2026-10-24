@@ -11,6 +11,7 @@ import (
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/ipreg"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 )
@@ -207,6 +208,33 @@ func isClientBlackBlocked(client *file.Client, remote string) bool {
 	return common.IsBlackIp(remote, verifyKey, blacklist)
 }
 
+// isRegisteredOnlyBlocked is the new opt-in access gate.  It is kept
+// separate from the historical IP whitelist challenge so existing clients and
+// configurations retain their exact behaviour when RegisteredOnly is false.
+func isRegisteredOnlyBlocked(client *file.Client, remote string, required bool) bool {
+	if client == nil {
+		return required
+	}
+	client.RLock()
+	clientID := client.Id
+	required = required || client.RegisteredOnly
+	client.RUnlock()
+	if !required {
+		return false
+	}
+	return !ipreg.RegisteredString(clientID, remote)
+}
+
+func isHostRegisteredOnlyBlocked(client *file.Client, host *file.Host, remote string) bool {
+	if host == nil {
+		return false
+	}
+	host.RLock()
+	required := host.RegisteredOnly
+	host.RUnlock()
+	return isRegisteredOnlyBlocked(client, remote, required)
+}
+
 // snapshotClientConfig copies the small immutable-on-the-wire portion of a
 // client configuration while holding the client's lock. Console updates may
 // replace Cnf or mutate its fields while proxy workers are active.
@@ -272,6 +300,10 @@ func (s *BaseServer) DealClient(c *conn.Conn, client *file.Client, addr string,
 		_ = c.Close()
 		return errors.New("local proxy is disabled")
 	}
+	if task != nil && SourceDenied(c.Conn.RemoteAddr(), client, &task.SourceLists, taskName(task)) {
+		_ = c.Close()
+		return nil
+	}
 
 	// 判断访问地址是否在全局黑名单内
 	if IsGlobalBlackIp(c.RemoteAddr().String()) {
@@ -297,7 +329,14 @@ func (s *BaseServer) DealClient(c *conn.Conn, client *file.Client, addr string,
 	if task != nil {
 		task.RLock()
 		protoVersion = task.ProtoVersion
+		registeredOnly := task.RegisteredOnly
 		task.RUnlock()
+		if isRegisteredOnlyBlocked(client, c.RemoteAddr().String(), registeredOnly) {
+			_ = c.Close()
+			return nil
+		}
+	} else if host != nil {
+		protoVersion = hostProxyProtocolVersion(host)
 	}
 
 	link := conn.NewLink(tp, addr, clientConfig.Crypt, clientConfig.Compress, c.Conn.RemoteAddr().String(), localProxy, protoVersion)
@@ -308,7 +347,7 @@ func (s *BaseServer) DealClient(c *conn.Conn, client *file.Client, addr string,
 	var bridgeTask *file.Tunnel
 	if s.task != nil {
 		s.task.RLock()
-		bridgeTask = &file.Tunnel{Mode: s.task.Mode}
+		bridgeTask = &file.Tunnel{Mode: s.task.Mode, RegisteredOnly: s.task.RegisteredOnly}
 		s.task.RUnlock()
 	}
 	if target, err := s.bridge.SendLinkInfo(clientID, link, bridgeTask); err != nil {

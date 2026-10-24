@@ -1,12 +1,14 @@
 package bridge
 
 import (
+	"context"
 	"crypto/tls"
 	"ehang.io/nps/lib/nps_mux"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,11 +19,14 @@ import (
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/ipreg"
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server/connection"
 	"ehang.io/nps/server/tool"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
+	"github.com/pires/go-proxyproto"
+	"github.com/quic-go/quic-go"
 )
 
 var ServerTlsEnable bool = false
@@ -292,6 +297,10 @@ func (s *Bridge) StartTunnel() error {
 		if err != nil {
 			return err
 		}
+		if err := s.startExtraBridgeTransports(); err != nil {
+			_ = kcpListener.Close()
+			return err
+		}
 		go func() {
 			defer kcpListener.Close()
 			for {
@@ -308,7 +317,7 @@ func (s *Bridge) StartTunnel() error {
 					return
 				}
 				conn.SetUdpSession(c)
-				go s.cliProcess(conn.NewConn(c))
+				go s.cliProcess(conn.NewConn(c), "kcp")
 			}
 		}()
 		go s.ping()
@@ -323,22 +332,173 @@ func (s *Bridge) StartTunnel() error {
 	// Bind the optional TLS listener before returning so startup failures are
 	// reported to the caller instead of terminating the whole process from a
 	// background goroutine.
+	var tlsListener net.Listener
 	if ServerTlsEnable {
 		tlsBridgePort := beego.AppConfig.DefaultInt("tls_bridge_port", 8025)
 		logs.Info("tls server start, the bridge type is %s, the tls bridge port is %d", "tcp", tlsBridgePort)
-		tlsListener, tlsErr := net.Listen("tcp", net.JoinHostPort(strings.TrimSpace(beego.AppConfig.String("bridge_ip")), strconv.Itoa(tlsBridgePort)))
+		var tlsErr error
+		tlsListener, tlsErr = net.Listen("tcp", net.JoinHostPort(strings.TrimSpace(beego.AppConfig.String("bridge_ip")), strconv.Itoa(tlsBridgePort)))
 		if tlsErr != nil {
 			_ = listener.Close()
 			return tlsErr
 		}
+	}
+	if err := s.startExtraBridgeTransports(); err != nil {
+		_ = listener.Close()
+		if tlsListener != nil {
+			_ = tlsListener.Close()
+		}
+		return err
+	}
+	if tlsListener != nil {
 		go conn.Accept(tlsListener, func(c net.Conn) {
-			s.cliProcess(conn.NewConn(tls.Server(c, &tls.Config{Certificates: []tls.Certificate{crypt.GetCert()}, MinVersion: tls.VersionTLS12})))
+			s.cliProcess(conn.NewConn(tls.Server(c, &tls.Config{Certificates: []tls.Certificate{crypt.GetCert()}, MinVersion: tls.VersionTLS12})), "tcp")
 		})
 	}
 	go s.ping()
 	go conn.Accept(listener, func(c net.Conn) {
-		s.cliProcess(conn.NewConn(c))
+		s.cliProcess(conn.NewConn(c), "tcp")
 	})
+	return nil
+}
+
+// startExtraBridgeTransports binds all configured optional endpoints before
+// serving any of them. A bad port or certificate therefore fails startup
+// instead of leaving a partially enabled Bridge behind.
+func (s *Bridge) startExtraBridgeTransports() error {
+	type kcpEndpoint struct {
+		accept func() (net.Conn, error)
+		close  func() error
+		port   int
+	}
+	var kcpEndpointValue *kcpEndpoint
+	kcpPort := beego.AppConfig.DefaultInt("bridge_kcp_port", 0)
+	if kcpPort > 0 && !(s.tunnelType == "kcp" && kcpPort == s.TunnelPort) {
+		listener, err := conn.NewKcpListener(net.JoinHostPort(strings.TrimSpace(beego.AppConfig.String("bridge_ip")), strconv.Itoa(kcpPort)))
+		if err != nil {
+			return fmt.Errorf("start KCP Bridge on port %d: %w", kcpPort, err)
+		}
+		kcpEndpointValue = &kcpEndpoint{
+			accept: func() (net.Conn, error) {
+				session, err := listener.AcceptKCP()
+				if err != nil {
+					return nil, err
+				}
+				conn.SetUdpSession(session)
+				return session, nil
+			},
+			close: listener.Close,
+			port:  kcpPort,
+		}
+	}
+	websocketListeners := make([]preparedWebSocketBridge, 0, 2)
+	for _, endpoint := range []struct {
+		key    string
+		secure bool
+	}{
+		{key: "bridge_ws_port"},
+		{key: "bridge_wss_port", secure: true},
+	} {
+		port := beego.AppConfig.DefaultInt(endpoint.key, 0)
+		if port <= 0 {
+			continue
+		}
+		prepared, err := s.prepareWebSocketBridge(port, endpoint.secure)
+		if err != nil {
+			if kcpEndpointValue != nil {
+				_ = kcpEndpointValue.close()
+			}
+			for _, previous := range websocketListeners {
+				_ = previous.listener.Close()
+			}
+			return err
+		}
+		websocketListeners = append(websocketListeners, prepared)
+	}
+	var quicListener *quic.Listener
+	quicPort := beego.AppConfig.DefaultInt("bridge_quic_port", 0)
+	if quicPort > 0 {
+		quicIP := strings.TrimSpace(beego.AppConfig.String("bridge_quic_ip"))
+		if quicIP == "" {
+			quicIP = strings.TrimSpace(beego.AppConfig.String("bridge_ip"))
+		}
+		if quicIP == "" {
+			quicIP = "0.0.0.0"
+		}
+		alpn := strings.TrimSpace(beego.AppConfig.String("quic_alpn"))
+		if alpn == "" {
+			alpn = "nps"
+		}
+		cert := crypt.GetCert()
+		quicConfig := &quic.Config{
+			KeepAlivePeriod:    time.Duration(beego.AppConfig.DefaultInt("quic_keep_alive_period", 10)) * time.Second,
+			MaxIdleTimeout:     time.Duration(beego.AppConfig.DefaultInt("quic_max_idle_timeout", 30)) * time.Second,
+			MaxIncomingStreams: int64(beego.AppConfig.DefaultInt("quic_max_incoming_streams", 100000)),
+		}
+		if quicConfig.KeepAlivePeriod < 0 {
+			quicConfig.KeepAlivePeriod = 0
+		}
+		if quicConfig.MaxIdleTimeout <= 0 {
+			quicConfig.MaxIdleTimeout = 30 * time.Second
+		}
+		if quicConfig.MaxIncomingStreams <= 0 {
+			quicConfig.MaxIncomingStreams = 100000
+		}
+		var quicErr error
+		quicListener, quicErr = quic.ListenAddr(net.JoinHostPort(quicIP, strconv.Itoa(quicPort)), &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+			NextProtos:   []string{alpn},
+		}, quicConfig)
+		if quicErr != nil {
+			if kcpEndpointValue != nil {
+				_ = kcpEndpointValue.close()
+			}
+			for _, previous := range websocketListeners {
+				_ = previous.listener.Close()
+			}
+			return fmt.Errorf("start QUIC Bridge on port %d: %w", quicPort, quicErr)
+		}
+	}
+	if kcpEndpointValue != nil {
+		logs.Info("server start, the bridge type is kcp, the bridge port is %d", kcpEndpointValue.port)
+		go func(endpoint *kcpEndpoint) {
+			defer endpoint.close()
+			for {
+				c, err := endpoint.accept()
+				if err != nil {
+					if !errors.Is(err, net.ErrClosed) {
+						logs.Warn("KCP Bridge accept failed: %v", err)
+					}
+					return
+				}
+				if c == nil {
+					return
+				}
+				go s.cliProcess(conn.NewConn(c), "kcp")
+			}
+		}(kcpEndpointValue)
+	}
+	for _, prepared := range websocketListeners {
+		prepared := prepared
+		logs.Info("server start, the bridge type is %s, the bridge port is %d, the bridge path is %s", prepared.transport, prepared.port, prepared.path)
+		go func() {
+			if err := prepared.server.Serve(prepared.listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logs.Error("%s Bridge stopped: %v", prepared.transport, err)
+			}
+		}()
+	}
+	if quicListener != nil {
+		logs.Info("server start, the bridge type is quic, the bridge port is %d", quicPort)
+		go func() {
+			err := conn.ServeQuic(context.Background(), quicListener, 10*time.Second, func(c net.Conn) {
+				s.cliProcess(conn.NewConn(c), "quic")
+			})
+			if err != nil && !errors.Is(err, net.ErrClosed) {
+				logs.Error("QUIC Bridge stopped: %v", err)
+			}
+		}()
+	}
 	return nil
 }
 
@@ -384,8 +544,8 @@ func applyHealthResult(target *file.Target, health *file.Health, info string, he
 	if target == nil || health == nil || !strings.Contains(target.TargetStr, info) {
 		return
 	}
-	health.Lock()
-	defer health.Unlock()
+	health.HealthLock()
+	defer health.HealthUnlock()
 	if !healthy {
 		if target.TargetArr == nil || (len(target.TargetArr) == 0 && len(health.HealthRemoveArr) == 0) {
 			target.TargetArr = common.TrimArr(strings.Split(target.TargetStr, "\n"))
@@ -485,9 +645,13 @@ func (s *Bridge) verifySuccess(c *conn.Conn) {
 	c.Write([]byte(common.VERIFY_SUCCESS))
 }
 
-func (s *Bridge) cliProcess(c *conn.Conn) {
+func (s *Bridge) cliProcess(c *conn.Conn, transport ...string) {
 	if c == nil || c.Conn == nil {
 		return
+	}
+	transportType := s.tunnelType
+	if len(transport) > 0 && transport[0] != "" {
+		transportType = transport[0]
 	}
 	// Apply the administrator's global source policy before reading the
 	// handshake. This protects the bridge/control plane as well as visitor
@@ -519,32 +683,117 @@ func (s *Bridge) cliProcess(c *conn.Conn) {
 		c.Close()
 		return
 	}
-	//write server version to client
-	c.Write([]byte(crypt.Md5(version.GetVersion())))
-	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
-	var buf []byte
-	//get vKey from client
-	if buf, err = c.GetShortContent(32); err != nil {
-		c.Close()
-		return
-	}
-	//verify
-	id, err := file.GetDb().GetIdByVerifyKey(string(buf), c.Conn.RemoteAddr().String())
+	clientVersion := strings.TrimSpace(strings.Trim(string(vs), "\x00"))
+	id, err := s.authenticateClient(c, clientVersion, file.GetDb())
 	if err != nil {
-		logs.Info("[验证失败] 拒绝客户端连接 %s，原因：%v", c.Conn.RemoteAddr(), err)
-		s.verifyError(c)
+		logs.Info("[验证失败] 拒绝客户端连接 %s，版本 %q，原因：%v", c.Conn.RemoteAddr(), clientVersion, err)
+		_ = c.Close()
 		return
-	} else {
-		s.verifySuccess(c)
 	}
 	if flag, err := c.ReadFlag(); err == nil {
 		_ = c.SetReadDeadline(time.Time{})
-		s.typeDeal(flag, c, id, string(vs))
+		s.typeDeal(flag, c, id, clientVersion, transportType)
 	} else {
 		logs.Warn("[连接异常] 读取客户端连接类型失败：%v，flag=%q", err, flag)
 		c.Close()
 	}
 	return
+}
+
+// authenticateClient chooses the wire-compatible handshake using the NPC's
+// product release. NPC 1.1.28 and earlier receive only the original MD5(vkey)
+// exchange; new messages are reserved for 1.1.29 and later.
+func (s *Bridge) authenticateClient(c *conn.Conn, clientVersion string, db *file.DbUtils) (int, error) {
+	switch {
+	case version.UsesSecureHandshake(clientVersion):
+		return s.secureClientHandshakeWithDB(c, clientVersion, db)
+	case version.SupportsLegacyHandshake(clientVersion):
+		if c == nil || c.Conn == nil {
+			return 0, errors.New("invalid handshake connection")
+		}
+		if db == nil || db.JsonDb == nil {
+			return 0, errors.New("client database is unavailable")
+		}
+		if _, err := c.Write([]byte(crypt.Md5(version.GetVersion()))); err != nil {
+			return 0, fmt.Errorf("write legacy server handshake: %w", err)
+		}
+		_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
+		proof, err := c.GetShortContent(32)
+		if err != nil {
+			return 0, fmt.Errorf("read legacy client proof: %w", err)
+		}
+		id, err := db.GetIdByVerifyKey(string(proof), c.Conn.RemoteAddr().String())
+		if err != nil {
+			s.verifyError(c)
+			return 0, err
+		}
+		s.verifySuccess(c)
+		return id, nil
+	default:
+		return 0, fmt.Errorf("不支持的 NPC 版本号 %q", clientVersion)
+	}
+}
+
+// secureClientHandshake performs the 1.1.29+ challenge-response handshake.
+// The server sends a fixed marker first, then proves possession of the
+// matching client key before accepting a Bridge connection type.
+func (s *Bridge) secureClientHandshake(c *conn.Conn, clientVersion string) (int, error) {
+	return s.secureClientHandshakeWithDB(c, clientVersion, file.GetDb())
+}
+
+func (s *Bridge) secureClientHandshakeWithDB(c *conn.Conn, clientVersion string, db *file.DbUtils) (int, error) {
+	if c == nil || c.Conn == nil {
+		return 0, errors.New("invalid handshake connection")
+	}
+	if db == nil || db.JsonDb == nil {
+		return 0, errors.New("client database is unavailable")
+	}
+	if _, err := c.Write(crypt.SecureHandshakeMarker()); err != nil {
+		return 0, fmt.Errorf("write secure handshake marker: %w", err)
+	}
+	keyID, err := c.GetShortLenContent()
+	if err != nil {
+		return 0, fmt.Errorf("read client key identifier: %w", err)
+	}
+	clientRecord, verifyKey, lookupErr := db.GetClientBySecureKeyID(keyID)
+	challenge, err := crypt.NewSecureHandshakeChallenge()
+	if err != nil {
+		return 0, fmt.Errorf("create challenge: %w", err)
+	}
+	if err := c.WriteLenContent(challenge); err != nil {
+		return 0, fmt.Errorf("send challenge: %w", err)
+	}
+	payload, err := c.GetShortLenContent()
+	if err != nil {
+		return 0, fmt.Errorf("read client proof: %w", err)
+	}
+	if lookupErr != nil || clientRecord == nil {
+		return 0, errors.New("client authentication failed")
+	}
+	window := int64(beego.AppConfig.DefaultInt("auth_time_window", 300))
+	if err := crypt.VerifySecureHandshakeClientPayload(verifyKey, version.GetVersion(), clientVersion, payload, challenge, time.Now().Unix(), window); err != nil {
+		return 0, err
+	}
+	if !db.IsClientActive(clientRecord) {
+		return 0, errors.New("客户端已停用或已过期")
+	}
+	clientRecord.Lock()
+	if clientRecord.VerifyKey != verifyKey || !clientRecord.Status {
+		clientRecord.Unlock()
+		return 0, errors.New("client credentials changed during handshake")
+	}
+	clientID := clientRecord.Id
+	clientRecord.Addr = common.GetIpByAddr(c.Conn.RemoteAddr().String())
+	clientRecord.Unlock()
+	serverProof, err := crypt.SecureHandshakeServerProof(verifyKey, payload, challenge)
+	if err != nil {
+		return 0, err
+	}
+	s.verifySuccess(c)
+	if _, err := c.Write(serverProof); err != nil {
+		return 0, fmt.Errorf("write server proof: %w", err)
+	}
+	return clientID, nil
 }
 
 func (s *Bridge) DelClient(id int) {
@@ -668,7 +917,11 @@ func (s *Bridge) recordClientConnection(id int, online bool) {
 }
 
 // use different
-func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
+func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, transport ...string) {
+	transportType := s.tunnelType
+	if len(transport) > 0 && transport[0] != "" {
+		transportType = transport[0]
+	}
 	isPub := file.GetDb().IsPubClient(id)
 	switch typeVal {
 	case common.WORK_MAIN:
@@ -719,7 +972,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 		go s.GetHealthFromClient(id, c)
 		logs.Info("[连接] clientId %d 已连接，来源：%s", id, c.Conn.RemoteAddr())
 	case common.WORK_CHAN:
-		muxConn := nps_mux.NewMux(c.Conn, s.tunnelType, s.disconnectTime)
+		muxConn := nps_mux.NewMux(c.Conn, transportType, s.disconnectTime)
 		var oldTunnel *nps_mux.Mux
 		s.clientsMu.Lock()
 		if v, ok := s.Client.Load(id); ok {
@@ -764,7 +1017,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 			c.Close()
 		}
 	case common.WORK_FILE:
-		muxConn := nps_mux.NewMux(c.Conn, s.tunnelType, s.disconnectTime)
+		muxConn := nps_mux.NewMux(c.Conn, transportType, s.disconnectTime)
 		var oldFile *nps_mux.Mux
 		s.clientsMu.Lock()
 		if v, ok := s.Client.Load(id); ok {
@@ -841,7 +1094,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string) {
 		}
 		return
 	}
-	c.SetAlive(s.tunnelType)
+	c.SetAlive(transportType)
 	return
 }
 
@@ -863,9 +1116,19 @@ func (s *Bridge) SendLinkInfo(clientId int, link *conn.Link, t *file.Tunnel) (ta
 			return nil, errors.New("local proxy is disabled")
 		}
 		target, err = net.Dial("tcp", link.Host)
+		if err == nil && (link.ProtoVersion == "V1" || link.ProtoVersion == "V2") {
+			if headerErr := writeLocalProxyProtocolHeader(target, link.RemoteAddr, link.ProtoVersion); headerErr != nil {
+				_ = target.Close()
+				return nil, headerErr
+			}
+		}
 		return
 	}
 	if v, ok := s.Client.Load(clientId); ok {
+		clientRecord, _ := file.GetDb().GetClient(clientId)
+		if registeredIPRequired(clientRecord, t) && !ipreg.RegisteredString(clientId, link.RemoteAddr) {
+			return nil, fmt.Errorf("访问 IP %s 尚未完成登记", common.GetIpByAddr(link.RemoteAddr))
+		}
 		//If ip is restricted to do ip verification
 		if s.ipVerify {
 			ip := common.GetIpByAddr(link.RemoteAddr)
@@ -915,6 +1178,50 @@ func (s *Bridge) SendLinkInfo(clientId int, link *conn.Link, t *file.Tunnel) (ta
 		err = errors.New(fmt.Sprintf("the client %d is not connect", clientId))
 	}
 	return
+}
+
+func writeLocalProxyProtocolHeader(target net.Conn, remoteAddr, protoVersion string) error {
+	if target == nil {
+		return errors.New("PROXY protocol target is nil")
+	}
+	var version byte
+	switch protoVersion {
+	case "V1":
+		version = 1
+	case "V2":
+		version = 2
+	default:
+		return fmt.Errorf("unsupported PROXY protocol version %q", protoVersion)
+	}
+	sourceAddr, err := net.ResolveTCPAddr("tcp", strings.TrimSpace(remoteAddr))
+	if err != nil || sourceAddr == nil || sourceAddr.IP == nil {
+		return fmt.Errorf("invalid source address for PROXY protocol: %q", remoteAddr)
+	}
+	destinationAddr, ok := target.RemoteAddr().(*net.TCPAddr)
+	if !ok || destinationAddr == nil || destinationAddr.IP == nil {
+		return fmt.Errorf("invalid target address for PROXY protocol: %v", target.RemoteAddr())
+	}
+	sourceIsIPv4 := sourceAddr.IP.To4() != nil
+	destinationIsIPv4 := destinationAddr.IP.To4() != nil
+	if sourceIsIPv4 != destinationIsIPv4 {
+		return fmt.Errorf("PROXY protocol cannot represent mixed address families: %s -> %s", sourceAddr, destinationAddr)
+	}
+	transport := proxyproto.TCPv4
+	if !sourceIsIPv4 {
+		transport = proxyproto.TCPv6
+	}
+	header := &proxyproto.Header{
+		Command:           proxyproto.PROXY,
+		SourceAddr:        sourceAddr,
+		DestinationAddr:   destinationAddr,
+		Version:           version,
+		TransportProtocol: transport,
+	}
+	_, err = header.WriteTo(target)
+	if err != nil {
+		return fmt.Errorf("write PROXY protocol header: %w", err)
+	}
+	return nil
 }
 
 func (s *Bridge) ping() {
@@ -985,6 +1292,17 @@ func (s *Bridge) ping() {
 			})
 		}
 	}
+}
+
+func registeredIPRequired(client *file.Client, task *file.Tunnel) bool {
+	required := task != nil && task.RegisteredOnly
+	if client == nil {
+		return required
+	}
+	client.RLock()
+	required = required || client.RegisteredOnly
+	client.RUnlock()
+	return required
 }
 
 // get config and add task from client config

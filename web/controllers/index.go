@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/version"
@@ -28,7 +29,7 @@ type IndexController struct {
 
 func normalizedTunnelMode(mode string) string {
 	switch mode {
-	case "tcp", "udp", "socks5", "secret", "p2p", "file":
+	case "tcp", "udp", "socks5", "mixProxy", "secret", "p2p", "file":
 		return mode
 	case "httpProxy":
 		return mode
@@ -42,7 +43,7 @@ func normalizedTunnelMode(mode string) string {
 // server.NewMode because that would leave an unusable task in the database.
 func supportedTunnelMode(mode string) bool {
 	switch strings.TrimSpace(mode) {
-	case "tcp", "udp", "httpProxy", "socks5", "secret", "p2p", "file":
+	case "tcp", "udp", "httpProxy", "socks5", "mixProxy", "secret", "p2p", "file":
 		return true
 	default:
 		return false
@@ -50,13 +51,23 @@ func supportedTunnelMode(mode string) bool {
 }
 
 // tunnelSidebarMenu maps the internal proxy mode to the sidebar destination.
-// httpProxy is shown as "HTTP 代理" in the navigation, while the remaining
-// modes use their own route names.
+// Legacy HTTP/SOCKS records and the new mixed listener share one navigation
+// entry so operators do not have to maintain duplicate proxy lists.
 func tunnelSidebarMenu(mode string) string {
-	if normalizedTunnelMode(mode) == "httpProxy" {
-		return "http"
+	switch normalizedTunnelMode(mode) {
+	case "httpProxy", "socks5", "mixProxy":
+		return "mixProxy"
 	}
 	return normalizedTunnelMode(mode)
+}
+
+func tunnelModeChangeAllowed(currentMode, desiredMode string) bool {
+	if currentMode == desiredMode {
+		return true
+	}
+	// The unified proxy form intentionally migrates legacy records without
+	// asking the operator to recreate the listener.
+	return desiredMode == "mixProxy" && (currentMode == "httpProxy" || currentMode == "socks5")
 }
 
 // tunnelTemplatePath keeps the mode-specific view entry points in one place.
@@ -78,6 +89,7 @@ type hostListRow struct {
 	Scheme              string
 	IsClose             bool
 	AutoHttps           bool
+	RegisteredOnly      bool
 	PlatformManaged     bool
 	BasicAuthSet        bool
 	HttpPort            string
@@ -103,8 +115,9 @@ type hostListClient struct {
 }
 
 type hostListTarget struct {
-	TargetStr  string
-	LocalProxy bool
+	TargetStr     string
+	LocalProxy    bool
+	ProxyProtocol int
 }
 
 // tunnelListRow adds public access metadata to the historical Tunnel JSON
@@ -170,6 +183,7 @@ func newHostListRows(hosts []*file.Host) []*hostListRow {
 			Scheme:           host.Scheme,
 			IsClose:          host.IsClose,
 			AutoHttps:        host.AutoHttps,
+			RegisteredOnly:   host.RegisteredOnly,
 			PlatformManaged:  host.PlatformDomainID != "",
 			BasicAuthSet:     file.BasicAuthConfigured(host.Auth),
 			HttpPort:         publicProxyPort(publicAccessPort("http_proxy_access_port", "http_proxy_port"), "80"),
@@ -193,7 +207,7 @@ func newHostListRows(hosts []*file.Host) []*hostListRow {
 		}
 		if target != nil {
 			target.RLock()
-			row.Target = hostListTarget{TargetStr: target.TargetStr, LocalProxy: target.LocalProxy}
+			row.Target = hostListTarget{TargetStr: target.TargetStr, LocalProxy: target.LocalProxy, ProxyProtocol: target.ProxyProtocol}
 			target.RUnlock()
 		}
 		rows = append(rows, row)
@@ -476,6 +490,146 @@ func parseResourceRateLimits(s *IndexController, upload, download int) (int, int
 	return upload, download, nil
 }
 
+func parseHostProxyProtocol(s *IndexController, current int) (int, error) {
+	if s == nil || s.Ctx == nil || s.Ctx.Request == nil {
+		return current, nil
+	}
+	if err := s.Ctx.Request.ParseForm(); err != nil {
+		return current, errors.New("读取 PROXY Protocol 设置失败")
+	}
+	values, submitted := s.Ctx.Request.Form["proxy_protocol"]
+	value := ""
+	if len(values) > 0 {
+		value = strings.TrimSpace(values[len(values)-1])
+	}
+	return parseHostProxyProtocolValue(value, current, submitted)
+}
+
+func parseHostProxyProtocolValue(value string, current int, submitted bool) (int, error) {
+	if !submitted {
+		return current, nil
+	}
+	version, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || version < 0 || version > 2 {
+		return current, errors.New("PROXY Protocol 仅支持关闭、v1 或 v2")
+	}
+	return version, nil
+}
+
+// parseSourceListsFromRequest keeps omitted fields unchanged on edits, so older
+// API callers can continue updating resources without clearing their ACL.
+func parseSourceListsFromRequest(s *IndexController, current *file.SourceLists) (priority int, black, white []string, submitted bool, err error) {
+	if current != nil {
+		priority, black, white = current.AccessListSnapshot()
+	}
+	if s == nil || s.Ctx == nil || s.Ctx.Request == nil {
+		return priority, black, white, false, nil
+	}
+	if err = s.Ctx.Request.ParseForm(); err != nil {
+		return priority, black, white, false, errors.New("读取 IP 名单设置失败")
+	}
+	request := s.Ctx.Request
+	if _, ok := request.Form["blackiplist"]; ok {
+		black = file.SplitSourceListText(s.getEscapeString("blackiplist"))
+		submitted = true
+	}
+	if _, ok := request.Form["whiteiplist"]; ok {
+		white = file.SplitSourceListText(s.getEscapeString("whiteiplist"))
+		submitted = true
+	}
+	if _, ok := request.Form["iplistpriority"]; ok {
+		priority, err = parseSourceListPriority(s.GetString("iplistpriority"), priority, true)
+		if err != nil {
+			return priority, black, white, submitted, err
+		}
+		submitted = true
+	}
+	return priority, black, white, submitted, nil
+}
+
+func parseSourceListPriority(value string, current int, submitted bool) (int, error) {
+	if !submitted {
+		return current, nil
+	}
+	priority, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || (priority != 0 && priority != 1) {
+		return current, errors.New("IP 名单优先级必须是 0（黑名单优先）或 1（白名单优先）")
+	}
+	return priority, nil
+}
+
+// parseMixProxySettings accepts the mixed-proxy form fields and keeps omitted
+// values unchanged on edits. The form defaults both protocols on for a new mixed
+// listener, but at least one must remain enabled.
+func parseMixProxySettings(s *IndexController, current *file.Tunnel) (httpEnabled, socksEnabled bool, aclMode int, aclRules string, submitted bool, err error) {
+	if current != nil {
+		current.RLock()
+		switch current.Mode {
+		case "httpProxy":
+			httpEnabled, socksEnabled = true, false
+		case "socks5":
+			httpEnabled, socksEnabled = false, true
+		default:
+			httpEnabled, socksEnabled = current.HttpProxy, current.Socks5Proxy
+		}
+		aclMode, aclRules = current.DestAclMode, current.DestAclRules
+		current.RUnlock()
+	} else {
+		httpEnabled, socksEnabled = true, true
+	}
+	if s == nil || s.Ctx == nil || s.Ctx.Request == nil {
+		return httpEnabled, socksEnabled, aclMode, aclRules, false, nil
+	}
+	request := s.Ctx.Request
+	if parseErr := request.ParseForm(); parseErr != nil {
+		return false, false, 0, "", false, errors.New("读取混合代理设置失败")
+	}
+	lastValue := func(key string) string {
+		values := request.Form[key]
+		if len(values) == 0 {
+			return ""
+		}
+		return strings.TrimSpace(values[len(values)-1])
+	}
+	if _, ok := request.Form["enable_http"]; ok {
+		httpEnabled, err = strconv.ParseBool(lastValue("enable_http"))
+		if err != nil {
+			return false, false, 0, "", false, errors.New("HTTP 代理开关值无效")
+		}
+		submitted = true
+	}
+	if _, ok := request.Form["enable_socks5"]; ok {
+		socksEnabled, err = strconv.ParseBool(lastValue("enable_socks5"))
+		if err != nil {
+			return false, false, 0, "", false, errors.New("SOCKS5 代理开关值无效")
+		}
+		submitted = true
+	}
+	if _, ok := request.Form["dest_acl_mode"]; ok {
+		aclMode, err = strconv.Atoi(lastValue("dest_acl_mode"))
+		if err != nil || (aclMode != file.AclOff && aclMode != file.AclWhitelist && aclMode != file.AclBlacklist) {
+			return false, false, 0, "", false, errors.New("目标 ACL 模式无效")
+		}
+		submitted = true
+	}
+	if _, ok := request.Form["dest_acl_rules"]; ok {
+		aclRules = lastValue("dest_acl_rules")
+		submitted = true
+	}
+	if !httpEnabled && !socksEnabled {
+		return false, false, 0, "", false, errors.New("HTTP 代理和 SOCKS5 代理不能同时关闭")
+	}
+	if aclMode == file.AclOff && aclRules != "" {
+		return false, false, 0, "", false, errors.New("目标 ACL 已关闭，不能同时填写规则")
+	}
+	if aclMode != file.AclOff {
+		if _, err = acl.CompileDest(aclMode, aclRules); err != nil {
+			return false, false, 0, "", false, fmt.Errorf("目标 ACL 规则无效: %w", err)
+		}
+	}
+	return httpEnabled, socksEnabled, aclMode, aclRules, submitted, nil
+}
+
 func copyHealthConfig(dst *file.Health, src *file.Health) {
 	if dst == nil {
 		return
@@ -484,7 +638,7 @@ func copyHealthConfig(dst *file.Health, src *file.Health) {
 	if src != nil {
 		snapshot = file.HealthConfigSnapshot(src)
 	}
-	dst.Lock()
+	dst.HealthLock()
 	dst.HealthCheckTimeout = snapshot.HealthCheckTimeout
 	dst.HealthMaxFail = snapshot.HealthMaxFail
 	dst.HealthCheckInterval = snapshot.HealthCheckInterval
@@ -494,7 +648,7 @@ func copyHealthConfig(dst *file.Health, src *file.Health) {
 	dst.HealthNextTime = time.Time{}
 	dst.HealthMap = nil
 	dst.HealthRemoveArr = nil
-	dst.Unlock()
+	dst.HealthUnlock()
 }
 
 // refreshHealthConfig is best-effort: persistence and listener lifecycle are
@@ -622,21 +776,24 @@ func (s *IndexController) Udp() {
 }
 
 func (s *IndexController) Socks5() {
-	s.Data["menu"] = "socks5"
+	// Keep the historical URL working, but show legacy SOCKS5 rules in the
+	// unified mixed-proxy list.
+	s.MixProxy()
+}
+
+func (s *IndexController) MixProxy() {
+	s.Data["menu"] = "mixProxy"
 	s.setOwnerFilterData()
 	s.setClientFilterData()
-	s.SetInfo("socks5")
-	s.SetType("socks5")
-	s.display(tunnelTemplatePath("socks5", "list"))
+	s.SetInfo("mix proxy")
+	s.SetType("mixProxy")
+	s.display(tunnelTemplatePath("mixProxy", "list"))
 }
 
 func (s *IndexController) Http() {
-	s.Data["menu"] = "http"
-	s.setOwnerFilterData()
-	s.setClientFilterData()
-	s.SetInfo("http proxy")
-	s.SetType("httpProxy")
-	s.display(tunnelTemplatePath("httpProxy", "list"))
+	// Keep the historical URL working, but show legacy HTTP rules in the
+	// unified mixed-proxy list.
+	s.MixProxy()
 }
 func (s *IndexController) File() {
 	s.Data["menu"] = "file"
@@ -807,6 +964,11 @@ func (s *IndexController) Add() {
 	if s.Ctx.Request.Method == "GET" {
 		rawTunnelType := strings.TrimSpace(s.getEscapeString("type"))
 		tunnelType := normalizedTunnelMode(rawTunnelType)
+		if tunnelType == "httpProxy" || tunnelType == "socks5" {
+			// New Web-created proxy rules use the unified listener. The old
+			// query values remain accepted for bookmarked URLs and API clients.
+			tunnelType = "mixProxy"
+		}
 		s.Data["type"] = tunnelType
 		s.Data["menu"] = tunnelSidebarMenu(tunnelType)
 		// A typed URL is one of the dedicated mode pages. Keep the historical
@@ -838,26 +1000,52 @@ func (s *IndexController) Add() {
 			s.AjaxErr(limitErr.Error())
 			return
 		}
+		aclPriority, aclBlack, aclWhite, _, aclErr := parseSourceListsFromRequest(s, nil)
+		if aclErr != nil {
+			s.AjaxErr("隧道 IP 名单无效: " + aclErr.Error())
+			return
+		}
+		if err := validateSourceAccessLists(acl.ScopeUser, aclPriority, aclBlack, aclWhite); err != nil {
+			s.AjaxErr("隧道 IP 名单无效: " + err.Error())
+			return
+		}
+		mixHTTP, mixSocks5, destACLMode, destACLRules := false, false, file.AclOff, ""
+		if tunnelMode == "mixProxy" {
+			var mixErr error
+			mixHTTP, mixSocks5, destACLMode, destACLRules, _, mixErr = parseMixProxySettings(s, nil)
+			if mixErr != nil {
+				s.AjaxErr(mixErr.Error())
+				return
+			}
+		}
 		if file.HealthConfigEnabled(&health) && tunnelMode != "tcp" {
 			s.AjaxErr("健康检查目前仅支持 TCP 隧道")
 			return
 		}
 		id := int(file.GetDb().JsonDb.GetTaskId())
 		t := &file.Tunnel{
-			Port:         s.GetIntNoErr("port"),
-			ServerIp:     s.getEscapeString("server_ip"),
-			Mode:         tunnelMode,
-			Target:       &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))},
-			Id:           id,
-			Status:       true,
-			Remark:       s.getEscapeString("remark"),
-			Password:     s.getEscapeString("password"),
-			LocalPath:    s.getEscapeString("local_path"),
-			StripPre:     s.getEscapeString("strip_pre"),
-			ProtoVersion: s.getEscapeString("proto_version"),
-			Flow:         &file.Flow{},
-			RateLimits:   file.RateLimits{UploadLimit: uploadLimit, DownloadLimit: downloadLimit},
-			Health:       health,
+			Port:           s.GetIntNoErr("port"),
+			ServerIp:       s.getEscapeString("server_ip"),
+			Mode:           tunnelMode,
+			Target:         &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))},
+			Id:             id,
+			Status:         true,
+			Remark:         s.getEscapeString("remark"),
+			Password:       s.getEscapeString("password"),
+			LocalPath:      s.getEscapeString("local_path"),
+			StripPre:       s.getEscapeString("strip_pre"),
+			ProtoVersion:   s.getEscapeString("proto_version"),
+			Flow:           &file.Flow{},
+			RateLimits:     file.RateLimits{UploadLimit: uploadLimit, DownloadLimit: downloadLimit},
+			Health:         health,
+			RegisteredOnly: s.GetBoolNoErr("registered_only"),
+			HttpProxy:      mixHTTP,
+			Socks5Proxy:    mixSocks5,
+		}
+		t.SetSourceLists(aclPriority, aclBlack, aclWhite, acl.ScopeUser, "tunnel")
+		if err := t.SetDestinationACL(destACLMode, destACLRules); err != nil {
+			s.AjaxErr("目标 ACL 无效: " + err.Error())
+			return
 		}
 
 		if t.Port <= 0 {
@@ -924,6 +1112,10 @@ func (s *IndexController) Copy() {
 	oldTarget := oldTask.Target
 	oldUploadLimit, oldDownloadLimit := oldTask.RateLimitSnapshot()
 	oldHealth := file.HealthConfigSnapshot(&oldTask.Health)
+	oldRegisteredOnly := oldTask.RegisteredOnly
+	oldHTTPProxy, oldSocks5Proxy := oldTask.HttpProxy, oldTask.Socks5Proxy
+	oldDestACLMode, oldDestACLRules := oldTask.DestAclMode, oldTask.DestAclRules
+	oldACLPriority, oldBlack, oldWhite := oldTask.AccessListSnapshot()
 	oldTask.RUnlock()
 	if oldClient == nil {
 		s.AjaxErr("modified error,the client is not exist")
@@ -946,21 +1138,29 @@ func (s *IndexController) Copy() {
 
 		id := int(file.GetDb().JsonDb.GetTaskId())
 		newTask := &file.Tunnel{
-			Client:       client,
-			Port:         tool.GenerateServerPort(oldMode),
-			ServerIp:     oldServerIP,
-			Mode:         oldMode,
-			Target:       &file.Target{TargetStr: targetStr, LocalProxy: localProxy},
-			Id:           id,
-			Status:       true,
-			Remark:       oldRemark,
-			Password:     oldPassword,
-			LocalPath:    oldLocalPath,
-			StripPre:     oldStripPre,
-			ProtoVersion: oldProtoVersion,
-			Flow:         &file.Flow{},
-			RateLimits:   file.RateLimits{UploadLimit: oldUploadLimit, DownloadLimit: oldDownloadLimit},
-			Health:       oldHealth,
+			Client:         client,
+			Port:           tool.GenerateServerPort(oldMode),
+			ServerIp:       oldServerIP,
+			Mode:           oldMode,
+			Target:         &file.Target{TargetStr: targetStr, LocalProxy: localProxy},
+			Id:             id,
+			Status:         true,
+			Remark:         oldRemark,
+			Password:       oldPassword,
+			LocalPath:      oldLocalPath,
+			StripPre:       oldStripPre,
+			ProtoVersion:   oldProtoVersion,
+			Flow:           &file.Flow{},
+			RateLimits:     file.RateLimits{UploadLimit: oldUploadLimit, DownloadLimit: oldDownloadLimit},
+			Health:         oldHealth,
+			RegisteredOnly: oldRegisteredOnly,
+			HttpProxy:      oldHTTPProxy,
+			Socks5Proxy:    oldSocks5Proxy,
+		}
+		newTask.SetSourceLists(oldACLPriority, oldBlack, oldWhite, acl.ScopeUser, "tunnel")
+		if err := newTask.SetDestinationACL(oldDestACLMode, oldDestACLRules); err != nil {
+			s.AjaxErr("目标 ACL 无效: " + err.Error())
+			return
 		}
 		if !tool.TestServerPort(newTask.Port, newTask.Mode) {
 			s.AjaxErr("The port cannot be opened because it may has been occupied or is no longer allowed.")
@@ -1028,6 +1228,12 @@ func (s *IndexController) Edit() {
 			s.Data["t"] = t
 			t.RLock()
 			tunnelMode = normalizedTunnelMode(t.Mode)
+			if tunnelMode == "httpProxy" || tunnelMode == "socks5" {
+				// Legacy proxy records are edited through the unified form. Saving
+				// the form migrates the record to mixProxy while preserving its
+				// port, client and access controls.
+				tunnelMode = "mixProxy"
+			}
 			s.Data["type"] = tunnelMode
 			s.Data["menu"] = tunnelSidebarMenu(tunnelMode)
 			t.RUnlock()
@@ -1093,7 +1299,11 @@ func (s *IndexController) Edit() {
 			t.RLock()
 			currentPort, currentMode := t.Port, t.Mode
 			t.RUnlock()
-			if desiredMode != currentMode {
+			// HTTP and SOCKS5 records created by older releases are edited
+			// through the unified mixProxy form. Treat that one-way migration as
+			// compatible with the historical mode; all other mode changes remain
+			// forbidden to avoid changing the semantics of a live tunnel.
+			if !tunnelModeChangeAllowed(currentMode, desiredMode) {
 				s.AjaxErr("tunnel mode cannot be changed")
 				return
 			}
@@ -1107,6 +1317,10 @@ func (s *IndexController) Edit() {
 				}
 			}
 			desiredHealth := file.HealthConfigSnapshot(&t.Health)
+			desiredRegisteredOnly := t.RegisteredOnly
+			if _, submitted := s.Ctx.Request.Form["registered_only"]; submitted {
+				desiredRegisteredOnly = s.GetBoolNoErr("registered_only")
+			}
 			if healthFieldsSubmitted(s.Ctx.Request) {
 				parsedHealth, healthErr := parseHealthFromRequest(s)
 				if healthErr != nil {
@@ -1125,6 +1339,26 @@ func (s *IndexController) Edit() {
 				s.AjaxErr(limitErr.Error())
 				return
 			}
+			aclPriority, aclBlack, aclWhite, aclSubmitted, aclErr := parseSourceListsFromRequest(s, &t.SourceLists)
+			if aclErr != nil {
+				s.AjaxErr("隧道 IP 名单无效: " + aclErr.Error())
+				return
+			}
+			if aclSubmitted {
+				if err := validateSourceAccessLists(acl.ScopeUser, aclPriority, aclBlack, aclWhite); err != nil {
+					s.AjaxErr("隧道 IP 名单无效: " + err.Error())
+					return
+				}
+			}
+			mixHTTP, mixSocks5, destACLMode, destACLRules, mixSubmitted := false, false, file.AclOff, "", false
+			if desiredMode == "mixProxy" {
+				var mixErr error
+				mixHTTP, mixSocks5, destACLMode, destACLRules, mixSubmitted, mixErr = parseMixProxySettings(s, t)
+				if mixErr != nil {
+					s.AjaxErr(mixErr.Error())
+					return
+				}
+			}
 			desiredTarget := &file.Target{TargetStr: s.getEscapeString("target")}
 			desiredTarget.LocalProxy = requestedLocalProxy(s.GetBoolNoErr("local_proxy"))
 			// Build the replacement atomically. Proxy workers take the same
@@ -1141,9 +1375,23 @@ func (s *IndexController) Edit() {
 			t.ProtoVersion = s.getEscapeString("proto_version")
 			t.StripPre = s.getEscapeString("strip_pre")
 			t.Remark = s.getEscapeString("remark")
+			if desiredMode == "mixProxy" && mixSubmitted {
+				t.HttpProxy = mixHTTP
+				t.Socks5Proxy = mixSocks5
+			}
 			t.SetRateLimits(desiredUploadLimit, desiredDownloadLimit)
 			copyHealthConfig(&t.Health, &desiredHealth)
+			t.RegisteredOnly = desiredRegisteredOnly
 			t.Unlock()
+			if desiredMode == "mixProxy" && mixSubmitted {
+				if err := t.SetDestinationACL(destACLMode, destACLRules); err != nil {
+					s.AjaxErr("目标 ACL 无效: " + err.Error())
+					return
+				}
+			}
+			if aclSubmitted {
+				t.SetSourceLists(aclPriority, aclBlack, aclWhite, acl.ScopeUser, "tunnel")
+			}
 			if err := file.GetDb().UpdateTask(t); err != nil {
 				s.AjaxErr("modified error")
 				return
@@ -1437,12 +1685,26 @@ func (s *IndexController) AddHost() {
 			s.AjaxErr("add fail, " + limitErr.Error())
 			return
 		}
+		aclPriority, aclBlack, aclWhite, _, aclErr := parseSourceListsFromRequest(s, nil)
+		if aclErr != nil {
+			s.AjaxErr("域名 IP 名单无效: " + aclErr.Error())
+			return
+		}
+		if err := validateSourceAccessLists(acl.ScopeUser, aclPriority, aclBlack, aclWhite); err != nil {
+			s.AjaxErr("域名 IP 名单无效: " + err.Error())
+			return
+		}
+		proxyProtocol, proxyProtocolErr := parseHostProxyProtocol(s, 0)
+		if proxyProtocolErr != nil {
+			s.AjaxErr("add fail, " + proxyProtocolErr.Error())
+			return
+		}
 		id := int(file.GetDb().JsonDb.GetHostId())
 		h := &file.Host{
 			Id:                   id,
 			Host:                 hostName,
 			PlatformDomainID:     platformDomainID,
-			Target:               &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))},
+			Target:               &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy")), ProxyProtocol: proxyProtocol},
 			HeaderChange:         s.getEscapeString("header"),
 			ResponseHeaderChange: s.getEscapeString("response_header"),
 			HostChange:           s.getEscapeString("hostchange"),
@@ -1459,8 +1721,10 @@ func (s *IndexController) AddHost() {
 			AutoHttps:            s.GetBoolNoErr("AutoHttps"),
 			AutoCORS:             s.GetBoolNoErr("auto_cors"),
 			CompatMode:           s.GetBoolNoErr("compat_mode"),
+			RegisteredOnly:       s.GetBoolNoErr("registered_only"),
 			Health:               health,
 		}
+		h.SetSourceLists(aclPriority, aclBlack, aclWhite, acl.ScopeUser, "host")
 
 		if h.Scheme == "http" {
 			h.AutoHttps = false
@@ -1531,7 +1795,19 @@ func (s *IndexController) EditHost() {
 			storedHost.RLock()
 			currentClient := storedHost.Client
 			currentAuth := storedHost.Auth
+			currentRegisteredOnly := storedHost.RegisteredOnly
 			storedHost.RUnlock()
+			aclPriority, aclBlack, aclWhite, aclSubmitted, aclErr := parseSourceListsFromRequest(s, &storedHost.SourceLists)
+			if aclErr != nil {
+				s.AjaxErr("域名 IP 名单无效: " + aclErr.Error())
+				return
+			}
+			if aclSubmitted {
+				if err := validateSourceAccessLists(acl.ScopeUser, aclPriority, aclBlack, aclWhite); err != nil {
+					s.AjaxErr("域名 IP 名单无效: " + err.Error())
+					return
+				}
+			}
 			if currentClient == nil {
 				s.AjaxErr("modified error,the client is not exist")
 				return
@@ -1576,7 +1852,18 @@ func (s *IndexController) EditHost() {
 					return
 				}
 			}
-			desiredTarget := &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))}
+			currentProxyProtocol := 0
+			if storedHost.Target != nil {
+				storedHost.Target.RLock()
+				currentProxyProtocol = storedHost.Target.ProxyProtocol
+				storedHost.Target.RUnlock()
+			}
+			proxyProtocol, proxyProtocolErr := parseHostProxyProtocol(s, currentProxyProtocol)
+			if proxyProtocolErr != nil {
+				s.AjaxErr("modified error," + proxyProtocolErr.Error())
+				return
+			}
+			desiredTarget := &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy")), ProxyProtocol: proxyProtocol}
 			desiredAuth := strings.TrimSpace(s.GetString("auth"))
 			clearHostAuth := strings.EqualFold(strings.TrimSpace(s.GetString("clear_host_auth")), "1") || strings.EqualFold(strings.TrimSpace(s.GetString("clear_host_auth")), "true")
 			if desiredAuth == "" && !clearHostAuth {
@@ -1594,6 +1881,11 @@ func (s *IndexController) EditHost() {
 			autoHTTPS := s.GetBoolNoErr("AutoHttps")
 			if desiredScheme == "http" {
 				autoHTTPS = false
+			}
+			desiredRegisteredOnly := currentRegisteredOnly
+			_ = s.Ctx.Request.ParseForm()
+			if _, submitted := s.Ctx.Request.Form["registered_only"]; submitted {
+				desiredRegisteredOnly = s.GetBoolNoErr("registered_only")
 			}
 			replacement := &file.Host{
 				Id:                   id,
@@ -1616,8 +1908,10 @@ func (s *IndexController) EditHost() {
 				AutoHttps:            autoHTTPS,
 				AutoCORS:             s.GetBoolNoErr("auto_cors"),
 				CompatMode:           s.GetBoolNoErr("compat_mode"),
+				RegisteredOnly:       desiredRegisteredOnly,
 				Health:               desiredHealth,
 			}
+			replacement.SetSourceLists(aclPriority, aclBlack, aclWhite, acl.ScopeUser, "host")
 			if err := file.GetDb().UpdateHost(replacement); err != nil {
 				s.AjaxErr("modified error," + err.Error())
 				return

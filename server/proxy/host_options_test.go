@@ -21,6 +21,27 @@ func TestRewriteHostRequestPath(t *testing.T) {
 	}
 }
 
+func TestHostProxyProtocolVersion(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		host *file.Host
+		want string
+	}{
+		{name: "nil host", want: ""},
+		{name: "nil target", host: &file.Host{}, want: ""},
+		{name: "disabled", host: &file.Host{Target: &file.Target{}}, want: ""},
+		{name: "v1", host: &file.Host{Target: &file.Target{ProxyProtocol: 1}}, want: "V1"},
+		{name: "v2", host: &file.Host{Target: &file.Target{ProxyProtocol: 2}}, want: "V2"},
+		{name: "invalid persisted value", host: &file.Host{Target: &file.Target{ProxyProtocol: 3}}, want: ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := hostProxyProtocolVersion(test.host); got != test.want {
+				t.Fatalf("hostProxyProtocolVersion() = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
+
 func TestApplyHeaderChangesAndCORS(t *testing.T) {
 	headers := http.Header{"Server": []string{"nps"}, "X-Old": []string{"remove"}}
 	applyHeaderChanges(headers, "Cache-Control: no-store\n-X-Old\n-Server")

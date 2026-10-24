@@ -25,6 +25,8 @@ type TLSOptions struct {
 	ServerName         string
 	Fingerprint        string
 	InsecureSkipVerify bool
+	BridgePath         string
+	QuicALPN           string
 }
 
 func TLSOptionsFromConfig(commonConfig *config.CommonConfig) TLSOptions {
@@ -36,6 +38,8 @@ func TLSOptionsFromConfig(commonConfig *config.CommonConfig) TLSOptions {
 		ServerName:         commonConfig.TLSServerName,
 		Fingerprint:        commonConfig.TLSFingerprint,
 		InsecureSkipVerify: commonConfig.TLSInsecureSkipVerify,
+		BridgePath:         commonConfig.BridgePath,
+		QuicALPN:           commonConfig.QuicALPN,
 	}
 }
 

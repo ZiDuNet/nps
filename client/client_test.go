@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/conn"
+	"github.com/pires/go-proxyproto"
 )
 
 type capturedClientLogger struct {
@@ -197,6 +198,71 @@ func TestHandleChanHTTPPreservesPipelinedRequests(t *testing.T) {
 	}
 	if second.URL.Path != "/two" {
 		t.Fatalf("second request path = %q, want %q", second.URL.Path, "/two")
+	}
+
+	_ = targetConn.Close()
+	_ = clientConn.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("HTTP tunnel did not shut down")
+	}
+}
+
+func TestHandleChanHTTPWritesProxyProtocolHeader(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen target: %v", err)
+	}
+	defer listener.Close()
+
+	serverConn, clientConn := net.Pipe()
+	client := NewRPClient("", "", "", "", nil, 0)
+	done := make(chan struct{})
+	go func() {
+		client.handleChan(serverConn)
+		close(done)
+	}()
+	defer func() {
+		_ = clientConn.Close()
+		_ = serverConn.Close()
+	}()
+
+	const source = "198.51.100.23:45678"
+	link := conn.NewLink("http", listener.Addr().String(), false, false, source, false, "V1")
+	sendDone := make(chan error, 1)
+	go func() {
+		_, sendErr := conn.NewConn(clientConn).SendInfo(link, "")
+		sendDone <- sendErr
+	}()
+
+	targetConn, err := listener.Accept()
+	if err != nil {
+		t.Fatalf("accept target: %v", err)
+	}
+	defer targetConn.Close()
+	if err := <-sendDone; err != nil {
+		t.Fatalf("send link info: %v", err)
+	}
+	_ = targetConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	targetReader := bufio.NewReader(targetConn)
+	header, err := proxyproto.Read(targetReader)
+	if err != nil {
+		t.Fatalf("read PROXY header: %v", err)
+	}
+	if header.Version != 1 || header.SourceAddr.String() != source {
+		t.Fatalf("PROXY header = version %d source %v, want v1 source %s", header.Version, header.SourceAddr, source)
+	}
+
+	if _, err := clientConn.Write([]byte("GET /proxy-protocol HTTP/1.1\r\nHost: example.test\r\nConnection: close\r\n\r\n")); err != nil {
+		t.Fatalf("write HTTP request: %v", err)
+	}
+	request, err := http.ReadRequest(targetReader)
+	if err != nil {
+		t.Fatalf("read forwarded HTTP request: %v", err)
+	}
+	if request.URL.Path != "/proxy-protocol" {
+		t.Fatalf("forwarded path = %q, want /proxy-protocol", request.URL.Path)
 	}
 
 	_ = targetConn.Close()

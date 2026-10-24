@@ -1,18 +1,10 @@
 package file
 
-import (
-	"net"
-	"strings"
+import "ehang.io/nps/lib/acl"
 
-	"ehang.io/nps/lib/common"
-)
-
-// GlobalIPDenied evaluates the administrator-owned source lists. Rules may be
-// exact IPs or CIDR ranges. With both lists configured, priority 0 (deny first)
-// requires an address to be on the allowlist and not on the denylist; priority
-// 1 (allow first) lets an allowlist match override a denylist match and leaves
-// unrelated addresses untouched. A single list keeps the intuitive behavior:
-// denylist blocks matches, allowlist permits only matches.
+// GlobalIPDenied evaluates the administrator-owned source policy using the
+// same compiler as the proxy and Bridge checks. Invalid legacy rules are
+// reported by the compiler and skipped, matching the historical behavior.
 func (s *DbUtils) GlobalIPDenied(ipPort string) bool {
 	if s == nil || s.JsonDb == nil {
 		return false
@@ -31,48 +23,8 @@ func (s *JsonDb) GlobalIPDenied(ipPort string) bool {
 	if global == nil {
 		return false
 	}
-	ip := net.ParseIP(strings.TrimSpace(common.GetIpByAddr(ipPort)))
-	if ip == nil {
-		return false
-	}
-	global.RLock()
-	black := append([]string(nil), global.BlackIpList...)
-	white := append([]string(nil), global.WhiteIpList...)
-	priority := global.IpListPriority
-	global.RUnlock()
-	blackMatch := matchesIPRules(ip, black)
-	whiteMatch := matchesIPRules(ip, white)
-	switch {
-	case len(black) == 0 && len(white) == 0:
-		return false
-	case len(black) == 0:
-		return !whiteMatch
-	case len(white) == 0:
-		return blackMatch
-	case priority == 1:
-		return blackMatch && !whiteMatch
-	default:
-		return blackMatch || !whiteMatch
-	}
-}
-
-func matchesIPRules(ip net.IP, rules []string) bool {
-	for _, raw := range rules {
-		for _, line := range strings.FieldsFunc(raw, func(r rune) bool { return r == '\r' || r == '\n' || r == ',' }) {
-			rule := strings.TrimSpace(line)
-			if rule == "" {
-				continue
-			}
-			if strings.Contains(rule, "/") {
-				if _, network, err := net.ParseCIDR(rule); err == nil && network.Contains(ip) {
-					return true
-				}
-				continue
-			}
-			if candidate := net.ParseIP(strings.Trim(rule, "[]")); candidate != nil && candidate.Equal(ip) {
-				return true
-			}
-		}
+	if source := global.SourceACL(); source != nil {
+		return !acl.AllowsString(ipPort, source, nil, nil)
 	}
 	return false
 }

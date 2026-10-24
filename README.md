@@ -5,9 +5,9 @@
 [![](https://img.shields.io/github/forks/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/network/members)
 [![](https://img.shields.io/docker/pulls/wushuo98/nps.svg)](https://hub.docker.com/r/wushuo98/nps)
 
-NPS is a lightweight, high-performance **intranet penetration** proxy server supporting **TCP/UDP forwarding, HTTP(S) reverse proxy, SOCKS5 proxy and P2P tunneling**, with a modern web management panel.
+NPS is a lightweight, high-performance **intranet penetration** proxy server supporting **TCP/UDP forwarding, HTTP(S) reverse proxy, HTTP/SOCKS mixed proxy and P2P tunneling**, with a modern web management panel.
 
-Based on the original nps 0.26.10, with extensive bug fixes, performance and security improvements, and a redesigned Web UI. Since v1.1.1, administrators can create users and assign multiple clients to one user; ordinary users can create clients within their administrator-defined quota. Client expiry cannot exceed the owning user expiry, and a blank client expiry follows the user.
+Administrators can create users and assign multiple clients to one user; ordinary users can create clients within their administrator-defined quota. Client expiry cannot exceed the owning user expiry, and a blank client expiry follows the user.
 
 ## Features
 
@@ -81,7 +81,7 @@ docker run -d --name npc \
 
 > 💡 **Recommended**: Delete the `conf` folder under the npc directory to use config-free mode. All settings are managed via the server's web panel.
 
-The Bridge transport currently supports TCP and KCP; TLS is exposed on the separate TLS Bridge port. QUIC and WebSocket Bridge transports are not supported yet.
+The Bridge supports TCP, KCP, WebSocket, WebSocket over TLS (WS/WSS), and QUIC; optional KCP, WS, WSS, and QUIC listeners use separate ports. TLS Bridge uses its own TLS port. QUIC Bridge is an encrypted UDP Bridge entry point, not a browser-facing HTTP/3 domain reverse proxy. Reusing one TCP port for Bridge, HTTP(S), and the management panel is limited to the existing protocol-routing mode.
 TLS clients verify certificates by default. Use `-tls_ca_file` and `-tls_server_name` for a CA-backed certificate; do not enable `-tls_insecure_skip_verify=true` in production.
 
 ## Tunnel Modes
@@ -91,7 +91,7 @@ TLS clients verify certificates by default. Use `-tls_ca_file` and `-tls_server_
 | **TCP** | TCP port forwarding with load balancing | SSH, Remote Desktop, Databases |
 | **UDP** | UDP port forwarding | DNS, Gaming, VoIP |
 | **HTTP(S)** | Domain-based reverse proxy | WeChat dev, Web apps |
-| **SOCKS5** | SOCKS5 proxy | Full intranet access |
+| **HTTP / SOCKS mixed proxy** | HTTP forward proxy and SOCKS5 on one public port | Browser proxy and full intranet access |
 | **P2P** | Peer-to-peer penetration | Direct device connection |
 | **Secret** | Private proxy | Secure temporary connections |
 | **File** | Intranet file access | File browsing & download |

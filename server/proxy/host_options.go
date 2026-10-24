@@ -13,6 +13,31 @@ import (
 	"ehang.io/nps/lib/file"
 )
 
+// hostProxyProtocolVersion returns the wire version configured for a Host
+// backend. A zero value preserves the historical behavior for existing rules.
+func hostProxyProtocolVersion(host *file.Host) string {
+	if host == nil {
+		return ""
+	}
+	host.RLock()
+	target := host.Target
+	host.RUnlock()
+	if target == nil {
+		return ""
+	}
+	target.RLock()
+	version := target.ProxyProtocol
+	target.RUnlock()
+	switch version {
+	case 1:
+		return "V1"
+	case 2:
+		return "V2"
+	default:
+		return ""
+	}
+}
+
 // applyHeaderChanges applies one "Name: Value" rule per line. An empty value
 // or a name prefixed with '-' removes a response header. Invalid names and
 // values are ignored so a bad optional rule cannot corrupt the proxy stream.

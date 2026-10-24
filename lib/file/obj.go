@@ -6,7 +6,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/rate"
+	"github.com/astaxie/beego/logs"
 	"github.com/pkg/errors"
 )
 
@@ -174,6 +176,7 @@ type Config struct {
 }
 
 type Client struct {
+	SourceLists       `json:"-"`
 	Cnf               *Config
 	Id                int        //id
 	UserId            int        //关联的普通用户 id
@@ -197,13 +200,27 @@ type Client struct {
 	MaxTunnelNum      int
 	Version           string
 	ConnectionHistory *ConnectionHistory `json:",omitempty"`
-	BlackIpList       []string
 	CreateTime        string
 	LastOnlineTime    string
 	IpWhite           bool     // 是否启用ip白名单
 	IpWhitePass       string   // ip授权密码
 	IpWhiteList       []string // ip白名单
-	ExpireTime        string   // 到期时间,留空表示永不过期,格式 2006-01-02 15:04:05
+	// BlackIpList remains a direct field for source compatibility with older
+	// embedders. The unified ACL mirrors it into SourceLists when records are
+	// loaded or edited.
+	BlackIpList    []string
+	WhiteIpList    []string
+	IpListPriority int
+	// RegisterKey allows a visitor to register its source IP from the public
+	// registration page.  It is intentionally separate from VerifyKey so a
+	// deployment can share a registration link without exposing the client
+	// control credential.
+	RegisterKey      string
+	RegisterMaxHours int
+	// RegisteredOnly requires source addresses to have an active registration
+	// for this client (or the administrator/public registration bucket).
+	RegisteredOnly bool
+	ExpireTime     string // 到期时间,留空表示永不过期,格式 2006-01-02 15:04:05
 	sync.RWMutex
 }
 
@@ -402,6 +419,7 @@ func (s *Client) HasHost(h *Host) bool {
 }
 
 type Tunnel struct {
+	SourceLists
 	RateLimits
 	Id                 int
 	Port               int
@@ -423,8 +441,90 @@ type Tunnel struct {
 	ProtoVersion       string
 	Target             *Target
 	MultiAccount       *MultiAccount
+	// mixProxy exposes HTTP proxy and SOCKS5 on one TCP port. These flags are
+	// ignored for the separate legacy httpProxy and socks5 modes.
+	HttpProxy    bool
+	Socks5Proxy  bool
+	DestAclMode  int    // 0=off, 1=whitelist, 2=blacklist
+	DestAclRules string // one destination rule per line
+	destACL      *acl.Dest
 	Health
+	// RegisteredOnly requires the visitor IP to be registered for the owning
+	// client before a connection is opened.
+	RegisteredOnly bool
 	sync.RWMutex
+}
+
+const (
+	AclOff       = 0
+	AclWhitelist = 1
+	AclBlacklist = 2
+)
+
+// SetDestinationACL validates and installs a destination policy. Web/API
+// callers should use this before persisting a tunnel so invalid new rules do
+// not silently change the effective policy.
+func (t *Tunnel) SetDestinationACL(mode int, rules string) error {
+	if t == nil {
+		return errors.New("隧道记录无效")
+	}
+	if mode != AclOff && mode != AclWhitelist && mode != AclBlacklist {
+		return errors.New("目标 ACL 模式无效")
+	}
+	compiled, err := acl.CompileDest(mode, rules)
+	if err != nil {
+		return err
+	}
+	t.Lock()
+	t.DestAclMode = mode
+	t.DestAclRules = strings.TrimSpace(strings.ReplaceAll(rules, "\r\n", "\n"))
+	t.destACL = compiled
+	t.Unlock()
+	return nil
+}
+
+// CompileDestinationACL compiles persisted settings at startup. Invalid old
+// lines are logged and skipped by the rule compiler while valid rules remain
+// active.
+func (t *Tunnel) CompileDestinationACL() {
+	if t == nil {
+		return
+	}
+	t.RLock()
+	mode, rules, id := t.DestAclMode, t.DestAclRules, t.Id
+	t.RUnlock()
+	if mode != AclOff && mode != AclWhitelist && mode != AclBlacklist {
+		mode = AclOff
+	}
+	compiled, err := acl.CompileDest(mode, rules)
+	if err != nil {
+		logs.Warn("Destination list of tunnel %d: invalid rules skipped: %v", id, err)
+	}
+	t.Lock()
+	t.DestAclMode = mode
+	t.destACL = compiled
+	t.Unlock()
+}
+
+// AllowsDestination reports whether the configured destination ACL permits
+// addr, expressed as host:port or an IP address.
+func (t *Tunnel) AllowsDestination(addr string) bool {
+	if t == nil {
+		return true
+	}
+	t.RLock()
+	mode, compiled := t.DestAclMode, t.destACL
+	t.RUnlock()
+	if mode != AclWhitelist && mode != AclBlacklist {
+		return true
+	}
+	if compiled == nil {
+		t.CompileDestinationACL()
+		t.RLock()
+		compiled = t.destACL
+		t.RUnlock()
+	}
+	return compiled != nil && compiled.Allows(addr)
 }
 
 type Health struct {
@@ -437,10 +537,37 @@ type Health struct {
 	HealthRemoveArr     []string       `json:"-"`
 	HealthCheckType     string         `json:"HealthCheckType,omitempty"`
 	HealthCheckTarget   string         `json:"HealthCheckTarget,omitempty"`
-	sync.RWMutex
+	// mu is deliberately a pointer rather than an embedded sync.RWMutex.
+	// Health profiles are copied when they are normalized and distributed to
+	// NPCs; embedding a mutex makes those safe value snapshots trigger
+	// copylocks diagnostics and invites accidental lock copying.
+	mu *sync.RWMutex
 }
 
+var healthMutexInitMu sync.Mutex
+
+func (h *Health) mutex() *sync.RWMutex {
+	if h == nil {
+		return nil
+	}
+	healthMutexInitMu.Lock()
+	if h.mu == nil {
+		h.mu = &sync.RWMutex{}
+	}
+	mu := h.mu
+	healthMutexInitMu.Unlock()
+	return mu
+}
+
+// HealthLock/HealthRLock and their counterparts keep the runtime lock out of
+// JSON snapshots and value copies without colliding with Host/Tunnel locks.
+func (h *Health) HealthLock()    { h.mutex().Lock() }
+func (h *Health) HealthUnlock()  { h.mutex().Unlock() }
+func (h *Health) HealthRLock()   { h.mutex().RLock() }
+func (h *Health) HealthRUnlock() { h.mutex().RUnlock() }
+
 type Host struct {
+	SourceLists
 	RateLimits
 	Id   int
 	Host string //host
@@ -469,14 +596,18 @@ type Host struct {
 	Client       *Client
 	Target       *Target //目标
 	Health
+	// RegisteredOnly requires the visitor IP to be registered for the owning
+	// client before a request is proxied.
+	RegisteredOnly bool
 	sync.RWMutex
 }
 
 type Target struct {
-	nowIndex   int
-	TargetStr  string
-	TargetArr  []string
-	LocalProxy bool
+	nowIndex      int
+	TargetStr     string
+	TargetArr     []string
+	LocalProxy    bool
+	ProxyProtocol int // 0=off, 1=PROXY protocol v1, 2=PROXY protocol v2
 	sync.RWMutex
 }
 
@@ -549,6 +680,7 @@ type PlatformDomain struct {
 }
 
 type Glob struct {
+	SourceLists     `json:"-"`
 	BlackIpList     []string
 	WhiteIpList     []string
 	IpListPriority  int

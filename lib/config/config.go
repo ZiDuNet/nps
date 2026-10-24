@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"ehang.io/nps/lib/common"
@@ -13,7 +14,9 @@ import (
 type CommonConfig struct {
 	Server                string
 	VKey                  string
-	Tp                    string //bridgeType kcp or tcp
+	Tp                    string // Bridge transport: tcp, kcp, ws, or wss
+	BridgePath            string
+	QuicALPN              string
 	AutoReconnection      bool
 	TlsEnable             bool
 	TLSCAFile             string
@@ -113,16 +116,67 @@ func NewConfig(path string) (c *Config, err error) {
 // happens to contain the word "host".
 func hasConfigKey(content, key string) bool {
 	for _, line := range splitStr(content) {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+		if !strings.Contains(line, "=") {
 			continue
 		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 && strings.TrimSpace(parts[0]) == key {
+		parsedKey, _, ok := splitKV(line)
+		if ok && parsedKey == key {
 			return true
 		}
 	}
 	return false
+}
+
+// splitKV parses one active key=value line. Values are split at the first '='
+// only, so credentials, URLs, and header values may contain '='. A bare key
+// keeps the legacy empty-value behavior used by multi-account files.
+// Comment and blank lines are ignored consistently across all section parsers.
+func splitKV(line string) (key, value string, ok bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+		return "", "", false
+	}
+	key, value, _ = strings.Cut(line, "=")
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", "", false
+	}
+	return key, strings.TrimSpace(value), true
+}
+
+func ensureClientConfig(c *CommonConfig) *file.Client {
+	if c.Client == nil {
+		c.Client = file.NewClient("", true, true)
+		c.Client.Cnf = new(file.Config)
+	}
+	if c.Client.Cnf == nil {
+		c.Client.Cnf = new(file.Config)
+	}
+	return c.Client
+}
+
+// parseProxyProtocol accepts both numeric values and the historical string
+// form. Unknown values safely disable it.
+func parseProxyProtocol(value string) string {
+	switch strings.ToUpper(strings.TrimSpace(value)) {
+	case "1", "V1":
+		return "V1"
+	case "2", "V2":
+		return "V2"
+	default:
+		return ""
+	}
+}
+
+func parseProxyProtocolValue(value string) int {
+	switch parseProxyProtocol(value) {
+	case "V1":
+		return 1
+	case "V2":
+		return 2
+	default:
+		return 0
+	}
 }
 
 func getTitleContent(s string) string {
@@ -132,69 +186,64 @@ func getTitleContent(s string) string {
 
 func dealCommon(s string) *CommonConfig {
 	c := &CommonConfig{}
-	// Keep the legacy parser's minimal result for connection-only sections;
-	// NewConfig adds the runtime client defaults after parsing.
-	needsClient := strings.Contains(s, "basic_username=") || strings.Contains(s, "basic_password=") || strings.Contains(s, "web_username=") || strings.Contains(s, "web_password=") || strings.Contains(s, "compress=") || strings.Contains(s, "crypt=") || strings.Contains(s, "rate_limit=") || strings.Contains(s, "flow_limit=")
-	if needsClient {
-		c.Client = file.NewClient("", true, true)
-		c.Client.Cnf = new(file.Config)
-	}
 	for _, v := range splitStr(s) {
-		item := strings.Split(v, "=")
-		if len(item) == 0 {
+		key, value, ok := splitKV(v)
+		if !ok {
 			continue
-		} else if len(item) == 1 {
-			item = append(item, "")
 		}
-		switch item[0] {
+		switch key {
 		case "server_addr", "server":
-			c.Server = item[1]
+			c.Server = value
 		case "vkey":
-			c.VKey = item[1]
+			c.VKey = value
 		case "conn_type", "tp":
-			c.Tp = item[1]
+			c.Tp = value
+		case "bridge_path":
+			c.BridgePath = value
+		case "quic_alpn":
+			c.QuicALPN = value
 		case "auto_reconnection":
-			c.AutoReconnection = common.GetBoolByStr(item[1])
+			c.AutoReconnection = common.GetBoolByStr(value)
 		case "basic_username":
-			if c.Client == nil {
-				c.Client = file.NewClient("", true, true)
-				c.Client.Cnf = new(file.Config)
-			}
-			c.Client.Cnf.U = item[1]
+			ensureClientConfig(c).Cnf.U = value
 		case "basic_password":
-			c.Client.Cnf.P = item[1]
+			ensureClientConfig(c).Cnf.P = value
 		case "web_password":
-			c.Client.WebPassword = item[1]
+			ensureClientConfig(c).WebPassword = value
 		case "web_username":
-			c.Client.WebUserName = item[1]
+			ensureClientConfig(c).WebUserName = value
 		case "compress":
-			c.Client.Cnf.Compress = common.GetBoolByStr(item[1])
+			ensureClientConfig(c).Cnf.Compress = common.GetBoolByStr(value)
 		case "crypt":
-			c.Client.Cnf.Crypt = common.GetBoolByStr(item[1])
+			ensureClientConfig(c).Cnf.Crypt = common.GetBoolByStr(value)
 		case "proxy_url":
-			c.ProxyUrl = item[1]
+			c.ProxyUrl = value
 		case "rate_limit":
-			c.Client.RateLimit = common.GetIntNoErrByStr(item[1])
+			ensureClientConfig(c).RateLimit = common.GetIntNoErrByStr(value)
 		case "flow_limit":
-			c.Client.Flow.SetLimit(int64(common.GetIntNoErrByStr(item[1])))
+			client := ensureClientConfig(c)
+			if client.Flow == nil {
+				client.Flow = file.NewFlow()
+			}
+			client.Flow.SetLimit(int64(common.GetIntNoErrByStr(value)))
 		case "max_conn":
-			c.Client.MaxConn = common.GetIntNoErrByStr(item[1])
+			ensureClientConfig(c).MaxConn = common.GetIntNoErrByStr(value)
 		case "remark":
-			c.Client.Remark = item[1]
+			ensureClientConfig(c).Remark = value
 		case "pprof_addr":
-			common.InitPProfFromArg(item[1])
+			common.InitPProfFromArg(value)
 		case "disconnect_timeout":
-			c.DisconnectTime = common.GetIntNoErrByStr(item[1])
+			c.DisconnectTime = common.GetIntNoErrByStr(value)
 		case "tls_enable":
-			c.TlsEnable = common.GetBoolByStr(item[1])
+			c.TlsEnable = common.GetBoolByStr(value)
 		case "tls_ca_file":
-			c.TLSCAFile = strings.TrimSpace(item[1])
+			c.TLSCAFile = value
 		case "tls_server_name":
-			c.TLSServerName = strings.TrimSpace(item[1])
+			c.TLSServerName = value
 		case "tls_fingerprint":
-			c.TLSFingerprint = strings.TrimSpace(item[1])
+			c.TLSFingerprint = value
 		case "tls_insecure_skip_verify":
-			c.TLSInsecureSkipVerify = common.GetBoolByStr(item[1])
+			c.TLSInsecureSkipVerify = common.GetBoolByStr(value)
 		}
 	}
 	return c
@@ -204,34 +253,70 @@ func dealHost(s string) *file.Host {
 	h := &file.Host{}
 	h.Target = new(file.Target)
 	h.Scheme = "all"
-	var headerChange string
+	var headerChange, responseHeaderChange string
 	for _, v := range splitStr(s) {
-		item := strings.Split(v, "=")
-		if len(item) == 0 {
+		key, value, ok := splitKV(v)
+		if !ok {
 			continue
-		} else if len(item) == 1 {
-			item = append(item, "")
 		}
-		switch strings.TrimSpace(item[0]) {
+		switch key {
 		case "host":
-			h.Host = item[1]
+			h.Host = value
 		case "upload_limit":
-			h.UploadLimit = max(common.GetIntNoErrByStr(item[1]), 0)
+			h.UploadLimit = max(common.GetIntNoErrByStr(value), 0)
 		case "download_limit":
-			h.DownloadLimit = max(common.GetIntNoErrByStr(item[1]), 0)
+			h.DownloadLimit = max(common.GetIntNoErrByStr(value), 0)
 		case "target_addr":
-			h.Target.TargetStr = strings.Replace(item[1], ",", "\n", -1)
+			h.Target.TargetStr = strings.ReplaceAll(value, ",", "\n")
+		case "proxy_protocol":
+			h.Target.ProxyProtocol = parseProxyProtocolValue(value)
 		case "host_change":
-			h.HostChange = item[1]
+			h.HostChange = value
 		case "scheme":
-			h.Scheme = item[1]
+			h.Scheme = value
 		case "location":
-			h.Location = item[1]
+			h.Location = value
+		case "path_rewrite":
+			h.PathRewrite = value
+		case "redirect_url":
+			h.RedirectURL = value
+		case "auto_https":
+			h.AutoHttps = common.GetBoolByStr(value)
+		case "auto_cors":
+			h.AutoCORS = common.GetBoolByStr(value)
+		case "compat_mode":
+			h.CompatMode = common.GetBoolByStr(value)
+		case "auth":
+			h.Auth = value
+		case "multi_account":
+			if common.FileExists(value) {
+				if b, err := common.ReadAllFromFile(value); err != nil {
+					panic(err)
+				} else if content, err := common.ParseStr(string(b)); err != nil {
+					panic(err)
+				} else {
+					accounts := dealMultiUser(content)
+					usernames := make([]string, 0, len(accounts))
+					for username := range accounts {
+						usernames = append(usernames, username)
+					}
+					sort.Strings(usernames)
+					lines := make([]string, 0, len(usernames))
+					for _, username := range usernames {
+						lines = append(lines, username+":"+accounts[username])
+					}
+					h.Auth = strings.Join(lines, "\n")
+				}
+			}
 		default:
-			if strings.Contains(item[0], "header") {
-				headerChange += strings.Replace(item[0], "header_", "", -1) + ":" + item[1] + "\n"
+			if name, ok := strings.CutPrefix(key, "header_"); ok && name != "" {
+				headerChange += name + ":" + value + "\n"
+			}
+			if name, ok := strings.CutPrefix(key, "response_"); ok && name != "" {
+				responseHeaderChange += name + ":" + value + "\n"
 			}
 			h.HeaderChange = headerChange
+			h.ResponseHeaderChange = responseHeaderChange
 		}
 	}
 	return h
@@ -240,25 +325,23 @@ func dealHost(s string) *file.Host {
 func dealHealth(s string) *file.Health {
 	h := &file.Health{}
 	for _, v := range splitStr(s) {
-		item := strings.Split(v, "=")
-		if len(item) == 0 {
+		key, value, ok := splitKV(v)
+		if !ok {
 			continue
-		} else if len(item) == 1 {
-			item = append(item, "")
 		}
-		switch strings.TrimSpace(item[0]) {
+		switch key {
 		case "health_check_timeout":
-			h.HealthCheckTimeout = common.GetIntNoErrByStr(item[1])
+			h.HealthCheckTimeout = common.GetIntNoErrByStr(value)
 		case "health_check_max_failed":
-			h.HealthMaxFail = common.GetIntNoErrByStr(item[1])
+			h.HealthMaxFail = common.GetIntNoErrByStr(value)
 		case "health_check_interval":
-			h.HealthCheckInterval = common.GetIntNoErrByStr(item[1])
+			h.HealthCheckInterval = common.GetIntNoErrByStr(value)
 		case "health_http_url":
-			h.HttpHealthUrl = item[1]
+			h.HttpHealthUrl = value
 		case "health_check_type":
-			h.HealthCheckType = item[1]
+			h.HealthCheckType = value
 		case "health_check_target":
-			h.HealthCheckTarget = item[1]
+			h.HealthCheckTarget = strings.ReplaceAll(value, ",", "\n")
 		}
 	}
 	return h
@@ -268,39 +351,49 @@ func dealTunnel(s string) *file.Tunnel {
 	t := &file.Tunnel{}
 	t.Target = new(file.Target)
 	for _, v := range splitStr(s) {
-		item := strings.Split(v, "=")
-		if len(item) == 0 {
+		key, value, ok := splitKV(v)
+		if !ok {
 			continue
-		} else if len(item) == 1 {
-			item = append(item, "")
 		}
-		switch strings.TrimSpace(item[0]) {
+		switch key {
 		case "upload_limit":
-			t.UploadLimit = max(common.GetIntNoErrByStr(item[1]), 0)
+			t.UploadLimit = max(common.GetIntNoErrByStr(value), 0)
 		case "download_limit":
-			t.DownloadLimit = max(common.GetIntNoErrByStr(item[1]), 0)
+			t.DownloadLimit = max(common.GetIntNoErrByStr(value), 0)
 		case "server_port":
-			t.Ports = item[1]
+			t.Ports = value
 		case "server_ip":
-			t.ServerIp = item[1]
+			t.ServerIp = value
 		case "mode":
-			t.Mode = item[1]
+			t.Mode = value
 		case "target_addr":
-			t.Target.TargetStr = strings.Replace(item[1], ",", "\n", -1)
+			t.Target.TargetStr = strings.ReplaceAll(value, ",", "\n")
 		case "target_port":
-			t.Target.TargetStr = item[1]
+			t.Target.TargetStr = value
 		case "target_ip":
-			t.TargetAddr = item[1]
+			t.TargetAddr = value
+		case "proxy_protocol":
+			t.ProtoVersion = parseProxyProtocol(value)
+		case "proto_version":
+			t.ProtoVersion = parseProxyProtocol(value)
+		case "http_proxy":
+			t.HttpProxy = common.GetBoolByStr(value)
+		case "socks5_proxy":
+			t.Socks5Proxy = common.GetBoolByStr(value)
+		case "dest_acl_mode":
+			t.DestAclMode = common.GetIntNoErrByStr(value)
+		case "dest_acl_rules":
+			t.DestAclRules = strings.ReplaceAll(value, ",", "\n")
 		case "password":
-			t.Password = item[1]
+			t.Password = value
 		case "local_path":
-			t.LocalPath = item[1]
+			t.LocalPath = value
 		case "strip_pre":
-			t.StripPre = item[1]
+			t.StripPre = value
 		case "multi_account":
 			t.MultiAccount = &file.MultiAccount{}
-			if common.FileExists(item[1]) {
-				if b, err := common.ReadAllFromFile(item[1]); err != nil {
+			if common.FileExists(value) {
+				if b, err := common.ReadAllFromFile(value); err != nil {
 					panic(err)
 				} else {
 					if content, err := common.ParseStr(string(b)); err != nil {
@@ -319,13 +412,11 @@ func dealTunnel(s string) *file.Tunnel {
 func dealMultiUser(s string) map[string]string {
 	multiUserMap := make(map[string]string)
 	for _, v := range splitStr(s) {
-		item := strings.Split(v, "=")
-		if len(item) == 0 {
+		key, value, ok := splitKV(v)
+		if !ok {
 			continue
-		} else if len(item) == 1 {
-			item = append(item, "")
 		}
-		multiUserMap[strings.TrimSpace(item[0])] = item[1]
+		multiUserMap[key] = value
 	}
 	return multiUserMap
 }
@@ -333,21 +424,19 @@ func dealMultiUser(s string) map[string]string {
 func delLocalService(s string) *LocalServer {
 	l := new(LocalServer)
 	for _, v := range splitStr(s) {
-		item := strings.Split(v, "=")
-		if len(item) == 0 {
+		key, value, ok := splitKV(v)
+		if !ok {
 			continue
-		} else if len(item) == 1 {
-			item = append(item, "")
 		}
-		switch item[0] {
+		switch key {
 		case "local_port":
-			l.Port = common.GetIntNoErrByStr(item[1])
+			l.Port = common.GetIntNoErrByStr(value)
 		case "local_ip":
-			l.Ip = item[1]
+			l.Ip = value
 		case "password":
-			l.Password = item[1]
+			l.Password = value
 		case "target_addr":
-			l.Target = item[1]
+			l.Target = value
 		}
 	}
 	return l

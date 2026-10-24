@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -60,6 +61,7 @@ type Sock5ModeServer struct {
 
 type socksTaskSnapshot struct {
 	bridgeTask   *file.Tunnel
+	sourceLists  *file.SourceLists
 	client       *file.Client
 	clientConfig file.Config
 	clientFlow   *file.Flow
@@ -81,7 +83,13 @@ func (s *Sock5ModeServer) snapshotTask() (socksTaskSnapshot, error) {
 	snapshot.taskFlow = s.task.Flow
 	snapshot.taskRate = s.task.RateLimiter()
 	snapshot.serverIP = s.task.ServerIp
-	snapshot.bridgeTask = &file.Tunnel{Mode: s.task.Mode}
+	snapshot.bridgeTask = &file.Tunnel{
+		Mode:           s.task.Mode,
+		RegisteredOnly: s.task.RegisteredOnly,
+		DestAclMode:    s.task.DestAclMode,
+		DestAclRules:   s.task.DestAclRules,
+	}
+	snapshot.sourceLists = &s.task.SourceLists
 	target := s.task.Target
 	if s.task.MultiAccount != nil {
 		snapshot.multiAccount = make(map[string]string, len(s.task.MultiAccount.AccountMap))
@@ -132,7 +140,7 @@ func (s *Sock5ModeServer) reserveClientForSnapshot(c net.Conn, snapshot socksTas
 
 	client := snapshot.client
 	remoteAddr := c.RemoteAddr().String()
-	if IsGlobalBlackIp(remoteAddr) || isClientBlackBlocked(client, remoteAddr) || isIPWhiteBlocked(client, remoteAddr) {
+	if SourceDeniedString(remoteAddr, client, snapshot.sourceLists, "socks5") || IsGlobalBlackIp(remoteAddr) || isClientBlackBlocked(client, remoteAddr) || isIPWhiteBlocked(client, remoteAddr) || isRegisteredOnlyBlocked(client, remoteAddr, snapshot.bridgeTask.RegisteredOnly) {
 		return nil, errors.New("socks5 client IP is not authorized")
 	}
 	if err := s.CheckFlowAndConnNum(client); err != nil {
@@ -281,6 +289,10 @@ func (s *Sock5ModeServer) doConnectWithSnapshot(c net.Conn, command uint8, snaps
 	}
 	// connect to host
 	addr := net.JoinHostPort(host, strconv.Itoa(int(port)))
+	if !mixProxySOCKSDestinationAllowed(snapshot.bridgeTask, command, addr) {
+		s.sendReply(c, notAllowed)
+		return
+	}
 	var ltype string
 	if command == associateMethod {
 		ltype = common.CONN_UDP
@@ -463,6 +475,16 @@ func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSn
 			if err != nil {
 				logs.Error("read data from %s err %s", reply.LocalAddr().String(), err.Error())
 				return
+			}
+			if snapshot.bridgeTask != nil && snapshot.bridgeTask.Mode == "mixProxy" && snapshot.bridgeTask.DestAclMode != file.AclOff {
+				datagram, parseErr := common.ReadUDPDatagram(bytes.NewReader(b[:n]))
+				if parseErr != nil || datagram == nil || datagram.Header == nil || datagram.Header.Addr == nil {
+					logs.Warn("[目标访问控制] 丢弃无法解析的 SOCKS5 UDP 数据报，隧道 %d", s.task.Id)
+					continue
+				}
+				if !mixProxyDestinationAllowed(snapshot.bridgeTask, datagram.Header.Addr.String()) {
+					continue
+				}
 			}
 			clientAddrMu.Lock()
 			if clientAddr == nil {

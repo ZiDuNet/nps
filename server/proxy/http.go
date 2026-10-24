@@ -352,6 +352,7 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		hostChange      string
 		headerChange    string
 		pathRewrite     string
+		registeredOnly  bool
 		failureContent  = s.errorContent
 		failureRaw      bool
 	)
@@ -434,12 +435,22 @@ reset:
 	host.RLock()
 	hostName, hostChange, headerChange = host.Host, host.HostChange, host.HeaderChange
 	pathRewrite = host.PathRewrite
+	registeredOnly = host.RegisteredOnly
 	host.RUnlock()
+	if SourceDenied(c.Conn.RemoteAddr(), hostClient, &host.SourceLists, "host "+strconv.Itoa(host.Id)) {
+		c.Close()
+		return
+	}
 	if isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) {
 		failureContent, failureRaw = s.ipWhiteResponse(c, r, hostClient)
 		return
 	}
 	if isClientBlackBlocked(hostClient, c.RemoteAddr().String()) {
+		c.Close()
+		return
+	}
+	if isRegisteredOnlyBlocked(hostClient, remoteAddr, registeredOnly) {
+		logs.Warn("http host access denied: IP %s is not registered", remoteAddr)
 		c.Close()
 		return
 	}
@@ -469,7 +480,7 @@ reset:
 	clientID := hostClient.Id
 	clientRate := hostClient.Rate
 	hostClient.RUnlock()
-	lk = conn.NewLink("http", targetAddr, clientConfig.Crypt, clientConfig.Compress, r.RemoteAddr, hostLocalProxy, "")
+	lk = conn.NewLink("http", targetAddr, clientConfig.Crypt, clientConfig.Compress, r.RemoteAddr, hostLocalProxy, hostProxyProtocolVersion(host))
 	if target, err = s.bridge.SendLinkInfo(clientID, lk, nil); err != nil {
 		logs.Notice("connect to target %s error %s", lk.Host, err)
 		return

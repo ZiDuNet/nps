@@ -191,12 +191,45 @@
                             <span class="help-block m-b-none" langtag="info-descblackiplist"></span>
                         </div>
                     </div>
+                    <div class="form-group" id="registered_only">
+                        <label class="form-label font-bold" for="client-registered-only" data-i18n-zh="仅允许已登记 IP" data-i18n-en="Registered IPs only">仅允许已登记 IP</label>
+                        <div class="form-group-wrapper">
+                            <div class="toggle-field">
+                                <input type="hidden" name="registered_only" value="0">
+                                <label class="toggle-switch"><input id="client-registered-only" type="checkbox"><span class="toggle-slider"></span></label>
+                                <span class="toggle-label" data-i18n-zh="否" data-i18n-en="No">否</span>
+                            </div>
+                            <span class="help-block m-b-none" data-i18n-zh="开启后，访问该客户端的隧道或域名规则前，访问者必须先通过 IP 登记页面完成登记。" data-i18n-en="When enabled, visitors must register their IP before accessing this client's tunnels or host rules.">开启后，访问该客户端的隧道或域名规则前，访问者必须先通过 IP 登记页面完成登记。</span>
+                        </div>
+                    </div>
+                    <div class="form-group" id="register_key">
+                        <label class="form-label font-bold" for="client-register-key" data-i18n-zh="IP 登记密钥" data-i18n-en="IP registration key">IP 登记密钥</label>
+                        <div class="form-group-wrapper">
+                            <input id="client-register-key" class="form-control" type="text" name="register_key" autocomplete="off" spellcheck="false" placeholder="可选" data-placeholder-zh="可选" data-placeholder-en="Optional">
+                            <span class="help-block m-b-none" data-i18n-zh="可分享给访问者。也可以使用客户端验证密钥，但建议单独设置登记密钥。" data-i18n-en="Share this with visitors. The client verify key also works, but a separate registration key is recommended.">可分享给访问者。也可以使用客户端验证密钥，但建议单独设置登记密钥。</span>
+                        </div>
+                    </div>
+                    <div class="form-group" id="register_max_hours">
+                        <label class="form-label font-bold" for="client-register-max-hours" data-i18n-zh="登记最长有效期（小时）" data-i18n-en="Maximum registration lifetime (hours)">登记最长有效期（小时）</label>
+                        <div class="form-group-wrapper">
+                            <input id="client-register-max-hours" class="form-control" type="number" name="register_max_hours" min="0" step="1" placeholder="跟随服务端默认值" data-placeholder-zh="跟随服务端默认值" data-placeholder-en="Use server default">
+                            <span class="help-block m-b-none" data-i18n-zh="0 表示跟随服务端 ip_register_max_hours。" data-i18n-en="0 uses the server ip_register_max_hours default.">0 表示跟随服务端 ip_register_max_hours。</span>
+                        </div>
+                    </div>
                     <div class="form-group form-group--wide" id="black_ip_list">
                         <label class="form-label font-bold" for="client-black-ip-list" langtag="word-blackiplist"></label>
                         <div class="form-group-wrapper">
                             <textarea id="client-black-ip-list" class="form-control" rows="4" type="text" name="blackiplist" placeholder="" langtag="info-suchasblackiplist">{{.BlackIpList}}</textarea>
                             <span class="help-block m-b-none" langtag="info-descblackiplist"></span>
                         </div>
+                    </div>
+                    <div class="form-group form-group--wide">
+                        <label class="form-label font-bold" for="client-acl-white-list" data-i18n-zh="统一白名单（IP/CIDR）" data-i18n-en="Unified allowlist (IP/CIDR)">统一白名单（IP/CIDR）</label>
+                        <div class="form-group-wrapper"><textarea id="client-acl-white-list" class="form-control" rows="3" name="whiteiplist" placeholder="198.51.100.0/24"></textarea><span class="help-block m-b-none" data-i18n-zh="配置后，未命中的来源会被拒绝；可与黑名单一起使用。" data-i18n-en="When set, sources not matching the allowlist are denied; may be combined with a denylist.">配置后，未命中的来源会被拒绝；可与黑名单一起使用。</span></div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-bold" for="client-acl-priority" data-i18n-zh="名单冲突策略" data-i18n-en="List conflict policy">名单冲突策略</label>
+                        <div class="form-group-wrapper"><select id="client-acl-priority" class="form-control" name="iplistpriority"><option value="0" data-i18n-zh="黑名单优先" data-i18n-en="Deny first">黑名单优先</option><option value="1" data-i18n-zh="白名单优先" data-i18n-en="Allow first">白名单优先</option></select></div>
                     </div>
 
                     {{if eq true .isAdmin}}

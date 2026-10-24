@@ -73,6 +73,10 @@ TLS 连接使用：
 
 域名规则在 Web 面板「域名」中维护，保存到 `conf/hosts.json`。
 
+HTTP 正向代理与 SOCKS5 在 Web 面板统一为“HTTP / SOCKS 混合代理”。一条混合代理隧道共用一个公网端口，可分别启用 HTTP 和 SOCKS5，至少启用一种；旧的 `httpProxy`、`socks5` 数据仍可继续使用，编辑后会迁移为混合代理。
+
+管理员还可以从「全局参数 → 服务端配置」按功能分组维护 `nps.conf`。可选监听、证书、密钥、日志归档和调试项关闭后会移除对应有效配置键；敏感字段脱敏，保存后必须重启 NPS。历史和自定义键只读展示并在保存时原样保留。
+
 ## 用户与配额
 
 | 配置项 | 说明 | 默认值 |
@@ -94,6 +98,11 @@ TLS 连接使用：
 | `auth_key` | Web API 鉴权密钥 | 首次启动随机生成 |
 | `auth_crypt_key` | 获取加密 authKey 的 AES 密钥，必须 16 位 | 首次启动随机生成 |
 | `public_vkey` | 公共客户端密钥，留空关闭 | 空（关闭） |
+| `public_register_key` | IP 登记页面的公共登记密钥，可为启用“仅允许已登记 IP”的资源登记来源 IP | 空（关闭） |
+| `ip_register_max_hours` | 公共登记密钥的默认最长登记时长，单位小时；客户端单独设置的时长不能超过该上限 | `2` |
+| `ip_register_ip` | 独立 IP 登记监听地址；仅 `ip_register_port` 非 0 时生效，未设置时回环监听 | `127.0.0.1` |
+| `ip_register_port` | 独立 IP 登记监听端口；`0` 表示不启动独立监听，继续使用面板的 `/ip/register` | `0` |
+| `ip_register_cert_file` / `ip_register_key_file` | 同时填写时为独立登记监听启用 HTTPS；相对路径以程序运行目录为准 | 空 |
 | `ip_limit` | 是否只允许已注册的来源 IP 访问代理资源 | `false` |
 | `allow_ports` | 隧道端口白名单 | 空 |
 | `allow_local_proxy` | 是否允许代理到服务端本机 | `false` |
@@ -105,6 +114,10 @@ allow_ports=9001-9009,10001,11000-12000
 ```
 
 支持单端口、逗号分隔列表和端口范围。
+
+IP 登记页面可使用 `/ip/register`。填写 `ip_register_port` 后，NPS 会启动只包含登记页面的独立 HTTP 监听，不会暴露管理面板的其他路由；默认绑定 `127.0.0.1`，需要公网或内网其他机器访问时，应显式将 `ip_register_ip` 设为对应网卡地址，并建议同时配置证书与私钥。独立监听只相信 TCP 对端地址，不接受 `X-Forwarded-For` 等可伪造请求头。
+
+登记密钥可以是客户端单独配置的登记密钥/验证密钥，也可以是 `public_register_key`（该密钥将登记应用到所有启用“仅允许已登记 IP”的客户端资源）。登记记录仅保存在内存中，服务端重启后需重新登记。
 
 ## P2P
 
@@ -119,7 +132,7 @@ P2P 依赖 NAT 类型，不能保证所有网络都能直连。
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `log_level` | 日志级别，`0` 最少，`7` 最详细；兼容上游 `trace`/`debug`/`info`/`warn`/`error`/`fatal`/`panic`/`off` | `6` |
+| `log_level` | 日志级别，`0` 最少，`7` 最详细；同时接受历史文本值 `trace`/`debug`/`info`/`warn`/`error`/`fatal`/`panic`/`off` | `6` |
 | `log_path` | 日志路径 | `nps.log` |
 | `flow_store_interval` | 流量数据持久化间隔，单位分钟；留空或 `0` 关闭定时持久化 | `1` |
 | `system_info_display` | 是否在仪表盘显示系统信息 | `true`（默认开启） |

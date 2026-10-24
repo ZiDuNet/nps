@@ -10,6 +10,7 @@ func Init() {
 	web_base_url := beego.AppConfig.String("web_base_url")
 	if len(web_base_url) > 0 {
 		ns := beego.NewNamespace(web_base_url,
+			beego.NSRouter("/ip/register", &controllers.LoginController{}, "*:IPRegister"),
 			beego.NSRouter("/", &controllers.IndexController{}, "*:Index"),
 			beego.NSRouter("/overview", &controllers.DashboardController{}, "*:Entry"),
 			beego.NSRouter("/overview/admin", &controllers.DashboardController{}, "*:Admin"),
@@ -24,11 +25,15 @@ func Init() {
 			beego.NSAutoRouter(&controllers.UserController{}),
 			beego.NSAutoRouter(&controllers.AuthController{}),
 			beego.NSRouter("/auth/ipwhiteauth", &controllers.AuthController{}, "*:IpWhiteAuth"),
+			beego.NSRouter("/global/config", &controllers.GlobalController{}, "GET:Config"),
+			beego.NSRouter("/global/config/save", &controllers.GlobalController{}, "POST:SaveConfig"),
+			beego.NSRouter("/global/config/restart", &controllers.GlobalController{}, "POST:Restart"),
 			beego.NSAutoRouter(&controllers.GlobalController{}),
 			beego.NSAutoRouter(&controllers.AuditController{}),
 		)
 		beego.AddNamespace(ns)
 	} else {
+		beego.Router("/ip/register", &controllers.LoginController{}, "*:IPRegister")
 		beego.Router("/", &controllers.IndexController{}, "*:Index")
 		beego.Router("/overview", &controllers.DashboardController{}, "*:Entry")
 		beego.Router("/overview/admin", &controllers.DashboardController{}, "*:Admin")
@@ -43,6 +48,9 @@ func Init() {
 		beego.AutoRouter(&controllers.UserController{})
 		beego.AutoRouter(&controllers.AuthController{})
 		beego.Router("/auth/ipwhiteauth", &controllers.AuthController{}, "*:IpWhiteAuth")
+		beego.Router("/global/config", &controllers.GlobalController{}, "GET:Config")
+		beego.Router("/global/config/save", &controllers.GlobalController{}, "POST:SaveConfig")
+		beego.Router("/global/config/restart", &controllers.GlobalController{}, "POST:Restart")
 		beego.AutoRouter(&controllers.GlobalController{})
 		beego.AutoRouter(&controllers.AuditController{})
 

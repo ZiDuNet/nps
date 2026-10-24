@@ -381,6 +381,11 @@ func ProcessHttp(c *conn.Conn, s *TunnelModeServer) error {
 		_ = c.Close()
 		return err
 	}
+	if !mixProxyDestinationAllowed(s.task, addr) {
+		_, _ = c.Write([]byte("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"))
+		_ = c.Close()
+		return errors.New("destination denied by mixed proxy ACL")
+	}
 	s.task.RLock()
 	client, target := s.task.Client, s.task.Target
 	s.task.RUnlock()

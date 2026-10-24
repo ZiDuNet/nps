@@ -86,13 +86,9 @@
                     <a href="{{.web_base_url}}/index/udp"><i class="icon icon-random" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-udp">UDP 隧道</span></a>
                 </li>
-                <li class="{{if eq "http" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/http"><i class="icon icon-server" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="scheme-httpproxy">HTTP 代理</span></a>
-                </li>
-                <li class="{{if eq "socks5" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/socks5"><i class="icon icon-cubes" aria-hidden="true"></i>
-                    <span class="nav-label" langtag="scheme-socks5">SOCKS 代理</span></a>
+                <li class="{{if eq "mixProxy" .menu}}active{{end}}">
+                    <a href="{{.web_base_url}}/index/mixproxy"><i class="icon icon-random" aria-hidden="true"></i>
+                    <span class="nav-label" data-i18n-zh="HTTP / SOCKS 混合代理" data-i18n-en="HTTP / SOCKS mixed proxy">HTTP / SOCKS 混合代理</span></a>
                 </li>
                 <li class="{{if eq "secret" .menu}}active{{end}}">
                     <a href="{{.web_base_url}}/index/secret"><i class="icon icon-eye-close" aria-hidden="true"></i>
@@ -281,6 +277,82 @@
 
 <script>
     window.nps = { "web_base_url": "{{.web_base_url}}", "version": "{{.version}}", "repository": "{{.github_repository}}" };
+
+    // Progressive disclosure keeps long operational forms scannable without
+    // disabling or removing values from the form. The first two groups remain
+    // visible (for tunnel forms: type + connection; for Host forms: domain +
+    // routing); later groups start collapsed and can be opened with a button.
+    (function initCollapsibleFormSections() {
+        var serial = 0;
+        function initialize(root) {
+            if (!root || !root.querySelectorAll) return;
+            var forms = [];
+            if (root.matches && root.matches('.form-workflow-form')) forms.push(root);
+            Array.prototype.forEach.call(root.querySelectorAll('.form-workflow-form'), function (form) { forms.push(form); });
+            forms.forEach(function (form) {
+                var headings = Array.prototype.filter.call(form.children, function (child) {
+                    return child.classList && child.classList.contains('form-section-title');
+                });
+                headings.forEach(function (heading, index) {
+                    if (heading.getAttribute('data-section-toggle-ready') === 'true') return;
+                    var sectionID = 'nps-form-section-' + (++serial);
+                    var controlled = [];
+                    var content = [];
+                    var next = heading.nextElementSibling;
+                    while (next && !next.classList.contains('form-section-title')) {
+                        if (next.classList.contains('form-workflow-actions') || next.classList.contains('form-workflow-divider')) break;
+                        next.classList.add('form-section-content');
+                        next.setAttribute('data-section-owner', sectionID);
+                        if (!next.id) next.id = sectionID + '-item-' + (content.length + 1);
+                        controlled.push(next.id);
+                        content.push(next);
+                        next = next.nextElementSibling;
+                    }
+
+                    var toggle = document.createElement('button');
+                    var open = heading.getAttribute('data-default-open') === 'true' || index < 2;
+                    toggle.type = 'button';
+                    toggle.className = 'form-section-toggle';
+                    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    if (controlled.length) toggle.setAttribute('aria-controls', controlled.join(' '));
+                    while (heading.firstChild) toggle.appendChild(heading.firstChild);
+                    var chevron = document.createElement('i');
+                    chevron.className = 'fa fa-chevron-down form-section-toggle__chevron';
+                    chevron.setAttribute('aria-hidden', 'true');
+                    toggle.appendChild(chevron);
+                    heading.appendChild(toggle);
+                    heading.setAttribute('data-section-toggle-ready', 'true');
+                    heading.classList.add('is-collapsible');
+
+                    function setOpen(value) {
+                        toggle.setAttribute('aria-expanded', value ? 'true' : 'false');
+                        heading.classList.toggle('is-collapsed', !value);
+                        content.forEach(function (item) { item.classList.toggle('form-section-content-collapsed', !value); });
+                    }
+                    toggle.addEventListener('click', function () {
+                        var willOpen = toggle.getAttribute('aria-expanded') !== 'true';
+                        if (!willOpen && content.some(function (item) { return item.contains(document.activeElement); })) toggle.focus();
+                        setOpen(willOpen);
+                    });
+                    setOpen(open);
+                });
+            });
+        }
+
+        initialize(document);
+        var contentRoot = document.getElementById('nps-content');
+        if (contentRoot && window.MutationObserver) {
+            var pending = false;
+            new MutationObserver(function (records) {
+                if (pending || !records.some(function (record) { return record.addedNodes.length > 0; })) return;
+                pending = true;
+                window.requestAnimationFrame(function () {
+                    pending = false;
+                    initialize(contentRoot);
+                });
+            }).observe(contentRoot, { childList: true, subtree: true });
+        }
+    }());
 
     function npsCopyText(value, successMessage) {
         if (!value) return;

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/file"
 )
 
@@ -120,6 +121,17 @@ func (s *GlobalController) Index() {
 	s.Data["menu"] = "global"
 	s.SetInfo("global")
 
+	// A fresh installation may not have a global.json yet. Keep the template
+	// input typed and non-nil in that case; comparing a missing value with the
+	// integer options in the priority select would otherwise make Beego abort
+	// rendering and return an empty 200 response.
+	s.Data["globalBlackIpList"] = ""
+	s.Data["globalWhiteIpList"] = ""
+	s.Data["globalIpListPriority"] = 0
+	s.Data["globalMaxConn"] = 0
+	s.Data["globalRateLimit"] = 0
+	s.Data["serverUrl"] = ""
+
 	global := file.GetDb().GetGlobal()
 	if global != nil {
 		s.Data["globalBlackIpList"] = strings.Join(global.BlackIpList, "\r\n")
@@ -165,9 +177,15 @@ func (s *GlobalController) Save() {
 	if priority != 1 {
 		priority = 0
 	}
+	blackIPList := parseIPRules(s.getEscapeString("globalBlackIpList"))
+	whiteIPList := parseIPRules(s.getEscapeString("globalWhiteIpList"))
+	if err := validateSourceAccessLists(acl.ScopeGlobal, priority, blackIPList, whiteIPList); err != nil {
+		s.AjaxErr("全局 IP 名单无效: " + err.Error())
+		return
+	}
 	t := &file.Glob{
-		BlackIpList:     parseIPRules(s.getEscapeString("globalBlackIpList")),
-		WhiteIpList:     parseIPRules(s.getEscapeString("globalWhiteIpList")),
+		BlackIpList:     blackIPList,
+		WhiteIpList:     whiteIPList,
 		IpListPriority:  priority,
 		MaxConn:         maxConn,
 		RateLimit:       rateLimit,

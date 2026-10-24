@@ -260,7 +260,7 @@ POST /index/gettunnel/
 | 参数 | 含义 |
 | --- | --- |
 | client_id | 客户端 id |
-| type | 隧道类型：`tcp`、`udp`、`httpProxy`、`socks5`、`secret`、`p2p`、`file` |
+| type | 隧道类型：`tcp`、`udp`、`httpProxy`、`socks5`、`mixProxy`、`secret`、`p2p`、`file` |
 | search | 搜索关键词 |
 | sort | 排序字段 |
 | order | asc 正序 / desc 倒序 |
@@ -290,7 +290,7 @@ POST /index/add/
 | 参数 | 含义 |
 | --- | --- |
 | client_id | 客户端 id |
-| type | 隧道类型：`tcp`、`udp`、`httpProxy`、`socks5`、`secret`、`p2p`、`file` |
+| type | 隧道类型：`tcp`、`udp`、`httpProxy`、`socks5`、`mixProxy`、`secret`、`p2p`、`file` |
 | remark | 备注 |
 | port | 服务端端口（端口为 0 或留空时自动分配） |
 | server_ip | 绑定的服务端 IP（多 IP 场景） |
@@ -302,6 +302,10 @@ POST /index/add/
 | proto_version | 协议版本 |
 | upload_limit | 资源上行限速，单位 KB/s；`0` 或留空表示不限速 |
 | download_limit | 资源下行限速，单位 KB/s；`0` 或留空表示不限速 |
+| enable_http | `mixProxy` 是否启用 HTTP 正向代理；新增混合代理默认启用 |
+| enable_socks5 | `mixProxy` 是否启用 SOCKS5；新增混合代理默认启用 |
+| dest_acl_mode | `mixProxy` 目标 ACL：`0` 关闭、`1` 白名单、`2` 黑名单 |
+| dest_acl_rules | `mixProxy` 目标规则，逐行填写主机名、通配域名或 IP/CIDR；不支持 GeoIP/Geosite |
 
 ---
 
@@ -339,6 +343,8 @@ POST /index/edit/
 | local_path | 本地文件路径 |
 | strip_pre | URL 前缀去除（仅 `file` 模式） |
 | proto_version | 协议版本 |
+| enable_http / enable_socks5 | `mixProxy` 协议开关；省略时保留原值 |
+| dest_acl_mode / dest_acl_rules | `mixProxy` 目标 ACL 配置；省略时保留原值 |
 
 编辑时可通过 `client_id` 将隧道迁移到当前账号有权限的另一个客户端；省略时沿用当前客户端，兼容旧调用方。目标客户端和用户配额会在迁移前校验。
 
@@ -428,6 +434,7 @@ POST /index/addhost/
 | location | URL 路由，留空不限制 |
 | target | 内网目标，格式 `ip:端口` |
 | local_proxy | 是否转发到 nps 服务器本地，`true` / `false` |
+| proxy_protocol | Host 后端 PROXY Protocol：`0` 关闭、`1` v1、`2` v2；后端必须显式支持 |
 | header | 自定义 request header |
 | hostchange | 修改 request host |
 | path_rewrite | 路径重写规则，例如 `/api => /v1/api` |
@@ -468,6 +475,7 @@ POST /index/edithost/
 | location | URL 路由 |
 | target | 内网目标 |
 | local_proxy | 是否转发到 nps 服务器本地 |
+| proxy_protocol | Host 后端 PROXY Protocol：`0` 关闭、`1` v1、`2` v2；省略时保留原值 |
 | header | 自定义 request header |
 | hostchange | 修改 request host |
 | path_rewrite | 路径重写规则，例如 `/api => /v1/api` |

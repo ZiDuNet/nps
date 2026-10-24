@@ -3,11 +3,15 @@ package controllers
 import (
 	crand "crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"github.com/astaxie/beego/cache"
 	"github.com/astaxie/beego/utils/captcha"
+	"html/template"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,10 +19,13 @@ import (
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/ipreg"
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server"
 	"ehang.io/nps/web/audit"
 	"github.com/astaxie/beego"
+	beecontext "github.com/astaxie/beego/context"
+	"github.com/astaxie/beego/session"
 )
 
 type LoginController struct {
@@ -191,8 +198,204 @@ func (self *LoginController) Index() {
 	self.Data["totp_enabled"] = strings.TrimSpace(beego.AppConfig.String("totp_secret")) != ""
 	self.Data["pow_enabled"] = beego.AppConfig.DefaultBool("force_pow", false)
 	self.Data["pow_bits"] = powDifficulty()
+	self.Data["ip_register_enabled"] = ipRegistrationConfigured()
 	self.Data["version"] = version.VERSION
 	self.TplName = "login/index.html"
+}
+
+// IPRegister is a public, short-lived IP registration page.  It deliberately
+// lives on the login controller so it does not require an authenticated panel
+// session; the submitted registration key is the only credential needed.
+func (self *LoginController) IPRegister() {
+	webBaseURL := beego.AppConfig.String("web_base_url")
+	if self.Ctx.Request.Method == http.MethodGet {
+		self.Data["web_base_url"] = webBaseURL
+		self.Data["version"] = version.VERSION
+		self.Data["ip"] = requestVisitorIP(self.Ctx)
+		self.Data["default_hours"] = registrationDefaultHours()
+		self.Data["login_url"] = webBaseURL + "/login/index"
+		self.TplName = "login/ipregister.html"
+		return
+	}
+	if !self.requirePost() {
+		return
+	}
+	hours, _ := strconv.Atoi(strings.TrimSpace(self.GetString("hours")))
+	self.Data["json"] = registerVisitorIP(self.GetString("key"), hours, requestVisitorIP(self.Ctx))
+	self.ServeJSON()
+}
+
+// IPRegisterStandaloneHandler returns a small public-only HTTP handler for
+// deployments that want the IP registration page on its own listener instead
+// of exposing the full management panel. It deliberately trusts only the TCP
+// peer address on that listener; forwarded headers are not accepted here.
+func IPRegisterStandaloneHandler() http.Handler {
+	mux := http.NewServeMux()
+	page := template.Must(template.New("ip-register-standalone").Parse(ipRegisterStandaloneHTML))
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" && r.URL.Path != "/ip/register" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method == http.MethodGet {
+			remoteIP := ""
+			if parsed, ok := ipreg.ParseIP(r.RemoteAddr); ok {
+				remoteIP = parsed.String()
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			if err := page.Execute(w, struct {
+				IP           string
+				DefaultHours int
+			}{IP: remoteIP, DefaultHours: registrationDefaultHours()}); err != nil {
+				http.Error(w, "页面暂时无法显示", http.StatusInternalServerError)
+			}
+			return
+		}
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "GET, POST")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "请求内容无效", http.StatusBadRequest)
+			return
+		}
+		remoteIP := ""
+		if parsed, ok := ipreg.ParseIP(r.RemoteAddr); ok {
+			remoteIP = parsed.String()
+		}
+		hours, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("hours")))
+		result := registerVisitorIP(r.Form.Get("key"), hours, remoteIP)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(result)
+	}
+	mux.HandleFunc("/", handler)
+	return mux
+}
+
+const ipRegisterStandaloneHTML = `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IP 地址登记</title><style>
+:root{color-scheme:light;--ink:#182230;--muted:#687386;--line:#dce3ec;--accent:#1769e0;--bg:#f3f6fb}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 15% 5%,#e1edff,transparent 42%),var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+.card{width:min(100%,440px);padding:32px;border:1px solid #fff;border-radius:20px;background:#ffffffed;box-shadow:0 20px 60px #19345516}.eyebrow{margin:0 0 8px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}h1{margin:0;font-size:25px;letter-spacing:-.03em}.intro{margin:8px 0 24px;color:var(--muted)}label{display:block;margin:17px 0 7px;font-size:13px;font-weight:650}input{width:100%;height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit}input[readonly]{background:#f5f7fa;color:var(--muted)}button{width:100%;height:46px;margin-top:22px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.65;cursor:wait}.hint{margin:14px 0 0;color:var(--muted);font-size:12px}.result{min-height:24px;margin-top:14px;font-size:13px}.result.error{color:#b42318}.result.success{color:#147a45}
+</style></head><body><main class="card"><p class="eyebrow">NPS · ACCESS</p><h1>登记访问 IP</h1><p class="intro">登记后，管理员启用“仅允许已登记 IP”的资源才会接受此地址的访问。</p>
+<form id="register-form"><label for="visitor-ip">当前访问地址</label><input id="visitor-ip" value="{{.IP}}" readonly>
+<label for="register-key">登记密钥</label><input id="register-key" name="key" type="password" autocomplete="off" required placeholder="输入管理员或客户端提供的登记密钥">
+<label for="register-hours">有效时长（小时）</label><input id="register-hours" name="hours" type="number" min="1" max="{{.DefaultHours}}" value="{{.DefaultHours}}">
+<button id="register-submit" type="submit">登记此 IP</button><p class="hint">登记有效时长受服务端配置限制。此页不会保存密钥。</p><div id="register-result" class="result" role="status" aria-live="polite"></div></form></main>
+<script>(function(){var form=document.getElementById('register-form'),button=document.getElementById('register-submit'),result=document.getElementById('register-result');form.addEventListener('submit',function(event){event.preventDefault();button.disabled=true;result.className='result';result.textContent='正在登记…';fetch('/ip/register',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams(new FormData(form))}).then(function(response){if(!response.ok)throw new Error('请求失败（HTTP '+response.status+'）');return response.json()}).then(function(data){result.className='result '+(data.status?'success':'error');result.textContent=data.status?'登记成功：'+data.ip+'，有效至 '+data.until:(data.msg||'登记失败')}).catch(function(error){result.className='result error';result.textContent=error.message||'登记请求失败'}).finally(function(){button.disabled=false})})})();</script></body></html>`
+
+func registerVisitorIP(key string, hours int, visitorIP string) map[string]interface{} {
+	ip, validIP := ipreg.ParseIP(strings.TrimSpace(visitorIP))
+	if !validIP {
+		return map[string]interface{}{"status": 0, "msg": "无法识别访问者 IP"}
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return map[string]interface{}{"status": 0, "msg": "登记密钥不能为空"}
+	}
+	clientID, limit, ok := registrationOwner(key)
+	if !ok {
+		return map[string]interface{}{"status": 0, "msg": "登记密钥无效"}
+	}
+	if hours <= 0 || hours > limit {
+		hours = limit
+	}
+	until := ipreg.Register(clientID, ip, time.Duration(hours)*time.Hour)
+	if until.IsZero() {
+		return map[string]interface{}{"status": 0, "msg": "IP 地址无效"}
+	}
+	return map[string]interface{}{
+		"status":    1,
+		"msg":       "IP 登记成功",
+		"ip":        ip.String(),
+		"until":     until.Format(time.DateTime),
+		"client_id": clientID,
+	}
+}
+
+func ipRegistrationConfigured() bool {
+	if strings.TrimSpace(beego.AppConfig.String("public_register_key")) != "" || strings.TrimSpace(beego.AppConfig.String("public_vkey")) != "" {
+		return true
+	}
+	found := false
+	file.GetDb().JsonDb.Clients.Range(func(_, value interface{}) bool {
+		client, ok := value.(*file.Client)
+		if !ok || client == nil {
+			return true
+		}
+		client.RLock()
+		found = strings.TrimSpace(client.RegisterKey) != "" || strings.TrimSpace(client.VerifyKey) != ""
+		client.RUnlock()
+		return !found
+	})
+	return found
+}
+
+func registrationDefaultHours() int {
+	hours := beego.AppConfig.DefaultInt("ip_register_max_hours", 2)
+	if hours <= 0 {
+		return 2
+	}
+	if hours > 8760 {
+		return 8760
+	}
+	return hours
+}
+
+// registrationOwner validates the public key or a client registration/verify
+// key and returns the registration bucket plus its maximum duration.
+func registrationOwner(key string) (int, int, bool) {
+	defaultHours := registrationDefaultHours()
+	for _, publicKey := range []string{beego.AppConfig.String("public_register_key"), beego.AppConfig.String("public_vkey")} {
+		publicKey = strings.TrimSpace(publicKey)
+		if publicKey != "" && subtle.ConstantTimeCompare([]byte(publicKey), []byte(key)) == 1 {
+			return ipreg.AnyClient, defaultHours, true
+		}
+	}
+	var ownerID, ownerLimit int
+	file.GetDb().JsonDb.Clients.Range(func(_, value interface{}) bool {
+		client, ok := value.(*file.Client)
+		if !ok || client == nil {
+			return true
+		}
+		client.RLock()
+		matches := client.Status && !client.NoDisplay &&
+			((client.RegisterKey != "" && subtle.ConstantTimeCompare([]byte(client.RegisterKey), []byte(key)) == 1) ||
+				(client.VerifyKey != "" && subtle.ConstantTimeCompare([]byte(client.VerifyKey), []byte(key)) == 1))
+		ownerID = client.Id
+		ownerLimit = client.RegisterMaxHours
+		client.RUnlock()
+		if !matches {
+			ownerID, ownerLimit = 0, 0
+		}
+		return !matches
+	})
+	if ownerID == 0 {
+		return 0, 0, false
+	}
+	if ownerLimit <= 0 || ownerLimit > 8760 {
+		ownerLimit = defaultHours
+	}
+	return ownerID, ownerLimit, true
+}
+
+func requestVisitorIP(ctx *beecontext.Context) string {
+	if ctx == nil || ctx.Request == nil {
+		return ""
+	}
+	// Beego's Input.IP trusts the first X-Forwarded-For value without checking
+	// whether the peer is a configured trusted proxy. Registration is an access
+	// control credential, so only use the observed TCP peer until trusted-proxy
+	// support is explicitly configured.
+	if parsed, ok := ipreg.ParseIP(strings.TrimSpace(ctx.Request.RemoteAddr)); ok {
+		return parsed.String()
+	}
+	return ""
 }
 
 func (self *LoginController) Verify() {
@@ -452,6 +655,12 @@ func (self *LoginController) doLoginWithTOTP(username, password, totpCode string
 	}
 	if auth {
 		self.SetSession("auth", true)
+		// Cookie sessions are serialized by Beego's deferred router hook.  That
+		// hook runs after ServeJSON/Redirect has already started the response, so
+		// the Set-Cookie header would be discarded.  Persist the authenticated
+		// cookie while headers are still writable; the deferred release remains
+		// harmless and keeps other providers unchanged.
+		self.releaseCookieSession()
 		if explicit {
 			loginAttempts.clear(ip, username)
 		}
@@ -524,6 +733,7 @@ func (self *LoginController) Register() {
 func (self *LoginController) Out() {
 	appendAuthAudit(self, "auth.logout", "", true, "")
 	clearAuthenticationSession(self.DelSession)
+	self.releaseCookieSession()
 	self.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
 }
 
@@ -559,8 +769,47 @@ func (self *LoginController) regenerateSession() {
 	if beego.GlobalSessions == nil {
 		return
 	}
-	self.StartSession()
+
+	// Beego's cookie provider does not implement SessionRegenerate: it returns
+	// a nil store because cookie sessions do not have server-side identifiers.
+	// Calling Controller.SessionRegenerateID with that provider therefore clears
+	// CruSession and the first SetSession/DelSession after a successful login
+	// panics.  A cookie session is already authenticated by its signed/encrypted
+	// contents, so flushing the pre-login values and releasing the store again
+	// after authentication provides the equivalent rotation.
+	store := self.StartSession()
+	if _, isCookieStore := store.(*session.CookieSessionStore); isCookieStore {
+		_ = store.Flush()
+		return
+	}
+	if self.Ctx == nil {
+		return
+	}
+
 	self.SessionRegenerateID()
+	if self.CruSession == nil {
+		// Custom providers are allowed to return a nil store from
+		// SessionRegenerate. Keep the existing store as a safe fallback instead
+		// of allowing the subsequent authentication writes to panic.
+		if store != nil {
+			_ = store.Flush()
+			self.CruSession = store
+			self.Ctx.Input.CruSession = store
+		}
+	}
+}
+
+// releaseCookieSession writes cookie-backed session state before a controller
+// action emits its body or redirect. Beego's router defers SessionRelease,
+// which is too late for Set-Cookie once the response has started.
+func (self *LoginController) releaseCookieSession() {
+	if self == nil || self.CruSession == nil || self.Ctx == nil || self.Ctx.ResponseWriter == nil {
+		return
+	}
+	if _, ok := self.CruSession.(*session.CookieSessionStore); !ok {
+		return
+	}
+	self.CruSession.SessionRelease(self.Ctx.ResponseWriter)
 }
 
 func (self *LoginController) requirePost() bool {

@@ -34,15 +34,16 @@ type HttpReverseProxy struct {
 // Host/client settings can be edited from the console while a request is in
 // flight, so transport callbacks must not reread the mutable model objects.
 type reverseProxyState struct {
-	req        *http.Request
-	host       *file.Host
-	targetAddr string
-	client     *file.Client
-	clientID   int
-	clientRate *rate.Rate
-	clientFlow *file.Flow
-	config     file.Config
-	localProxy bool
+	req            *http.Request
+	host           *file.Host
+	targetAddr     string
+	client         *file.Client
+	clientID       int
+	clientRate     *rate.Rate
+	clientFlow     *file.Flow
+	config         file.Config
+	localProxy     bool
+	registeredOnly bool
 }
 
 type reverseProxyContextKey struct{}
@@ -104,11 +105,14 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 	client.RLock()
 	clientID, clientRate, clientFlow := client.Id, client.Rate, client.Flow
 	client.RUnlock()
+	host.RLock()
+	registeredOnly := host.RegisteredOnly
+	host.RUnlock()
 	target.RLock()
 	localProxy := target.LocalProxy
 	target.RUnlock()
 	remoteAddr := req.RemoteAddr
-	if IsGlobalBlackIp(remoteAddr) || isClientBlackBlocked(client, remoteAddr) {
+	if SourceDeniedString(remoteAddr, client, &host.SourceLists, "host") || IsGlobalBlackIp(remoteAddr) || isClientBlackBlocked(client, remoteAddr) || isRegisteredOnlyBlocked(client, remoteAddr, registeredOnly) {
 		http.Error(rw, "IP address is blocked", http.StatusForbidden)
 		return
 	}
@@ -151,15 +155,16 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 	defer client.AddConn()
 
 	state := &reverseProxyState{
-		req:        req,
-		host:       host,
-		targetAddr: targetAddr,
-		client:     client,
-		clientID:   clientID,
-		clientRate: clientRate,
-		clientFlow: clientFlow,
-		config:     config,
-		localProxy: localProxy,
+		req:            req,
+		host:           host,
+		targetAddr:     targetAddr,
+		client:         client,
+		clientID:       clientID,
+		clientRate:     clientRate,
+		clientFlow:     clientFlow,
+		config:         config,
+		localProxy:     localProxy,
+		registeredOnly: registeredOnly,
 	}
 	req = req.WithContext(context.WithValue(req.Context(), reverseProxyContextKey{}, state))
 
@@ -266,8 +271,8 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 				if stateErr != nil || s == nil || s.bridge == nil {
 					return nil, NewHTTPError(http.StatusBadGateway, "proxy request state is unavailable")
 				}
-				lk := conn.NewLink("http", state.targetAddr, state.config.Crypt, state.config.Compress, state.req.RemoteAddr, state.localProxy, "")
-				target, err := s.bridge.SendLinkInfo(state.clientID, lk, nil)
+				lk := conn.NewLink("http", state.targetAddr, state.config.Crypt, state.config.Compress, state.req.RemoteAddr, state.localProxy, hostProxyProtocolVersion(state.host))
+				target, err := s.bridge.SendLinkInfo(state.clientID, lk, &file.Tunnel{RegisteredOnly: state.registeredOnly})
 				if err != nil {
 					logs.Notice("connect to target %s error %s", lk.Host, err)
 					return nil, NewHTTPError(http.StatusBadGateway, "Cannot connect to the server")
@@ -295,8 +300,8 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 		if stateErr != nil || s == nil || s.bridge == nil {
 			return nil, NewHTTPError(http.StatusBadGateway, "proxy request state is unavailable")
 		}
-		lk := conn.NewLink("tcp", state.targetAddr, state.config.Crypt, state.config.Compress, state.req.RemoteAddr, state.localProxy, "")
-		target, err := s.bridge.SendLinkInfo(state.clientID, lk, nil)
+		lk := conn.NewLink("tcp", state.targetAddr, state.config.Crypt, state.config.Compress, state.req.RemoteAddr, state.localProxy, hostProxyProtocolVersion(state.host))
+		target, err := s.bridge.SendLinkInfo(state.clientID, lk, &file.Tunnel{RegisteredOnly: state.registeredOnly})
 		if err != nil {
 			logs.Notice("connect to target %s error %s", lk.Host, err)
 			return nil, NewHTTPError(http.StatusBadGateway, "Cannot connect to the target")

@@ -258,6 +258,8 @@ func NewMode(Bridge *bridge.Bridge, c *file.Tunnel) proxy.Service {
 	switch c.Mode {
 	case "tcp", "file":
 		service = proxy.NewTunnelModeServer(proxy.ProcessTunnel, Bridge, c)
+	case "mixProxy":
+		service = proxy.NewTunnelModeServer(proxy.ProcessMix, Bridge, c)
 	case "socks5":
 		service = proxy.NewSock5ModeServer(Bridge, c)
 	case "httpProxy":
@@ -469,6 +471,19 @@ func GetTunnelByAllowedClients(start, length int, typeVal string, clientId int, 
 	return GetTunnelByOwnerFilter(start, length, typeVal, clientId, search, sortField, order, nil, allowedClientIds)
 }
 
+// tunnelTypeMatches keeps the Web proxy list unified without changing the
+// persisted mode names used by older clients and API consumers. New mixed
+// proxy pages include legacy HTTP and SOCKS5 listeners as well as mixProxy.
+func tunnelTypeMatches(mode, requested string) bool {
+	if requested == "" {
+		return true
+	}
+	if requested == "mixProxy" {
+		return mode == "mixProxy" || mode == "httpProxy" || mode == "socks5"
+	}
+	return mode == requested
+}
+
 // GetTunnelByOwnerFilter applies dashboard ownership before sorting, search,
 // counting, and pagination. A zero-valued owner filter intentionally matches
 // tunnels attached to unassigned clients.
@@ -500,7 +515,7 @@ func GetTunnelByOwnerFilter(start, length int, typeVal string, clientId int, sea
 			v.RLock()
 			mode := v.Mode
 			v.RUnlock()
-			if (typeVal != "" && mode != typeVal) || (clientId != 0 && clientID != clientId) || (typeVal == "" && clientId != 0 && clientId != clientID) {
+			if !tunnelTypeMatches(mode, typeVal) || (clientId != 0 && clientID != clientId) || (typeVal == "" && clientId != 0 && clientId != clientID) {
 				continue
 			}
 			all_list = append(all_list, v)
@@ -560,7 +575,7 @@ func GetTunnelByOwnerFilter(start, length int, typeVal string, clientId int, sea
 			v.RLock()
 			mode, password, remark := v.Mode, v.Password, v.Remark
 			v.RUnlock()
-			if (typeVal != "" && mode != typeVal) || (clientId != 0 && clientID != clientId) || (typeVal == "" && clientId != 0 && clientId != clientID) {
+			if !tunnelTypeMatches(mode, typeVal) || (clientId != 0 && clientID != clientId) || (typeVal == "" && clientId != 0 && clientId != clientID) {
 				continue
 			}
 			v.RLock()
@@ -970,7 +985,7 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 	data["inletFlowCount"] = int(in)
 	data["exportFlowCount"] = int(out)
 	data["legacyFlowCount"] = int(legacy)
-	var tcp, udp, secret, socks5, p2p, http int
+	var tcp, udp, secret, socks5, p2p, http, mixProxy int
 	file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
 		task, ok := value.(*file.Tunnel)
 		if !ok || task == nil {
@@ -996,6 +1011,8 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 			socks5 += 1
 		case "httpProxy":
 			http += 1
+		case "mixProxy":
+			mixProxy += 1
 		case "udp":
 			udp += 1
 		case "p2p":
@@ -1028,6 +1045,7 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 	data["udpCount"] = udp
 	data["socks5Count"] = socks5
 	data["httpProxyCount"] = http
+	data["mixProxyCount"] = mixProxy
 	data["secretCount"] = secret
 	data["p2pCount"] = p2p
 	data["tcpCount"] = currentProxyConnections
@@ -1363,9 +1381,9 @@ func dashboardHasUnhealthyResource(allowedClientIds map[int]struct{}) bool {
 		}
 		// Health state has its own lock because the client health reporter updates
 		// it independently of the tunnel's metadata lock.
-		task.Health.RLock()
+		task.Health.HealthRLock()
 		unhealthy = dashboardHealthFailed(task.Health.HealthMap, task.Health.HealthRemoveArr, task.Health.HealthMaxFail)
-		task.Health.RUnlock()
+		task.Health.HealthRUnlock()
 		return !unhealthy
 	})
 	if unhealthy {
@@ -1382,9 +1400,9 @@ func dashboardHasUnhealthyResource(allowedClientIds map[int]struct{}) bool {
 		if !dashboardClientVisible(client, allowedClientIds) {
 			return true
 		}
-		host.Health.RLock()
+		host.Health.HealthRLock()
 		unhealthy = dashboardHealthFailed(host.Health.HealthMap, host.Health.HealthRemoveArr, host.Health.HealthMaxFail)
-		host.Health.RUnlock()
+		host.Health.HealthRUnlock()
 		return !unhealthy
 	})
 	return unhealthy

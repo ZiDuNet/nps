@@ -38,7 +38,9 @@ var (
 	configPath           = flag.String("config", "", "Configuration file path")
 	verifyKey            = flag.String("vkey", "", "Authentication key")
 	logType              = flag.String("log", "stdout", "Log output mode（stdout|file）")
-	connType             = flag.String("type", "tcp", "Connection type with the server（kcp|tcp）")
+	connType             = flag.String("type", "tcp", "Connection type with the server (tcp|kcp|ws|wss|quic)")
+	bridgePath           = flag.String("bridge_path", "/ws", "WebSocket Bridge URL path")
+	quicALPN             = flag.String("quic_alpn", "nps", "QUIC ALPN protocol")
 	proxyUrl             = flag.String("proxy", "", "proxy socks5 url(eg:socks5://111:222@127.0.0.1:9007)")
 	logLevel             = flag.String("log_level", "7", "log level 0~7")
 	registerTime         = flag.Int("time", 2, "register time long /h")
@@ -71,6 +73,8 @@ func currentTLSOptions() client.TLSOptions {
 		ServerName:         *tlsServerName,
 		Fingerprint:        *tlsFingerprint,
 		InsecureSkipVerify: *tlsInsecure,
+		BridgePath:         *bridgePath,
+		QuicALPN:           *quicALPN,
 	}
 }
 
@@ -467,6 +471,7 @@ func run() {
 		commonConfig.TLSServerName = *tlsServerName
 		commonConfig.TLSFingerprint = *tlsFingerprint
 		commonConfig.TLSInsecureSkipVerify = *tlsInsecure
+		commonConfig.QuicALPN = *quicALPN
 		localServer := new(config.LocalServer)
 		localServer.Type = *localType
 		localServer.Password = *password

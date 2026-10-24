@@ -46,6 +46,16 @@ npc.exe -server=1.1.1.1:8025 -vkey=xxx -tls_enable=true      # TLS 桥接（tls_
 
 > 客户端默认会校验证书。使用自签名证书时，请配置 `-tls_fingerprint`、`-tls_ca_file` 或 `-tls_server_name`；`-tls_insecure_skip_verify=true` 仅用于兼容旧部署，生产环境不要开启。
 
+### QUIC Bridge
+
+服务端配置 `bridge_quic_port`（UDP，默认 `0` 关闭）后，NPC 可使用：
+
+```shell
+./npc -server=1.1.1.1:8026 -vkey=xxx -type=quic -tls_fingerprint=sha256:...
+```
+
+`quic_alpn` 两端必须一致，默认值为 `nps`。QUIC 使用 Bridge 证书完成 TLS 握手，需放行 UDP 端口；它承载 NPS Bridge 字节流，不是浏览器直接访问的 HTTP/3 反向代理。
+
 ## 全局参数
 
 > 未来会在此页面继续扩展更多功能，欢迎提需求。

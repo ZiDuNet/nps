@@ -44,6 +44,14 @@ func TestGlobalIPDeniedSupportsCIDRAndPriority(t *testing.T) {
 	}
 }
 
+func TestGlobalIPDeniedSkipsInvalidLegacyRules(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	db.setGlobal(&Glob{BlackIpList: []string{"not-an-ip"}})
+	if db.GlobalIPDenied("198.51.100.7:1234") {
+		t.Fatal("invalid legacy blacklist entries should be ignored as before")
+	}
+}
+
 func TestGlobalConnectionLimitReservesAndReleasesWithClientSlots(t *testing.T) {
 	SetGlobalMaxConn(1)
 	t.Cleanup(func() {

@@ -33,11 +33,9 @@ func migrateConfigFile(path, template string) (changed bool, added []string, sec
 	return true, added, secrets, nil
 }
 
-// configCompatibilityAliases describes names used by the upstream nps2
-// configuration format that have a different canonical name in ZiDuNet/nps.
-// The old assignment is intentionally kept in place: this makes the upgrade
-// reversible and lets operators compare the generated canonical value with
-// the source setting.  Only the canonical key is consumed by this codebase.
+// configCompatibilityAliases describes historical Bridge setting names that
+// differ from the canonical names used by the current configuration. The old
+// assignment is intentionally kept in place so an upgrade remains reversible.
 type configCompatibilityRule struct {
 	canonical string
 	aliases   []string
@@ -49,8 +47,33 @@ var configCompatibilityAliases = []configCompatibilityRule{
 	{canonical: "bridge_ip", aliases: []string{"bridge_tcp_ip", "bridge_kcp_ip"}},
 }
 
-// migrateConfigCompatibility adds canonical ZiDuNet/nps keys when an existing
-// configuration only contains an upstream alias.  Existing canonical values
+// configMigrationOptionalKeys are feature switches, listener endpoints, and
+// optional paths that the Web configuration panel can remove from nps.conf.
+// Do not re-add them on every startup when an operator deliberately disabled
+// them. A fresh installation still receives the complete checked-in template;
+// this list only affects upgrades of an existing file.
+var configMigrationOptionalKeys = map[string]struct{}{
+	"http_proxy_port": {}, "https_proxy_port": {},
+	"http_proxy_access_port": {}, "https_proxy_access_port": {},
+	"bridge_kcp_port": {}, "bridge_ws_port": {}, "bridge_wss_port": {},
+	"bridge_quic_port": {}, "bridge_quic_ip": {}, "quic_alpn": {},
+	"quic_keep_alive_period": {}, "quic_max_idle_timeout": {},
+	"quic_max_incoming_streams": {}, "bridge_path": {},
+	"public_vkey": {}, "ip_limit": {}, "public_register_key": {},
+	"ip_register_ip": {}, "ip_register_port": {},
+	"ip_register_cert_file": {}, "ip_register_key_file": {},
+	"flow_store_interval": {}, "log_path": {}, "log_max_size": {},
+	"log_max_files": {}, "log_max_days": {}, "log_compress": {},
+	"log_rotate_daily": {}, "audit_log_path": {},
+	"p2p_ip": {}, "p2p_port": {}, "totp_secret": {},
+	"web_host": {}, "web_base_url": {}, "instance_key_file": {},
+	"web_cert_file": {}, "web_key_file": {}, "allow_ports": {},
+	"http_cache_length": {}, "pprof_ip": {}, "pprof_port": {},
+	"tls_bridge_port": {},
+}
+
+// migrateConfigCompatibility adds canonical keys when an existing
+// configuration only contains a historical alias. Existing canonical values
 // always win, including explicit empty values.  The function is deliberately
 // independent from Beego so it can be tested before the config is loaded.
 func migrateConfigCompatibility(content string) (string, []string) {
@@ -60,6 +83,7 @@ func migrateConfigCompatibility(content string) (string, []string) {
 		newline = "\r\n"
 	}
 	bridgeType := strings.ToLower(strings.TrimSpace(values["bridge_type"]))
+	_, bridgeTypeSet := values["bridge_type"]
 
 	var blocks []string
 	var added []string
@@ -67,14 +91,14 @@ func migrateConfigCompatibility(content string) (string, []string) {
 		if _, exists := values[rule.canonical]; exists {
 			continue
 		}
-		aliases := preferredConfigAliases(rule, bridgeType)
+		aliases := preferredConfigAliases(rule, bridgeType, bridgeTypeSet, values)
 		for _, alias := range aliases {
 			value, exists := values[alias]
 			if !exists {
 				continue
 			}
 			blocks = append(blocks,
-				"# Added automatically for compatibility with the ZiDuNet/nps configuration format (source: "+alias+")."+newline+
+				"# Added automatically to keep the Bridge listener configuration compatible (alias: "+alias+")."+newline+
 					rule.canonical+"="+value,
 			)
 			values[rule.canonical] = value
@@ -88,22 +112,45 @@ func migrateConfigCompatibility(content string) (string, []string) {
 	return appendConfigBlocks(content, blocks, newline), added
 }
 
-func preferredConfigAliases(rule configCompatibilityRule, bridgeType string) []string {
-	aliases := append([]string(nil), rule.aliases...)
-	if rule.canonical != "bridge_port" || len(aliases) < 2 {
-		return aliases
-	}
-	preferred := "bridge_tcp_port"
-	if bridgeType == "kcp" {
-		preferred = "bridge_kcp_port"
-	}
-	for i, alias := range aliases {
-		if alias == preferred {
-			aliases[0], aliases[i] = aliases[i], aliases[0]
-			break
+func preferredConfigAliases(rule configCompatibilityRule, bridgeType string, bridgeTypeSet bool, values map[string]string) []string {
+	// bridge_kcp_port is also a current, valid secondary-listener option. It is
+	// only a legacy alias for bridge_port when KCP is the selected primary
+	// transport (or when the old file has no transport setting and KCP is its
+	// only port). In an explicitly TCP configuration, never consume the KCP
+	// listener as the primary TCP port.
+	if rule.canonical == "bridge_port" {
+		switch bridgeType {
+		case "kcp":
+			return []string{"bridge_kcp_port", "bridge_tcp_port"}
+		case "tcp":
+			return []string{"bridge_tcp_port"}
+		default:
+			if _, hasTCP := values["bridge_tcp_port"]; hasTCP {
+				return []string{"bridge_tcp_port", "bridge_kcp_port"}
+			}
+			if !bridgeTypeSet {
+				return []string{"bridge_kcp_port", "bridge_tcp_port"}
+			}
+			return []string{"bridge_tcp_port"}
 		}
 	}
-	return aliases
+	if rule.canonical == "bridge_ip" {
+		switch bridgeType {
+		case "kcp":
+			return []string{"bridge_kcp_ip", "bridge_tcp_ip"}
+		case "tcp":
+			return []string{"bridge_tcp_ip"}
+		default:
+			if _, hasTCP := values["bridge_tcp_ip"]; hasTCP {
+				return []string{"bridge_tcp_ip", "bridge_kcp_ip"}
+			}
+			if !bridgeTypeSet {
+				return []string{"bridge_kcp_ip", "bridge_tcp_ip"}
+			}
+			return []string{"bridge_tcp_ip"}
+		}
+	}
+	return append([]string(nil), rule.aliases...)
 }
 
 // configValues returns active INI assignments.  The last assignment wins,
@@ -158,6 +205,12 @@ func mergeMissingConfigFields(content, template string) (string, []string) {
 	for _, rawLine := range strings.Split(template, "\n") {
 		line := strings.TrimSuffix(rawLine, "\r")
 		if key, ok := configEntryKey(line); ok {
+			if _, optional := configMigrationOptionalKeys[key]; optional {
+				// An omitted optional setting is intentional. Do not carry its
+				// template comments into a later block either.
+				pending = pending[:0]
+				continue
+			}
 			if _, ok := existing[key]; !ok {
 				start := 0
 				for start < len(pending) && strings.TrimSpace(pending[start]) == "" {

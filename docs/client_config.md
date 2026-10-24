@@ -65,7 +65,9 @@ npc.exe -server=<服务器IP>:8024 -vkey=<VerifyKey>
 | `-server` | 服务端地址，格式 `ip:port` | 空 |
 | `-vkey` | 客户端连接密钥，多个用英文逗号分隔 | 空 |
 | `-config` | 配置文件路径 | 默认配置路径 |
-| `-type` | 与服务端连接类型，`tcp` 或 `kcp` | `tcp` |
+| `-type` | Bridge 类型，`tcp`、`kcp`、`ws`、`wss` 或 `quic`；WS/WSS/QUIC 需服务端启用对应端口 | `tcp` |
+| `-bridge_path` | WS/WSS Bridge URL 路径，需与服务端配置相同 | `/ws` |
+| `-quic_alpn` | QUIC Bridge 的 ALPN，需与服务端配置相同 | `nps` |
 | `-tls_enable` | 启用 TLS Bridge | `false` |
 | `-tls_ca_file` | TLS CA 证书文件 | 空 |
 | `-tls_server_name` | TLS SNI/证书名称 | 服务端地址 |
@@ -125,8 +127,8 @@ server_port=9001
 |--------|------|--------|
 | `compress` | 使用 Snappy 压缩 Bridge 数据，可降低带宽占用；CPU 较弱时可关闭 | `false` |
 | `crypt` | 加密 Bridge 数据，需与服务端/客户端配置保持一致 | `false` |
-| `server_addr` | 服务端地址；兼容上游别名 `server` | 空 |
-| `conn_type` | 连接类型；兼容上游别名 `tp` | `tcp` |
+| `server_addr` | 服务端地址；兼容旧配置别名 `server` | 空 |
+| `conn_type` | 连接类型；兼容旧配置别名 `tp` | `tcp` |
 | `tls_ca_file` | 服务端 CA 证书文件 | 空 |
 | `tls_server_name` | TLS SNI/证书名称 | 服务端地址 |
 | `tls_fingerprint` | 服务端证书 SHA-256 指纹 | 空 |

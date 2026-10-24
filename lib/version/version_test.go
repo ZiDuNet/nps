@@ -35,3 +35,26 @@ func TestCompareRejectsNonReleaseVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestHandshakeReleaseBoundary(t *testing.T) {
+	for _, test := range []struct {
+		release string
+		secure  bool
+		legacy  bool
+	}{
+		{release: "1.1.27", legacy: true},
+		{release: "1.1.28", legacy: true},
+		{release: "1.1.29", secure: true},
+		{release: "1.2.0", secure: true},
+		{release: "dev"},
+	} {
+		t.Run(test.release, func(t *testing.T) {
+			if got := UsesSecureHandshake(test.release); got != test.secure {
+				t.Fatalf("UsesSecureHandshake(%q) = %t, want %t", test.release, got, test.secure)
+			}
+			if got := SupportsLegacyHandshake(test.release); got != test.legacy {
+				t.Fatalf("SupportsLegacyHandshake(%q) = %t, want %t", test.release, got, test.legacy)
+			}
+		})
+	}
+}

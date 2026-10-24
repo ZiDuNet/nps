@@ -35,7 +35,9 @@ server_port=9001
 | --- | --- |
 | `server_addr` | NPS Bridge 地址，格式为 `主机:端口`；兼容旧键名 `server`。 |
 | `vkey` | 客户端验证密钥。 |
-| `conn_type` | Bridge 类型，支持 `tcp` 和 `kcp`；兼容旧键名 `tp`。 |
+| `conn_type` | Bridge 类型，支持 `tcp`、`kcp`、`ws`、`wss` 和 `quic`；兼容旧键名 `tp`。WS/WSS/QUIC 需要服务端启用对应独立监听。 |
+| `bridge_path` | WS/WSS Bridge 路径，必须与服务端 `bridge_path` 相同，默认 `/ws`。 |
+| `quic_alpn` | QUIC Bridge 的 ALPN，必须与服务端 `quic_alpn` 相同，默认 `nps`。 |
 | `auto_reconnection` | 控制连接断开后自动重连。长期运行建议设为 `true`。 |
 | `proxy_url` | 通过 HTTP 或 SOCKS5 出站代理连接 NPS，例如 `socks5://user:pass@127.0.0.1:1080`。 |
 | `compress` | 对 Bridge 数据启用 Snappy 压缩。文本或低带宽场景可考虑开启，数据本身已压缩或 CPU 较弱时通常关闭。 |
@@ -81,8 +83,17 @@ header_X-Proxy-Source=nps
 | `location` | 路径匹配前缀，例如 `/api`。 |
 | `host_change` | 转发给后端时替换 HTTP Host。 |
 | `header_名称` | 新增或替换请求 Header，例如 `header_X-Env=prod`。 |
+| `response_名称` | 新增或替换后端响应 Header，例如 `response_Cache-Control=no-cache`；不改变响应正文。 |
+| `proxy_protocol` | 后端支持时传递 PROXY Protocol：`0` 关闭、`1` v1、`2` v2。普通 HTTP 服务不要开启。 |
+| `path_rewrite` | 每行一条路径替换规则，例如 `/api => /v1/api`；查询参数保持不变。 |
+| `redirect_url` | 可选 307 重定向地址，`{path}` 会替换为原始请求路径和查询参数。填写后该 Host 不再转发到后端。 |
+| `auto_cors` | 是否自动追加宽松 CORS 响应头；不会代替后端处理 OPTIONS 预检。 |
+| `compat_mode` | 是否让普通 HTTP 请求走标准反向代理兼容链路，适用于 SSE、流式响应或复杂 Header。 |
+| `multi_account` | Host 独立 Basic 认证账号文件；每行 `用户名=密码`，路径按 NPC 当前工作目录解析。该规则认证优先于客户端公共 Basic 账号。 |
 | `upload_limit` | 此 Host 规则上行限速，单位 KiB/s；访问者到内网服务，`0` 或留空表示不限速。 |
 | `download_limit` | 此 Host 规则下行限速，单位 KiB/s；内网服务到访问者，`0` 或留空表示不限速。 |
+
+`proxy_protocol` 同时接受本项目旧配置中的 `proto_version=V1` / `proto_version=V2` 写法。省略时保持关闭，因此旧配置的转发行为不变。只有当后端明确配置为接收 PROXY Protocol 时才启用，否则后端通常会把 PROXY 头当作错误的 HTTP 数据。
 
 配置文件只描述路由规则。HTTP/HTTPS 监听端口、证书和自动 HTTPS 仍由 NPS 服务端配置控制。DNS、非 80/443 端口和证书流程见[隧道模式](../tunnel.md#http-s-域名代理)。
 
@@ -108,6 +119,7 @@ server_port=5353
 | `server_ip` | 可选。服务端开启 `allow_multi_ip=true` 后，将规则绑定到指定 NPS 网卡地址。 |
 | `upload_limit` | 此隧道上行限速，单位 KiB/s；访问者到内网服务，`0` 或留空表示不限速。 |
 | `download_limit` | 此隧道下行限速，单位 KiB/s；内网服务到访问者，`0` 或留空表示不限速。 |
+| `proxy_protocol` | TCP 隧道可配置 `0`（关闭）、`1`（v1）或 `2`（v2）；只有目标服务显式支持时才开启。兼容旧键 `proto_version=V1` / `V2`。 |
 
 ## HTTP 正向代理、SOCKS5 与文件访问
 

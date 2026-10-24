@@ -5,9 +5,9 @@
 [![](https://img.shields.io/github/forks/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/network/members)
 [![](https://img.shields.io/docker/pulls/wushuo98/nps.svg)](https://hub.docker.com/r/wushuo98/nps)
 
-NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务器。支持 **TCP/UDP 流量转发、HTTP(S) 反向代理、SOCKS5 代理、P2P 穿透**等，并配备现代化 Web 管理面板。
+NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务器。支持 **TCP/UDP 流量转发、HTTP(S) 反向代理、HTTP / SOCKS 混合代理、P2P 穿透**等，并配备现代化 Web 管理面板。
 
-基于原版 nps 0.26.10 二次开发，修复了大量 bug，优化了性能和安全性，并重新设计了 Web UI。v1.1.1 起支持独立用户体系：管理员可创建用户并将多个客户端分配给同一个用户；普通用户也可在管理员配置的客户端配额内自行创建客户端。用户与客户端到期时间独立保存，客户端到期不得晚于用户到期，客户端留空时跟随用户。
+项目提供独立的多用户管理与资源隔离：管理员可创建用户并将多个客户端分配给同一个用户；普通用户也可在管理员配置的客户端配额内自行创建客户端。用户与客户端到期时间独立保存，客户端到期不得晚于用户到期，客户端留空时跟随用户。
 
 ## 使用场景
 
@@ -92,7 +92,7 @@ docker run -d --name npc \
 
 > 💡 **推荐无配置文件模式**：删除 npc 目录下的 `conf` 文件夹，所有配置在服务端 Web 面板管理。
 
-当前 Bridge 传输支持 TCP 和 KCP；TLS 通过独立的 TLS Bridge 端口提供。QUIC 和 WebSocket Bridge 传输暂未支持。
+当前 Bridge 支持 TCP、KCP、WebSocket、WebSocket TLS（WS/WSS）与 QUIC；KCP、WS、WSS、QUIC 可使用独立的可选监听端口。TLS Bridge 使用独立 TLS 端口。QUIC Bridge 是加密的 UDP Bridge 入口，不是浏览器 HTTP/3 域名反向代理。同一 TCP 端口上的 Bridge、HTTP(S) 与 Web 管理复用仅适用于现有的限定分流模式。
 TLS 客户端默认校验证书；也可使用 `-tls_ca_file` 和 `-tls_server_name`，不要在生产环境启用 `-tls_insecure_skip_verify=true`。
 
 ## 隧道模式
@@ -102,7 +102,7 @@ TLS 客户端默认校验证书；也可使用 `-tls_ca_file` 和 `-tls_server_n
 | **TCP** | TCP 端口转发，支持负载均衡 | SSH、远程桌面、数据库 |
 | **UDP** | UDP 端口转发 | DNS、游戏、VoIP |
 | **HTTP(S)** | 基于域名的反向代理 | 微信开发、Web 站点 |
-| **SOCKS5** | SOCKS5 代理 | 内网资源全面访问 |
+| **HTTP / SOCKS 混合代理** | HTTP 正向代理与 SOCKS5 共用一个公网端口 | 浏览器代理、内网资源全面访问 |
 | **P2P** | 点对点穿透 | 直连内网设备 |
 | **Secret** | 私密代理 | 安全的临时连接 |
 | **文件** | 内网文件访问 | 文件浏览与下载 |
@@ -203,7 +203,7 @@ docker-compose up -d
 - **v1.1.24** (2026-10-21) - 普通用户可删除自己名下的客户端；Docker `latest` 改为仅跟随正式版，master 测试镜像使用 SHA 标签
 - **v1.1.23** (2026-10-21) - 管理员可从客户端列表下发 NPC 远程升级；客户端校验 Release 后按服务账户权限替换并自动重启
 
-- **v1.1.22** (2026-10-15) - 发布包含最新上游兼容性修复的版本
+- **v1.1.22** (2026-10-15) - 修复 Bridge 连接、代理认证和更新包校验等兼容性问题。
 - **v1.1.21** (2026-10-12) - 修复反向代理验证码路径、系统服务证书路径、SOCKS5 UDP 中继地址选择和服务端更新后的自动重启
 - **v1.1.20** (2026-09-22) - 大屏快捷密钥加密持久化，授权账号刷新后可再次查看；用户 API Token 操作移入状态列
 - **v1.1.19** (2026-09-22) - 增加普通用户 API Token 自助生成/撤销，以及管理员和普通用户隔离的只读大屏快捷地址
@@ -241,4 +241,4 @@ docker-compose up -d
 
 ## 致谢
 
-基于原版 NPS 二次开发。当前项目仓库：[ZiDuNet/nps](https://github.com/ZiDuNet/nps)。
+项目仓库：[ZiDuNet/nps](https://github.com/ZiDuNet/nps)。

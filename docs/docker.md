@@ -47,7 +47,7 @@ http://127.0.0.1:8081
 
 ## NPC 客户端
 
-NPC 也可以用 Docker 运行。镜像入口就是 `npc`，启动参数和物理机二进制一致。本项目保留了上游 `Dockerfile.npc` 的用法，并用于发布 `wushuo98/npc` 镜像。
+NPC 也可以用 Docker 运行。镜像入口就是 `npc`，启动参数和物理机二进制一致；正式构建会发布 `wushuo98/npc` 镜像。
 
 完整的 NPC Docker 命令行、`npc.conf` 挂载、Compose、TLS CA、网络模式、日志排查和升级说明见：[NPC Docker 部署](client/docker.md)。
 
