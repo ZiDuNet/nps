@@ -125,16 +125,55 @@
                     + '<code>' + text(code) + '</code>'
                     + '<button type="button" class="copy btn btn-outline btn-primary btn-xs client-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button></div>';
             };
+            var updateAction = '';
+            {{if eq true .isAdmin}}
+            {{if .allow_remote_update}}
+            (function () {
+                var clientId = Number(row.Id);
+                var supported = row.CanRemoteUpdate === true;
+                var online = row.IsConnect === true && row.Status === true && row.NoStore !== true;
+                var disabled = !supported || !online;
+                var titleZh = !supported
+                    ? '请先手动升级到 v{{.client_update_min_version}}，之后可远程升级'
+                    : (!online ? '客户端启用并在线后才能升级' : '下发客户端升级');
+                var titleEn = !supported
+                    ? 'Manually update once to v{{.client_update_min_version}} to enable remote updates'
+                    : (!online ? 'Client must be enabled and online' : 'Send client update');
+                var title = npsIsEnglish() ? titleEn : titleZh;
+                updateAction = '<div class="client-detail__update">'
+                    + '<button type="button" class="btn btn-outline btn-primary btn-xs client-version-update"'
+                    + (disabled ? ' disabled' : '')
+                    + ' onclick="requestClientUpgrade(this,' + clientId + ')"'
+                    + ' title="' + npsEscapeHtml(title) + '" data-title-zh="' + npsEscapeHtml(titleZh) + '"'
+                    + ' aria-label="' + npsEscapeHtml(title) + '" data-aria-label-zh="' + npsEscapeHtml(titleZh) + '"'
+                    + ' data-title-en="' + npsEscapeHtml(titleEn) + '"'
+                    + ' data-aria-label-en="' + npsEscapeHtml(titleEn) + '">'
+                    + '<i class="fa fa-cloud-download" aria-hidden="true"></i>'
+                    + '<span>' + (english ? 'Update client' : '更新客户端') + '</span></button>'
+                    + '<span class="client-detail__update-note">' + npsEscapeHtml(title) + '</span></div>';
+            })();
+            {{end}}
+            {{end}}
             return '<div class="client-detail">'
+                + section('terminal', english ? 'Connection commands' : '连接命令',
+                    cmdRow('<span langtag="word-quicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.p}}|' + (row.VerifyKey || '') + '|false'))
+                    + cmdRow('<span langtag="word-tlsquicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.tls_p}}|' + (row.VerifyKey || '') + '|true'))
+                    + cmdRow('<span langtag="word-commandclient"></span>', '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + (row.VerifyKey || '') + ' -type={{.bridgeType}}')
+                    + cmdRow('<span langtag="word-commandclient-tls"></span>', '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + (row.VerifyKey || '') + ' -tls_enable=true'))
+                + updateAction
                 + section('sliders-h', english ? 'Connection' : '基础配置',
                     kv('<span langtag="word-maxconnections"></span>', text(row.MaxConn))
                     + kv('<span langtag="word-curconnections"></span>', text(row.NowConn))
+                    + kv(english ? 'Current rate' : '当前速率', changeunit((row.Rate && row.Rate.NowRate) ? row.Rate.NowRate : 0) + '/S')
                     + kv('<span langtag="word-flowlimit"></span>', text(flow.FlowLimit, 0) + ' M')
                     + kv('<span langtag="word-ratelimit"></span>', text(row.RateLimit, 0) + ' KB/s')
                     + kv('<span langtag="word-maxtunnels"></span>', text(row.MaxTunnelNum, 0))
                     + kv('<span langtag="word-connectbyconfig"></span>', npsBooleanMarkup(!!row.ConfigConnAllow)))
                 + section('info-circle', english ? 'Client details' : '客户端信息',
-                    kv('<span langtag="word-version"></span>', text(row.Version, '-'))
+                    kv(english ? 'Owner' : '所属用户', row.UserId > 0 ? (text(row.UserName, '-') + '（ID ' + text(row.UserId) + '）') : (english ? 'Unassigned' : '未分配'))
+                    + kv(english ? 'Status' : '运行状态', row.Status === true ? (english ? 'Enabled' : '已启用') : (english ? 'Disabled' : '已停用'))
+                    + kv(english ? 'Online' : '在线状态', row.IsConnect === true ? (english ? 'Online' : '在线') : (english ? 'Offline' : '离线'))
+                    + kv('<span langtag="word-version"></span>', text(row.Version, '-'))
                     + kv('<span langtag="word-verifykey"></span>', text(row.VerifyKey, '-'))
                     + kv('<span langtag="word-address"></span>', text(row.Addr, '-'))
                     + kv('<span langtag="word-localaddr"></span>', text(row.LocalAddr, '-'))
@@ -176,11 +215,6 @@
                             + state + '</div>';
                     }).join('')
                     : '<div class="client-detail__history-empty">' + (english ? 'No connection history yet.' : '暂无连接记录。') + '</div>')
-                + section('terminal', english ? 'Connection commands' : '连接命令',
-                    cmdRow('<span langtag="word-quicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.p}}|' + (row.VerifyKey || '') + '|false'))
-                    + cmdRow('<span langtag="word-tlsquicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.tls_p}}|' + (row.VerifyKey || '') + '|true'))
-                    + cmdRow('<span langtag="word-commandclient"></span>', '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + (row.VerifyKey || '') + ' -type={{.bridgeType}}')
-                    + cmdRow('<span langtag="word-commandclient-tls"></span>', '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + (row.VerifyKey || '') + ' -tls_enable=true'))
                 + '</div>';
         },
         //表格的列
@@ -318,39 +352,15 @@
                 align: 'center',
                 halign: 'center',
                 class: 'client-list__option',
-                width: '168px',
+                width: '140px',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
                     var clientId = Number(row.Id);
                     if (!isFinite(clientId) || Math.floor(clientId) !== clientId || clientId <= 0) return '';
                     var btn_group = '<div class="client-actions client-actions--manage">'
 
+                    // 操作顺序：停用/启用 → 修改 → 删除；停用/启用仅管理员可用
                     {{if eq true .isAdmin}}
-                    // Keep the remote-update action in the always-visible
-                    // management column.  The version column is responsive
-                    // and may be hidden on compact screens or by a saved
-                    // column preference, which previously made this action
-                    // impossible to discover.
-                    {{if .allow_remote_update}}
-                    var supported = row.CanRemoteUpdate === true;
-                    var online = row.IsConnect === true && row.Status === true && row.NoStore !== true;
-                    var disabled = !supported || !online;
-                    var titleZh = !supported
-                        ? '请先手动升级到 v{{.client_update_min_version}}，之后可远程升级'
-                        : (!online ? '客户端启用并在线后才能升级' : '下发客户端升级');
-                    var titleEn = !supported
-                        ? 'Manually update once to v{{.client_update_min_version}} to enable remote updates'
-                        : (!online ? 'Client must be enabled and online' : 'Send client update');
-                    var title = npsIsEnglish() ? titleEn : titleZh;
-                    btn_group += '<button type="button" class="btn btn-outline btn-primary client-version-update"'
-                        + (disabled ? ' disabled' : '')
-                        + ' onclick="requestClientUpgrade(this,' + clientId + ')"'
-                        + ' title="' + npsEscapeHtml(title) + '" data-title-zh="' + npsEscapeHtml(titleZh) + '"'
-                        + ' aria-label="' + npsEscapeHtml(title) + '" data-aria-label-zh="' + npsEscapeHtml(titleZh) + '"'
-                        + ' data-title-en="' + npsEscapeHtml(titleEn) + '"'
-                        + ' data-aria-label-en="' + npsEscapeHtml(titleEn) + '">'
-                        + '<i class="fa fa-cloud-download" aria-hidden="true"></i></button>';
-                    {{end}}
                     if (row.Status) {
                         btn_group += '<button type="button" onclick="submitform(\'stop\', \'{{.web_base_url}}/client/changestatus\', {\'id\':' + clientId
                         btn_group += ', \'status\': 0})" class="btn btn-outline btn-warning" data-title-zh="停用客户端" data-title-en="Disable client" data-aria-label-zh="停用客户端" data-aria-label-en="Disable client"><i class="fa fa-pause" aria-hidden="true"></i></button>'
@@ -358,15 +368,12 @@
                         btn_group += '<button type="button" onclick="submitform(\'start\', \'{{.web_base_url}}/client/changestatus\', {\'id\':' + clientId
                         btn_group += ', \'status\': 1})" class="btn btn-outline btn-primary" data-title-zh="启用客户端" data-title-en="Enable client" data-aria-label-zh="启用客户端" data-aria-label-en="Enable client"><i class="fa fa-play" aria-hidden="true"></i></button>'
                     }
+                    {{end}}
+                    btn_group += '<a href="{{.web_base_url}}/client/edit?id=' + clientId
+                    btn_group += '" class="btn btn-outline btn-success client-action-btn" data-title-zh="编辑客户端" data-title-en="Edit client" data-aria-label-zh="编辑客户端" data-aria-label-en="Edit client"><i class="fa fa-edit" aria-hidden="true"></i></a>'
                     btn_group += '<button type="button" onclick="submitform(\'delete\', \'{{.web_base_url}}/client/del\', {\'id\':' + clientId
                     btn_group += '})" class="btn btn-outline btn-danger" data-title-zh="删除客户端" data-title-en="Delete client" data-aria-label-zh="删除客户端" data-aria-label-en="Delete client"><i class="fa fa-trash" aria-hidden="true"></i></button>'
-                    {{else}}
-                    btn_group += '<button type="button" onclick="submitform(\'delete\', \'{{.web_base_url}}/client/del\', {\'id\':' + clientId
-                    btn_group += '})" class="btn btn-outline btn-danger" data-title-zh="删除我的客户端" data-title-en="Delete my client" data-aria-label-zh="删除我的客户端" data-aria-label-en="Delete my client"><i class="fa fa-trash" aria-hidden="true"></i></button>'
-                    {{end}}
-
-                    btn_group += '<a href="{{.web_base_url}}/client/edit?id=' + clientId
-                    btn_group += '" class="btn btn-outline btn-success client-action-btn" data-title-zh="编辑客户端" data-title-en="Edit client" data-aria-label-zh="编辑客户端" data-aria-label-en="Edit client"><i class="fa fa-edit" aria-hidden="true"></i></a></div>'
+                    btn_group += '</div>'
                     return btn_group
                 }
             },

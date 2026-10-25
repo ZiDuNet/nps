@@ -773,16 +773,27 @@
             var $list = $('#dashboard-quota-list');
             if (!$list.length) return;
             $list.empty();
-            if (!$.isArray(rows) || !rows.length) {
+            var english = dashboardIsEnglish();
+            var limitedRows = [];
+            if ($.isArray(rows)) {
+                for (var quotaIndex = 0; quotaIndex < rows.length; quotaIndex++) {
+                    var quotaRow = rows[quotaIndex] || {};
+                    if (dashboardNumber(dashboardValue(quotaRow, 'connectionLimit', 0)) > 0
+                        || dashboardNumber(dashboardValue(quotaRow, 'tunnelLimit', 0)) > 0
+                        || dashboardNumber(dashboardValue(quotaRow, 'flowLimitBytes', 0)) > 0) {
+                        limitedRows.push(quotaRow);
+                    }
+                }
+            }
+            if (!limitedRows.length) {
                 $('<li>', {
                     'class': 'dashboard-pending-empty',
                     text: dashboardIsEnglish() ? 'No quota limits configured' : '暂无配额限制'
                 }).appendTo($list);
                 return;
             }
-            var english = dashboardIsEnglish();
-            for (var i = 0; i < rows.length; i++) {
-                var row = rows[i] || {};
+            for (var i = 0; i < limitedRows.length; i++) {
+                var row = limitedRows[i] || {};
                 var name = String(dashboardValue(row, 'clientName', '') || (english ? 'Client ' : '客户端 ') + dashboardValue(row, 'clientId', ''));
                 var details = [];
                 var connectionLimit = dashboardNumber(dashboardValue(row, 'connectionLimit', 0));
@@ -797,7 +808,6 @@
                 if (flowLimit > 0) {
                     details.push((english ? 'Flow ' : '流量 ') + dashboardFormatQuotaBytes(dashboardValue(row, 'flowUsedBytes', 0)) + '/' + dashboardFormatQuotaBytes(flowLimit));
                 }
-                if (!details.length) details.push(english ? 'Unlimited' : '未设置限制');
                 $('<li>', {
                     'class': 'dashboard-quota-item',
                     text: name + ' · ' + details.join(' · ')

@@ -103,7 +103,7 @@
                     <div class="form-group tunnel-mode-field" id="port" data-tunnel-field="port">
                         <label class="form-label font-bold" for="tunnel-port" langtag="word-serverport"></label>
                         <div class="form-group-wrapper">
-                            <input id="tunnel-port" class="form-control" type="text" name="port" placeholder=""
+                            <input id="tunnel-port" class="form-control" type="number" name="port" min="1" max="65535" step="1" inputmode="numeric" placeholder=""
                                    langtag="info-suchasport">
                             <span class="help-block" data-i18n-zh="公网访问端口；必须是服务器上未被占用且允许映射的端口。" data-i18n-en="The public access port; it must be unused and allowed by the server port policy.">公网访问端口；必须是服务器上未被占用且允许映射的端口。</span>
                         </div>

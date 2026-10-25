@@ -526,6 +526,18 @@ h3.ibox-title { display: block; min-height: 0; }
     font-size: 12px;
 }
 .client-detail__copy { min-width: 42px; }
+.client-detail__update {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    background: var(--nps-surface-subtle);
+    border: 1px solid var(--nps-line);
+    border-radius: 8px;
+}
+.client-detail__update .btn { flex: 0 0 auto; }
+.client-detail__update-note { min-width: 0; color: var(--nps-muted); font-size: 12px; line-height: 1.5; }
 
 /* Forms */
 .form-horz .form-group { margin-bottom: 20px !important; }
@@ -596,6 +608,19 @@ textarea.form-control { min-height: 96px; line-height: 1.55; resize: vertical; }
 .form-workflow-actions .btn { min-width: 96px; }
 .required-mark { margin-left: 4px; color: var(--nps-danger); font-weight: 700; }
 .input-group .form-control { border-right: 0 !important; }
+.form-page .form-workflow-form .input-group { flex-wrap: nowrap !important; }
+.form-page .form-workflow-form .input-group > .form-control {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+}
+.form-page .form-workflow-form .input-group > .input-group-btn,
+.form-page .form-workflow-form .input-group > .input-group-addon {
+    flex: 0 0 auto !important;
+    width: auto !important;
+}
+.form-page .form-workflow-form .input-group > .input-group-btn .btn {
+    white-space: nowrap;
+}
 .input-group-btn .btn {
     min-width: 40px;
     height: 38px;
@@ -889,11 +914,13 @@ textarea.form-control { min-height: 96px; line-height: 1.55; resize: vertical; }
 .auth-control { position: relative; }
 .auth-control .input-icon { position: absolute; top: 50%; left: 13px; z-index: 1; color: var(--nps-faint); font-size: 13px; transform: translateY(-50%); }
 .auth-control .has-icon { height: 42px; padding-left: 38px !important; }
-.auth-captcha { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; }
+.auth-captcha { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; align-items: center; }
+.auth-captcha__hint { display: block; margin: 7px 0 0; }
 .auth-captcha__challenge {
     display: flex;
     align-items: center;
     justify-content: center;
+    height: 42px;
     min-height: 42px;
     overflow: hidden;
     background: var(--nps-surface-subtle);

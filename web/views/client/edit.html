@@ -78,7 +78,7 @@
                     <div class="form-group" id="flow_limit">
                         <label class="form-label font-bold" for="client-flow-limit" langtag="word-flowlimit"></label>
                         <div class="form-group-wrapper">
-                            <input id="client-flow-limit" class="form-control" value="{{.c.Flow.FlowLimit}}" type="text" name="flow_limit"
+                            <input id="client-flow-limit" class="form-control" value="{{.c.Flow.FlowLimit}}" type="number" min="0" step="1" inputmode="numeric" name="flow_limit"
                                 placeholder="" langtag="info-unrestricted">
                             <span class="help-block m-b-none form-unit-hint"><span langtag="word-unit"></span><span class="form-unit-suffix">: M</span></span>
                             <span class="help-block m-b-none" data-i18n-zh="客户端累计流量上限，单位 MB；留空或 0 表示不限。达到上限后该客户端的转发会被暂停。" data-i18n-en="Cumulative client traffic limit in MB; blank or 0 means unlimited. Forwarding is paused when the limit is reached.">客户端累计流量上限，单位 MB；留空或 0 表示不限。达到上限后该客户端的转发会被暂停。</span>
@@ -89,7 +89,7 @@
                     <div class="form-group" id="rate_limit">
                         <label class="form-label font-bold" for="client-rate-limit" langtag="word-ratelimit"></label>
                         <div class="form-group-wrapper">
-                            <input id="client-rate-limit" class="form-control" value="{{.c.RateLimit}}" type="text" name="rate_limit"
+                            <input id="client-rate-limit" class="form-control" value="{{.c.RateLimit}}" type="number" min="0" step="1" inputmode="numeric" name="rate_limit"
                                 placeholder="" langtag="info-unrestricted">
                             <span class="help-block m-b-none form-unit-hint"><span langtag="word-unit"></span><span class="form-unit-suffix">: KB/S</span></span>
                             <span class="help-block m-b-none" data-i18n-zh="客户端所有转发连接共享的带宽上限，单位 KB/s；留空或 0 表示不限。" data-i18n-en="Shared bandwidth limit for all forwarding connections of this client in KB/s; blank or 0 means unlimited.">客户端所有转发连接共享的带宽上限，单位 KB/s；留空或 0 表示不限。</span>
@@ -100,7 +100,7 @@
                     <div class="form-group" id="max_conn">
                         <label class="form-label font-bold" for="client-max-conn" langtag="word-maxconnections"></label>
                         <div class="form-group-wrapper">
-                            <input id="client-max-conn" class="form-control" value="{{.c.MaxConn}}" type="text" name="max_conn"
+                            <input id="client-max-conn" class="form-control" value="{{.c.MaxConn}}" type="number" min="0" step="1" inputmode="numeric" name="max_conn"
                                 placeholder="" langtag="info-unrestricted">
                             <span class="help-block m-b-none" data-i18n-zh="客户端同时建立的转发连接上限；0 表示不限。TCP 按连接、UDP 按会话计数。" data-i18n-en="Maximum concurrent forwarding connections for this client; 0 means unlimited. TCP counts connections and UDP counts sessions.">客户端同时建立的转发连接上限；0 表示不限。TCP 按连接、UDP 按会话计数。</span>
                         </div>
@@ -110,7 +110,7 @@
                     <div class="form-group" id="max_tunnel">
                         <label class="form-label font-bold" for="client-max-tunnel" langtag="word-maxtunnels"></label>
                         <div class="form-group-wrapper">
-                            <input id="client-max-tunnel" class="form-control" value="{{.c.MaxTunnelNum}}" type="text" name="max_tunnel"
+                            <input id="client-max-tunnel" class="form-control" value="{{.c.MaxTunnelNum}}" type="number" min="0" step="1" inputmode="numeric" name="max_tunnel"
                                 placeholder="" langtag="info-unrestricted">
                             <span class="help-block m-b-none" data-i18n-zh="客户端可创建的普通隧道和 Host 域名规则总数上限；0 表示不限。" data-i18n-en="Maximum number of tunnels and Host rules this client may create; 0 means unlimited.">客户端可创建的普通隧道和 Host 域名规则总数上限；0 表示不限。</span>
                         </div>
@@ -140,20 +140,22 @@
                     <div class="form-group" id="compress">
                         <label class="form-label font-bold" for="client-compress" langtag="word-compress"></label>
                         <div class="form-group-wrapper">
-                            <select id="client-compress" class="form-control" name="compress">
-                                <option {{if eq false .c.Cnf.Compress}}selected{{end}} value="0" langtag="word-no"></option>
-                                <option {{if eq true .c.Cnf.Compress}}selected{{end}} value="1" langtag="word-yes"></option>
-                            </select>
+                            <div class="toggle-field">
+                                <input type="hidden" name="compress" value="{{if eq true .c.Cnf.Compress}}1{{else}}0{{end}}">
+                                <label class="toggle-switch"><input id="client-compress" type="checkbox"{{if eq true .c.Cnf.Compress}} checked{{end}}><span class="toggle-slider"></span></label>
+                                <span class="toggle-label" data-i18n-zh="{{if eq true .c.Cnf.Compress}}是{{else}}否{{end}}" data-i18n-en="{{if eq true .c.Cnf.Compress}}Yes{{else}}No{{end}}">{{if eq true .c.Cnf.Compress}}是{{else}}否{{end}}</span>
+                            </div>
                             <span class="help-block m-b-none" data-i18n-zh="启用后压缩 Bridge 数据，可降低带宽但会增加 CPU；只影响该客户端的传输。" data-i18n-en="Compresses Bridge data for this client; it can save bandwidth at the cost of CPU.">启用后压缩 Bridge 数据，可降低带宽但会增加 CPU；只影响该客户端的传输。</span>
                         </div>
                     </div>
                     <div class="form-group" id="crypt">
                         <label class="form-label font-bold" for="client-crypt" langtag="word-crypt"></label>
                         <div class="form-group-wrapper">
-                            <select id="client-crypt" class="form-control" name="crypt">
-                                <option {{if eq false .c.Cnf.Crypt}}selected{{end}} value="0" langtag="word-no"></option>
-                                <option {{if eq true .c.Cnf.Crypt}}selected{{end}} value="1" langtag="word-yes"></option>
-                            </select>
+                            <div class="toggle-field">
+                                <input type="hidden" name="crypt" value="{{if eq true .c.Cnf.Crypt}}1{{else}}0{{end}}">
+                                <label class="toggle-switch"><input id="client-crypt" type="checkbox"{{if eq true .c.Cnf.Crypt}} checked{{end}}><span class="toggle-slider"></span></label>
+                                <span class="toggle-label" data-i18n-zh="{{if eq true .c.Cnf.Crypt}}是{{else}}否{{end}}" data-i18n-en="{{if eq true .c.Cnf.Crypt}}Yes{{else}}No{{end}}">{{if eq true .c.Cnf.Crypt}}是{{else}}否{{end}}</span>
+                            </div>
                             <span class="help-block m-b-none" data-i18n-zh="启用后对客户端数据进行额外加密；会增加 CPU 和少量延迟，Bridge 已使用加密连接时通常无需开启。" data-i18n-en="Adds client data encryption with some CPU and latency overhead; usually unnecessary when the Bridge connection is already encrypted.">启用后对客户端数据进行额外加密；会增加 CPU 和少量延迟，Bridge 已使用加密连接时通常无需开启。</span>
                         </div>
                     </div>
@@ -204,38 +206,11 @@
                         </div>
                     </div>
                     {{end}}
-                    <div class="form-group" id="ip_white">
-                        <label class="form-label font-bold" for="client-ip-white" langtag="word-ipwhite"></label>
-                        <div class="form-group-wrapper">
-                            <div class="toggle-field">
-                                <input type="hidden" name="ipwhite" value="{{if eq true .c.IpWhite}}1{{else}}0{{end}}">
-                                <label class="toggle-switch"><input id="client-ip-white" type="checkbox" {{if eq true .c.IpWhite}}checked{{end}}><span class="toggle-slider"></span></label>
-                                <span class="toggle-label" data-toggle-state="{{if eq true .c.IpWhite}}yes{{else}}no{{end}}">{{if eq true .c.IpWhite}}是{{else}}否{{end}}</span>
-                            </div>
-                            <span class="help-block m-b-none" data-i18n-zh="开启后访问者不在白名单时会跳转到 IP 授权页面；授权密码由下方字段设置。" data-i18n-en="When enabled, visitors outside the allowlist are sent to the IP authorization page; configure its password below.">开启后访问者不在白名单时会跳转到 IP 授权页面；授权密码由下方字段设置。</span>
-                        </div>
-                    </div>
-                    <div class="form-group is-hidden" id="ip_white_pass">
-                        <label class="form-label font-bold" for="client-ip-white-pass" langtag="word-ipwhitepass"></label>
-                        <div class="form-group-wrapper">
-                            <input id="client-ip-white-pass" class="form-control" type="text" name="ipwhitepass" autocomplete="off" placeholder=""
-                                langtag="info-input-whitepass" value="{{.c.IpWhitePass}}">
-                            <span class="help-block m-b-none" langtag="info-ipwhitepass"></span>
-                        </div>
-                    </div>
-                    <div class="form-group form-group--wide is-hidden" id="ip_white_list">
-                        <label class="form-label font-bold" for="client-ip-white-list" langtag="word-ipwhitelist"></label>
-                        <div class="form-group-wrapper">
-                            <textarea id="client-ip-white-list" class="form-control" rows="4" type="text" name="ipwhitelist" placeholder=""
-                                langtag="info-suchasblackiplist">{{.IpWhiteList}}</textarea>
-                            <span class="help-block m-b-none" langtag="info-descblackiplist"></span>
-                        </div>
-                    </div>
                     <div class="form-group" id="registered_only">
                         <label class="form-label font-bold" for="client-registered-only" data-i18n-zh="仅允许已登记 IP" data-i18n-en="Registered IPs only">仅允许已登记 IP</label>
                         <div class="form-group-wrapper">
                             <div class="toggle-field">
-                                <input type="hidden" name="registered_only" value="0">
+                                <input type="hidden" name="registered_only" value="{{if eq true .c.RegisteredOnly}}1{{else}}0{{end}}">
                                 <label class="toggle-switch"><input id="client-registered-only" type="checkbox" {{if eq true .c.RegisteredOnly}}checked{{end}}><span class="toggle-slider"></span></label>
                                 <span class="toggle-label" data-toggle-state="{{if eq true .c.RegisteredOnly}}yes{{else}}no{{end}}">{{if eq true .c.RegisteredOnly}}是{{else}}否{{end}}</span>
                             </div>
@@ -257,21 +232,57 @@
                         </div>
                     </div>
                     <div class="form-group form-group--wide" id="black_ip_list">
-                        <label class="form-label font-bold" for="client-black-ip-list" langtag="word-blackiplist"></label>
+                        <label class="form-label font-bold" for="client-black-ip-list" data-i18n-zh="IP 黑名单（IP/CIDR）" data-i18n-en="IP denylist (IP/CIDR)">IP 黑名单（IP/CIDR）</label>
                         <div class="form-group-wrapper">
                             <textarea id="client-black-ip-list" class="form-control" rows="4" type="text" name="blackiplist" placeholder=""
                                 langtag="info-suchasblackiplist">{{.BlackIpList}}</textarea>
-                            <span class="help-block m-b-none" langtag="info-descblackiplist"></span>
+                            <span class="help-block m-b-none" data-i18n-zh="拒绝名单：匹配的来源地址会被直接拒绝访问。一行一个，支持单个 IP 或 CIDR 网段（如 203.0.113.0/24）；留空表示不拒绝任何来源。" data-i18n-en="Denylist: matching source addresses are denied. One entry per line, as a single IP or CIDR range (for example 203.0.113.0/24). Leave blank to deny nothing.">拒绝名单：匹配的来源地址会被直接拒绝访问。一行一个，支持单个 IP 或 CIDR 网段（如 203.0.113.0/24）；留空表示不拒绝任何来源。</span>
                         </div>
                     </div>
                     <div class="form-group form-group--wide">
-                        <label class="form-label font-bold" for="client-acl-white-list" data-i18n-zh="统一白名单（IP/CIDR）" data-i18n-en="Unified allowlist (IP/CIDR)">统一白名单（IP/CIDR）</label>
-                        <div class="form-group-wrapper"><textarea id="client-acl-white-list" class="form-control" rows="3" name="whiteiplist" placeholder="198.51.100.0/24">{{.WhiteIpList}}</textarea><span class="help-block m-b-none" data-i18n-zh="配置后，未命中的来源会被拒绝；可与黑名单一起使用。" data-i18n-en="When set, sources not matching the allowlist are denied; may be combined with a denylist.">配置后，未命中的来源会被拒绝；可与黑名单一起使用。</span></div>
+                        <label class="form-label font-bold" for="client-acl-white-list" data-i18n-zh="IP 白名单（IP/CIDR）" data-i18n-en="IP allowlist (IP/CIDR)">IP 白名单（IP/CIDR）</label>
+                        <div class="form-group-wrapper"><textarea id="client-acl-white-list" class="form-control" rows="3" name="whiteiplist" placeholder="198.51.100.0/24">{{.WhiteIpList}}</textarea><span class="help-block m-b-none" data-i18n-zh="放行名单：一旦填写，只有命中名单的来源地址才允许访问，其余来源全部拒绝；留空表示不限。支持单个 IP 或 CIDR 网段，可与黑名单同时使用，同时命中时按下方冲突策略处理。" data-i18n-en="Allowlist: when filled, only matching source addresses may connect and all others are denied. Leave blank for no restriction. Accepts single IPs or CIDR ranges and can be combined with the denylist; the policy below resolves conflicts.">放行名单：一旦填写，只有命中名单的来源地址才允许访问，其余来源全部拒绝；留空表示不限。支持单个 IP 或 CIDR 网段，可与黑名单同时使用，同时命中时按下方冲突策略处理。</span></div>
                     </div>
-                        <div class="form-group">
+                    <div class="form-group">
                         <label class="form-label font-bold" for="client-acl-priority" data-i18n-zh="名单冲突策略" data-i18n-en="List conflict policy">名单冲突策略</label>
                         <div class="form-group-wrapper"><select id="client-acl-priority" class="form-control" name="iplistpriority"><option value="0"{{if ne .c.IpListPriority 1}} selected{{end}} data-i18n-zh="黑名单优先" data-i18n-en="Deny first">黑名单优先</option><option value="1"{{if eq .c.IpListPriority 1}} selected{{end}} data-i18n-zh="白名单优先" data-i18n-en="Allow first">白名单优先</option></select><span class="help-block m-b-none" data-i18n-zh="同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。" data-i18n-en="Applies when both lists are configured: deny-first rejects denylisted addresses and allows only allowlisted others; allow-first allows allowlisted addresses and any others not on the denylist. With one list, both policies are equivalent.">同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。</span></div>
                     </div>
+                    <details class="form-workflow-advanced legacy-ip-auth-settings">
+                        <summary>
+                            <span class="form-workflow-advanced__title"><i class="fa fa-history" aria-hidden="true"></i><span data-i18n-zh="旧版 IP 授权跳转（兼容）" data-i18n-en="Legacy IP authorization redirect">旧版 IP 授权跳转（兼容）</span></span>
+                            <span class="form-workflow-advanced__badge" data-i18n-zh="可选" data-i18n-en="Optional">可选</span>
+                        </summary>
+                        <div class="form-workflow-advanced__body">
+                            <p class="form-field-hint" data-i18n-zh="这是旧版的访问控制方式：开启后，访问者不在旧版白名单时会被跳转到 IP 授权页面，输入授权密码后自动登记 IP。新版部署建议直接使用上方的 IP 白名单/黑名单，无需开启此项。" data-i18n-en="Legacy access control: when enabled, visitors outside the legacy allowlist are redirected to an IP authorization page and can self-register with the password. New deployments should prefer the allowlist and denylist above.">这是旧版的访问控制方式：开启后，访问者不在旧版白名单时会被跳转到 IP 授权页面，输入授权密码后自动登记 IP。新版部署建议直接使用上方的 IP 白名单/黑名单，无需开启此项。</p>
+                            <div class="form-group" id="ip_white">
+                                <label class="form-label font-bold" for="client-ip-white" data-i18n-zh="启用旧版 IP 授权" data-i18n-en="Enable legacy IP authorization">启用旧版 IP 授权</label>
+                                <div class="form-group-wrapper">
+                                    <div class="toggle-field">
+                                        <input type="hidden" name="ipwhite" value="{{if eq true .c.IpWhite}}1{{else}}0{{end}}">
+                                        <label class="toggle-switch"><input id="client-ip-white" type="checkbox" {{if eq true .c.IpWhite}}checked{{end}}><span class="toggle-slider"></span></label>
+                                        <span class="toggle-label" data-toggle-state="{{if eq true .c.IpWhite}}yes{{else}}no{{end}}">{{if eq true .c.IpWhite}}是{{else}}否{{end}}</span>
+                                    </div>
+                                    <span class="help-block m-b-none" data-i18n-zh="开启后，访问者不在旧版白名单时会跳转到 IP 授权页面；授权密码由下方字段设置。" data-i18n-en="When enabled, visitors outside the legacy allowlist are sent to the IP authorization page; configure its password below.">开启后，访问者不在旧版白名单时会跳转到 IP 授权页面；授权密码由下方字段设置。</span>
+                                </div>
+                            </div>
+                            <div class="form-group is-hidden" id="ip_white_pass">
+                                <label class="form-label font-bold" for="client-ip-white-pass" langtag="word-ipwhitepass"></label>
+                                <div class="form-group-wrapper">
+                                    <input id="client-ip-white-pass" class="form-control" type="text" name="ipwhitepass" autocomplete="off" placeholder=""
+                                        langtag="info-input-whitepass" value="{{.c.IpWhitePass}}">
+                                    <span class="help-block m-b-none" langtag="info-ipwhitepass"></span>
+                                </div>
+                            </div>
+                            <div class="form-group form-group--wide is-hidden" id="ip_white_list">
+                                <label class="form-label font-bold" for="client-ip-white-list" langtag="word-ipwhitelist"></label>
+                                <div class="form-group-wrapper">
+                                    <textarea id="client-ip-white-list" class="form-control" rows="4" type="text" name="ipwhitelist" placeholder=""
+                                        langtag="info-suchasblackiplist">{{.IpWhiteList}}</textarea>
+                                    <span class="help-block m-b-none" langtag="info-descblackiplist"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
 
                     {{if eq true .isAdmin}}
                     <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="客户端到期后自动停止连接" data-section-summary-en="Stop connections after client expiry"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
@@ -309,13 +320,17 @@ $(document).ready(function () {
         var checked = $ipToggle.is(':checked');
         npsSetToggleLabel($ipToggle.closest('.toggle-field').find('.toggle-label'), checked);
         $('#ip_white_pass, #ip_white_list').toggleClass('is-hidden', !checked);
-        $('#black_ip_list').toggleClass('is-hidden', checked);
     }
     $ipToggle.on('change', updateIpWhiteUI);
     updateIpWhiteUI();
 
     // config_conn_allow 标签
     $('#config_conn_allow .toggle-switch input[type="checkbox"]').on('change', function() {
+        npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked);
+    });
+
+    // 压缩 / 加密开关：同步隐藏字段并刷新文案
+    $('#compress .toggle-switch input[type="checkbox"], #crypt .toggle-switch input[type="checkbox"]').on('change', function () {
         npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked);
     });
 

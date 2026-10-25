@@ -108,7 +108,7 @@
                     <div class="form-group tunnel-mode-field" id="port" data-tunnel-field="port">
                         <label class="form-label font-bold" for="tunnel-port" langtag="word-serverport"></label>
                         <div class="form-group-wrapper">
-                            <input id="tunnel-port" value="{{.t.Port}}" class="form-control" type="text" name="port" placeholder=""
+                            <input id="tunnel-port" value="{{.t.Port}}" class="form-control" type="number" name="port" min="1" max="65535" step="1" inputmode="numeric" placeholder=""
                                    langtag="info-suchasport">
                             <span class="help-block" data-i18n-zh="公网访问端口；修改后 NPS 会重载该隧道并检查端口是否可用。" data-i18n-en="The public access port; NPS reloads the tunnel and checks availability after a change.">公网访问端口；修改后 NPS 会重载该隧道并检查端口是否可用。</span>
                         </div>
