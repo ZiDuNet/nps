@@ -39,7 +39,7 @@ server_port=9001
 | `bridge_path` | WS/WSS Bridge 路径，必须与服务端 `bridge_path` 相同，默认 `/ws`。 |
 | `quic_alpn` | QUIC Bridge 的 ALPN，必须与服务端 `quic_alpn` 相同，默认 `nps`。 |
 | `auto_reconnection` | 控制连接断开后自动重连。长期运行建议设为 `true`。 |
-| `proxy_url` | 通过 HTTP 或 SOCKS5 出站代理连接 NPS，例如 `socks5://user:pass@127.0.0.1:1080`。 |
+| `proxy_url` | 通过 HTTP/HTTPS CONNECT、SOCKS4/4a、SOCKS5/SOCKS5H 出站代理连接 NPS，例如 `socks5h://user:pass@127.0.0.1:1080`；留空时可使用 `ALL_PROXY`，并按 `NO_PROXY` 绕过。 |
 | `compress` | 对 Bridge 数据启用 Snappy 压缩。文本或低带宽场景可考虑开启，数据本身已压缩或 CPU 较弱时通常关闭。 |
 | `crypt` | 启用项目内置加密。跨不可信网络优先使用 TLS Bridge，不要将它当作 TLS 的替代品。 |
 | `tls_enable` | 改连服务端 `tls_bridge_port`，默认通常为 `8025`。 |
@@ -53,6 +53,12 @@ server_port=9001
 | `rate_limit` | 此客户端带宽上限，单位 KiB/s。 |
 | `flow_limit` | 此客户端累计流量上限，单位 MiB，入口与出口相加计算。 |
 | `disconnect_timeout` | 未收到心跳回包的最大检查次数；检查间隔为 5 秒，默认 `60`，约为 5 分钟。 |
+| `local_ip` / `local_ip_forward` | 指定 NPC 出站绑定地址；启用 `local_ip_forward=true` 后，对公网 IP/域名目标的 TCP、UDP、SOCKS5 UDP 转发也使用该地址，私网目标保持系统路由。不填写时由系统自动探测或由内核选择。 |
+| `dns_server` | NPC 目标解析和 NAT 探测使用的 DNS 服务器，多个地址用逗号分隔；未配置时使用操作系统解析器。 |
+| `ntp_server` / `ntp_interval` | NPC 校时服务器和周期（分钟）；留空关闭，避免新握手因设备时钟偏差失败。 |
+| `fallback_secret` | P2P 直连失败后是否回退到同任务 Secret 中继。 |
+| `secret_link` | 是否向已允许 `allow_secret_link` 的服务端发送 Link 元数据；旧服务端或服务端未开启时保持关闭。 |
+| `disable_remote_update` | 设为 `true` 后拒绝服务端下发的远程更新指令。 |
 | `pprof_addr` | 可选调试监听地址，例如 `127.0.0.1:9999`。只允许在受控网络使用。 |
 | `remark` | 客户端显示备注。 |
 
@@ -170,6 +176,12 @@ target_addr=127.0.0.1:22
 ~~~
 
 节名称必须以 `secret` 或 `p2p` 开头，NPC 才会把它识别为本地访问端。Secret/P2P 的命令和 NAT 限制见[客户端配置](../client_config.md#p2p-和-secret-本地访问端)。
+
+### P2P 版本兼容
+
+NPC `1.1.28` 及以下继续使用历史 UDP/KCP P2P 握手；NPC `1.1.29` 及以上使用带时间校验的安全 Bridge 握手和现代 NAT 打洞。服务端同时保留两条路径，不会向旧 NPC 下发新控制帧。现代直连失败时，只有 `fallback_secret=true` 且服务端对应 Secret 任务存在、并允许 Secret 访问时才会回退；普通 TCP、HTTP、WebSocket 和文件转发不依赖 P2P。
+
+现代 P2P 需要服务端开放 `p2p_port` 对应的旧版 `+0..+2` UDP 端口和新版 `+3..+5` UDP observer 端口。UPnP、PCP、NAT-PMP 默认关闭，只有明确打开服务端开关并且局域网网关支持时才会申请端口映射。映射失败不会阻塞普通转发。
 
 ## 健康检查
 

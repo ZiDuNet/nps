@@ -36,6 +36,8 @@
 | quic_max_idle_timeout | QUIC 最大空闲超时（秒） | `30` |
 | quic_max_incoming_streams | 单个 QUIC 会话允许的最大并发流数 | `100000` |
 | bridge_path | WS/WSS Bridge URL 路径，NPC 与服务端必须一致 | `/ws` |
+| bridge_addr | 客户端列表中生成 NPC 命令使用的对外 Bridge 主机名/IP；留空时按 Web 访问地址自动识别 | （空） |
+| bridge_host | Bridge 端口复用时标识 Bridge 流量的 Host/SNI；应与管理域名及普通站点域名区分 | （空） |
 | tls_enable | 是否开启 TLS。开启后客户端可通过 `-tls_enable=true` 连接 `tls_bridge_port` | `true` |
 | tls_bridge_port | TLS 桥接端口，默认 `8025`。**与 `bridge_port` 并存**：客户端可分别用 `bridge_port`（明文）或 `tls_bridge_port`（TLS）接入 | `8025` |
 | disconnect_timeout | 未收到 mux 心跳回包的最大次数；每次检查间隔为 5 秒，默认 `60`（即约 5 分钟） | `60` |
@@ -93,6 +95,9 @@ HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCK
 | web_open_ssl | web 管理是否启用 https；远程直连时应开启 | `false` |
 | web_cert_file | web 管理 https 证书路径 | `conf/server.pem` |
 | web_key_file | web 管理 https 私钥路径 | `conf/server.key` |
+| allow_x_real_ip | 是否读取前置反向代理覆盖后的 `X-Real-IP`/`X-Forwarded-For`；Docker + Nginx 场景只需开启此项并确保代理覆盖这些请求头 | `false` |
+| trusted_proxy_ips | 旧版可信代理列表兼容字段；当前 Web 登录和 HTTP/IP 登记来源识别不要求额外填写此列表 | `127.0.0.1` |
+| x_nps_http_only | 可选反代共享密钥；请求携带匹配的 `X-NPS-Http-Only` 时允许使用真实 IP 头并保持 HTTP 入口 | 空 |
 | open_captcha | 登录是否开启验证码校验 | `false` |
 | force_pow | 是否强制登录前完成工作量证明 | `false` |
 | pow_bits | PoW 难度（SHA-256 前导零位数） | `20` |
@@ -100,6 +105,18 @@ HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCK
 | allow_user_login | 是否允许普通用户登录。优先使用「用户管理」中创建的账号；`user` + 客户端 VerifyKey 仅为历史兼容方式 | `true` |
 | allow_user_register | 是否允许从登录页注册账号 | `false` |
 | allow_user_change_username | 多用户登录后是否允许修改用户名 | `true` |
+
+## IP 登记
+
+| 名称 | 含义 | 默认值 |
+| --- | --- | --- |
+| public_register_key | 对所有启用“仅允许已登记 IP”的资源生效的公共登记口令 | 空 |
+| ip_register_max_hours | IP 登记页面允许的默认最长有效期（小时） | `2` |
+| ip_register_ip | 独立 IP 登记监听地址；仅 `ip_register_port` 非 0 时生效 | `127.0.0.1` |
+| ip_register_port | 独立 IP 登记监听端口；`0` 表示仅使用管理面板 `/ip/register` | `0` |
+| ip_register_cert_file / ip_register_key_file | 独立登记监听的 HTTPS 证书与私钥，需同时填写 | 空 |
+
+登记页面默认只相信 TCP 对端地址。若页面经过反向代理，只有在 `allow_x_real_ip=true` 且代理出口命中 `trusted_proxy_ips`，或请求携带匹配的 `X-NPS-Http-Only` 密钥时，才读取 `X-Real-IP`（无效时回退到 `X-Forwarded-For` 首地址）；未知代理不能伪造登记 IP。
 
 ## API 鉴权
 
@@ -116,6 +133,31 @@ HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCK
 | --- | --- | --- |
 | p2p_ip | 服务端 IP，使用 p2p 模式必填 | - |
 | p2p_port | p2p 模式开启的 UDP 起始端口。若设为 `6000`，请额外开放 `6001`、`6002` | - |
+| p2p_stun_servers | 新版 P2P 使用的 STUN 地址，逗号分隔；留空使用内置列表，`none` 关闭 | 内置列表 |
+| p2p_enable_upnp_portmap | 允许 NPC 申请 UPnP 端口映射 | `false` |
+| p2p_enable_pcp_portmap | 允许 NPC 申请 PCP 端口映射 | `false` |
+| p2p_enable_natpmp_portmap | 允许 NPC 申请 NAT-PMP 端口映射 | `false` |
+| p2p_portmap_lease_seconds | 端口映射租约秒数，`0` 使用网关默认值 | `3600` |
+| p2p_probe_timeout_ms | NAT 探测超时；`0` 使用内置默认值 | `0` |
+| p2p_handshake_timeout_ms | P2P 控制协商超时；`0` 使用内置默认值 | `0` |
+| p2p_transport_timeout_ms | 直连传输建立超时；`0` 使用内置默认值 | `0` |
+
+当 `p2p_port=6000` 时，旧版 NPC 使用 `6000-6002` 的 UDP/KCP 通道；新版 NPC（`>=1.1.29`）额外使用 `6003-6005` 的 UDP NAT observer。新旧端口不能只开放一组，否则不同版本的客户端会出现“能连接但 P2P 不通”。新版直连失败会按客户端任务配置自动回退到 Secret 中继；普通 TCP/HTTP 转发不依赖 P2P，P2P 探测失败不会阻塞主转发链路。
+
+### HTTP/3、证书与 ACME
+
+| 名称 | 含义 | 默认值 |
+| --- | --- | --- |
+| http3_proxy_port | 浏览器 HTTP/3/QUIC 域名反代 UDP 端口；必须同时开启 HTTPS 入口和证书 | （空） |
+| https_default_cert_file / https_default_key_file | Host 未单独配置证书时的默认证书和私钥 | `conf/server.pem` / `conf/server.key` |
+| force_auto_ssl | 非标准端口也允许 Host 自动申请 ACME 证书；标准 80/443 时可不打开 | `false` |
+| ssl_path | ACME 证书缓存目录 | `conf/ssl` |
+| ssl_email | ACME 联系邮箱 | （空） |
+| ssl_ca | ACME 服务名称；`LetsEncrypt` 使用默认目录，`ZeroSSL` 使用 ZeroSSL ACME 目录 | `LetsEncrypt` |
+| ssl_zerossl_api | ZeroSSL API 密钥；启动时仅用于换取 EAB 凭据，不写入日志 | （空） |
+| ssl_cache_max / ssl_cache_reload / ssl_cache_idle | 证书缓存上限、检查周期（秒）和空闲回收时间（秒） | `0` / `3600` / `60` |
+
+HTTP/3 只处理能在 NPS 终止 TLS 的 Host。TLS 原样透传和后端 TLS 卸载规则继续使用 HTTPS/TCP，不会被 HTTP/3 七层处理。HTTP/3 需要在防火墙和云安全组放行 UDP；证书仍按 SNI 选择。启用 `bridge_http3=true` 时，Bridge QUIC 与浏览器 HTTP/3 可以共用 UDP 端口：协商为 `h3` 且 SNI 不等于 `bridge_host` 的连接进入浏览器 HTTP/3；SNI 命中 `bridge_host` 时交给 Bridge，其他 ALPN 也交给 Bridge。`quic_alpn=h3` 可以使用，但必须为 Bridge 保留独立的 `bridge_host`，不能让浏览器站点和 Bridge 共用同一个 SNI。未配置 `bridge_host` 时，浏览器应使用带 SNI 的站点域名；不带 SNI 的 `h3` 连接会按 Bridge 处理。TLS 原样透传 Host 不会被 HTTP/3 七层反代处理。
 
 ## 限制开关
 
@@ -129,8 +171,19 @@ HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCK
 | allow_connection_num_limit | 是否启用客户端最大连接数限制 | `true` |
 | allow_multi_ip | 是否允许每个隧道监听不同的服务端 IP | `true` |
 | allow_local_proxy | 是否允许把隧道目标转发到 nps 所在服务器本地 | `false` |
+| allow_user_local | 是否允许普通用户在资源中启用服务端本地代理 | `false` |
+| allow_secret_link | 是否允许新版 Secret 访问端发送 Link 元数据（目标、来源、ACK） | `false` |
+| allow_secret_local | 是否允许 Secret Link 访问 NPS 所在主机的本地地址 | `false` |
+| allow_remote_update | 是否允许管理员从 Web 面板向在线 NPC 下发更新指令 | `true` |
+| allow_time_limit | 是否执行客户端和用户的到期时间限制 | `true` |
 | allow_ports | 限制可开放的隧道端口范围，例如 `9001-9009,10001,11000-12000`，留空不限制 | （空） |
 | system_info_display | 是否在 web 上展示服务器系统监控信息图表 | `true`（默认开启） |
+
+### NTP、GeoIP/Geosite 与 ACL
+
+`ntp_server` 和 `ntp_interval` 用于新版 Bridge 握手的时间校准；服务端和 NPC 都可以配置，校时失败时保留上一次成功的偏移。`geoip_path` 和 `geosite_path` 支持文本规则文件以及常见的 GeoIP/Geosite protobuf 数据文件：来源名单支持 `geoip:cn`，混合代理目标规则还支持 `geosite:private`。`acl_max_rules` 限制每张普通用户资源的黑名单、白名单或目标 ACL 列表，默认 `1000`；空行和 `#`、`;` 注释行不计数，全局管理员来源名单不受此限制。`geo_reload_interval` 控制文件变更检查周期，默认 `60` 秒。
+
+GeoIP 用于来源 IP 规则，Geosite 用于混合代理和目标 ACL 的域名匹配。数据文件不写入 JSON 数据库；替换文件后 NPS 会按刷新周期自动重新加载并编译运行中的策略。
 
 管理操作审计日志记录登录、用户、客户端、隧道、Host 和全局配置等控制面变更，不记录密码、验证密钥、API Token 原文、证书私钥或代理请求体。日志按 JSONL 追加写入，文件权限为仅服务账号可读写；管理员可在 Web 面板的「操作审计」页面查询。
 

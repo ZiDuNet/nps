@@ -11,6 +11,31 @@ import (
 	"ehang.io/nps/lib/common"
 )
 
+func TestClientLocalProxyAllowedScopes(t *testing.T) {
+	tests := []struct {
+		name       string
+		clientID   int
+		userID     int
+		allowLocal bool
+		allowUser  bool
+		want       bool
+	}{
+		{name: "global gate closed", clientID: 1, userID: 0, allowUser: true, want: false},
+		{name: "admin managed client", clientID: 2, userID: 0, allowLocal: true, want: true},
+		{name: "tenant default denied", clientID: 3, userID: 9, allowLocal: true, want: false},
+		{name: "tenant opt in", clientID: 4, userID: 9, allowLocal: true, allowUser: true, want: true},
+		{name: "internal synthetic client", clientID: -1, userID: 9, want: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &Client{Id: test.clientID, UserId: test.userID}
+			if got := client.LocalProxyAllowed(test.allowLocal, test.allowUser); got != test.want {
+				t.Fatalf("LocalProxyAllowed() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
 func TestMigrateUsersFromClientsGroupsSameLegacyCredentials(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	clientA := &Client{

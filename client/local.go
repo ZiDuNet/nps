@@ -14,6 +14,7 @@ import (
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server/proxy"
 	"github.com/astaxie/beego/logs"
 	"github.com/xtaci/kcp-go"
@@ -193,6 +194,19 @@ func startLocalFileServer(config *config.CommonConfig, t *file.Tunnel, vkey stri
 		logs.Error("Local connection server failed ", err.Error())
 		return
 	}
+	if version.SupportsKeyedFiles(version.VERSION) {
+		key := file.FileAccessKey(vkey, t.LocalPath, t.StripPre)
+		if key == "" {
+			_ = remoteConn.Close()
+			logs.Error("文件访问通道键生成失败")
+			return
+		}
+		if err := remoteConn.WriteLenContent([]byte(key)); err != nil {
+			_ = remoteConn.Close()
+			logs.Error("文件访问通道键发送失败: %v", err)
+			return
+		}
+	}
 	srv := &http.Server{
 		Handler: http.StripPrefix(t.StripPre, http.FileServer(http.Dir(t.LocalPath))),
 	}
@@ -355,6 +369,18 @@ func handleSecret(localTcpConn net.Conn, config *config.CommonConfig, l *config.
 		return
 	}
 	defer remoteConn.Close()
+	if config.SecretLink {
+		link := conn.NewLink(common.CONN_TCP, l.Target, false, false, localTcpConn.RemoteAddr().String(), l.LocalProxy, "")
+		link.Option.NeedAck = true
+		if err := conn.WriteSecretLink(remoteConn.Conn, link); err != nil {
+			logs.Error("Secret Link 写入失败: %v", err)
+			return
+		}
+		if err := conn.ReadACK(remoteConn.Conn, link.Option.Timeout); err != nil {
+			logs.Error("Secret Link 未收到服务端确认: %v", err)
+			return
+		}
+	}
 	conn.CopyWaitGroup(remoteConn.Conn, localTcpConn, false, false, nil, nil, false, nil, nil, nil)
 }
 
@@ -372,6 +398,13 @@ func handleP2PVisitor(localTcpConn net.Conn, config *config.CommonConfig, l *con
 	//TODO just support compress now because there is not tls file in client packages
 	link := conn.NewLink(common.CONN_TCP, l.Target, false, config.Client.Cnf.Compress, localTcpConn.LocalAddr().String(), false, "")
 	if target, err := bridge.SendLinkInfo(0, link, nil); err != nil {
+		if config.FallbackSecret {
+			logs.Notice("P2P 直连失败，回落到 Secret 中继: %v", err)
+			secretLocal := *l
+			secretLocal.Type = "secret"
+			handleSecret(localTcpConn, config, &secretLocal)
+			return
+		}
 		logs.Error(err)
 		_ = localTcpConn.Close()
 		lock.Lock()

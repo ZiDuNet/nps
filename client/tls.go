@@ -27,6 +27,9 @@ type TLSOptions struct {
 	InsecureSkipVerify bool
 	BridgePath         string
 	QuicALPN           string
+	LocalIP            string
+	LocalIPForward     bool
+	DNSServer          string
 }
 
 func TLSOptionsFromConfig(commonConfig *config.CommonConfig) TLSOptions {
@@ -40,6 +43,9 @@ func TLSOptionsFromConfig(commonConfig *config.CommonConfig) TLSOptions {
 		InsecureSkipVerify: commonConfig.TLSInsecureSkipVerify,
 		BridgePath:         commonConfig.BridgePath,
 		QuicALPN:           commonConfig.QuicALPN,
+		LocalIP:            commonConfig.LocalIP,
+		LocalIPForward:     commonConfig.LocalIPForward,
+		DNSServer:          commonConfig.DnsServer,
 	}
 }
 

@@ -1,11 +1,9 @@
 package client
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -13,7 +11,6 @@ import (
 	"math"
 	"math/rand"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -31,7 +28,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/quic-go/quic-go"
 	"github.com/xtaci/kcp-go"
-	"golang.org/x/net/proxy"
 )
 
 var tlsEnable1 atomic.Bool
@@ -53,6 +49,9 @@ func GetTaskStatus(path string) {
 			err = errors.New("missing common configuration")
 		}
 		log.Fatalln(err)
+	}
+	if err := common.SetCustomDNS(cnf.CommonConfig.DnsServer); err != nil {
+		logs.Warn("[配置] DNS 服务器配置无效，继续使用当前系统解析器：%v", err)
 	}
 	c, err := NewConnWithTLS(cnf.CommonConfig.Tp, cnf.CommonConfig.VKey, cnf.CommonConfig.Server, common.WORK_CONFIG, cnf.CommonConfig.ProxyUrl, cnf.CommonConfig.TlsEnable, TLSOptionsFromConfig(cnf.CommonConfig))
 	if err != nil {
@@ -119,8 +118,18 @@ func StartFromFile(path string) {
 		return
 	}
 	logs.Info("[配置] 配置文件加载成功：%s", path)
+	if err := common.SetCustomDNS(cnf.CommonConfig.DnsServer); err != nil {
+		logs.Warn("[配置] DNS 服务器配置无效，继续使用当前系统解析器：%v", err)
+	}
 
 	logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), cnf.CommonConfig.TlsEnable)
+	if cnf.CommonConfig.NtpServer != "" {
+		interval := time.Duration(cnf.CommonConfig.NtpInterval) * time.Minute
+		if interval <= 0 {
+			interval = 5 * time.Minute
+		}
+		common.ConfigureTimeSync(cnf.CommonConfig.NtpServer, interval)
+	}
 re:
 	if first || cnf.CommonConfig.AutoReconnection {
 		if !first {
@@ -190,8 +199,21 @@ re:
 		}
 	}
 
+	// Create local P2P/Secret ingress listeners with the modern manager for
+	// current NPCs. Older builds retain the historical UDP/KCP listener path.
+	var modernLocalManager *P2PManager
+	if version.SupportsModernP2P(version.VERSION) {
+		crypt.EnsureTls()
+		modernLocalManager = NewP2PManager(context.Background(), cnf.CommonConfig)
+	}
 	//create local server secret or p2p
 	for _, v := range cnf.LocalServer {
+		if modernLocalManager != nil && (v.Type == "p2p" || v.Type == "secret") {
+			if err := modernLocalManager.StartLocalServer(v); err != nil {
+				logs.Error("启动 P2P/Secret 本地监听失败（端口 %d）：%v", v.Port, err)
+			}
+			continue
+		}
 		go startLocalServer(v, cnf.CommonConfig, localGeneration)
 	}
 
@@ -201,7 +223,14 @@ re:
 	} else {
 		logs.Notice("web access login username:%s password:%s", cnf.CommonConfig.Client.WebUserName, cnf.CommonConfig.Client.WebPassword)
 	}
-	NewRPClientWithTLS(cnf.CommonConfig.Server, vkey, cnf.CommonConfig.Tp, cnf.CommonConfig.ProxyUrl, cnf, cnf.CommonConfig.DisconnectTime, cnf.CommonConfig.TlsEnable, TLSOptionsFromConfig(cnf.CommonConfig)).Start()
+	client := NewRPClientWithTLS(cnf.CommonConfig.Server, vkey, cnf.CommonConfig.Tp, cnf.CommonConfig.ProxyUrl, cnf, cnf.CommonConfig.DisconnectTime, cnf.CommonConfig.TlsEnable, TLSOptionsFromConfig(cnf.CommonConfig))
+	if modernLocalManager != nil {
+		client.SetP2PManager(modernLocalManager)
+	}
+	client.Start()
+	if modernLocalManager != nil {
+		modernLocalManager.Close()
+	}
 	CloseLocalServer()
 	goto re
 }
@@ -213,7 +242,10 @@ func NewConn(tp string, vkey string, server string, connType string, proxyUrl st
 
 // NewConnWithTLS establishes a verified control/data connection using the
 // caller's TLS preference. Keeping the preference on the call path avoids a
-// process-wide setting leaking between concurrently running GUI clients.
+// process-wide setting leaking between concurrently running GUI clients. DNS
+// configuration is process-wide and must be applied once by the application
+// before it starts concurrent connections (for example, with
+// common.SetCustomDNS); it is intentionally not changed on every reconnect.
 func NewConnWithTLS(tp string, vkey string, server string, connType string, proxyUrl string, tlsEnabled bool, tlsOptions ...TLSOptions) (*conn.Conn, error) {
 	var err error
 	var connection net.Conn
@@ -225,44 +257,13 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 	}
 	switch transport {
 	case "tcp":
-		if proxyUrl != "" {
-			u, er := url.Parse(proxyUrl)
-			if er != nil {
-				return nil, er
-			}
-			switch u.Scheme {
-			case "socks5":
-				n, er := proxy.FromURL(u, nil)
-				if er != nil {
-					return nil, er
-				}
-				connection, err = n.Dial("tcp", server)
-			default:
-				connection, err = NewHttpProxyConn(u, server)
-			}
-		} else {
-			connection, err = net.DialTimeout("tcp", server, clientDialTimeout)
-
-			//header := &proxyproto.Header{
-			//	Version:           1,
-			//	Command:           proxyproto.PROXY,
-			//	TransportProtocol: proxyproto.TCPv4,
-			//	SourceAddr: &net.TCPAddr{
-			//		IP:   net.ParseIP("10.1.1.1"),
-			//		Port: 1000,
-			//	},
-			//	DestinationAddr: &net.TCPAddr{
-			//		IP:   net.ParseIP("20.2.2.2"),
-			//		Port: 2000,
-			//	},
-			//}
-			//
-			//_, err = header.WriteTo(connection)
-			//_, err = io.WriteString(connection, "HELO")
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), clientDialTimeout)
+		connection, err = dialBridgeTCP(ctx, proxyUrl, server, options.LocalIP)
+		cancel()
 		if err == nil && tlsEnabled {
 			config, configErr := tlsClientConfig(server, options)
 			if configErr != nil {
+				_ = connection.Close()
 				return nil, configErr
 			}
 			// Apply the deadline before the handshake so a stalled TLS peer cannot
@@ -271,6 +272,7 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 			_ = connection.SetDeadline(time.Now().Add(clientDialTimeout))
 			tlsConnection := tls.Client(connection, config)
 			if err = tlsConnection.Handshake(); err != nil {
+				_ = connection.Close()
 				return nil, fmt.Errorf("TLS handshake failed: %w", err)
 			}
 			connection = tlsConnection
@@ -278,12 +280,18 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 	case "ws", "wss":
 		connection, err = dialWebSocketBridge(transport, server, proxyUrl, options)
 	case "kcp":
-		sess, err = kcp.DialWithOptions(server, nil, 10, 3)
+		if strings.TrimSpace(proxyUrl) != "" || environmentProxyURL(server) != "" {
+			return nil, errors.New("KCP Bridge does not support TCP-based outbound proxies; use TCP, WS, or WSS")
+		}
+		sess, err = conn.DialKCPWithLocalIP(server, options.LocalIP)
 		if err == nil {
 			conn.SetUdpSession(sess)
 			connection = sess
 		}
 	case "quic":
+		if strings.TrimSpace(proxyUrl) != "" || environmentProxyURL(server) != "" {
+			return nil, errors.New("QUIC Bridge does not support TCP-based outbound proxies; use TCP, WS, or WSS")
+		}
 		quicTLS, tlsErr := tlsClientConfig(server, options)
 		if tlsErr != nil {
 			return nil, tlsErr
@@ -299,7 +307,7 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 			MaxIncomingStreams: 100000,
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), clientDialTimeout)
-		connection, err = conn.DialQuic(ctx, server, quicTLS, quicConfig)
+		connection, err = conn.DialQuicWithLocalIP(ctx, server, quicTLS, quicConfig, options.LocalIP)
 		cancel()
 	default:
 		return nil, fmt.Errorf("unsupported Bridge transport %q; supported types are tcp, kcp, ws, wss, and quic", tp)
@@ -341,7 +349,7 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 		if err != nil {
 			return nil, fmt.Errorf("read secure server challenge: %w", err)
 		}
-		payload, err := crypt.SecureHandshakeClientPayload(vkey, version.GetVersion(), version.VERSION, time.Now().Unix(), challenge)
+		payload, err := crypt.SecureHandshakeClientPayload(vkey, version.GetVersion(), version.VERSION, common.TimeNow().Unix(), challenge)
 		if err != nil {
 			return nil, err
 		}
@@ -359,6 +367,20 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 		}
 		if err := crypt.VerifySecureHandshakeServerProof(vkey, payload, challenge, serverProof); err != nil {
 			return nil, err
+		}
+		if version.SupportsModernP2P(version.VERSION) {
+			fingerprint, err := c.GetShortLenContent()
+			if err != nil {
+				return nil, fmt.Errorf("read Bridge certificate fingerprint: %w", err)
+			}
+			proof, err := c.GetShortContent(32)
+			if err != nil {
+				return nil, fmt.Errorf("read Bridge certificate fingerprint proof: %w", err)
+			}
+			if err := crypt.VerifySecureHandshakeFingerprintProof(vkey, fingerprint, proof); err != nil {
+				return nil, err
+			}
+			c.PeerFingerprint = append([]byte(nil), fingerprint...)
 		}
 	} else {
 		// An older server answers with its historical 32-byte core-version
@@ -411,33 +433,18 @@ func dialWebSocketBridge(transport, server, proxyURL string, options TLSOptions)
 		ReadBufferSize:    4096,
 		WriteBufferSize:   4096,
 		EnableCompression: false,
-		Proxy:             http.ProxyFromEnvironment,
+		Proxy:             nil,
+		NetDialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			if network != "tcp" {
+				return nil, fmt.Errorf("unsupported WebSocket Bridge network %q", network)
+			}
+			return dialBridgeTCP(ctx, proxyURL, address, options.LocalIP)
+		},
 	}
 	if transport == "wss" {
 		dialer.TLSClientConfig, err = tlsClientConfig(server, options)
 		if err != nil {
 			return nil, err
-		}
-	}
-	if strings.TrimSpace(proxyURL) != "" {
-		proxyAddress, parseErr := url.Parse(proxyURL)
-		if parseErr != nil || proxyAddress.Host == "" {
-			return nil, fmt.Errorf("invalid proxy URL: %w", parseErr)
-		}
-		if proxyAddress.Scheme == "socks5" || proxyAddress.Scheme == "socks5h" {
-			proxyDialer, dialerErr := proxy.FromURL(proxyAddress, nil)
-			if dialerErr != nil {
-				return nil, dialerErr
-			}
-			dialer.Proxy = nil
-			dialer.NetDialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-				if contextDialer, ok := proxyDialer.(proxy.ContextDialer); ok {
-					return contextDialer.DialContext(ctx, network, address)
-				}
-				return proxyDialer.Dial(network, address)
-			}
-		} else {
-			dialer.Proxy = func(*http.Request) (*url.URL, error) { return proxyAddress, nil }
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), clientDialTimeout)
@@ -464,48 +471,15 @@ func muxTransportType(transport string) string {
 	return "tcp"
 }
 
-// http proxy connection
+// NewHttpProxyConn preserves the historical helper while supporting the
+// complete proxy URL parser used by current NPC connections.
 func NewHttpProxyConn(url *url.URL, remoteAddr string) (net.Conn, error) {
-	req, err := http.NewRequest("CONNECT", "http://"+remoteAddr, nil)
-	if err != nil {
-		return nil, err
+	if url == nil {
+		return nil, errors.New("outbound proxy URL is nil")
 	}
-	password, _ := url.User.Password()
-	req.Header.Set("Authorization", "Basic "+basicAuth(strings.Trim(url.User.Username(), " "), password))
-	// we make a http proxy request
-	proxyConn, err := net.DialTimeout("tcp", url.Host, clientDialTimeout)
-	if err != nil {
-		return nil, err
-	}
-	if err := proxyConn.SetDeadline(time.Now().Add(clientDialTimeout)); err != nil {
-		_ = proxyConn.Close()
-		return nil, err
-	}
-	if err := req.Write(proxyConn); err != nil {
-		_ = proxyConn.Close()
-		return nil, err
-	}
-	res, err := http.ReadResponse(bufio.NewReader(proxyConn), req)
-	if err != nil {
-		_ = proxyConn.Close()
-		return nil, err
-	}
-	_ = res.Body.Close()
-	if res.StatusCode != 200 {
-		_ = proxyConn.Close()
-		return nil, errors.New("Proxy error " + res.Status)
-	}
-	if err := proxyConn.SetDeadline(time.Time{}); err != nil {
-		_ = proxyConn.Close()
-		return nil, err
-	}
-	return proxyConn, nil
-}
-
-// get a basic auth string
-func basicAuth(username, password string) string {
-	auth := username + ":" + password
-	return base64.StdEncoding.EncodeToString([]byte(auth))
+	ctx, cancel := context.WithTimeout(context.Background(), clientDialTimeout)
+	defer cancel()
+	return dialBridgeTCP(ctx, url.String(), remoteAddr, "")
 }
 
 func getRemoteAddressFromServer(rAddr string, localConn *net.UDPConn, md5Password, role string, add int) error {

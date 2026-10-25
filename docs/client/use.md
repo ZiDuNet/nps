@@ -26,6 +26,7 @@
 ./npc -server=ip:port -vkey=web界面中显示的密钥         # 标准
 ./npc -server=ip:8025 -vkey=xxx -tls_enable=true       # TLS 桥接
 ./npc -server=ip:8024 -vkey=ytkpyr0er676m0r7,iwnbjfbvygvzyzzt  # 同时拉起多个隧道 ID（逗号拼接）
+./npc -server=nps-a:8024,nps-b:8025 -vkey=key-a,key-b -type=tcp,tls  # 同时连接多个服务端
 ```
 
 ## 配置文件模式
@@ -82,7 +83,11 @@ npc.exe        # windows（管理员 cmd）
 ```shell
 ./npc          # 选择菜单 [5] 更新客户端
 ./npc update   # 非交互更新命令
+./npc update-force  # 强制重新安装最新正式 Release
 ```
+
+如果当前设备不允许服务端远程下发升级，可以在直接启动命令中增加
+`-disable_remote_update=true`；配置文件模式则在 `[common]` 中设置同名字段。
 
 自动从 GitHub 最新正式 Release 下载当前平台的 `npc` 压缩包，校验 `checksums.txt` 后替换二进制。菜单更新完成后需要重新启动对应客户端服务；服务端下发的升级指令会在校验成功后自动重启客户端。
 

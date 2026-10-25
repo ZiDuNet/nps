@@ -28,6 +28,26 @@ type Flow struct {
 
 const directionalFlowAccountingVersion = 2
 
+// flowLimitActual controls the global client quota accounting mode.  It is
+// configured once during server startup from flow_limit_type and kept here
+// rather than importing beego into the persistence package (which would
+// create an import cycle).  The default remains the historical total mode.
+var flowLimitActual atomic.Bool
+
+// SetFlowLimitType selects how client flow limits are enforced.  "actual"
+// counts each byte in both directions (the effective consumption is doubled),
+// while any other value keeps the legacy total accounting.
+func SetFlowLimitType(value string) {
+	flowLimitActual.Store(strings.EqualFold(strings.TrimSpace(value), "actual"))
+}
+
+func FlowLimitType() string {
+	if flowLimitActual.Load() {
+		return "actual"
+	}
+	return "total"
+}
+
 func NewFlow() *Flow {
 	return &Flow{AccountingVersion: directionalFlowAccountingVersion}
 }
@@ -163,7 +183,11 @@ func (s *Flow) Exceeded() bool {
 		return false
 	}
 	s.RLock()
-	exceeded := s.FlowLimit > 0 && (s.FlowLimit<<20) < s.LegacyTotal+s.InletFlow+s.ExportFlow
+	usage := s.LegacyTotal + s.InletFlow + s.ExportFlow
+	if flowLimitActual.Load() {
+		usage = s.LegacyTotal + 2*(s.InletFlow+s.ExportFlow)
+	}
+	exceeded := s.FlowLimit > 0 && (s.FlowLimit<<20) < usage
 	s.RUnlock()
 	return exceeded
 }
@@ -222,6 +246,26 @@ type Client struct {
 	RegisteredOnly bool
 	ExpireTime     string // 到期时间,留空表示永不过期,格式 2006-01-02 15:04:05
 	sync.RWMutex
+}
+
+// LocalProxyAllowed reports whether this client may ask the server to connect
+// through its own network namespace. The global switch is always required;
+// user-owned clients also require the administrator's explicit tenant-level
+// opt-in. Synthetic negative IDs are internal server services.
+func (c *Client) LocalProxyAllowed(allowLocalProxy, allowUserLocal bool) bool {
+	if c == nil {
+		return false
+	}
+	if c.Id < 0 {
+		return true
+	}
+	if !allowLocalProxy {
+		return false
+	}
+	c.RLock()
+	userID := c.UserId
+	c.RUnlock()
+	return userID <= 0 || allowUserLocal
 }
 
 type User struct {
@@ -484,8 +528,8 @@ func (t *Tunnel) SetDestinationACL(mode int, rules string) error {
 }
 
 // CompileDestinationACL compiles persisted settings at startup. Invalid old
-// lines are logged and skipped by the rule compiler while valid rules remain
-// active.
+// lines are logged and disable the complete policy until the saved rules are
+// corrected; silently skipping a bad rule could broaden a deny/allow policy.
 func (t *Tunnel) CompileDestinationACL() {
 	if t == nil {
 		return
@@ -498,7 +542,7 @@ func (t *Tunnel) CompileDestinationACL() {
 	}
 	compiled, err := acl.CompileDest(mode, rules)
 	if err != nil {
-		logs.Warn("Destination list of tunnel %d: invalid rules skipped: %v", id, err)
+		logs.Warn("Destination list of tunnel %d: policy disabled because validation failed: %v", id, err)
 	}
 	t.Lock()
 	t.DestAclMode = mode
@@ -592,9 +636,20 @@ type Host struct {
 	AutoHttps    bool // 自动https
 	AutoCORS     bool // add permissive CORS response headers
 	CompatMode   bool // use net/http reverse proxy compatibility path
-	Flow         *Flow
-	Client       *Client
-	Target       *Target //目标
+	// TargetIsHTTPS makes the server establish an inner TLS connection to the
+	// private target after the public HTTP(S) request has been terminated.
+	TargetIsHTTPS bool
+	// HTTPSJustProxy keeps the public TLS stream opaque and forwards it to the
+	// backend unchanged.
+	HTTPSJustProxy bool
+	// AutoSSL allows this host to participate in the optional ACME certificate
+	// manager when force_auto_ssl is enabled globally.
+	AutoSSL bool
+	// TLSOffload forwards a terminated TLS stream as raw bytes to the backend.
+	TLSOffload bool
+	Flow       *Flow
+	Client     *Client
+	Target     *Target //目标
 	Health
 	// RegisteredOnly requires the visitor IP to be registered for the owning
 	// client before a request is proxied.

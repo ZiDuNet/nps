@@ -296,7 +296,7 @@ func (s *BaseServer) DealClient(c *conn.Conn, client *file.Client, addr string,
 		_ = c.Close()
 		return errors.New("proxy bridge is nil")
 	}
-	if localProxy && !beego.AppConfig.DefaultBool("allow_local_proxy", false) {
+	if localProxy && !localProxyAllowedForClient(client, task) {
 		_ = c.Close()
 		return errors.New("local proxy is disabled")
 	}
@@ -347,7 +347,7 @@ func (s *BaseServer) DealClient(c *conn.Conn, client *file.Client, addr string,
 	var bridgeTask *file.Tunnel
 	if s.task != nil {
 		s.task.RLock()
-		bridgeTask = &file.Tunnel{Mode: s.task.Mode, RegisteredOnly: s.task.RegisteredOnly}
+		bridgeTask = &file.Tunnel{Id: s.task.Id, Mode: s.task.Mode, RegisteredOnly: s.task.RegisteredOnly}
 		s.task.RUnlock()
 	}
 	if target, err := s.bridge.SendLinkInfo(clientID, link, bridgeTask); err != nil {
@@ -368,6 +368,25 @@ func (s *BaseServer) DealClient(c *conn.Conn, client *file.Client, addr string,
 		conn.CopyWaitGroupWithLimits(target, c.Conn, link.Crypt, link.Compress, clientRate, flow, true, rb, task, host)
 	}
 	return nil
+}
+
+// localProxyAllowedForClient applies both the historical global switch and
+// the tenant safety gate. Internal synthetic clients (negative IDs) are used
+// by server-owned management services and retain access even when ordinary
+// user local proxy is disabled.
+func localProxyAllowedForClient(client *file.Client, task *file.Tunnel) bool {
+	if task != nil {
+		task.RLock()
+		secret := task.Mode == "secret"
+		task.RUnlock()
+		if secret && beego.AppConfig.DefaultBool("allow_secret_local", false) {
+			return beego.AppConfig.DefaultBool("allow_local_proxy", false)
+		}
+	}
+	return client.LocalProxyAllowed(
+		beego.AppConfig.DefaultBool("allow_local_proxy", false),
+		beego.AppConfig.DefaultBool("allow_user_local", false),
+	)
 }
 
 // 判断访问地址是否在全局黑名单内

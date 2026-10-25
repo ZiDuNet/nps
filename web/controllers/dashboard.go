@@ -101,7 +101,7 @@ func (s *DashboardController) sessionPrincipal() (dashboardPrincipal, bool) {
 	if principal == sessionPrincipalClient {
 		clientID, _ := sessionInt(s.GetSession("clientId"))
 		if clientID > 0 {
-			if client, err := file.GetDb().GetClient(clientID); err == nil && file.GetDb().IsClientActive(client) {
+			if client, err := file.GetDb().GetClient(clientID); err == nil && file.GetDb().IsClientActiveWithExpiry(client, beego.AppConfig.DefaultBool("allow_time_limit", true)) {
 				return dashboardPrincipal{ClientID: clientID}, true
 			}
 		}

@@ -21,20 +21,24 @@ sudo ./npc restart -config=conf/npc.conf
 
 ## 通过代理连接 NPS
 
-内网机器不能直接访问 NPS 时，可让 NPC 通过 HTTP 或 SOCKS5 出站代理建立 Bridge 连接：
+内网机器不能直接访问 NPS 时，可让 NPC 通过 HTTP/HTTPS CONNECT、SOCKS4/4a 或 SOCKS5 出站代理建立 Bridge 连接：
 
 ~~~bash
 ./npc -server=nps.example.com:8024 -vkey=replace-with-verify-key \
-  -proxy=socks5://user:pass@127.0.0.1:1080
+  -proxy=socks5h://user:pass@127.0.0.1:1080
 ~~~
 
 也可在 `[common]` 中使用：
 
 ~~~ini
-proxy_url=http://user:pass@127.0.0.1:8080
+proxy_url=https://user:pass@127.0.0.1:8443
 ~~~
 
-代理地址必须是 NPC 所在机器可达的地址。请确认上游代理允许连接 NPS 的 Bridge 端口，并保留 TLS 校验；不要为绕过证书问题而设置 `tls_insecure_skip_verify=true`。
+代理地址必须是 NPC 所在机器可达的地址。省略协议时按 HTTP 代理处理；未配置显式代理时，NPC 会读取 `ALL_PROXY`/`all_proxy`，并按 `NO_PROXY`/`no_proxy` 绕过匹配地址。代理可用于 TCP、WS、WSS Bridge；KCP 和 QUIC 是 UDP 传输，不支持 TCP 出站代理。请确认上游代理允许连接 NPS 的 Bridge 端口，并保留 TLS 校验；不要为绕过证书问题而设置 `tls_insecure_skip_verify=true`。
+
+命令行还支持 `-local_ip=<本地IP>`、`-local_ip_forward=true` 和
+`-dns_server=1.1.1.1,8.8.8.8`。前者绑定 NPC 对 NPS 的出站连接；开启
+`local_ip_forward` 后，公网目标的隧道出口也使用该地址，私网目标不改变原有路由。
 
 ## 日志与诊断
 

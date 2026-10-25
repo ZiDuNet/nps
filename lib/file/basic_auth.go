@@ -77,4 +77,3 @@ func CheckBasicAuth(r *http.Request, value string) bool {
 	password, ok := accounts[credentials[0]]
 	return ok && password == credentials[1]
 }
-

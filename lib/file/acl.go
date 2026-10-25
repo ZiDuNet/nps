@@ -68,6 +68,7 @@ func (c *Client) SourceACL() *acl.Source {
 	if c == nil {
 		return nil
 	}
+	c.syncSourceListsFromFields()
 	return c.SourceLists.SourceACL()
 }
 
@@ -75,6 +76,7 @@ func (c *Client) RefreshSourceLists(owner string) {
 	if c == nil {
 		return
 	}
+	c.syncSourceListsFromFields()
 	c.SourceLists.RefreshSourceLists(owner)
 }
 
@@ -82,6 +84,7 @@ func (c *Client) CompileSourceLists(scope acl.Scope, owner string) {
 	if c == nil {
 		return
 	}
+	c.syncSourceListsFromFields()
 	c.SourceLists.CompileSourceLists(scope, owner)
 }
 
@@ -173,7 +176,7 @@ func (l *SourceLists) CompileSourceLists(scope acl.Scope, owner string) {
 	l.aclMu.RUnlock()
 	source, err := acl.CompileSource(scope, priority, black, white)
 	if err != nil {
-		logs.Warn("Access lists of %s: rules skipped: %v", owner, err)
+		logs.Warn("Access lists of %s: policy disabled because validation failed: %v", owner, err)
 	}
 	l.aclMu.Lock()
 	l.sourceACL = source
@@ -210,8 +213,8 @@ func (l *SourceLists) AccessListSnapshot() (priority int, black, white []string)
 }
 
 // RefreshSourceLists recompiles a policy after an optional geodata update.
-// The dependency-free ACL currently accepts IP/CIDR rules; keeping this hook
-// makes future geodata support a non-breaking runtime addition.
+// Invalid or unavailable rules remain fail-closed until the configuration is
+// corrected or the external data becomes available again.
 func (l *SourceLists) RefreshSourceLists(owner string) {
 	if l == nil {
 		return
@@ -294,6 +297,7 @@ func WatchAccessLists(ctx context.Context, interval time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			acl.ReloadGeoData()
 			if db := GetDb(); db != nil {
 				db.RefreshAccessLists()
 			}

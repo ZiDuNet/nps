@@ -9,6 +9,7 @@ package ipreg
 import (
 	"net"
 	"net/netip"
+	"sort"
 	"sync"
 	"time"
 )
@@ -22,6 +23,15 @@ var (
 	mu  sync.Mutex
 	reg = map[int]map[netip.Addr]time.Time{}
 )
+
+// Registration is a read-only snapshot of an active registration.  The
+// in-memory store intentionally never exposes the internal map so callers can
+// safely render or audit registrations without holding the package lock.
+type Registration struct {
+	ClientID int
+	IP       netip.Addr
+	Until    time.Time
+}
 
 // Register adds or extends an address registration.  A shorter request never
 // reduces an already active registration.
@@ -85,23 +95,89 @@ func ParseIP(value string) (netip.Addr, bool) {
 
 // Count returns the number of non-expired registrations.
 func Count() int {
+	return len(List())
+}
+
+// List returns all active registrations and removes expired entries as part of
+// the same operation. Results are sorted by client bucket and address so the
+// administrator view remains stable between refreshes.
+func List() []Registration {
 	now := time.Now()
 	mu.Lock()
 	defer mu.Unlock()
-	count := 0
+	rows := make([]Registration, 0)
 	for clientID, byIP := range reg {
 		for ip, until := range byIP {
-			if until.After(now) {
-				count++
-			} else {
+			if !until.After(now) {
 				delete(byIP, ip)
+				continue
+			}
+			rows = append(rows, Registration{ClientID: clientID, IP: ip, Until: until})
+		}
+		if len(byIP) == 0 {
+			delete(reg, clientID)
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].ClientID != rows[j].ClientID {
+			return rows[i].ClientID < rows[j].ClientID
+		}
+		return rows[i].IP.String() < rows[j].IP.String()
+	})
+	return rows
+}
+
+// Revoke removes one registration from the requested bucket. A caller can
+// revoke a global registration with AnyClient or a client-scoped registration
+// with its client ID.
+func Revoke(clientID int, ip netip.Addr) bool {
+	ip = normalize(ip)
+	if !ip.IsValid() {
+		return false
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	byIP := reg[clientID]
+	if byIP == nil {
+		return false
+	}
+	if _, ok := byIP[ip]; !ok {
+		return false
+	}
+	delete(byIP, ip)
+	if len(byIP) == 0 {
+		delete(reg, clientID)
+	}
+	return true
+}
+
+// RevokeString is the string counterpart used by form/API handlers. It
+// accepts both plain IPs and IP:port values, matching RegisteredString.
+func RevokeString(clientID int, value string) bool {
+	ip, ok := ParseIP(value)
+	return ok && Revoke(clientID, ip)
+}
+
+// ClearExpired removes only registrations whose TTL has elapsed and returns
+// the number removed. Calling List already performs this cleanup; this helper
+// exists so the admin action can report an explicit result.
+func ClearExpired() int {
+	mu.Lock()
+	defer mu.Unlock()
+	now := time.Now()
+	removed := 0
+	for clientID, byIP := range reg {
+		for ip, until := range byIP {
+			if !until.After(now) {
+				delete(byIP, ip)
+				removed++
 			}
 		}
 		if len(byIP) == 0 {
 			delete(reg, clientID)
 		}
 	}
-	return count
+	return removed
 }
 
 // Reset clears registrations.  It is useful for tests and for an explicit

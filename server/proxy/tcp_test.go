@@ -9,6 +9,7 @@ import (
 	"crypto/aes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -100,6 +101,59 @@ func TestProcessTunnelForwardsBufferedBytesWhenAuthProbeFails(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("ProcessTunnel did not exit after connections closed")
+	}
+}
+
+func TestTunnelModeServerDialVirtualUsesNormalProcessAndVisitorAddress(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	processDone := make(chan error, 1)
+	server := NewTunnelModeServer(func(c *conn.Conn, _ *TunnelModeServer) error {
+		if got, want := c.RemoteAddr().String(), "198.51.100.8:43210"; got != want {
+			processDone <- fmt.Errorf("remote address = %q, want %q", got, want)
+			return nil
+		}
+		payload := make([]byte, 5)
+		if _, readErr := io.ReadFull(c, payload); readErr != nil {
+			processDone <- readErr
+			return nil
+		}
+		if string(payload) != "hello" {
+			processDone <- fmt.Errorf("payload = %q, want hello", payload)
+			return nil
+		}
+		_, writeErr := c.Write([]byte("world"))
+		processDone <- writeErr
+		return nil
+	}, nil, &file.Tunnel{Id: 9, Port: 0})
+	server.listener = listener
+	defer server.Close()
+
+	virtual, err := server.DialVirtual("198.51.100.8:43210")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer virtual.Close()
+	if _, err := virtual.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	response := make([]byte, 5)
+	if _, err := io.ReadFull(virtual, response); err != nil {
+		t.Fatal(err)
+	}
+	if string(response) != "world" {
+		t.Fatalf("virtual response = %q, want world", response)
+	}
+	select {
+	case err := <-processDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("virtual tunnel process did not finish")
 	}
 }
 

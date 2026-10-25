@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.29</sub>
+﻿# NPS <sub>v1.1.30</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -123,7 +123,7 @@ nps/
 
 ## Build from Source
 
-Requires Go 1.24+
+Requires Go 1.26+
 
 ```bash
 # Quick build
@@ -179,7 +179,9 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
-- **v1.1.29** (2026-10-24) - Added Web-configured backend health checks and per-resource directional limits with version-gated NPC synchronization, atomic validation, API rate fields, and TCP/Host access metadata.
+- **v1.1.30** (2026-10-25) - Completed NPC custom DNS, outbound proxies (HTTP/HTTPS, SOCKS4/4a/5, and environment proxy settings), local source-IP binding, and remote-target forwarding; documented QUIC/KCP source binding while preserving compatibility with older clients and configuration files.
+
+- **v1.1.29** (2026-10-24) - Added modern P2P with legacy-client compatibility, secure Bridge challenge-response, HTTP/3 domain proxy support, optional ACME certificates, GeoIP/Geosite ACL data, NTP clock sync, Secret fallback, server configuration maintenance, and Web-configured backend health checks and per-resource directional limits.
 
 - **v1.1.28** (2026-10-22) - Added safe Basic/legacy client username visibility and clarified domain proxy CORS and compatibility settings in the Web UI.
 - **v1.1.27** (2026-10-22) - Fixed NPC service log permissions and completed CLI/GUI/server-triggered update flows; release packages are checksum-verified before replacement.

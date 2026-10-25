@@ -117,6 +117,13 @@ TLS：
 ./npc -server=<服务器IP>:8024 -vkey=key1,key2,key3
 ```
 
+多个服务端：
+
+```bash
+./npc -server=nps-a.example.com:8024,nps-b.example.com:8025 \
+  -vkey=key-a,key-b -type=tcp,tls
+```
+
 通过代理连接服务端：
 
 ```bash
@@ -128,6 +135,12 @@ TLS：
 
 ```bash
 ./npc -config=npc.conf
+```
+
+也可以用逗号分隔路径，同时启动多份独立配置：
+
+```bash
+./npc -config=/etc/nps/npc-a.conf,/etc/nps/npc-b.conf
 ```
 
 未指定 `-config` 时，源码默认查找：

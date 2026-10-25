@@ -1,8 +1,10 @@
 package tool
 
 import (
+	"errors"
 	"math"
 	"math/rand"
+	stdnet "net"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -15,6 +17,40 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/net"
 )
+
+// TunnelDialer is implemented by a running TCP-capable tunnel that accepts
+// server-internal virtual connections as if they had arrived at its listener.
+type TunnelDialer interface {
+	DialVirtual(remote string) (stdnet.Conn, error)
+}
+
+var tunnelLookup struct {
+	sync.RWMutex
+	fn func(int) (TunnelDialer, bool)
+}
+
+// SetTunnelLookup installs the server-owned task lookup used by nested
+// forwarding. The function is kept here to avoid a bridge <-> proxy import
+// cycle.
+func SetTunnelLookup(fn func(int) (TunnelDialer, bool)) {
+	tunnelLookup.Lock()
+	tunnelLookup.fn = fn
+	tunnelLookup.Unlock()
+}
+
+func GetTunnelConn(id int, remote string) (stdnet.Conn, error) {
+	tunnelLookup.RLock()
+	lookup := tunnelLookup.fn
+	tunnelLookup.RUnlock()
+	if lookup == nil {
+		return nil, errors.New("tunnel lookup is not configured")
+	}
+	dialer, ok := lookup(id)
+	if !ok || dialer == nil {
+		return nil, errors.New("target tunnel is unavailable or not eligible for nested forwarding")
+	}
+	return dialer.DialVirtual(remote)
+}
 
 var (
 	ports            []int

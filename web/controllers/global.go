@@ -7,15 +7,205 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/ipreg"
 )
 
 type GlobalController struct {
 	BaseController
+}
+
+// ipRegistrationRow is the administrator-facing view of an in-memory IP
+// registration. Keys are never rendered; only the owning bucket, address and
+// expiry are exposed so an administrator can safely revoke access.
+type ipRegistrationRow struct {
+	ClientID  int    `json:"client_id"`
+	Client    string `json:"client"`
+	IP        string `json:"ip"`
+	Until     string `json:"until"`
+	Remaining string `json:"remaining"`
+}
+
+// IPRegisterPage renders the administrator view for short-lived IP
+// registrations. Registration state is deliberately not persisted and is
+// therefore presented as live runtime state rather than configuration.
+func (s *GlobalController) IPRegisterPage() {
+	if !s.RequireAdmin() {
+		return
+	}
+	if s.Ctx.Request.Method != http.MethodGet {
+		s.rejectRequest(http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	s.Data["menu"] = "ipregister"
+	s.SetInfo("ipregister")
+	s.Data["ip_registration_configured"] = ipRegistrationConfigured()
+	s.Data["ip_registration_count"] = ipreg.Count()
+	s.display("global/ipregister")
+}
+
+// IPRegisterList returns a paginated snapshot for the management table.
+func (s *GlobalController) IPRegisterList() {
+	if !s.RequireAdmin() || !s.RequirePost() {
+		return
+	}
+	rows := ipreg.List()
+	search := strings.ToLower(strings.TrimSpace(s.GetString("search")))
+	result := make([]*ipRegistrationRow, 0, len(rows))
+	for _, item := range rows {
+		clientName := "公共登记密钥"
+		if item.ClientID != ipreg.AnyClient {
+			clientName = "客户端 #" + strconv.Itoa(item.ClientID)
+			if client, err := file.GetDb().GetClient(item.ClientID); err == nil && client != nil {
+				client.RLock()
+				if strings.TrimSpace(client.Remark) != "" {
+					clientName = client.Remark
+				}
+				client.RUnlock()
+			}
+		}
+		ipText := item.IP.String()
+		if search != "" && !strings.Contains(strings.ToLower(ipText), search) && !strings.Contains(strings.ToLower(clientName), search) {
+			continue
+		}
+		remaining := time.Until(item.Until)
+		if remaining < 0 {
+			remaining = 0
+		}
+		result = append(result, &ipRegistrationRow{
+			ClientID:  item.ClientID,
+			Client:    clientName,
+			IP:        ipText,
+			Until:     item.Until.Local().Format("2006-01-02 15:04:05"),
+			Remaining: formatRegistrationRemaining(remaining),
+		})
+	}
+	start, length := s.GetAjaxParams()
+	if start < 0 {
+		start = 0
+	}
+	if length <= 0 {
+		length = 20
+	}
+	total := len(result)
+	if start > total {
+		start = total
+	}
+	end := start + length
+	if end > total {
+		end = total
+	}
+	s.AjaxTable(result[start:end], end-start, total, nil)
+}
+
+func formatRegistrationRemaining(remaining time.Duration) string {
+	minutes := int(remaining / time.Minute)
+	if minutes < 1 {
+		return "少于 1 分钟"
+	}
+	if minutes < 60 {
+		return strconv.Itoa(minutes) + " 分钟"
+	}
+	hours := minutes / 60
+	if hours < 24 {
+		return strconv.Itoa(hours) + " 小时"
+	}
+	days := hours / 24
+	return strconv.Itoa(days) + " 天"
+}
+
+// IPRegisterRevoke revokes one client/global bucket registration.
+func (s *GlobalController) IPRegisterRevoke() {
+	if !s.RequireAdmin() || !s.RequirePost() {
+		return
+	}
+	clientID, err := strconv.Atoi(strings.TrimSpace(s.GetString("client_id")))
+	if err != nil || clientID < 0 {
+		s.AjaxErr("客户端标识无效")
+		return
+	}
+	ip := strings.TrimSpace(s.GetString("ip"))
+	if !ipreg.RevokeString(clientID, ip) {
+		s.AjaxErr("登记记录不存在或已过期")
+		return
+	}
+	s.auditMutation("global.ip_registration.revoke", "ip_registration", clientID, 0, "", nil, map[string]string{"ip": ip})
+	s.AjaxOk("已撤销 IP 登记")
+}
+
+// IPRegisterClean removes expired runtime registrations.
+func (s *GlobalController) IPRegisterClean() {
+	if !s.RequireAdmin() || !s.RequirePost() {
+		return
+	}
+	removed := ipreg.ClearExpired()
+	s.auditMutation("global.ip_registration.clean", "ip_registration", 0, 0, "", nil, map[string]string{"removed": strconv.Itoa(removed)})
+	s.AjaxOk("已清理 " + strconv.Itoa(removed) + " 条过期登记")
+}
+
+// IPRegisterClear explicitly resets all runtime registrations.
+func (s *GlobalController) IPRegisterClear() {
+	if !s.RequireAdmin() || !s.RequirePost() {
+		return
+	}
+	count := ipreg.Count()
+	ipreg.Reset()
+	s.auditMutation("global.ip_registration.clear", "ip_registration", 0, 0, "", nil, map[string]string{"removed": strconv.Itoa(count)})
+	s.AjaxOk("已清空 IP 登记")
+}
+
+// Banlist exposes the in-memory login protection records to administrators.
+// Records are never persisted and contain neither passwords nor session data.
+func (s *GlobalController) Banlist() {
+	if !s.RequireAdmin() {
+		return
+	}
+	if s.Ctx.Request.Method == "GET" {
+		s.Data["menu"] = "banlist"
+		s.SetInfo("banlist")
+		s.display("global/banlist")
+		return
+	}
+	if !s.RequirePost() {
+		return
+	}
+	rows := currentLoginBanList()
+	s.AjaxTable(rows, len(rows), len(rows), nil)
+}
+
+func (s *GlobalController) Unban() {
+	if !s.RequirePost() || !s.RequireAdmin() {
+		return
+	}
+	if !removeLoginBan(s.GetString("key")) {
+		s.AjaxErr("封禁记录不存在或已过期")
+		return
+	}
+	s.auditMutation("global.login_ban.remove", "login_ban", 0, 0, "", nil, map[string]string{"key": s.GetString("key")})
+	s.AjaxOk("解封成功")
+}
+
+func (s *GlobalController) Unbanall() {
+	if !s.RequirePost() || !s.RequireAdmin() {
+		return
+	}
+	removeAllLoginBans()
+	s.auditMutation("global.login_ban.clear", "login_ban", 0, 0, "", nil, nil)
+	s.AjaxOk("已清空登录封禁记录")
+}
+
+func (s *GlobalController) Banclean() {
+	if !s.RequirePost() || !s.RequireAdmin() {
+		return
+	}
+	cleanLoginBans()
+	s.auditMutation("global.login_ban.clean", "login_ban", 0, 0, "", nil, nil)
+	s.AjaxOk("已清理过期登录记录")
 }
 
 // platformDomainStatus is rendered only on the administrator-only global

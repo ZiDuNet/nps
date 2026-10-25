@@ -31,6 +31,7 @@
 
     <script src="{{.web_base_url}}/static/js/zui-3.0.0.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/jsencrypt.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20260904-3" type="text/javascript"></script>
 </head>
 
@@ -119,6 +120,7 @@
                         <div class="auth-control input-icon-wrap">
                             <i class="fa fa-user input-icon" aria-hidden="true"></i>
                             <input id="auth-username" name="username" class="form-control has-icon" placeholder="username" required="" autocomplete="username" langtag="word-username">
+                            <span class="help-block" data-i18n-zh="注册后用于登录面板的唯一用户名；不能与已有账号重复。" data-i18n-en="The unique username used to sign in to the dashboard; it cannot duplicate an existing account.">注册后用于登录面板的唯一用户名；不能与已有账号重复。</span>
                         </div>
                     </div>
                     <div class="form-group auth-field">
@@ -126,6 +128,7 @@
                         <div class="auth-control input-icon-wrap">
                             <i class="fa fa-lock input-icon" aria-hidden="true"></i>
                             <input id="auth-password" name="password" type="password" class="form-control has-icon" placeholder="password" required="" autocomplete="new-password" langtag="word-password">
+                            <span class="help-block" data-i18n-zh="设置登录密码；提交后只保存加密结果，页面不会回显原文。" data-i18n-en="Set the dashboard password. Only an encrypted result is stored and the original is never echoed.">设置登录密码；提交后只保存加密结果，页面不会回显原文。</span>
                         </div>
                     </div>
                     <button type="button" onclick="register()" class="auth-submit login-btn" langtag="word-register"></button>
@@ -145,16 +148,54 @@
 </div>
 
 <script type="text/javascript">
-    window.nps = {"web_base_url": "{{.web_base_url}}", "version": "{{.version}}"}
+    window.nps = {
+        "web_base_url": "{{.web_base_url}}",
+        "version": "{{.version}}",
+        "publicKey": `{{.public_key}}`,
+        "loginNonce": "{{.login_nonce}}",
+        "timeOffset": 0
+    };
+    var npsRSAEncryptor = typeof JSEncrypt === 'function' ? new JSEncrypt() : null;
+    if (npsRSAEncryptor) npsRSAEncryptor.setPublicKey(window.nps.publicKey || '');
+    $.ajax({
+        url: "{{.web_base_url}}/auth/gettime",
+        dataType: "json",
+        cache: false,
+        timeout: 5000,
+        success: function (res) {
+            if (res && res.time != null) window.nps.timeOffset = res.time * 1000 - Date.now();
+        }
+    });
 
     function register() {
         if (!validateNpsForm(document.querySelector('.login-form-wrap form'), true)) return false;
+        var data = {};
+        $("form").serializeArray().forEach(function (field) { data[field.name] = field.value; });
+        if (!npsRSAEncryptor || !window.nps.publicKey || !window.nps.loginNonce) {
+            npsNotify('error', npsIsEnglish() ? 'Secure password encryption is unavailable. Refresh the page and try again.' : '安全密码加密不可用，请刷新页面后重试。');
+            return false;
+        }
+        var payload = JSON.stringify({n: window.nps.loginNonce, t: Date.now() + window.nps.timeOffset, p: data.password});
+        try {
+            data.password = npsRSAEncryptor.encrypt(payload);
+        } catch (error) {
+            data.password = null;
+        }
+        if (!data.password) {
+            npsNotify('error', npsIsEnglish() ? 'Secure password encryption failed. Refresh the page and try again.' : '安全密码加密失败，请刷新页面后重试。');
+            return false;
+        }
         $.ajax({
             type: "POST",
             url: "{{.web_base_url}}/login/register",
-            data: $("form").serializeArray(),
+            data: data,
             success: function (res) {
                 npsNotify(res.status ? 'success' : 'error', res.msg)
+                if (res.nonce) window.nps.loginNonce = res.nonce;
+                if (res.cert) {
+                    window.nps.publicKey = res.cert;
+                    npsRSAEncryptor.setPublicKey(res.cert);
+                }
                 if (res.status) {
                     window.setTimeout(function () {
                         window.location.href = "{{.web_base_url}}/login/index";

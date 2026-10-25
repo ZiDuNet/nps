@@ -1,8 +1,13 @@
 package acl
 
-import "testing"
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
 
-func TestCompileSourceReportsInvalidRulesButKeepsValidPolicy(t *testing.T) {
+func TestCompileSourceFailsClosedWhenAnyRuleIsInvalid(t *testing.T) {
 	tests := []struct {
 		name          string
 		black         []string
@@ -12,9 +17,9 @@ func TestCompileSourceReportsInvalidRulesButKeepsValidPolicy(t *testing.T) {
 		wantRuleError bool
 	}{
 		{name: "invalid allowlist stays empty and denies", white: []string{"not-an-ip"}, address: "198.51.100.8:443", wantRuleError: true},
-		{name: "invalid denylist is ignored", black: []string{"not-an-ip"}, address: "198.51.100.8:443", wantAllowed: true, wantRuleError: true},
+		{name: "invalid denylist also denies", black: []string{"not-an-ip"}, address: "198.51.100.8:443", wantRuleError: true},
 		{name: "unsupported geodata stays empty and denies", white: []string{"geoip:cn"}, address: "198.51.100.8:443", wantRuleError: true},
-		{name: "valid rule beside invalid allowlist entry", white: []string{"198.51.100.0/24", "not-an-ip"}, address: "198.51.100.8:443", wantAllowed: true, wantRuleError: true},
+		{name: "valid rule beside invalid allowlist entry fails closed", white: []string{"198.51.100.0/24", "not-an-ip"}, address: "198.51.100.8:443", wantRuleError: true},
 		{name: "valid allowlist still limits unrelated addresses", white: []string{"198.51.100.0/24", "not-an-ip"}, address: "192.0.2.8:443", wantRuleError: true},
 	}
 	for _, test := range tests {
@@ -30,6 +35,53 @@ func TestCompileSourceReportsInvalidRulesButKeepsValidPolicy(t *testing.T) {
 				t.Fatalf("AllowsString(%q) = %t, want %t", test.address, got, test.wantAllowed)
 			}
 		})
+	}
+}
+
+func TestCompileSourceIgnoresCommentsAndEmptyLinesForRuleLimit(t *testing.T) {
+	previous := maxRules
+	SetMaxRules(1)
+	t.Cleanup(func() { SetMaxRules(previous) })
+
+	if source, err := CompileSource(ScopeUser, DenyFirst, []string{"# comment", "198.51.100.0/24", "", "; another comment"}, nil); err != nil || source == nil || !source.AllowsString("203.0.113.8:443") {
+		t.Fatalf("comments and empty lines should not consume the limit: source=%v err=%v", source, err)
+	}
+
+	source, err := CompileSource(ScopeUser, DenyFirst, []string{"198.51.100.0/24", "203.0.113.0/24"}, nil)
+	if err == nil || source == nil || source.AllowsString("192.0.2.8:443") {
+		t.Fatalf("exceeding the user rule limit should return a fail-closed policy: source=%v err=%v", source, err)
+	}
+	if !strings.Contains(err.Error(), "maximum is 1") {
+		t.Fatalf("rule limit error = %v, want maximum detail", err)
+	}
+	if _, err := CompileSource(ScopeUser, DenyFirst, []string{"198.51.100.0/24"}, []string{"203.0.113.0/24"}); err != nil {
+		t.Fatalf("blacklist and allowlist have independent per-list limits: %v", err)
+	}
+
+	// Global policies are administrator-owned and are not subject to the user
+	// quota, even when the same runtime limit is configured.
+	global, err := CompileSource(ScopeGlobal, DenyFirst, []string{"198.51.100.0/24", "203.0.113.0/24"}, nil)
+	if err != nil || global == nil || global.AllowsString("192.0.2.8:443") == false {
+		t.Fatalf("global policy should bypass user rule limit: source=%v err=%v", global, err)
+	}
+}
+
+func TestCompileSourceSupportsConfiguredGeoIPAndRejectsGeosite(t *testing.T) {
+	resetGeoTestData(t)
+	path := filepath.Join(t.TempDir(), "geoip.dat")
+	writeGeoTestFile(t, path, "cn,198.51.100.0/24\n", time.Time{})
+	SetGeoData(path, "")
+
+	source, err := CompileSource(ScopeUser, DenyFirst, nil, []string{"geoip:cn"})
+	if err != nil || source == nil {
+		t.Fatalf("configured GeoIP rule should compile: source=%v err=%v", source, err)
+	}
+	if !source.AllowsString("198.51.100.8:443") || source.AllowsString("203.0.113.8:443") {
+		t.Fatal("GeoIP allowlist did not match the configured category")
+	}
+
+	if source, err := CompileSource(ScopeUser, DenyFirst, nil, []string{"geosite:private"}); err == nil || source == nil || source.AllowsString("198.51.100.8:443") {
+		t.Fatalf("Geosite source rules should fail closed: source=%v err=%v", source, err)
 	}
 }
 

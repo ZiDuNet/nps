@@ -69,7 +69,22 @@ var configMigrationOptionalKeys = map[string]struct{}{
 	"web_host": {}, "web_base_url": {}, "instance_key_file": {},
 	"web_cert_file": {}, "web_key_file": {}, "allow_ports": {},
 	"http_cache_length": {}, "pprof_ip": {}, "pprof_port": {},
-	"tls_bridge_port": {},
+	"tls_bridge_port":  {},
+	"http3_proxy_port": {}, "https_default_cert_file": {}, "https_default_key_file": {},
+	"force_auto_ssl": {}, "ssl_path": {}, "ssl_email": {}, "ssl_ca": {},
+	"ssl_zerossl_api": {},
+	"ssl_cache_max":   {}, "ssl_cache_reload": {}, "ssl_cache_idle": {},
+	"x_nps_http_only": {}, "trusted_proxy_ips": {}, "bridge_addr": {}, "bridge_real_ip_header": {}, "bridge_trusted_ips": {},
+	"bridge_host": {}, "bridge_select_mode": {}, "bridge_http3": {},
+	"bridge_cert_file": {}, "bridge_key_file": {}, "allow_user_local": {},
+	"allow_secret_link": {}, "allow_secret_local": {}, "allow_time_limit": {},
+	"allow_remote_update": {}, "p2p_stun_servers": {}, "p2p_enable_upnp_portmap": {},
+	"p2p_enable_pcp_portmap": {}, "p2p_enable_natpmp_portmap": {}, "p2p_portmap_lease_seconds": {},
+	"p2p_probe_timeout_ms": {}, "p2p_handshake_timeout_ms": {}, "p2p_transport_timeout_ms": {},
+	"allow_x_real_ip": {}, "ntp_server": {}, "ntp_interval": {}, "timezone": {},
+	"geoip_path": {}, "geosite_path": {}, "acl_max_rules": {}, "dns_server": {}, "log": {},
+	"web_close_on_not_found": {}, "login_ban_time": {}, "login_ip_ban_time": {},
+	"login_user_ban_time": {}, "login_max_fail_times": {}, "login_max_body": {}, "login_max_skew": {},
 }
 
 // migrateConfigCompatibility adds canonical keys when an existing

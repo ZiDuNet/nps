@@ -24,12 +24,14 @@
     <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20260904-3"></script>
     <style>
-        .ip-register-card { max-width: 620px; margin: 8vh auto; }
+        .ip-register-card { max-width: 620px; margin: 8vh auto; background: var(--nps-surface); color: var(--nps-ink); }
         .ip-register-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
-        .ip-register-meta__item { padding: 14px 16px; border: 1px solid var(--nps-border, #e5e7eb); border-radius: 10px; background: var(--nps-surface-muted, #f8fafc); }
-        .ip-register-meta__label { display: block; font-size: 12px; opacity: .68; margin-bottom: 4px; }
-        .ip-register-meta__value { font-weight: 600; word-break: break-all; }
-        .ip-register-note { margin: 0 0 18px; color: var(--nps-text-muted, #64748b); line-height: 1.7; }
+        .ip-register-meta__item { padding: 14px 16px; border: 1px solid var(--nps-line); border-radius: 10px; background: var(--nps-surface-subtle); }
+        .ip-register-meta__label { display: block; margin-bottom: 4px; color: var(--nps-muted); font-size: 12px; }
+        .ip-register-meta__value { color: var(--nps-ink); font-weight: 600; word-break: break-all; }
+        .ip-register-meta__source { display: block; margin-top: 5px; color: var(--nps-faint); font-size: 11px; line-height: 1.45; }
+        .ip-register-note { margin: 0 0 18px; color: var(--nps-muted); line-height: 1.7; }
+        .ip-register-warning { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 18px; line-height: 1.6; }
         @media (max-width: 640px) { .ip-register-meta { grid-template-columns: 1fr; } .ip-register-card { margin: 24px 12px; } }
     </style>
 </head>
@@ -57,13 +59,20 @@
                 <p class="auth-panel__description" data-i18n-zh="登记成功后，当前公网 IP 才能访问启用了“仅允许已登记 IP”的隧道和域名规则。" data-i18n-en="After registration, this public IP can access tunnels and host rules that require registered IPs.">登记成功后，当前公网 IP 才能访问启用了“仅允许已登记 IP”的隧道和域名规则。</p>
             </header>
             <div class="ip-register-meta">
-                <div class="ip-register-meta__item"><span class="ip-register-meta__label" data-i18n-zh="检测到的访问 IP" data-i18n-en="Detected IP">检测到的访问 IP</span><span class="ip-register-meta__value">{{.ip}}</span></div>
+                <div class="ip-register-meta__item"><span class="ip-register-meta__label" data-i18n-zh="检测到的访问 IP" data-i18n-en="Detected IP">检测到的访问 IP</span><span class="ip-register-meta__value">{{.ip}}</span><small class="ip-register-meta__source">{{.ip_source}}</small></div>
                 <div class="ip-register-meta__item"><span class="ip-register-meta__label" data-i18n-zh="服务端默认最长时长" data-i18n-en="Server default maximum">服务端默认最长时长</span><span class="ip-register-meta__value">{{.default_hours}}h</span></div>
             </div>
-            <p class="ip-register-note" data-i18n-zh="登记记录只保存在服务端内存中，过期或服务端重启后需要重新登记。密钥由服务管理员提供。" data-i18n-en="Registrations stay in server memory and expire automatically; register again after expiry or restart. Ask the server administrator for the key.">登记记录只保存在服务端内存中，过期或服务端重启后需要重新登记。密钥由服务管理员提供。</p>
+            {{if eq false .ip_registration_configured}}
+            <div class="alert alert-warning zui-alert ip-register-warning" role="status">
+                <i class="fa fa-info-circle" aria-hidden="true"></i>
+                <span data-i18n-zh="管理员尚未启用 IP 登记。请先在客户端或全局配置中设置登记密钥，设置完成后此页面即可使用。"
+                      data-i18n-en="IP registration is not enabled yet. An administrator must configure a registration key in the client or global settings before this page can be used.">管理员尚未启用 IP 登记。请先在客户端或全局配置中设置登记密钥，设置完成后此页面即可使用。</span>
+            </div>
+            {{end}}
+            <p class="ip-register-note" data-i18n-zh="访问者输入客户端单独的 IP 登记口令即可登记当前 IP；登记口令留空时，才使用客户端 VKEY。两者彼此独立，登记口令泄露后可单独重置，不影响 NPC 连接。输入 public_vkey 可对所有启用登记的客户端生效。登记记录只保存在服务端内存中，过期或服务端重启后需要重新登记。" data-i18n-en="Enter a client's separate IP registration key to register this IP. When it is empty, the client VKEY can be used instead. They are independent: resetting a leaked registration key does not affect the NPC connection. public_vkey applies to every client that enables registration. Registrations stay in server memory and expire automatically.">访问者输入客户端单独的 IP 登记口令即可登记当前 IP；登记口令留空时，才使用客户端 VKEY。两者彼此独立，登记口令泄露后可单独重置，不影响 NPC 连接。输入 public_vkey 可对所有启用登记的客户端生效。登记记录只保存在服务端内存中，过期或服务端重启后需要重新登记。</p>
             <form class="form auth-form zui-form" onsubmit="return registerIP()">
-                <div class="form-group auth-field"><label class="auth-field__label" for="ip-register-key" data-i18n-zh="登记密钥" data-i18n-en="Registration key">登记密钥</label><div class="auth-control input-icon-wrap"><i class="fa fa-key input-icon" aria-hidden="true"></i><input id="ip-register-key" name="key" class="form-control has-icon" type="password" autocomplete="off" required></div></div>
-                <div class="form-group auth-field"><label class="auth-field__label" for="ip-register-hours" data-i18n-zh="登记时长（小时）" data-i18n-en="Registration hours">登记时长（小时）</label><div class="auth-control input-icon-wrap"><i class="fa fa-clock input-icon" aria-hidden="true"></i><input id="ip-register-hours" name="hours" class="form-control has-icon" type="number" min="1" step="1" value="{{.default_hours}}"><span class="help-block" data-i18n-zh="超过客户端或服务端上限时会自动按上限登记。" data-i18n-en="Values above the client or server limit are capped automatically.">超过客户端或服务端上限时会自动按上限登记。</span></div></div>
+                <div class="form-group auth-field"><label class="auth-field__label" for="ip-register-key" data-i18n-zh="IP 登记口令 / VKEY" data-i18n-en="IP registration key / VKEY">IP 登记口令 / VKEY</label><div class="auth-control input-icon-wrap"><i class="fa fa-key input-icon" aria-hidden="true"></i><input id="ip-register-key" name="key" class="form-control has-icon" type="password" autocomplete="off" required><span class="help-block" data-i18n-zh="优先使用客户端的登记口令；未设置登记口令时使用 VKEY。public_vkey 对所有启用登记的客户端生效。" data-i18n-en="Use the client's registration key first; use its VKEY only when no registration key is set. public_vkey applies to every client that enables registration.">优先使用客户端的登记口令；未设置登记口令时使用 VKEY。public_vkey 对所有启用登记的客户端生效。</span></div></div>
+                <div class="form-group auth-field"><label class="auth-field__label" for="ip-register-hours" data-i18n-zh="登记时长（小时）" data-i18n-en="Registration hours">登记时长（小时）</label><div class="auth-control input-icon-wrap"><i class="fa fa-clock input-icon" aria-hidden="true"></i><input id="ip-register-hours" name="hours" class="form-control has-icon" type="number" min="1" step="1" value="{{.default_hours}}"><span class="help-block" data-i18n-zh="超过客户端或服务端上限时会自动按上限登记；客户端填 0 或留空时跟随服务端 ip_register_max_hours。" data-i18n-en="Values above the client or server limit are capped automatically; a client value of 0 or blank follows ip_register_max_hours.">超过客户端或服务端上限时会自动按上限登记；客户端填 0 或留空时跟随服务端 ip_register_max_hours。</span></div></div>
                 <button type="submit" class="auth-submit login-btn" data-i18n-zh="登记当前 IP" data-i18n-en="Register current IP">登记当前 IP</button>
             </form>
             <div class="auth-switch register-link"><a class="auth-switch__link" href="{{.login_url}}" data-i18n-zh="返回登录" data-i18n-en="Back to login">返回登录</a></div>

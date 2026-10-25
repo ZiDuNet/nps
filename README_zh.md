@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.29</sub>
+﻿# NPS <sub>v1.1.30</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -134,7 +134,7 @@ nps/
 
 ## 构建从源码
 
-需要 Go 1.24+
+需要 Go 1.26+
 
 ```bash
 # 快速构建
@@ -194,7 +194,9 @@ docker-compose up -d
 
 ### 近期更新
 
-- **v1.1.29** (2026-10-24) - 新增 Web 配置的后端健康检查与规则级上下行限速，按版本门槛同步到 NPC；补齐原子校验、启停刷新、API 速率字段和 TCP/Host 访问元数据。
+- **v1.1.30** (2026-10-25) - 完善 NPC 的自定义 DNS、出站代理（HTTP/HTTPS、SOCKS4/4a/5、环境代理）、本地出口 IP 绑定与远程目标转发；补齐 QUIC/KCP 的本地地址绑定和配置文件说明，并继续兼容旧客户端与旧配置。
+
+- **v1.1.29** (2026-10-24) - 新增现代 P2P 与旧客户端兼容、安全 Bridge 挑战握手、HTTP/3 域名反代、可选 ACME 证书、GeoIP/Geosite ACL、NTP 校时、Secret 回退、服务端配置维护，以及 Web 配置的后端健康检查与规则级上下行限速。
 
 - **v1.1.28** (2026-10-22) - 客户端详情安全显示 Basic/旧版用户名，并在域名解析页面补充跨域与兼容模式说明。
 - **v1.1.27** (2026-10-22) - 修复 NPC 服务日志权限，并完善 CLI、GUI 手动/远程升级流程；下载升级包后校验 SHA-256 再替换。

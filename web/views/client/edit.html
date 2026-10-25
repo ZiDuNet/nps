@@ -19,7 +19,7 @@
                 <form id="client-form" class="form form-horz form-workflow-form zui-form" data-form-workflow="client-edit" autocomplete="off">
                     <input type="hidden" name="id" value="{{.c.Id}}">
 
-                    <div class="form-section-title"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
+                    <div class="form-section-title" data-section-tier="primary"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
                     <div class="form-group form-group--wide">
                         <label class="form-label font-bold" data-i18n-zh="客户端标识" data-i18n-en="Client identity">客户端标识</label>
                         <div class="form-group-wrapper">
@@ -32,6 +32,7 @@
                         <div class="form-group-wrapper">
                             <input id="client-remark" class="form-control" value="{{.c.Remark}}" type="text" name="remark" placeholder=""
                                 langtag="word-remark" required>
+                            <span class="help-block m-b-none" data-i18n-zh="用于识别客户端的备注，不影响 NPC 连接或验证。" data-i18n-en="A label for identifying this client; it does not affect NPC connections or authentication.">用于识别客户端的备注，不影响 NPC 连接或验证。</span>
                         </div>
                     </div>
                     {{if eq true .isAdmin}}
@@ -52,6 +53,7 @@
                                 <option value="{{.Id}}" data-expire-time="{{.ExpireTime}}" {{if eq $.c.UserId .Id}}selected{{end}}>{{.Id}} · {{.UserName}}</option>
                                 {{end}}
                             </select>
+                            <span class="help-block m-b-none" data-i18n-zh="客户端会归属此用户；用户创建的隧道、域名规则和配额都会按所属用户计算。" data-i18n-en="The client belongs to this user; the user's tunnels, host rules, and quotas are calculated from this ownership.">客户端会归属此用户；用户创建的隧道、域名规则和配额都会按所属用户计算。</span>
                         </div>
                     </div>
                     {{else}}
@@ -71,7 +73,7 @@
                     {{end}}
 
                     {{if eq true .isAdmin}}
-                    <div class="form-section-title"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
+                    <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="按需设置流量、带宽和连接配额" data-section-summary-en="Optional flow, rate, and connection quotas"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
                     {{if eq true .allow_flow_limit}}
                     <div class="form-group" id="flow_limit">
                         <label class="form-label font-bold" for="client-flow-limit" langtag="word-flowlimit"></label>
@@ -79,6 +81,7 @@
                             <input id="client-flow-limit" class="form-control" value="{{.c.Flow.FlowLimit}}" type="text" name="flow_limit"
                                 placeholder="" langtag="info-unrestricted">
                             <span class="help-block m-b-none form-unit-hint"><span langtag="word-unit"></span><span class="form-unit-suffix">: M</span></span>
+                            <span class="help-block m-b-none" data-i18n-zh="客户端累计流量上限，单位 MB；留空或 0 表示不限。达到上限后该客户端的转发会被暂停。" data-i18n-en="Cumulative client traffic limit in MB; blank or 0 means unlimited. Forwarding is paused when the limit is reached.">客户端累计流量上限，单位 MB；留空或 0 表示不限。达到上限后该客户端的转发会被暂停。</span>
                         </div>
                     </div>
                     {{end}}
@@ -89,6 +92,7 @@
                             <input id="client-rate-limit" class="form-control" value="{{.c.RateLimit}}" type="text" name="rate_limit"
                                 placeholder="" langtag="info-unrestricted">
                             <span class="help-block m-b-none form-unit-hint"><span langtag="word-unit"></span><span class="form-unit-suffix">: KB/S</span></span>
+                            <span class="help-block m-b-none" data-i18n-zh="客户端所有转发连接共享的带宽上限，单位 KB/s；留空或 0 表示不限。" data-i18n-en="Shared bandwidth limit for all forwarding connections of this client in KB/s; blank or 0 means unlimited.">客户端所有转发连接共享的带宽上限，单位 KB/s；留空或 0 表示不限。</span>
                         </div>
                     </div>
                     {{end}}
@@ -98,6 +102,7 @@
                         <div class="form-group-wrapper">
                             <input id="client-max-conn" class="form-control" value="{{.c.MaxConn}}" type="text" name="max_conn"
                                 placeholder="" langtag="info-unrestricted">
+                            <span class="help-block m-b-none" data-i18n-zh="客户端同时建立的转发连接上限；0 表示不限。TCP 按连接、UDP 按会话计数。" data-i18n-en="Maximum concurrent forwarding connections for this client; 0 means unlimited. TCP counts connections and UDP counts sessions.">客户端同时建立的转发连接上限；0 表示不限。TCP 按连接、UDP 按会话计数。</span>
                         </div>
                     </div>
                     {{end}}
@@ -107,12 +112,13 @@
                         <div class="form-group-wrapper">
                             <input id="client-max-tunnel" class="form-control" value="{{.c.MaxTunnelNum}}" type="text" name="max_tunnel"
                                 placeholder="" langtag="info-unrestricted">
+                            <span class="help-block m-b-none" data-i18n-zh="客户端可创建的普通隧道和 Host 域名规则总数上限；0 表示不限。" data-i18n-en="Maximum number of tunnels and Host rules this client may create; 0 means unlimited.">客户端可创建的普通隧道和 Host 域名规则总数上限；0 表示不限。</span>
                         </div>
                     </div>
                     {{end}}
                     {{end}}
 
-                    <div class="form-section-title"><i class="fa fa-key" aria-hidden="true"></i><span data-i18n-zh="认证配置" data-i18n-en="Authentication">认证配置</span></div>
+                    <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="验证密钥与客户端身份选项" data-section-summary-en="Verify keys and client identity options"><i class="fa fa-key" aria-hidden="true"></i><span data-i18n-zh="认证配置" data-i18n-en="Authentication">认证配置</span></div>
                     <div class="form-group" id="u">
                         <label class="form-label font-bold" for="client-basic-username" langtag="word-basicusername"></label>
                         <div class="form-group-wrapper">
@@ -138,6 +144,7 @@
                                 <option {{if eq false .c.Cnf.Compress}}selected{{end}} value="0" langtag="word-no"></option>
                                 <option {{if eq true .c.Cnf.Compress}}selected{{end}} value="1" langtag="word-yes"></option>
                             </select>
+                            <span class="help-block m-b-none" data-i18n-zh="启用后压缩 Bridge 数据，可降低带宽但会增加 CPU；只影响该客户端的传输。" data-i18n-en="Compresses Bridge data for this client; it can save bandwidth at the cost of CPU.">启用后压缩 Bridge 数据，可降低带宽但会增加 CPU；只影响该客户端的传输。</span>
                         </div>
                     </div>
                     <div class="form-group" id="crypt">
@@ -147,6 +154,7 @@
                                 <option {{if eq false .c.Cnf.Crypt}}selected{{end}} value="0" langtag="word-no"></option>
                                 <option {{if eq true .c.Cnf.Crypt}}selected{{end}} value="1" langtag="word-yes"></option>
                             </select>
+                            <span class="help-block m-b-none" data-i18n-zh="启用后对客户端数据进行额外加密；会增加 CPU 和少量延迟，Bridge 已使用加密连接时通常无需开启。" data-i18n-en="Adds client data encryption with some CPU and latency overhead; usually unnecessary when the Bridge connection is already encrypted.">启用后对客户端数据进行额外加密；会增加 CPU 和少量延迟，Bridge 已使用加密连接时通常无需开启。</span>
                         </div>
                     </div>
                     {{if and (eq true .allow_user_login) (eq true .isAdmin)}}
@@ -162,6 +170,7 @@
                                 <div class="legacy-client-login-field" id="web_username">
                                     <label class="form-label font-bold" for="client-web-username" data-i18n-zh="旧版客户端用户名" data-i18n-en="Legacy client username">旧版客户端用户名</label>
                                     <input id="client-web-username" class="form-control" value="{{.c.WebUserName}}" type="text" name="web_username" autocomplete="off" placeholder="留空则保持" data-placeholder-zh="留空则保持" data-placeholder-en="Leave blank to keep">
+                                    <span class="help-block" data-i18n-zh="仅兼容旧版按客户端账号登录的部署；留空表示保持现有用户名。" data-i18n-en="Only for legacy deployments that sign in with a client account. Leave blank to keep the current username.">仅兼容旧版按客户端账号登录的部署；留空表示保持现有用户名。</span>
                                 </div>
                                 {{end}}
                                 <div class="legacy-client-login-field" id="web_password">
@@ -170,16 +179,18 @@
                                         <input id="client-web-password" class="form-control" type="password" name="web_password" autocomplete="new-password" spellcheck="false" placeholder="留空则保持现有密码" data-placeholder-zh="留空则保持现有密码" data-placeholder-en="Leave blank to keep current password">
                                         <span class="input-group-btn"><button class="btn btn-default credential-password-toggle" type="button" data-password-target="client-web-password" aria-controls="client-web-password" aria-label="显示密码" data-aria-label-zh="显示密码" data-aria-label-en="Show password" aria-pressed="false" title="显示密码" data-title-zh="显示密码" data-title-en="Show password"><i class="fa fa-eye" aria-hidden="true"></i></button></span>
                                     </div>
+                                    <span class="help-block" data-i18n-zh="留空表示保持现有密码；与旧版客户端用户名成对存在时才会启用旧版登录。" data-i18n-en="Leave blank to keep the current password. Legacy login is enabled only when the username and password exist as a pair.">留空表示保持现有密码；与旧版客户端用户名成对存在时才会启用旧版登录。</span>
                                 </div>
                             </div>
                             {{if or (eq true .allow_user_change_username) (eq true .isAdmin)}}
                             <label class="legacy-client-login-clear"><input type="checkbox" name="clear_legacy_web_login" value="1"> <span data-i18n-zh="清除旧版客户端登录凭据" data-i18n-en="Clear legacy client login credentials">清除旧版客户端登录凭据</span></label>
+                            <span class="help-block" data-i18n-zh="勾选后会删除该客户端保存的旧版用户名和密码；新版本所属用户登录不受影响。" data-i18n-en="Deletes the saved legacy username and password. New assigned-user login is not affected.">勾选后会删除该客户端保存的旧版用户名和密码；新版本所属用户登录不受影响。</span>
                             {{end}}
                         </div>
                     </details>
                     {{end}}
 
-                    <div class="form-section-title"><i class="fa fa-shield-alt" aria-hidden="true"></i><span data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</span></div>
+                    <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="IP 白名单、黑名单和认证行为" data-section-summary-en="IP allowlists, denylists, and auth behavior"><i class="fa fa-shield-alt" aria-hidden="true"></i><span data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</span></div>
                     {{if eq true .isAdmin}}
                     <div class="form-group" id="config_conn_allow">
                         <label class="form-label font-bold" for="client-config-conn-allow" langtag="word-connectbyconfig"></label>
@@ -189,6 +200,7 @@
                                 <label class="toggle-switch"><input id="client-config-conn-allow" type="checkbox" {{if eq true .c.ConfigConnAllow}}checked{{end}}><span class="toggle-slider"></span></label>
                                 <span class="toggle-label" data-toggle-state="{{if eq true .c.ConfigConnAllow}}yes{{else}}no{{end}}">{{if eq true .c.ConfigConnAllow}}是{{else}}否{{end}}</span>
                             </div>
+                            <span class="help-block m-b-none" data-i18n-zh="允许 NPC 通过控制连接读取和修改该客户端的隧道配置；关闭后只能在 Web 面板中维护。" data-i18n-en="Allows NPC to read and change this client's tunnel configuration over the control connection; when off, manage it only in the Web panel.">允许 NPC 通过控制连接读取和修改该客户端的隧道配置；关闭后只能在 Web 面板中维护。</span>
                         </div>
                     </div>
                     {{end}}
@@ -200,6 +212,7 @@
                                 <label class="toggle-switch"><input id="client-ip-white" type="checkbox" {{if eq true .c.IpWhite}}checked{{end}}><span class="toggle-slider"></span></label>
                                 <span class="toggle-label" data-toggle-state="{{if eq true .c.IpWhite}}yes{{else}}no{{end}}">{{if eq true .c.IpWhite}}是{{else}}否{{end}}</span>
                             </div>
+                            <span class="help-block m-b-none" data-i18n-zh="开启后访问者不在白名单时会跳转到 IP 授权页面；授权密码由下方字段设置。" data-i18n-en="When enabled, visitors outside the allowlist are sent to the IP authorization page; configure its password below.">开启后访问者不在白名单时会跳转到 IP 授权页面；授权密码由下方字段设置。</span>
                         </div>
                     </div>
                     <div class="form-group is-hidden" id="ip_white_pass">
@@ -226,21 +239,21 @@
                                 <label class="toggle-switch"><input id="client-registered-only" type="checkbox" {{if eq true .c.RegisteredOnly}}checked{{end}}><span class="toggle-slider"></span></label>
                                 <span class="toggle-label" data-toggle-state="{{if eq true .c.RegisteredOnly}}yes{{else}}no{{end}}">{{if eq true .c.RegisteredOnly}}是{{else}}否{{end}}</span>
                             </div>
-                            <span class="help-block m-b-none" data-i18n-zh="开启后，访问该客户端的隧道或域名规则前，访问者必须先通过 IP 登记页面完成登记。" data-i18n-en="When enabled, visitors must register their IP before accessing this client's tunnels or host rules.">开启后，访问该客户端的隧道或域名规则前，访问者必须先通过 IP 登记页面完成登记。</span>
+                            <span class="help-block m-b-none" data-i18n-zh="开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用该客户端的登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。" data-i18n-en="When enabled, visitors must pass the lists and register their IP first: run npc register on the visitor device, or use this client's registration key or VKEY on the registration page. Registrations stay in memory and end when NPS restarts.">开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用该客户端的登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。</span>
                         </div>
                     </div>
                     <div class="form-group" id="register_key">
                         <label class="form-label font-bold" for="client-register-key" data-i18n-zh="IP 登记密钥" data-i18n-en="IP registration key">IP 登记密钥</label>
                         <div class="form-group-wrapper">
                             <input id="client-register-key" class="form-control" type="text" name="register_key" autocomplete="off" spellcheck="false" value="{{.c.RegisterKey}}" placeholder="可选" data-placeholder-zh="可选" data-placeholder-en="Optional">
-                            <span class="help-block m-b-none" data-i18n-zh="可分享给访问者。也可以使用客户端验证密钥，但建议单独设置登记密钥。" data-i18n-en="Share this with visitors. The client verify key also works, but a separate registration key is recommended.">可分享给访问者。也可以使用客户端验证密钥，但建议单独设置登记密钥。</span>
+                            <span class="help-block m-b-none" data-i18n-zh="访问者在登记页面输入此口令即可为本客户端登记自己的 IP；留空时只能使用 VKEY。它与 VKEY 分开，泄露后只需重置登记口令，不影响 NPC 连接。" data-i18n-en="Visitors enter this key on the registration page to register their IP for this client; when empty, only the VKEY works. It is separate from the VKEY, so resetting a leaked key does not affect the NPC connection.">访问者在登记页面输入此口令即可为本客户端登记自己的 IP；留空时只能使用 VKEY。它与 VKEY 分开，泄露后只需重置登记口令，不影响 NPC 连接。</span>
                         </div>
                     </div>
                     <div class="form-group" id="register_max_hours">
                         <label class="form-label font-bold" for="client-register-max-hours" data-i18n-zh="登记最长有效期（小时）" data-i18n-en="Maximum registration lifetime (hours)">登记最长有效期（小时）</label>
                         <div class="form-group-wrapper">
                             <input id="client-register-max-hours" class="form-control" type="number" name="register_max_hours" min="0" step="1" value="{{if .c.RegisterMaxHours}}{{.c.RegisterMaxHours}}{{end}}" placeholder="跟随服务端默认值" data-placeholder-zh="跟随服务端默认值" data-placeholder-en="Use server default">
-                            <span class="help-block m-b-none" data-i18n-zh="0 表示跟随服务端 ip_register_max_hours。" data-i18n-en="0 uses the server ip_register_max_hours default.">0 表示跟随服务端 ip_register_max_hours。</span>
+                            <span class="help-block m-b-none" data-i18n-zh="登记页面允许的最长时长；留空或 0 表示跟随服务端 ip_register_max_hours。请求超过上限时会自动按上限登记。" data-i18n-en="Maximum duration allowed on the registration page; blank or 0 follows server ip_register_max_hours. Requests above the limit are capped automatically.">登记页面允许的最长时长；留空或 0 表示跟随服务端 ip_register_max_hours。请求超过上限时会自动按上限登记。</span>
                         </div>
                     </div>
                     <div class="form-group form-group--wide" id="black_ip_list">
@@ -255,13 +268,13 @@
                         <label class="form-label font-bold" for="client-acl-white-list" data-i18n-zh="统一白名单（IP/CIDR）" data-i18n-en="Unified allowlist (IP/CIDR)">统一白名单（IP/CIDR）</label>
                         <div class="form-group-wrapper"><textarea id="client-acl-white-list" class="form-control" rows="3" name="whiteiplist" placeholder="198.51.100.0/24">{{.WhiteIpList}}</textarea><span class="help-block m-b-none" data-i18n-zh="配置后，未命中的来源会被拒绝；可与黑名单一起使用。" data-i18n-en="When set, sources not matching the allowlist are denied; may be combined with a denylist.">配置后，未命中的来源会被拒绝；可与黑名单一起使用。</span></div>
                     </div>
-                    <div class="form-group">
+                        <div class="form-group">
                         <label class="form-label font-bold" for="client-acl-priority" data-i18n-zh="名单冲突策略" data-i18n-en="List conflict policy">名单冲突策略</label>
-                        <div class="form-group-wrapper"><select id="client-acl-priority" class="form-control" name="iplistpriority"><option value="0"{{if ne .c.IpListPriority 1}} selected{{end}} data-i18n-zh="黑名单优先" data-i18n-en="Deny first">黑名单优先</option><option value="1"{{if eq .c.IpListPriority 1}} selected{{end}} data-i18n-zh="白名单优先" data-i18n-en="Allow first">白名单优先</option></select></div>
+                        <div class="form-group-wrapper"><select id="client-acl-priority" class="form-control" name="iplistpriority"><option value="0"{{if ne .c.IpListPriority 1}} selected{{end}} data-i18n-zh="黑名单优先" data-i18n-en="Deny first">黑名单优先</option><option value="1"{{if eq .c.IpListPriority 1}} selected{{end}} data-i18n-zh="白名单优先" data-i18n-en="Allow first">白名单优先</option></select><span class="help-block m-b-none" data-i18n-zh="同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。" data-i18n-en="Applies when both lists are configured: deny-first rejects denylisted addresses and allows only allowlisted others; allow-first allows allowlisted addresses and any others not on the denylist. With one list, both policies are equivalent.">同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。</span></div>
                     </div>
 
                     {{if eq true .isAdmin}}
-                    <div class="form-section-title"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
+                    <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="客户端到期后自动停止连接" data-section-summary-en="Stop connections after client expiry"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
                     <div class="form-group" id="expire_time">
                         <label class="form-label font-bold" for="date-picker-client-expire-picker" data-i18n-zh="客户端独立到期时间" data-i18n-en="Client-specific expiration">客户端独立到期时间</label>
                         <div class="form-group-wrapper">

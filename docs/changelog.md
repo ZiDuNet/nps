@@ -1,5 +1,16 @@
 # 更新日志
 
+## v1.1.30 (2026-10-25)
+
+- NPS/NPC 配置文件和命令行支持自定义 DNS；多个 DNS 服务器会轮询并在失败时切换，未配置时保持系统解析器。
+- NPC 出站 Bridge 代理支持 HTTP/HTTPS CONNECT、SOCKS4/4a、SOCKS5/SOCKS5H，以及 `ALL_PROXY`/`NO_PROXY` 环境变量。
+- `local_ip` 与 `local_ip_forward` 现在实际作用于 TCP、UDP、SOCKS5 UDP、KCP、QUIC 和 P2P 相关出站连接；私网目标仍保持默认路由。
+- 补齐 NPC Docker/配置文件说明，并继续兼容旧客户端与旧配置。
+- NPC 命令行支持同时连接多个 NPS 服务端，配置文件模式支持多份配置并行运行；管理员可查看、解封和清理登录保护记录。
+- 直接启动的 NPC 可用 `-disable_remote_update=true` 忽略服务端升级指令，并新增 `npc update-force` 重新安装同版本正式包。
+- SOCKS5 UDP ASSOCIATE 使用共享 UDP 端口和会话注册，支持多来源绑定、队列保护、空闲/断线回收、目标 ACL 与大报文转发。
+- 隧道列表把配置、监听、客户端状态合并为一组紧凑状态标记，表头支持悬浮显示完整名称，窄屏使用卡片布局避免横向滚动。
+
 ## v1.1.29 (2026-10-24)
 
 - HTTP 正向代理与 SOCKS5 在 Web 面板统一为混合代理；旧 HTTP/SOCKS 规则继续兼容，编辑时可迁移为混合代理。

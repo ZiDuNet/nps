@@ -5,6 +5,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"ehang.io/nps/lib/crypt"
 	"encoding/json"
 	"flag"
@@ -41,7 +42,10 @@ var (
 	connType             = flag.String("type", "tcp", "Connection type with the server (tcp|kcp|ws|wss|quic)")
 	bridgePath           = flag.String("bridge_path", "/ws", "WebSocket Bridge URL path")
 	quicALPN             = flag.String("quic_alpn", "nps", "QUIC ALPN protocol")
-	proxyUrl             = flag.String("proxy", "", "proxy socks5 url(eg:socks5://111:222@127.0.0.1:9007)")
+	proxyUrl             = flag.String("proxy", "", "outbound proxy URL (http/https/socks4/socks4a/socks5/socks5h)")
+	localIP              = flag.String("local_ip", "", "local source IP for outbound connections")
+	localIPForward       = flag.Bool("local_ip_forward", false, "apply local_ip to tunnel forwarding egress for public targets")
+	dnsServer            = flag.String("dns_server", "", "custom DNS server(s), comma separated")
 	logLevel             = flag.String("log_level", "7", "log level 0~7")
 	registerTime         = flag.Int("time", 2, "register time long /h")
 	localPort            = flag.Int("local_port", 2000, "p2p local port")
@@ -60,6 +64,7 @@ var (
 	remoteUpdateParent   = flag.Int("remote_update_parent", 0, "internal remote update parent PID")
 	remoteUpdateService  = flag.String("remote_update_service", "", "internal remote update service name")
 	remoteUpdateArgsFile = flag.String("remote_update_args_file", "", "internal remote update argument file")
+	disableRemoteUpdate  = flag.Bool("disable_remote_update", false, "ignore update requests from the server")
 	tlsEnable            = flag.Bool("tls_enable", false, "enable tls")
 	tlsCAFile            = flag.String("tls_ca_file", "", "TLS CA certificate file")
 	tlsServerName        = flag.String("tls_server_name", "", "TLS server name")
@@ -75,6 +80,9 @@ func currentTLSOptions() client.TLSOptions {
 		InsecureSkipVerify: *tlsInsecure,
 		BridgePath:         *bridgePath,
 		QuicALPN:           *quicALPN,
+		LocalIP:            *localIP,
+		LocalIPForward:     *localIPForward,
+		DNSServer:          *dnsServer,
 	}
 }
 
@@ -100,7 +108,7 @@ func newNpcServiceConfig(name, displayName, description string) *service.Config 
 func findNpcCommand(args []string) (string, int) {
 	for index, arg := range args {
 		switch arg {
-		case "status", "register", "update", "nat", "start", "stop", "restart", "install", "uninstall":
+		case "status", "register", "update", "update-force", "nat", "start", "stop", "restart", "install", "uninstall":
 			return arg, index
 		}
 	}
@@ -144,7 +152,7 @@ func main() {
 	)
 	for _, v := range os.Args[1:] {
 		switch v {
-		case "install", "start", "stop", "uninstall", "restart":
+		case "install", "start", "stop", "uninstall", "restart", "update", "update-force":
 			continue
 		}
 		if !strings.Contains(v, "-service=") && !strings.Contains(v, "-debug=") {
@@ -178,9 +186,12 @@ func main() {
 			}
 		case "register":
 			flag.CommandLine.Parse(os.Args[commandArgIndex+1:])
-			client.RegisterLocalIp(*serverAddr, *verifyKey, *connType, *proxyUrl, *registerTime)
+			client.RegisterLocalIpWithTLS(*serverAddr, *verifyKey, *connType, *proxyUrl, *registerTime, *tlsEnable, currentTLSOptions())
 		case "update":
 			install.UpdateNpc()
+			return
+		case "update-force":
+			install.ForceUpdateNpc()
 			return
 		case "nat":
 			c := stun.NewClient()
@@ -248,6 +259,10 @@ func main() {
 }
 
 func registerRemoteUpdateHandler(s service.Service) {
+	if *disableRemoteUpdate {
+		client.SetRemoteUpdateHandler(nil)
+		return
+	}
 	client.SetRemoteUpdateHandler(func(vKey string) (bool, error) {
 		if runtime.GOOS == "windows" {
 			if s == nil {
@@ -460,6 +475,9 @@ func (p *npc) run() error {
 func run() {
 	common.ReportInstall("npc")
 	common.InitPProfFromArg(*pprofAddr)
+	if err := common.SetCustomDNS(*dnsServer); err != nil {
+		logs.Warn("[配置] DNS 服务器配置无效，继续使用当前系统解析器：%v", err)
+	}
 	//p2p or secret command
 	if *password != "" {
 		commonConfig := new(config.CommonConfig)
@@ -472,6 +490,10 @@ func run() {
 		commonConfig.TLSFingerprint = *tlsFingerprint
 		commonConfig.TLSInsecureSkipVerify = *tlsInsecure
 		commonConfig.QuicALPN = *quicALPN
+		commonConfig.LocalIP = *localIP
+		commonConfig.LocalIPForward = *localIPForward
+		commonConfig.DnsServer = *dnsServer
+		commonConfig.DisableRemoteUpdate = *disableRemoteUpdate
 		localServer := new(config.LocalServer)
 		localServer.Type = *localType
 		localServer.Password = *password
@@ -479,6 +501,19 @@ func run() {
 		localServer.Port = *localPort
 		commonConfig.Client = new(file.Client)
 		commonConfig.Client.Cnf = new(file.Config)
+		if version.SupportsModernP2P(version.VERSION) && (localServer.Type == "p2p" || localServer.Type == "secret") {
+			// Keep one modern manager alive for the lifetime of the foreground
+			// local listener. It owns the direct QUIC path, optional NAT port
+			// mapping, and Secret fallback; the historical p2p/p2ps/p2pt
+			// listeners remain available for explicitly legacy modes.
+			manager := client.NewP2PManager(context.Background(), commonConfig)
+			if err := manager.StartLocalServer(localServer); err != nil {
+				logs.Error("启动 P2P/Secret 本地监听失败：", err)
+				manager.Close()
+				return
+			}
+			return
+		}
 		go client.StartLocalServer(localServer, commonConfig)
 		return
 	}
@@ -491,14 +526,19 @@ func run() {
 	}
 	if *verifyKey != "" && *serverAddr != "" && *configPath == "" {
 		logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), *tlsEnable)
-
-		vkeys := strings.Split(*verifyKey, `,`)
-		for _, key := range vkeys {
-			key := key
+		connections := expandNpcConnections(*serverAddr, *verifyKey, *connType, *localIP)
+		if len(connections) == 0 {
+			logs.Error("server 或 vkey 不能为空")
+			return
+		}
+		for _, connection := range connections {
+			connection := connection
 			go func() {
 				for {
-					logs.Info("start vkey:" + key)
-					client.NewRPClientWithTLS(*serverAddr, key, *connType, *proxyUrl, nil, *disconnectTime, *tlsEnable, currentTLSOptions()).Start()
+					logs.Info("[连接] start server:%s vkey:%s type:%s local_ip:%s tls:%t", connection.server, connection.vkey, connection.transport, connection.localIP, connection.tls)
+					options := currentTLSOptions()
+					options.LocalIP = connection.localIP
+					client.NewRPClientWithTLS(connection.server, connection.vkey, connection.transport, *proxyUrl, nil, *disconnectTime, connection.tls, options).Start()
 					logs.Info("[重连] 客户端连接已关闭，5 秒后重连")
 					time.Sleep(time.Second * 5)
 				}
@@ -510,16 +550,100 @@ func run() {
 			*configPath = common.GetConfigPath()
 		}
 
-		// 判断路径下是否有配置文件
-		if common.FileExists(*configPath) {
-			logs.Info("配置文件模式启动")
-			go client.StartFromFile(*configPath)
-		} else {
-			// 无配置文件模式双击运行
-			printSlogan()
-			inputCmd()
+		// 配置文件可以用逗号分隔，同时启动多个独立的客户端配置。
+		configPaths := strings.Split(strings.NewReplacer("，", ",").Replace(*configPath), ",")
+		started := false
+		for _, path := range configPaths {
+			path = strings.TrimSpace(path)
+			if path == "" {
+				continue
+			}
+			if common.FileExists(path) {
+				started = true
+				logs.Info("配置文件模式启动：%s", path)
+				go client.StartFromFile(path)
+			} else if len(configPaths) > 1 {
+				logs.Warn("配置文件不存在，跳过：%s", path)
+			}
 		}
+		if started {
+			return
+		}
+		// 无配置文件模式双击运行
+		printSlogan()
+		inputCmd()
 	}
+}
+
+type npcConnection struct {
+	server    string
+	vkey      string
+	transport string
+	localIP   string
+	tls       bool
+}
+
+// expandNpcConnections implements the multi-server command-line form used by
+// current NPC deployments. A shorter vkey/type/local_ip list reuses its last
+// value, so `-server=a:1,b:2 -vkey=key` is valid and deterministic.
+func expandNpcConnections(servers, vkeys, transports, localIPs string) []npcConnection {
+	split := func(value string) []string {
+		value = strings.NewReplacer("，", ",", "：", ":").Replace(value)
+		parts := strings.Split(value, ",")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+		}
+		for len(parts) > 0 && parts[len(parts)-1] == "" {
+			parts = parts[:len(parts)-1]
+		}
+		return parts
+	}
+	serverList := split(servers)
+	vkeyList := split(vkeys)
+	transportList := split(transports)
+	localIPList := split(localIPs)
+	if len(serverList) == 0 || len(vkeyList) == 0 {
+		return nil
+	}
+	if len(transportList) == 0 {
+		transportList = []string{"tcp"}
+	}
+	maxLength := len(serverList)
+	if len(vkeyList) > maxLength {
+		maxLength = len(vkeyList)
+	}
+	if len(transportList) > maxLength {
+		maxLength = len(transportList)
+	}
+	if len(localIPList) > maxLength {
+		maxLength = len(localIPList)
+	}
+	valueAt := func(values []string, index int) string {
+		if len(values) == 0 {
+			return ""
+		}
+		if index < len(values) {
+			return values[index]
+		}
+		return values[len(values)-1]
+	}
+	connections := make([]npcConnection, 0, maxLength)
+	for index := 0; index < maxLength; index++ {
+		transport := strings.ToLower(valueAt(transportList, index))
+		tls := *tlsEnable
+		if transport == "tls" {
+			transport = "tcp"
+			tls = true
+		}
+		connections = append(connections, npcConnection{
+			server:    valueAt(serverList, index),
+			vkey:      valueAt(vkeyList, index),
+			transport: transport,
+			localIP:   valueAt(localIPList, index),
+			tls:       tls,
+		})
+	}
+	return connections
 }
 
 func printSlogan() {
@@ -640,7 +764,8 @@ func startNpcServer(startCmd string) {
 				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey)
 			}
 			logs.Info("版本: %s, 核心版本: %s, TLS: %t", version.VERSION, version.GetVersion(), tlsEnable)
-			client.NewRPClientWithTLS(serAddr, vkey, *connType, *proxyUrl, nil, *disconnectTime, tlsEnable, currentTLSOptions()).Start()
+			options := currentTLSOptions()
+			client.NewRPClientWithTLS(serAddr, vkey, *connType, *proxyUrl, nil, *disconnectTime, tlsEnable, options).Start()
 			logs.Info("[重连] 连接断开，5 秒后重连")
 			time.Sleep(time.Second * 5)
 		}

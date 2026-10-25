@@ -78,6 +78,26 @@ NPC 不认识这两个字段时会忽略它们，原有连接协议和目标配�
 
 ## 升级步骤
 
+### NPC 版本边界与无缝切换
+
+`1.1.28` 是旧客户端兼容边界：
+
+- 服务端升级后，`<=1.1.28` NPC 仍使用原有 MD5 Bridge 握手和 UDP/KCP P2P，不需要立即替换客户端。
+- `>=1.1.29` NPC 使用时间戳 + Challenge-Response 握手，并可使用现代 P2P、健康检查同步、内网地址上报和远程更新。
+- 同一台 NPS 可以同时承载两类 NPC。服务端按客户端在握手中声明的产品版本自动分流，不需要改旧客户端配置。
+- 现代 P2P 失败只影响该次 P2P 尝试；配置允许时会回退 Secret，普通 TCP/HTTP 转发和其他客户端不会被阻塞。
+
+### 新增配置的处理
+
+升级启动时会把模板中缺少的必需字段追加到现有 `nps.conf`；端口、证书、P2P、ACME、日志和调试类可选字段仍保持“缺少即关闭”，不会在管理员明确移除后被反复写回。新版本通常只需按需增加：
+
+- `p2p_stun_servers`、`p2p_enable_*_portmap`、`p2p_portmap_lease_seconds` 和三个 P2P 超时字段；
+- `http3_proxy_port`、`https_default_*`、`force_auto_ssl` 和 ACME 缓存字段；
+- `allow_user_local`、`allow_secret_link`、`allow_secret_local`、`allow_remote_update`；
+- `ntp_server`、`ntp_interval`、`geoip_path`、`geosite_path`、`geo_reload_interval`、`acl_max_rules`、`dns_server`。
+
+这些字段可以在 Web 的「全局参数 → 服务端配置」中按分组查看。保存后会提示重启；配置页不会覆盖未知自定义字段，敏感值只显示掩码。生产环境可以先复制旧 `nps.conf`，再让 NPS 自动追加字段，不要求重写端口和证书路径。
+
 ### 二进制部署
 
 ```bash

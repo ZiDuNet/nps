@@ -164,7 +164,7 @@ allow_ports=9001-9009,10001,11000-12000
 
 ### 受限端口复用
 
-现有端口分流器可以在部分配置下，让主 TCP Bridge、HTTP/HTTPS 域名代理和 Web 管理共用一个 TCP 端口；Web 管理流量使用配置的 `web_host` 区分。它不是任意 TCP 协议的通用首字节嗅探器，也不会把 KCP、WS/WSS 额外监听自动复用到同一端口。新部署建议使用独立端口；需要复用时应按[服务端配置](../server/server_config.md)逐项验证实际绑定与 Host/SNI 路由。
+主 TCP Bridge 可以与 HTTP/HTTPS 域名代理、Web 管理及 WS/WSS Bridge 复用同一个 TCP 端口。明文 HTTP 根据 `Host` 分流：`web_host` 进入管理面板，`bridge_host` 进入 WebSocket Bridge，其他 Host 进入域名代理；TLS 根据 ClientHello 的 SNI 分流到 Bridge、管理面板或 HTTPS 代理。需要 TLS Bridge 与 HTTPS/管理面板共端口时，应为各入口配置不同的 `bridge_host`、`web_host` 和站点域名。TLS Bridge 与 WSS 使用同一个端口时无法区分加密后的应用协议，服务端会拒绝该冲突配置。KCP 和 QUIC 使用 UDP，不与 TCP 监听复用；新部署仍建议使用独立端口，复用时按[服务端配置](../server/server_config.md)验证 Host/SNI 路由。
 
 ## 资源、访问与账号控制
 
@@ -206,7 +206,6 @@ allow_ports=9001-9009,10001,11000-12000
 
 下列项目不应当作已支持功能部署：
 
-- QUIC Bridge。
 - 通过任意 TCP 端口嗅探自动复用 TCP、UDP、KCP、WS/WSS 等全部传输。现有复用范围仅限受支持的 TCP Bridge、HTTP(S) 和管理面板分流。
 - mTLS/客户端证书双向校验。
 - 完整的 `nps.conf` 热重载；端口、监听器和 TLS/P2P 启停都需要重启 NPS。

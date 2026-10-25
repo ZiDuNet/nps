@@ -3,6 +3,7 @@ package client
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/p2pproto"
 )
 
 // ClientLogger receives logs emitted by one TRP client instance. It lets
@@ -55,6 +57,17 @@ func SetRemoteUpdateHandler(handler func(vKey string) (bool, error)) {
 }
 
 func requestRemoteUpdate(client *TRPClient) {
+	if client == nil {
+		return
+	}
+	// The server may expose a global update button, but the local operator can
+	// explicitly disable remote updates in npc.conf.  Check this before
+	// acquiring the process-wide update lock so an ignored request never blocks
+	// a later, manually enabled client instance.
+	if client.cnf != nil && client.cnf.CommonConfig != nil && client.cnf.CommonConfig.DisableRemoteUpdate {
+		client.logInfo("[升级] 配置已禁止服务端下发的远程升级请求")
+		return
+	}
 	if !remoteUpdateInProgress.CompareAndSwap(false, true) {
 		client.logInfo("remote client update is already in progress")
 		return
@@ -84,6 +97,8 @@ type TRPClient struct {
 	svrAddr        string
 	bridgeConnType string
 	proxyUrl       string
+	localIP        string
+	localIPForward bool
 	tlsEnable      bool
 	tlsOptions     TLSOptions
 	vKey           string
@@ -101,6 +116,8 @@ type TRPClient struct {
 	healthMu       sync.Mutex
 	healthStop     chan struct{}
 	remoteHealths  []*file.Health
+	p2pManager     *P2PManager
+	serverInfo     serverInfo
 }
 
 // new client
@@ -116,6 +133,10 @@ func NewRPClientWithTLS(svraddr string, vKey string, bridgeConnType string, prox
 	if len(tlsOptions) > 0 {
 		options = tlsOptions[0]
 	}
+	var p2pManager *P2PManager
+	if cnf != nil && cnf.CommonConfig != nil {
+		p2pManager = NewP2PManager(context.Background(), cnf.CommonConfig)
+	}
 	return &TRPClient{
 		svrAddr:        svraddr,
 		tlsEnable:      tlsEnable,
@@ -124,11 +145,14 @@ func NewRPClientWithTLS(svraddr string, vKey string, bridgeConnType string, prox
 		vKey:           vKey,
 		bridgeConnType: bridgeConnType,
 		proxyUrl:       proxyUrl,
+		localIP:        options.LocalIP,
+		localIPForward: options.LocalIPForward,
 		cnf:            cnf,
 		disconnectTime: disconnectTime,
 		once:           sync.Once{},
 		closeCh:        make(chan struct{}),
 		logger:         nil, // 默认使用全局 logger，可通过 SetLogger 设置
+		p2pManager:     p2pManager,
 	}
 }
 
@@ -137,6 +161,19 @@ func (s *TRPClient) SetLogger(logger ClientLogger) {
 	s.loggerMu.Lock()
 	s.logger = logger
 	s.loggerMu.Unlock()
+}
+
+// SetP2PManager injects the local forwarding manager created from the same
+// NPC configuration. It keeps local listeners and the control channel on one
+// lifecycle while preserving constructor compatibility for SDK callers.
+func (s *TRPClient) SetP2PManager(manager *P2PManager) {
+	if s == nil || manager == nil {
+		return
+	}
+	if s.p2pManager != nil && s.p2pManager != manager {
+		s.p2pManager.Close()
+	}
+	s.p2pManager = manager
 }
 
 func (s *TRPClient) instanceLogger() ClientLogger {
@@ -237,9 +274,15 @@ func (s *TRPClient) detach(expectedSignal *conn.Conn, expectedTunnel *nps_mux.Mu
 }
 
 func (s *TRPClient) closeDetached(signal *conn.Conn, tunnel *nps_mux.Mux) {
+	if s.p2pManager != nil {
+		s.p2pManager.Close()
+	}
 	s.stopHealthChecks()
 	s.once.Do(func() {
 		s.closed.Store(true)
+		s.stateMu.Lock()
+		s.serverInfo = serverInfo{}
+		s.stateMu.Unlock()
 		CloseClient.Store(true)
 		NowStatus.Store(0)
 		if s.closeCh == nil {
@@ -297,6 +340,13 @@ retry:
 		return
 	}
 	s.logInfo("[连接] 已连接服务端 %s", s.svrAddr)
+	if s.p2pManager != nil {
+		info := serverInfo{fingerprint: append([]byte(nil), c.PeerFingerprint...), ip: common.GetIpByAddr(c.Conn.RemoteAddr().String())}
+		s.p2pManager.setServer(info)
+		s.stateMu.Lock()
+		s.serverInfo = info
+		s.stateMu.Unlock()
+	}
 	//monitor the connection
 	go s.ping()
 	if !s.installSignal(c) {
@@ -346,6 +396,23 @@ mainLoop:
 			// main control reader or tunnel traffic. The process is restarted only
 			// after the new binary has been downloaded and verified.
 			requestRemoteUpdate(s)
+		case common.P2P_PUNCH_START:
+			raw, readErr := signal.GetShortLenContent()
+			if readErr != nil {
+				s.logWarn("读取 P2P 邀请失败：%s", readErr.Error())
+				break mainLoop
+			}
+			var invite p2pproto.Invite
+			if readErr = json.Unmarshal(raw, &invite); readErr != nil {
+				s.logWarn("解析 P2P 邀请失败：%s", readErr.Error())
+				continue
+			}
+			s.stateMu.RLock()
+			serverFingerprintReady := len(s.serverInfo.fingerprint) > 0
+			s.stateMu.RUnlock()
+			if s.p2pManager != nil && serverFingerprintReady {
+				go s.serveModernP2P(s.currentTunnel(), invite)
+			}
 		case common.HEALTH_CONFIG:
 			length, readErr := signal.GetLen()
 			if readErr != nil {
@@ -381,7 +448,7 @@ mainLoop:
 		case common.NEW_UDP_CONN:
 			//read server udp addr and password
 			if lAddr, err := signal.GetShortLenContent(); err != nil {
-				s.logWarn(err.Error())
+				s.logWarn("读取 P2P 中继地址失败：%s", err)
 				break mainLoop
 			} else if pwd, err := signal.GetShortLenContent(); err == nil {
 				var localAddr string
@@ -389,7 +456,7 @@ mainLoop:
 				if v, ok := s.p2pAddr[crypt.Md5(string(pwd)+strconv.Itoa(int(time.Now().Unix()/100)))]; !ok {
 					tmpConn, err := common.GetLocalUdpAddr()
 					if err != nil {
-						s.logError(err.Error())
+						s.logError("创建 P2P 本地 UDP 地址失败：%s", err)
 						break mainLoop
 					}
 					localAddr = tmpConn.LocalAddr().String()
@@ -412,13 +479,13 @@ func (s *TRPClient) newUdpConn(localAddr, rAddr string, md5Password string) {
 	var err error
 	var remoteAddress string
 	if remoteAddress, localConn, err = handleP2PUdp(localAddr, rAddr, md5Password, common.WORK_P2P_PROVIDER); err != nil {
-		s.logError(err.Error())
+		s.logError("建立 P2P UDP 会话失败：%s", err)
 		return
 	}
 	l, err := kcp.ServeConn(nil, 150, 3, localConn)
 	if err != nil {
 		_ = localConn.Close()
-		s.logError(err.Error())
+		s.logError("启动 P2P KCP 会话失败：%s", err)
 		return
 	}
 	defer l.Close()
@@ -426,7 +493,7 @@ func (s *TRPClient) newUdpConn(localAddr, rAddr string, md5Password string) {
 	for {
 		udpTunnel, err := l.AcceptKCP()
 		if err != nil {
-			s.logError(err.Error())
+			s.logError("接收 P2P KCP 连接失败：%s", err)
 			return
 		}
 		if !matchesP2PRemote(udpTunnel, remoteAddress) {
@@ -497,11 +564,28 @@ func (s *TRPClient) handleChan(src net.Conn) {
 		s.logError("[通道异常] 读取转发连接信息失败：%v", err)
 		return
 	}
+	// Modern P2P and Secret Link use a small, optional ACK before the
+	// provider starts dialing the target.  It is deliberately handled before
+	// the empty-host liveness probe so the probe can prove the path is alive
+	// without attempting a real backend connection.  Older links keep
+	// NeedAck=false and therefore retain the historical wire flow.
+	if lk.Option.NeedAck {
+		if err := conn.WriteACK(src, lk.Option.Timeout); err != nil {
+			s.logWarn("[通道异常] 写入 ACK 失败：%v", err)
+			_ = src.Close()
+			return
+		}
+	}
 	//host for target processing
 	lk.Host = common.FormatAddress(lk.Host)
+	if lk.Host == "" {
+		s.logTrace("[P2P] 收到连接探测，来源：%s", lk.RemoteAddr)
+		_ = src.Close()
+		return
+	}
 	//if Conn type is http, read the request and log
 	if lk.ConnType == "http" {
-		if targetConn, err := net.DialTimeout(common.CONN_TCP, lk.Host, lk.Option.Timeout); err != nil {
+		if targetConn, err := s.dialTarget(common.CONN_TCP, lk.Host, lk.Option.Timeout); err != nil {
 			s.logWarn("connect to %s error %s", lk.Host, err.Error())
 			src.Close()
 		} else {
@@ -567,12 +651,17 @@ func (s *TRPClient) handleChan(src net.Conn) {
 	}
 	if lk.ConnType == "udp5" {
 		s.logTrace("new %s connection with the goal of %s, remote address:%s", lk.ConnType, lk.Host, lk.RemoteAddr)
-		s.handleUdp(conn.GetConn(src, lk.Crypt, lk.Compress, nil, false, lk.TLSFingerprint))
+		localIP := ""
+		if s.localIPForward {
+			localIP = s.localIP
+		}
+		s.handleUdp(conn.GetConn(src, lk.Crypt, lk.Compress, nil, false, lk.TLSFingerprint), localIP)
 		return
 	}
 	//connect to target if conn type is tcp or udp
-	if targetConn, err := net.DialTimeout(lk.ConnType, lk.Host, lk.Option.Timeout); err != nil {
-		s.logWarn("connect to %s error %s", lk.Host, err.Error())
+	targetConn, dialErr := s.dialTarget(lk.ConnType, lk.Host, lk.Option.Timeout)
+	if dialErr != nil {
+		s.logWarn("connect to %s error %s", lk.Host, dialErr.Error())
 		src.Close()
 	} else {
 		s.logTrace("new %s connection with the goal of %s, remote address:%s", lk.ConnType, lk.Host, lk.RemoteAddr)
@@ -588,6 +677,26 @@ func (s *TRPClient) handleChan(src net.Conn) {
 
 		conn.CopyWaitGroup(src, targetConn, lk.Crypt, lk.Compress, nil, nil, false, nil, nil, nil, lk.TLSFingerprint)
 	}
+}
+
+func (s *TRPClient) forwardLocalIP(host string) string {
+	if s != nil && s.localIPForward && s.localIP != "" && common.IsPublicHost(host) {
+		return s.localIP
+	}
+	return ""
+}
+
+func (s *TRPClient) dialTarget(network, host string, timeout time.Duration) (net.Conn, error) {
+	if localIP := s.forwardLocalIP(host); localIP != "" {
+		dialer := net.Dialer{Timeout: timeout}
+		if network == "udp" {
+			dialer.LocalAddr = common.BuildUDPBindAddr(localIP)
+		} else {
+			dialer.LocalAddr = common.BuildTCPBindAddr(localIP)
+		}
+		return dialer.DialContext(context.Background(), network, host)
+	}
+	return net.DialTimeout(network, host, timeout)
 }
 
 func writeProxyProtocolHeader(target net.Conn, remoteAddr, protoVersion string) error {
@@ -633,9 +742,9 @@ func writeProxyProtocolHeader(target net.Conn, remoteAddr, protoVersion string) 
 	return nil
 }
 
-func (s *TRPClient) handleUdp(serverConn io.ReadWriteCloser) {
+func (s *TRPClient) handleUdp(serverConn io.ReadWriteCloser, localIP string) {
 	// bind a local udp port
-	local, err := net.ListenUDP("udp", nil)
+	local, err := net.ListenUDP("udp", common.BuildUDPBindAddr(localIP))
 	defer serverConn.Close()
 	if err != nil {
 		s.logError("bind local udp port error %s", err.Error())
@@ -644,8 +753,8 @@ func (s *TRPClient) handleUdp(serverConn io.ReadWriteCloser) {
 	defer local.Close()
 	go func() {
 		defer serverConn.Close()
-		b := common.BufPoolUdp.Get().([]byte)
-		defer common.BufPoolUdp.Put(b)
+		b := common.BufPool.Get().([]byte)
+		defer common.BufPool.Put(b)
 		var buf bytes.Buffer
 		for {
 			n, raddr, err := local.ReadFrom(b)
@@ -667,8 +776,8 @@ func (s *TRPClient) handleUdp(serverConn io.ReadWriteCloser) {
 			}
 		}
 	}()
-	b := common.BufPoolUdp.Get().([]byte)
-	defer common.BufPoolUdp.Put(b)
+	b := common.BufPool.Get().([]byte)
+	defer common.BufPool.Put(b)
 	for {
 		n, err := serverConn.Read(b)
 		if err != nil {

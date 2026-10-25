@@ -3,6 +3,8 @@ package server
 import (
 	"ehang.io/nps/lib/version"
 	"errors"
+	"math"
+	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +20,8 @@ import (
 	"ehang.io/nps/server/tool"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
+	"github.com/djylb/holepunch/protocol"
+	"github.com/djylb/holepunch/stun"
 )
 
 var (
@@ -77,6 +81,10 @@ func (s *managementService) Close() error {
 	if s == nil {
 		return nil
 	}
+	if Bridge != nil {
+		Bridge.StopP2P()
+		Bridge.CloseVirtualBridgeListeners()
+	}
 	var closeErr error
 	if s.web != nil {
 		if err := s.web.Close(); err != nil {
@@ -93,6 +101,36 @@ func (s *managementService) Close() error {
 
 func init() {
 	RunList = sync.Map{}
+	tool.SetTunnelLookup(func(id int) (tool.TunnelDialer, bool) {
+		task, err := file.GetDb().GetTask(id)
+		if err != nil || task == nil {
+			return nil, false
+		}
+		task.RLock()
+		mode, status := task.Mode, task.Status
+		target := ""
+		if task.Target != nil {
+			task.Target.RLock()
+			target = strings.TrimSpace(task.Target.TargetStr)
+			task.Target.RUnlock()
+		}
+		task.RUnlock()
+		if !status || (mode != "tcp" && mode != "file" && mode != "tcpTrans" && mode != "httpProxy" && mode != "mixProxy") {
+			return nil, false
+		}
+		// Keep nested graphs one level deep. This matches the supported route
+		// model and prevents a pair of user-controlled tunnel targets from
+		// creating a forwarding cycle.
+		if strings.HasPrefix(strings.ToLower(target), "tunnel://") || strings.HasPrefix(strings.ToLower(target), "bridge://") {
+			return nil, false
+		}
+		service, ok := RunList.Load(id)
+		if !ok {
+			return nil, false
+		}
+		dialer, ok := service.(tool.TunnelDialer)
+		return dialer, ok
+	})
 }
 
 func forEachStoredTunnel(tasks *sync.Map, visit func(*file.Tunnel)) {
@@ -158,25 +196,13 @@ func DealBridgeTask() {
 			if t := file.GetDb().GetTaskByMd5Password(s.Password); t != nil {
 				t.RLock()
 				status, mode := t.Status, t.Mode
-				client, target, flow := t.Client, t.Target, t.Flow
 				t.RUnlock()
-				if status && mode == "secret" && client != nil && target != nil {
-					target.RLock()
-					targetStr, localProxy := target.TargetStr, target.LocalProxy
-					target.RUnlock()
-					base := proxy.NewBaseServer(Bridge, t)
-					if err := base.CheckFlowAndConnNum(client); err != nil {
-						_ = s.Conn.Close()
-						logs.Warn("reject secret connection for client quota: %s", err)
-						continue
+				if status && (mode == "secret" || mode == "p2p") {
+					allowLocalProxy, allowSecretLink, allowSecretLocal := proxy.SecretConfig()
+					secretServer := proxy.NewSecretServer(Bridge, t, allowLocalProxy, allowSecretLink, allowSecretLocal)
+					if err := secretServer.HandleSecret(s.Conn.Conn); err != nil {
+						logs.Warn("secret connection rejected: %s", err)
 					}
-					secretConn := s.Conn
-					go func() {
-						defer client.AddConn()
-						if err := base.DealClient(secretConn, client, targetStr, nil, common.CONN_TCP, nil, flow, localProxy, t, nil); err != nil {
-							logs.Warn("secret connection failed: %s", err)
-						}
-					}()
 				} else {
 					_ = s.Conn.Close()
 					logs.Trace("This key %s cannot be processed,status is close", s.Password)
@@ -194,14 +220,30 @@ func StartNewServer(bridgePort int, cnf *file.Tunnel, bridgeType string, bridgeD
 	if cnf == nil {
 		return errors.New("management service configuration is nil")
 	}
+	if Bridge != nil {
+		// A reload/restart in the same process must not leave the previous
+		// observer sockets and coordinator goroutines alive while a new Bridge
+		// is being bound.
+		Bridge.StopP2P()
+	}
 	Bridge = bridge.NewTunnel(bridgePort, bridgeType, common.GetBoolByStr(beego.AppConfig.String("ip_limit")), &RunList, bridgeDisconnect)
+	if mode := strings.TrimSpace(beego.AppConfig.String("bridge_select_mode")); mode != "" {
+		if err := bridge.SetClientSelectMode(mode); err != nil {
+			logs.Warn("Bridge 连接选主策略无效，将使用 Primary：%v", err)
+		} else {
+			logs.Info("Bridge 连接选主策略：%s", mode)
+		}
+	}
 	if err := Bridge.StartTunnel(); err != nil {
 		return err
 	}
-	if p, err := beego.AppConfig.Int("p2p_port"); err == nil {
+	startModernP2P()
+	if p, err := beego.AppConfig.Int("p2p_port"); err == nil && p > 0 && p+2 <= 65535 {
 		go proxy.NewP2PServer(p).Start()
 		go proxy.NewP2PServer(p + 1).Start()
 		go proxy.NewP2PServer(p + 2).Start()
+	} else if err == nil && p != 0 {
+		logs.Warn("旧版 P2P 未启动：p2p_port=%d 必须在 1..65533 范围内", p)
 	}
 	go DealBridgeTask()
 	go dealClientFlow()
@@ -238,6 +280,63 @@ func StartNewServer(bridgePort int, cnf *file.Tunnel, bridgeType string, bridgeD
 	return nil
 }
 
+func startModernP2P() {
+	port := beego.AppConfig.DefaultInt("p2p_port", 0)
+	if port <= 0 || Bridge == nil {
+		return
+	}
+	stunServers := strings.TrimSpace(beego.AppConfig.String("p2p_stun_servers"))
+	var stunList []string
+	if stunServers == "" {
+		stunList = stun.DefaultServers()
+	} else if !strings.EqualFold(stunServers, "none") {
+		for _, item := range strings.Split(stunServers, ",") {
+			if value := strings.TrimSpace(item); value != "" {
+				stunList = append(stunList, value)
+			}
+		}
+	}
+	lease := beego.AppConfig.DefaultInt("p2p_portmap_lease_seconds", 3600)
+	if lease < 0 {
+		lease = 0
+	}
+	if lease > math.MaxInt32 {
+		lease = math.MaxInt32
+	}
+	modernPort := port + 3 // keep the historical three UDP relay ports available to old NPCs
+	if modernPort+2 > 65535 {
+		logs.Warn("现代 P2P 未启用：p2p_port=%d 后没有可用的三个 UDP 观察端口", port)
+		return
+	}
+	if err := Bridge.StartP2P(bridge.P2PConfig{
+		BasePort:    modernPort,
+		IP:          strings.TrimSpace(beego.AppConfig.String("p2p_ip")),
+		STUNServers: stunList,
+		Timeouts: protocol.Timeouts{
+			ProbeTimeoutMs:     uint32(max(0, beego.AppConfig.DefaultInt("p2p_probe_timeout_ms", 0))),
+			HandshakeTimeoutMs: uint32(max(0, beego.AppConfig.DefaultInt("p2p_handshake_timeout_ms", 0))),
+			TransportTimeoutMs: uint32(max(0, beego.AppConfig.DefaultInt("p2p_transport_timeout_ms", 0))),
+		},
+		PortMapping: protocol.PortMappingPolicy{
+			EnableUPnP:   boolPtr(beego.AppConfig.DefaultBool("p2p_enable_upnp_portmap", false)),
+			EnablePCP:    boolPtr(beego.AppConfig.DefaultBool("p2p_enable_pcp_portmap", false)),
+			EnableNATPMP: boolPtr(beego.AppConfig.DefaultBool("p2p_enable_natpmp_portmap", false)),
+			LeaseSeconds: uint32(lease),
+		},
+	}); err != nil {
+		logs.Warn("现代 P2P 未启用：%v", err)
+		return
+	}
+	if value := strings.TrimSpace(beego.AppConfig.String("p2p_ip")); value != "" {
+		if _, err := netip.ParseAddr(strings.Trim(value, "[]")); err != nil {
+			logs.Info("P2P 使用地址/域名 %q", value)
+		}
+	}
+	logs.Info("现代 P2P 已启用，UDP 观察端口 %d-%d（旧版转发端口仍使用 %d-%d）", modernPort, modernPort+2, port, port+2)
+}
+
+func boolPtr(value bool) *bool { return &value }
+
 func dealClientFlow() {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
@@ -273,10 +372,11 @@ func NewMode(Bridge *bridge.Bridge, c *file.Tunnel) proxy.Service {
 	case "httpHostServer":
 		httpPort, _ := beego.AppConfig.Int("http_proxy_port")
 		httpsPort, _ := beego.AppConfig.Int("https_proxy_port")
+		http3Port, _ := beego.AppConfig.Int("http3_proxy_port")
 		useCache, _ := beego.AppConfig.Bool("http_cache")
 		cacheLen, _ := beego.AppConfig.Int("http_cache_length")
 		addOrigin, _ := beego.AppConfig.Bool("http_add_origin_header")
-		service = proxy.NewHttp(Bridge, c, httpPort, httpsPort, useCache, cacheLen, addOrigin)
+		service = proxy.NewHttp(Bridge, c, httpPort, httpsPort, useCache, cacheLen, addOrigin, http3Port)
 	}
 	return service
 }
@@ -747,8 +847,7 @@ func bridgeClientConnected(clientID int) bool {
 	if Bridge == nil {
 		return false
 	}
-	_, connected := Bridge.Client.Load(clientID)
-	return connected
+	return Bridge.IsClientConnected(clientID)
 }
 
 // RequestClientUpdate sends a self-update signal through the live control
@@ -771,11 +870,9 @@ func dealClientData() {
 		version := ""
 		clientID, _ := clientSnapshot(v)
 		if Bridge != nil {
-			if vv, ok := Bridge.Client.Load(clientID); ok {
-				connected = true
-				if client, ok := vv.(*bridge.Client); ok {
-					version = client.VersionSnapshot()
-				}
+			connected = Bridge.IsClientConnected(clientID)
+			if connected {
+				version = Bridge.SelectedClientVersion(clientID)
 			}
 		}
 		v.RLock()

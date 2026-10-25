@@ -58,3 +58,20 @@ func TestHandshakeReleaseBoundary(t *testing.T) {
 		})
 	}
 }
+
+func TestKeyedFileReleaseBoundary(t *testing.T) {
+	for _, test := range []struct {
+		release string
+		want    bool
+	}{
+		{release: "1.1.28", want: false},
+		{release: "1.1.29", want: false},
+		{release: "1.1.30", want: true},
+		{release: "1.2.0", want: true},
+		{release: "dev", want: false},
+	} {
+		if got := SupportsKeyedFiles(test.release); got != test.want {
+			t.Errorf("SupportsKeyedFiles(%q) = %t, want %t", test.release, got, test.want)
+		}
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/goroutine"
 	"ehang.io/nps/lib/rate"
+	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 )
 
@@ -111,7 +112,14 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 	target.RLock()
 	localProxy := target.LocalProxy
 	target.RUnlock()
-	remoteAddr := req.RemoteAddr
+	remoteAddr := effectiveHTTPRemoteAddr(req)
+	if strings.TrimSpace(remoteAddr) == "" {
+		remoteAddr = req.RemoteAddr
+	}
+	// Propagate the same effective visitor address to ACLs, bridge metadata and
+	// the standard reverse-proxy path. This avoids registering one address while
+	// WebSocket requests are checked against the Docker/Nginx peer address.
+	req.RemoteAddr = remoteAddr
 	if SourceDeniedString(remoteAddr, client, &host.SourceLists, "host") || IsGlobalBlackIp(remoteAddr) || isClientBlackBlocked(client, remoteAddr) || isRegisteredOnlyBlocked(client, remoteAddr, registeredOnly) {
 		http.Error(rw, "IP address is blocked", http.StatusForbidden)
 		return
@@ -132,7 +140,7 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		rw.Write([]byte("Unauthorized"))
 		return
 	}
-	if isIPWhiteBlocked(client, req.RemoteAddr) {
+	if isIPWhiteBlocked(client, remoteAddr) {
 		// A WebSocket upgrade has no useful HTML challenge response. Reject it
 		// before reserving a client slot or opening the remote tunnel.
 		http.Error(rw, "IP address is not authorized", http.StatusForbidden)
@@ -227,11 +235,32 @@ func (*flowConn) SetReadDeadline(t time.Time) error { return nil }
 func (*flowConn) SetWriteDeadline(t time.Time) error { return nil }
 
 func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
+	responseHeaderTimeout := beego.AppConfig.DefaultInt("http_proxy_response_timeout", 100)
+	if responseHeaderTimeout <= 0 {
+		responseHeaderTimeout = 100
+	}
 	rp := &HttpReverseProxy{
 		server:                s,
-		responseHeaderTimeout: 30 * time.Second,
+		responseHeaderTimeout: time.Duration(responseHeaderTimeout) * time.Second,
 	}
 	local, _ := net.ResolveTCPAddr("tcp", "127.0.0.1")
+	dialBridge := func(ctx context.Context, _, _ string) (net.Conn, error) {
+		state, stateErr := stateFromContext(ctx)
+		if stateErr != nil || s == nil || s.bridge == nil {
+			return nil, NewHTTPError(http.StatusBadGateway, "proxy request state is unavailable")
+		}
+		lk := conn.NewLink("http", state.targetAddr, state.config.Crypt, state.config.Compress, state.req.RemoteAddr, state.localProxy, hostProxyProtocolVersion(state.host))
+		target, err := s.bridge.SendLinkInfo(state.clientID, lk, &file.Tunnel{RegisteredOnly: state.registeredOnly})
+		if err != nil {
+			logs.Notice("connect to target %s error %s", lk.Host, err)
+			return nil, NewHTTPError(http.StatusBadGateway, "Cannot connect to the server")
+		}
+		if target == nil {
+			return nil, NewHTTPError(http.StatusBadGateway, "server returned an empty connection")
+		}
+		connClient := conn.GetConnWithLimits(target, lk.Crypt, lk.Compress, state.clientRate, true, nil, state.host)
+		return &flowConn{ReadWriteCloser: connClient, fakeAddr: local, host: state.host, flow: state.clientFlow, track: true}, nil
+	}
 	proxy := NewReverseProxy(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			state, err := stateFromContext(r.Context())
@@ -240,7 +269,14 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 			}
 			state.host.RLock()
 			hostChange, headerChange, pathRewrite := state.host.HostChange, state.host.HeaderChange, state.host.PathRewrite
+			targetIsHTTPS := state.host.TargetIsHTTPS
 			state.host.RUnlock()
+			if targetIsHTTPS {
+				r.URL.Scheme = "https"
+			} else {
+				r.URL.Scheme = "http"
+			}
+			r.URL.Host = state.targetAddr
 			rewriteHostRequestPath(r, pathRewrite)
 			common.ChangeHostAndHeader(r, hostChange, headerChange, r.RemoteAddr)
 		},
@@ -266,28 +302,29 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 		Transport: &http.Transport{
 			ResponseHeaderTimeout: rp.responseHeaderTimeout,
 			DisableKeepAlives:     true,
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				state, stateErr := stateFromContext(ctx)
-				if stateErr != nil || s == nil || s.bridge == nil {
-					return nil, NewHTTPError(http.StatusBadGateway, "proxy request state is unavailable")
-				}
-				lk := conn.NewLink("http", state.targetAddr, state.config.Crypt, state.config.Compress, state.req.RemoteAddr, state.localProxy, hostProxyProtocolVersion(state.host))
-				target, err := s.bridge.SendLinkInfo(state.clientID, lk, &file.Tunnel{RegisteredOnly: state.registeredOnly})
+			DialContext:           dialBridge,
+			DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				bridgeConn, err := dialBridge(ctx, network, addr)
 				if err != nil {
-					logs.Notice("connect to target %s error %s", lk.Host, err)
-					return nil, NewHTTPError(http.StatusBadGateway, "Cannot connect to the server")
+					return nil, err
 				}
-				if target == nil {
-					return nil, NewHTTPError(http.StatusBadGateway, "server returned an empty connection")
+				state, stateErr := stateFromContext(ctx)
+				if stateErr != nil {
+					_ = bridgeConn.Close()
+					return nil, stateErr
 				}
-				connClient := conn.GetConnWithLimits(target, lk.Crypt, lk.Compress, state.clientRate, true, nil, state.host)
-				return &flowConn{
-					ReadWriteCloser: connClient,
-					fakeAddr:        local,
-					host:            state.host,
-					flow:            state.clientFlow,
-					track:           true,
-				}, nil
+				state.host.RLock()
+				sni := state.host.Host
+				if state.host.HostChange != "" {
+					sni = state.host.HostChange
+				}
+				state.host.RUnlock()
+				tlsConn, tlsErr := conn.GetTlsConn(bridgeConn, sni)
+				if tlsErr != nil {
+					_ = bridgeConn.Close()
+					return nil, NewHTTPError(http.StatusBadGateway, "HTTPS backend handshake failed")
+				}
+				return tlsConn, nil
 			},
 		},
 		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
@@ -310,6 +347,18 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 			return nil, NewHTTPError(http.StatusBadGateway, "server returned an empty connection")
 		}
 		connClient := conn.GetConnWithLimits(target, lk.Crypt, lk.Compress, state.clientRate, true, nil, state.host)
+		state.host.RLock()
+		targetIsHTTPS := state.host.TargetIsHTTPS
+		sni := state.host.Host
+		state.host.RUnlock()
+		if targetIsHTTPS {
+			tlsConn, tlsErr := conn.GetTlsConn(readWriteCloserAsNetConn(connClient), sni)
+			if tlsErr != nil {
+				_ = connClient.Close()
+				return nil, NewHTTPError(http.StatusBadGateway, "HTTPS backend handshake failed")
+			}
+			connClient = tlsConn
+		}
 		return &flowConn{
 			ReadWriteCloser: connClient,
 			fakeAddr:        local,
@@ -320,6 +369,30 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 	}
 	rp.proxy = proxy
 	return rp
+}
+
+// readWriteCloserAsNetConn adapts an io.ReadWriteCloser returned by the NPS
+// bridge to the net.Conn interface required for an inner TLS handshake. The
+// bridge returns a net.Conn-backed wrapper in this path; fail closed if a
+// future transport supplies a different implementation.
+type bridgeNetConn struct {
+	io.ReadWriteCloser
+}
+
+func (c *bridgeNetConn) LocalAddr() net.Addr              { return &net.TCPAddr{} }
+func (c *bridgeNetConn) RemoteAddr() net.Addr             { return &net.TCPAddr{} }
+func (c *bridgeNetConn) SetDeadline(time.Time) error      { return nil }
+func (c *bridgeNetConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *bridgeNetConn) SetWriteDeadline(time.Time) error { return nil }
+
+func readWriteCloserAsNetConn(value io.ReadWriteCloser) net.Conn {
+	if c, ok := value.(net.Conn); ok {
+		return c
+	}
+	if value == nil {
+		return nil
+	}
+	return &bridgeNetConn{ReadWriteCloser: value}
 }
 
 func NewHTTPError(code int, errmsg string) error {

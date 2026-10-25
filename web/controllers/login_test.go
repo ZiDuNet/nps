@@ -81,6 +81,17 @@ func TestStandaloneIPRegisterHandlerUsesPeerIPAndOnlyPublicRoutes(t *testing.T) 
 }
 
 func TestRequestVisitorIPDoesNotTrustForwardedHeaders(t *testing.T) {
+	oldAllow := beego.AppConfig.String("allow_x_real_ip")
+	oldTrusted := beego.AppConfig.String("trusted_proxy_ips")
+	oldHTTPOnly := beego.AppConfig.String("x_nps_http_only")
+	_ = beego.AppConfig.Set("allow_x_real_ip", "false")
+	_ = beego.AppConfig.Set("trusted_proxy_ips", "127.0.0.1")
+	_ = beego.AppConfig.Set("x_nps_http_only", "")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
+		_ = beego.AppConfig.Set("trusted_proxy_ips", oldTrusted)
+		_ = beego.AppConfig.Set("x_nps_http_only", oldHTTPOnly)
+	})
 	request := httptest.NewRequest(http.MethodGet, "http://console.test/ip/register", nil)
 	request.RemoteAddr = "198.51.100.23:43210"
 	request.Header.Set("X-Forwarded-For", "203.0.113.90")
@@ -90,6 +101,65 @@ func TestRequestVisitorIPDoesNotTrustForwardedHeaders(t *testing.T) {
 
 	if got := requestVisitorIP(ctx); got != "198.51.100.23" {
 		t.Fatalf("requestVisitorIP() = %q, want TCP peer IP; forwarded header must be ignored", got)
+	}
+}
+
+func TestRequestVisitorIPUsesTrustedProxyRealIP(t *testing.T) {
+	oldAllow := beego.AppConfig.String("allow_x_real_ip")
+	oldTrusted := beego.AppConfig.String("trusted_proxy_ips")
+	oldHTTPOnly := beego.AppConfig.String("x_nps_http_only")
+	_ = beego.AppConfig.Set("allow_x_real_ip", "true")
+	_ = beego.AppConfig.Set("trusted_proxy_ips", "192.0.2.10")
+	_ = beego.AppConfig.Set("x_nps_http_only", "")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
+		_ = beego.AppConfig.Set("trusted_proxy_ips", oldTrusted)
+		_ = beego.AppConfig.Set("x_nps_http_only", oldHTTPOnly)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "http://console.test/ip/register", nil)
+	request.RemoteAddr = "192.0.2.10:43210"
+	request.Header.Set("X-Real-IP", "203.0.113.90")
+	request.Header.Set("X-Forwarded-For", "198.51.100.4, 192.0.2.10")
+	ctx := beecontext.NewContext()
+	ctx.Reset(httptest.NewRecorder(), request)
+	if got := requestVisitorIP(ctx); got != "203.0.113.90" {
+		t.Fatalf("requestVisitorIP() = %q, want trusted X-Real-IP", got)
+	}
+	if got, source := requestVisitorIPDetails(request); got != "203.0.113.90" || source != "可信反代的 X-Real-IP" {
+		t.Fatalf("requestVisitorIPDetails() = %q, %q", got, source)
+	}
+
+	request.Header.Set("X-Real-IP", "not-an-ip")
+	if got := requestVisitorIPFromRequest(request); got != "198.51.100.4" {
+		t.Fatalf("requestVisitorIP() fallback = %q, want first X-Forwarded-For address", got)
+	}
+}
+
+func TestRequestVisitorIPUsesHTTPOnlySecret(t *testing.T) {
+	oldAllow := beego.AppConfig.String("allow_x_real_ip")
+	oldTrusted := beego.AppConfig.String("trusted_proxy_ips")
+	oldHTTPOnly := beego.AppConfig.String("x_nps_http_only")
+	_ = beego.AppConfig.Set("allow_x_real_ip", "false")
+	_ = beego.AppConfig.Set("trusted_proxy_ips", "192.0.2.10")
+	_ = beego.AppConfig.Set("x_nps_http_only", "only-for-proxy")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
+		_ = beego.AppConfig.Set("trusted_proxy_ips", oldTrusted)
+		_ = beego.AppConfig.Set("x_nps_http_only", oldHTTPOnly)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "http://console.test/ip/register", nil)
+	request.RemoteAddr = "198.51.100.23:43210"
+	request.Header.Set("X-NPS-Http-Only", "only-for-proxy")
+	request.Header.Set("X-Real-IP", "203.0.113.90")
+	if got := requestVisitorIPFromRequest(request); got != "203.0.113.90" {
+		t.Fatalf("requestVisitorIP() with HTTP-only secret = %q, want header address", got)
+	}
+
+	request.Header.Set("X-NPS-Http-Only", "wrong")
+	if got := requestVisitorIPFromRequest(request); got != "198.51.100.23" {
+		t.Fatalf("requestVisitorIP() with wrong secret = %q, want peer address", got)
 	}
 }
 
@@ -363,6 +433,66 @@ func TestRegenerateSessionWithCookieProviderKeepsAuthenticationStore(t *testing.
 	}
 }
 
+func TestLoginIndexReleasesCookieSessionBeforeRendering(t *testing.T) {
+	providerConfig, err := json.Marshal(map[string]string{
+		"securityKey":  "login-index-signing-key",
+		"blockKey":     "0123456789abcdef",
+		"securityName": "login-index-session",
+		"cookieName":   "nps_session",
+	})
+	if err != nil {
+		t.Fatalf("encode cookie provider config: %v", err)
+	}
+	manager, err := session.NewManager("cookie", &session.ManagerConfig{
+		CookieName:      "nps_session",
+		EnableSetCookie: true,
+		Gclifetime:      3600,
+		Maxlifetime:     3600,
+		ProviderConfig:  string(providerConfig),
+	})
+	if err != nil {
+		t.Fatalf("create cookie session manager: %v", err)
+	}
+	store, err := manager.GetProvider().SessionRead("pre-login-cookie")
+	if err != nil {
+		t.Fatalf("read cookie session: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "http://console.test/login/index", nil)
+	recorder := httptest.NewRecorder()
+	ctx := beecontext.NewContext()
+	ctx.Reset(recorder, request)
+	controller := &LoginController{Controller: beego.Controller{
+		Ctx:        ctx,
+		Data:       make(map[interface{}]interface{}),
+		CruSession: store,
+	}}
+
+	oldUser := beego.AppConfig.String("web_username")
+	oldPassword := beego.AppConfig.String("web_password")
+	oldBaseURL := beego.AppConfig.String("web_base_url")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("web_username", oldUser)
+		_ = beego.AppConfig.Set("web_password", oldPassword)
+		_ = beego.AppConfig.Set("web_base_url", oldBaseURL)
+	})
+	_ = beego.AppConfig.Set("web_username", "admin")
+	_ = beego.AppConfig.Set("web_password", "secret")
+	_ = beego.AppConfig.Set("web_base_url", "")
+
+	controller.Index()
+	cookies := recorder.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("login page did not release its cookie session")
+	}
+	if len(cookies[len(cookies)-1].Value) <= 32 {
+		t.Fatalf("login page released an unencrypted session id: %q", cookies[len(cookies)-1].Value)
+	}
+	if got := store.Get("login_nonce"); got == nil || got == "" {
+		t.Fatalf("login nonce was not stored in cookie session: %#v", got)
+	}
+}
+
 func TestCaptchaFilterPathFollowsWebBaseURL(t *testing.T) {
 	tests := []struct {
 		name string
@@ -381,5 +511,24 @@ func TestCaptchaFilterPathFollowsWebBaseURL(t *testing.T) {
 				t.Fatalf("captchaFilterPath(%q) = %q, want %q", tt.base, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSetNoStoreDisablesProxyCaching(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "http://console.test/login/index", nil)
+	recorder := httptest.NewRecorder()
+	ctx := beecontext.NewContext()
+	ctx.Reset(recorder, request)
+
+	setNoStore(ctx)
+	header := recorder.Header()
+	if got := header.Get("Cache-Control"); got != "no-store, no-cache, must-revalidate, max-age=0" {
+		t.Fatalf("Cache-Control = %q", got)
+	}
+	if got := header.Get("Pragma"); got != "no-cache" {
+		t.Fatalf("Pragma = %q", got)
+	}
+	if got := header.Get("Expires"); got != "0" {
+		t.Fatalf("Expires = %q", got)
 	}
 }

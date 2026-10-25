@@ -1,0 +1,110 @@
+<section class="form-page form-page-global management-page" aria-labelledby="ip-register-admin-title">
+    <header class="dashboard-page-header form-page-header">
+        <div class="form-page-heading">
+            <div class="dashboard-page-kicker" data-i18n-zh="运行安全" data-i18n-en="Runtime security">运行安全</div>
+            <h1 id="ip-register-admin-title" data-i18n-zh="IP 登记" data-i18n-en="IP registrations">IP 登记</h1>
+            <p data-i18n-zh="查看当前仍然有效的访问 IP，并在需要时撤销或清理。登记记录只保存在 NPS 内存中，服务重启后会自动清空。"
+               data-i18n-en="Review active visitor IP registrations and revoke or clean them when needed. Registrations stay in NPS memory and are cleared when the service restarts.">查看当前仍然有效的访问 IP，并在需要时撤销或清理。登记记录只保存在 NPS 内存中，服务重启后会自动清空。</p>
+        </div>
+        <div class="dashboard-page-actions form-page-actions">
+            <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/ip/register" target="_blank" rel="noopener">
+                <i class="fa fa-external-link" aria-hidden="true"></i><span data-i18n-zh="打开登记页" data-i18n-en="Open registration page">打开登记页</span>
+            </a>
+            <button type="button" class="btn btn-outline btn-warning" id="ip-register-clean">
+                <i class="fa fa-broom" aria-hidden="true"></i><span data-i18n-zh="清理过期" data-i18n-en="Clean expired">清理过期</span>
+            </button>
+            <button type="button" class="btn btn-outline btn-danger" id="ip-register-clear">
+                <i class="fa fa-eraser" aria-hidden="true"></i><span data-i18n-zh="全部清空" data-i18n-en="Clear all">全部清空</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="ip-register-admin-summary" role="status" aria-live="polite">
+        <div class="ip-register-admin-summary__item">
+            <span class="ip-register-admin-summary__label" data-i18n-zh="当前登记数" data-i18n-en="Active registrations">当前登记数</span>
+            <strong id="ip-register-count">{{.ip_registration_count}}</strong>
+        </div>
+        <div class="ip-register-admin-summary__item">
+            <span class="ip-register-admin-summary__label" data-i18n-zh="公共登记" data-i18n-en="Global bucket">公共登记</span>
+            <strong data-i18n-zh="可用于所有启用登记的客户端" data-i18n-en="Applies to all clients requiring registration">可用于所有启用登记的客户端</strong>
+        </div>
+        <div class="ip-register-admin-summary__item">
+            <span class="ip-register-admin-summary__label" data-i18n-zh="登记密钥状态" data-i18n-en="Key status">登记密钥状态</span>
+            <strong id="ip-register-key-status" class="{{if .ip_registration_configured}}text-success{{else}}text-warning{{end}}">{{if .ip_registration_configured}}已启用{{else}}未启用{{end}}</strong>
+        </div>
+    </div>
+
+    <section class="panel ibox zui-panel">
+        <div class="ibox-content">
+            <div class="ip-register-admin-toolbar">
+                <div>
+                    <label class="sr-only" for="ip-register-search" data-i18n-zh="搜索 IP 或客户端" data-i18n-en="Search IP or client">搜索 IP 或客户端</label>
+                    <input id="ip-register-search" class="form-control" type="search" autocomplete="off" placeholder="搜索 IP 或客户端名称" data-placeholder-zh="搜索 IP 或客户端名称" data-placeholder-en="Search IP or client name">
+                </div>
+                <span class="help-block" data-i18n-zh="只显示当前有效记录；点击撤销后，访问者需要重新登记。" data-i18n-en="Only active records are shown. After revocation, the visitor must register again.">只显示当前有效记录；点击撤销后，访问者需要重新登记。</span>
+            </div>
+            <div class="table-responsive">
+                <table id="ip-registration-table" class="table table-hover nps-table">
+                    <thead><tr>
+                        <th data-i18n-zh="来源 IP" data-i18n-en="Source IP">来源 IP</th>
+                        <th data-i18n-zh="登记范围" data-i18n-en="Scope">登记范围</th>
+                        <th data-i18n-zh="到期时间" data-i18n-en="Expires">到期时间</th>
+                        <th data-i18n-zh="剩余时间" data-i18n-en="Remaining">剩余时间</th>
+                        <th data-i18n-zh="操作" data-i18n-en="Actions">操作</th>
+                    </tr></thead>
+                    <tbody><tr><td colspan="5" class="text-muted" data-i18n-zh="加载中…" data-i18n-en="Loading…">加载中…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</section>
+
+<style>
+    .ip-register-admin-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 18px; }
+    .ip-register-admin-summary__item { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 15px 17px; border: 1px solid var(--nps-line, #e5e7eb); border-radius: 10px; background: var(--nps-surface, #fff); box-shadow: 0 5px 18px rgba(21, 39, 66, .04); }
+    .ip-register-admin-summary__label { color: var(--nps-muted, #64748b); font-size: 12px; }
+    .ip-register-admin-summary__item strong { color: var(--nps-ink, #182230); font-size: 16px; overflow-wrap: anywhere; }
+    .ip-register-admin-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 15px; }
+    .ip-register-admin-toolbar > div { width: min(100%, 340px); }
+    .ip-register-admin-toolbar .help-block { margin: 0 !important; }
+    #ip-registration-table code { color: var(--nps-primary, #1769e0); }
+    @media (max-width: 760px) { .ip-register-admin-summary { grid-template-columns: 1fr; } .ip-register-admin-toolbar { align-items: stretch; flex-direction: column; } .ip-register-admin-toolbar > div { width: 100%; } }
+</style>
+
+<script>
+(function () {
+    var endpoint = '{{.web_base_url}}/global/ipregister';
+    var $table = $('#ip-registration-table');
+    function escape(value) { return $('<div>').text(value == null ? '' : String(value)).html(); }
+    function notify(type, message) { if (typeof npsNotify === 'function') npsNotify(type, message); else window.alert(message); }
+    function refresh() {
+        var search = $('#ip-register-search').val() || '';
+        $.post(endpoint + '/list', {search: search, offset: 0, limit: 1000}, function (response) {
+            var rows = response && Array.isArray(response.rows) ? response.rows : [];
+            var body = $table.find('tbody').empty();
+            $('#ip-register-count').text(response && response.total != null ? response.total : rows.length);
+            if (!rows.length) { body.append('<tr><td colspan="5" class="text-muted">暂无有效登记</td></tr>'); return; }
+            rows.forEach(function (row) {
+                var ip = escape(row.ip), client = escape(row.client), clientID = escape(row.client_id);
+                body.append('<tr><td><code>' + ip + '</code></td><td>' + client + '</td><td>' + escape(row.until) + '</td><td>' + escape(row.remaining) + '</td><td><button type="button" class="btn btn-xs btn-outline btn-danger js-ip-register-revoke" data-client-id="' + clientID + '" data-ip="' + ip + '">撤销</button></td></tr>');
+            });
+            if (typeof $('body').setLang === 'function') $('body').setLang('#ip-registration-table');
+        }).fail(function () { $table.find('tbody').html('<tr><td colspan="5" class="text-danger">读取 IP 登记失败</td></tr>'); });
+    }
+    function postAction(path, data, successMessage) {
+        $.post(endpoint + path, data || {}, function (response) {
+            if (response && response.status) { notify('success', response.msg || successMessage); refresh(); }
+            else notify('error', response && response.msg ? response.msg : '操作失败');
+        }, 'json').fail(function () { notify('error', '请求失败，请刷新后重试'); });
+    }
+    $('#ip-register-search').on('input', function () { window.clearTimeout(this._npsTimer); this._npsTimer = window.setTimeout(refresh, 220); });
+    $table.on('click', '.js-ip-register-revoke', function () {
+        var button = this, clientID = $(button).data('client-id'), ip = $(button).data('ip');
+        if (!window.confirm('确认撤销 ' + ip + ' 的 IP 登记？')) return;
+        postAction('/revoke', {client_id: clientID, ip: ip}, '已撤销 IP 登记');
+    });
+    $('#ip-register-clean').on('click', function () { postAction('/clean', {}, '已清理过期登记'); });
+    $('#ip-register-clear').on('click', function () { if (window.confirm('确认清空全部 IP 登记？访问者需要重新登记。')) postAction('/clear', {}, '已清空 IP 登记'); });
+    refresh();
+}());
+</script>

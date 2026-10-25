@@ -12,6 +12,37 @@ import (
 	"github.com/kardianos/service"
 )
 
+func TestExpandNpcConnectionsAlignsMultiServerArguments(t *testing.T) {
+	oldTLS := *tlsEnable
+	*tlsEnable = false
+	t.Cleanup(func() { *tlsEnable = oldTLS })
+	connections := expandNpcConnections("a:1,b:2", "key-a,key-b", "tcp,tls", "192.0.2.10")
+	if len(connections) != 2 {
+		t.Fatalf("connection count = %d, want 2", len(connections))
+	}
+	if connections[0].server != "a:1" || connections[0].vkey != "key-a" || connections[0].transport != "tcp" || connections[0].tls {
+		t.Fatalf("first connection = %+v", connections[0])
+	}
+	if connections[1].server != "b:2" || connections[1].vkey != "key-b" || connections[1].transport != "tcp" || !connections[1].tls || connections[1].localIP != "192.0.2.10" {
+		t.Fatalf("second connection = %+v", connections[1])
+	}
+}
+
+func TestExpandNpcConnectionsReusesLastValuesAndRejectsMissingCredentials(t *testing.T) {
+	connections := expandNpcConnections("a:1,b:2,c:3", "key", "", "")
+	if len(connections) != 3 {
+		t.Fatalf("connection count = %d, want 3", len(connections))
+	}
+	for _, connection := range connections {
+		if connection.vkey != "key" || connection.transport != "tcp" {
+			t.Fatalf("connection did not reuse defaults: %+v", connection)
+		}
+	}
+	if got := expandNpcConnections("a:1", "", "tcp", ""); got != nil {
+		t.Fatalf("missing vkey produced %#v, want nil", got)
+	}
+}
+
 func TestServiceStatusText(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -57,6 +88,10 @@ func TestFindNpcCommandAfterFlags(t *testing.T) {
 	command, index := findNpcCommand([]string{"-service_name=nps-client-key", "restart"})
 	if command != "restart" || index != 1 {
 		t.Fatalf("findNpcCommand() = (%q, %d), want (restart, 1)", command, index)
+	}
+	command, index = findNpcCommand([]string{"-service_name=nps-client-key", "update-force"})
+	if command != "update-force" || index != 1 {
+		t.Fatalf("findNpcCommand() = (%q, %d), want (update-force, 1)", command, index)
 	}
 }
 

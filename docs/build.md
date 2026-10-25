@@ -105,13 +105,13 @@ docker build -f Dockerfile.npc -t npc .
 - Windows/macOS/Linux GUI 客户端打包
 - Release 附件上传
 
-`.github/workflows/ci.yml` 在推送 `master` 或创建面向 `master` 的 Pull Request 时执行服务端/客户端构建、核心 Go 包测试，以及 GUI 前端的冻结依赖安装和构建，也可以手动触发。文档站使用 `docs/package-lock.json` 与 `npm ci` 构建，确保 Pages 部署可复现；`.github/workflows/docs.yml` 在 `master` 的文档变更时部署，也保留手动入口。
+`.github/workflows/ci.yml` 在推送 `master` 或创建面向 `master` 的 Pull Request 时执行服务端/客户端构建、核心 Go 包测试，以及 GUI 前端的冻结依赖安装和构建，也可以手动触发。CI 只负责验证代码，不推送镜像、不创建 Release。文档站使用 `docs/package-lock.json` 与 `npm ci` 构建，确保 Pages 部署可复现；`.github/workflows/docs.yml` 只在推送 `v*` 正式标签时部署（另保留从标签手动重跑的入口）。
 
-推送代码到 `master` 会自动触发 CI、文档（仅文档变更）和 Docker 测试流水线。Docker 流水线会同时推送 `latest` 与不可变的 `sha-<短提交号>` 多架构镜像；这类推送不会生成 GitHub Release，也不会产生供软件更新器读取的正式版本资产。
+普通代码提交不会触发 Docker 发布。`.github/workflows/docker.yml` 仅保留从已有 `v*` 标签手动重跑的兜底入口，正式镜像由 Release 工作流统一推送版本号和 `latest`，避免一次发版生成两套来源不同的镜像标签。
 
-推送与源码版本严格一致的标签（例如源码为 `1.1.29` 时推送 `v1.1.29`）才会运行 Release 工作流并创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；CLI/GUI 自动更新和服务端下发的 NPC 在线升级仍只读取 GitHub 上经过完整校验的最新正式 Release，并按 `lib/version.VERSION` 与 Release tag 比较，不依赖 Docker 标签。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`；Release 的 Docker 构建推送版本号镜像（如 `1.1.29`），`latest` 由 master Docker 流水线维护。因此正式发版只需：先把准备好的代码推送到 `master`，确认版本号后创建并推送对应的 `vX.Y.Z` 标签。`sha-<短提交号>` 仅用于测试构建。也可以在 Actions 页面手动执行 Release 的 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.29`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
+推送与源码版本严格一致的标签（例如源码为 `1.1.30` 时推送 `v1.1.30`）才会运行 Release 工作流并创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；CLI/GUI 自动更新和服务端下发的 NPC 在线升级仍只读取 GitHub 上经过完整校验的最新正式 Release，并按 `lib/version.VERSION` 与 Release tag 比较，不依赖 Docker 标签。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`；Release 的 Docker 构建同时推送版本号镜像（如 `1.1.30`）和 `latest`。因此正式发版只需：先把准备好的代码推送到 `master`，确认版本号后创建并推送对应的 `vX.Y.Z` 标签。也可以在 Actions 页面手动执行 Release 的 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.30`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
 
-`sha-<短提交号>` 测试镜像仍按源码编译，因此可能显示尚未正式发布的 `lib/version.VERSION`。更新器只按此版本号与 GitHub 最新正式 Release 比较，不会从 Docker Hub 的 `latest` 推断版本；测试镜像适用于验证，不应把其版本号当成已发布版本。
+更新器只按 `lib/version.VERSION` 与 GitHub 最新正式 Release 比较，不会从 Docker Hub 的 `latest` 推断版本；因此只有正式标签完成 Release 后，`latest` 才会指向该版本。
 
 GUI 构建由 Wails 3 调用 `wails.json` 中配置的 Yarn 前端流程：
 

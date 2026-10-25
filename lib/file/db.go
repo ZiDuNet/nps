@@ -880,6 +880,16 @@ func (s *DbUtils) IsClientActive(client *Client) bool {
 	if client == nil {
 		return false
 	}
+	return s.IsClientActiveWithExpiry(client, true)
+}
+
+// IsClientActiveWithExpiry applies status and owner checks and optionally
+// enforces the effective client expiry. The Web feature switch uses this to
+// preserve older deployments that intentionally did not enforce time limits.
+func (s *DbUtils) IsClientActiveWithExpiry(client *Client, enforceExpiry bool) bool {
+	if client == nil {
+		return false
+	}
 	client.RLock()
 	status, userID := client.Status, client.UserId
 	client.RUnlock()
@@ -888,6 +898,9 @@ func (s *DbUtils) IsClientActive(client *Client) bool {
 	}
 	if userID != 0 && !s.IsUserActive(userID) {
 		return false
+	}
+	if !enforceExpiry {
+		return true
 	}
 	effectiveExpiry, err := s.EffectiveClientExpireTime(client)
 	if err != nil || effectiveExpiry == "" {
@@ -1912,6 +1925,8 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 		RedirectURL: stored.RedirectURL, Remark: stored.Remark, Auth: stored.Auth, Scheme: stored.Scheme,
 		CertFilePath: stored.CertFilePath, KeyFilePath: stored.KeyFilePath,
 		AutoHttps: stored.AutoHttps, AutoCORS: stored.AutoCORS, CompatMode: stored.CompatMode,
+		TargetIsHTTPS: stored.TargetIsHTTPS, HTTPSJustProxy: stored.HTTPSJustProxy,
+		AutoSSL: stored.AutoSSL, TLSOffload: stored.TLSOffload,
 		Client: stored.Client, Target: stored.Target,
 	}
 	previousHealth := HealthConfigSnapshot(&stored.Health)
@@ -1939,6 +1954,10 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 	stored.AutoHttps = t.AutoHttps
 	stored.AutoCORS = t.AutoCORS
 	stored.CompatMode = t.CompatMode
+	stored.TargetIsHTTPS = t.TargetIsHTTPS
+	stored.HTTPSJustProxy = t.HTTPSJustProxy
+	stored.AutoSSL = t.AutoSSL
+	stored.TLSOffload = t.TLSOffload
 	stored.RegisteredOnly = nextRegisteredOnly
 	stored.SetRateLimits(t.UploadLimit, t.DownloadLimit)
 	if stored.Flow == nil {
@@ -1965,6 +1984,10 @@ func (s *DbUtils) UpdateHost(t *Host) error {
 		stored.AutoHttps = previous.AutoHttps
 		stored.AutoCORS = previous.AutoCORS
 		stored.CompatMode = previous.CompatMode
+		stored.TargetIsHTTPS = previous.TargetIsHTTPS
+		stored.HTTPSJustProxy = previous.HTTPSJustProxy
+		stored.AutoSSL = previous.AutoSSL
+		stored.TLSOffload = previous.TLSOffload
 		stored.RegisteredOnly = previousRegisteredOnly
 		stored.SetRateLimits(previous.UploadLimit, previous.DownloadLimit)
 		stored.Client = previous.Client

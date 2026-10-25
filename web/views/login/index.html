@@ -32,6 +32,7 @@
 
     <script src="{{.web_base_url}}/static/js/zui-3.0.0.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/jsencrypt.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20260904-3" type="text/javascript"></script>
 </head>
@@ -120,6 +121,7 @@
                         <div class="auth-control input-icon-wrap">
                             <i class="fa fa-user input-icon" aria-hidden="true"></i>
                             <input id="auth-username" name="username" class="form-control has-icon" placeholder="username" required="" autocomplete="username" langtag="word-username">
+                            <span class="help-block" data-i18n-zh="管理员或普通用户登录面板使用的账号；如果启用了 VKEY 登录，也可以输入客户端 VKEY。" data-i18n-en="The dashboard account for an administrator or regular user. If VKEY login is enabled, a client VKEY can also be used.">管理员或普通用户登录面板使用的账号；如果启用了 VKEY 登录，也可以输入客户端 VKEY。</span>
                         </div>
                     </div>
                     <div class="form-group auth-field">
@@ -127,6 +129,7 @@
                         <div class="auth-control input-icon-wrap">
                             <i class="fa fa-lock input-icon" aria-hidden="true"></i>
                             <input id="auth-password" name="password" type="password" class="form-control has-icon" placeholder="password" required="" autocomplete="current-password" langtag="word-password">
+                            <span class="help-block" data-i18n-zh="输入对应账号的登录密码；密码不会在页面或接口响应中回显。" data-i18n-en="Enter the password for this account. Passwords are never echoed in the page or API responses.">输入对应账号的登录密码；密码不会在页面或接口响应中回显。</span>
                         </div>
                     </div>
                     {{if .pow_enabled}}
@@ -140,6 +143,7 @@
                         <div class="auth-control input-icon-wrap">
                             <i class="fa fa-shield-alt input-icon" aria-hidden="true"></i>
                             <input id="auth-totp" name="totp" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="form-control has-icon" placeholder="000000" autocomplete="one-time-code" required>
+                            <span class="help-block" data-i18n-zh="管理员启用双因素认证时填写认证器应用当前的 6 位验证码。" data-i18n-en="When administrator two-factor authentication is enabled, enter the current 6-digit code from your authenticator app.">管理员启用双因素认证时填写认证器应用当前的 6 位验证码。</span>
                         </div>
                     </div>
                     {{end}}
@@ -151,6 +155,7 @@
                             <div class="auth-control auth-captcha__input input-icon-wrap">
                                 <i class="fa fa-shield-alt input-icon" aria-hidden="true"></i>
                                 <input id="auth-captcha" name="captcha" class="form-control has-icon" placeholder="captcha" required="" autocomplete="off" langtag="word-captcha">
+                                <span class="help-block" data-i18n-zh="按图片中的字符填写验证码；看不清时可刷新页面获取新的题目。" data-i18n-en="Enter the characters shown in the image. Refresh the page if the challenge is difficult to read.">按图片中的字符填写验证码；看不清时可刷新页面获取新的题目。</span>
                             </div>
                         </div>
                     </div>
@@ -164,12 +169,11 @@
                     <a class="auth-switch__link" href="{{.web_base_url}}/login/register" langtag="word-register"></a>
                 </div>
                 {{end}}
-                {{if eq true .ip_register_enabled}}
                 <div class="auth-switch register-link">
                     <span class="auth-switch__copy" data-i18n-zh="访问前需要登记 IP？" data-i18n-en="Need to register an IP before access?">访问前需要登记 IP？</span>
                     <a class="auth-switch__link" href="{{.web_base_url}}/ip/register" data-i18n-zh="打开 IP 登记" data-i18n-en="Open IP registration">打开 IP 登记</a>
+                    {{if eq false .ip_registration_configured}}<small class="auth-switch__hint" data-i18n-zh="当前尚未启用，打开页面可查看配置说明" data-i18n-en="Not enabled yet; open the page for configuration details">当前尚未启用，打开页面可查看配置说明</small>{{end}}
                 </div>
-                {{end}}
             </section>
         </div>
     </main>
@@ -181,7 +185,40 @@
 </div>
 
 <script type="text/javascript">
-    window.nps = {"web_base_url": "{{.web_base_url}}", "version": "{{.version}}"}
+    window.nps = {
+        "web_base_url": "{{.web_base_url}}",
+        "version": "{{.version}}",
+        "publicKey": `{{.public_key}}`,
+        "loginNonce": "{{.login_nonce}}",
+        "timeOffset": 0
+    };
+    var npsRSAEncryptor = typeof JSEncrypt === 'function' ? new JSEncrypt() : null;
+    if (npsRSAEncryptor) npsRSAEncryptor.setPublicKey(window.nps.publicKey || '');
+
+    function npsEncryptedPassword(password) {
+        if (!npsRSAEncryptor || !window.nps.publicKey || !window.nps.loginNonce) return null;
+        var payload = JSON.stringify({n: window.nps.loginNonce, t: Date.now() + window.nps.timeOffset, p: password});
+        try {
+            return npsRSAEncryptor.encrypt(payload) || null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    (function syncServerTime() {
+        var started = Date.now();
+        $.ajax({
+            url: "{{.web_base_url}}/auth/gettime",
+            dataType: "json",
+            cache: false,
+            timeout: 5000,
+            success: function (res) {
+                if (!res || res.time == null) return;
+                var elapsed = Date.now() - started;
+                window.nps.timeOffset = (res.time * 1000 + Math.floor(elapsed / 2)) - Date.now();
+            }
+        });
+    }());
 
     function login() {
         if (!validateNpsForm(document.querySelector('.login-form-wrap form'), true)) return false;
@@ -189,10 +226,18 @@
             prepareLoginPow();
             return false;
         }
+        var data = {};
+        $("form").serializeArray().forEach(function (field) { data[field.name] = field.value; });
+        var encryptedPassword = npsEncryptedPassword(data.password);
+        if (!encryptedPassword) {
+            npsNotify('error', npsIsEnglish() ? 'Secure password encryption is unavailable. Refresh the page and try again.' : '安全密码加密不可用，请刷新页面后重试。');
+            return false;
+        }
+        data.password = encryptedPassword;
         $.ajax({
             type: "POST",
             url: "{{.web_base_url}}/login/verify",
-            data: $("form").serializeArray(),
+            data: data,
             success: function (res) {
                 if (res.status) {
                     window.location.href = "{{.web_base_url}}/index/index"
@@ -210,6 +255,11 @@
                         document.getElementById('auth-pow-nonce').value = '';
                         document.getElementById('auth-pow-solution').value = '';
                         prepareLoginPow();
+                    }
+                    if (res.nonce) window.nps.loginNonce = res.nonce;
+                    if (res.cert) {
+                        window.nps.publicKey = res.cert;
+                        npsRSAEncryptor.setPublicKey(res.cert);
                     }
                 }
             },

@@ -50,7 +50,8 @@ func NormalizePriority(priority int) int {
 	return DenyFirst
 }
 
-// RuleError reports malformed rules while keeping valid rules usable.
+// RuleError reports malformed rules. Compilers return the error alongside a
+// fail-closed policy so callers can log or reject invalid persisted input.
 type RuleError struct {
 	Errors []error
 }
@@ -77,13 +78,14 @@ type Source struct {
 	white    []netip.Prefix
 	hasBlack bool
 	hasWhite bool
+	invalid  bool
 	mu       sync.RWMutex
 }
 
-// CompileSource builds an IP/CIDR source policy. Host names and geo rules are
-// rejected deliberately: source policy is evaluated before an HTTP request
-// exists, so accepting a DNS name would make the policy unstable. geoip:/ and
-// geosite:/ are retained as explicit errors until geodata is configured.
+// CompileSource builds an IP/CIDR source policy. Host names and Geosite rules
+// are rejected deliberately: source policy is evaluated before an HTTP request
+// exists, so accepting a DNS name would make the policy unstable. GeoIP rules
+// are supported when the corresponding dataset is configured.
 func CompileSource(scope Scope, priority int, black, white []string) (*Source, error) {
 	blackLines, whiteLines := splitLines(black), splitLines(white)
 	if !hasActiveRule(blackLines) && !hasActiveRule(whiteLines) {
@@ -100,9 +102,10 @@ func CompileSource(scope Scope, priority int, black, white []string) (*Source, e
 	if len(errs) == 0 {
 		return s, nil
 	}
-	// Keep valid entries active and report malformed ones. New Web/API writes
-	// reject the error before persistence; skipping here preserves the historic
-	// behavior for old JSON files that may contain stale or malformed entries.
+	// Persisted policies are untrusted input too. If any configured entry is
+	// invalid, deny the entire policy rather than accidentally broadening a
+	// blacklist or weakening an allowlist by skipping just the bad entry.
+	s.invalid = true
 	return s, &RuleError{Errors: errs}
 }
 
@@ -118,9 +121,10 @@ func hasActiveRule(lines []string) bool {
 
 func compileIPRules(scope Scope, name string, rules []string, errs []error) ([]netip.Prefix, []error) {
 	lines := splitLines(rules)
-	if scope == ScopeUser && maxRules > 0 && len(lines) > maxRules {
-		errs = append(errs, fmt.Errorf("%s list has %d rules, maximum is %d", name, len(lines), maxRules))
-		lines = lines[:maxRules]
+	count := activeRuleCount(lines)
+	if scope == ScopeUser && maxRules > 0 && count > maxRules {
+		errs = append(errs, fmt.Errorf("%s list has %d rules, maximum is %d", name, count, maxRules))
+		return nil, errs
 	}
 	seen := make(map[string]struct{}, len(lines))
 	out := make([]netip.Prefix, 0, len(lines))
@@ -129,8 +133,25 @@ func compileIPRules(scope Scope, name string, rules []string, errs []error) ([]n
 		if rule == "" || strings.HasPrefix(rule, "#") || strings.HasPrefix(rule, ";") {
 			continue
 		}
-		if strings.HasPrefix(strings.ToLower(rule), "geoip:") || strings.HasPrefix(strings.ToLower(rule), "geosite:") {
-			errs = append(errs, fmt.Errorf("%s rule %d %q requires geodata", name, index+1, rule))
+		if strings.HasPrefix(strings.ToLower(rule), "geoip:") {
+			category := strings.TrimSpace(rule[len("geoip:"):])
+			prefixes := geoPrefixes(category)
+			if len(prefixes) == 0 {
+				errs = append(errs, fmt.Errorf("%s rule %d %q requires geoip data", name, index+1, rule))
+				continue
+			}
+			for _, prefix := range prefixes {
+				key := prefix.String()
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				seen[key] = struct{}{}
+				out = append(out, prefix)
+			}
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(rule), "geosite:") {
+			errs = append(errs, fmt.Errorf("%s rule %d %q is only valid for destination/domain rules", name, index+1, rule))
 			continue
 		}
 		prefix, err := parseIPPrefix(rule)
@@ -149,6 +170,18 @@ func compileIPRules(scope Scope, name string, rules []string, errs []error) ([]n
 		return out[i].Bits() < out[j].Bits() || (out[i].Bits() == out[j].Bits() && out[i].String() < out[j].String())
 	})
 	return out, errs
+}
+
+func activeRuleCount(lines []string) int {
+	count := 0
+	for _, raw := range lines {
+		rule := strings.TrimSpace(raw)
+		if rule == "" || strings.HasPrefix(rule, "#") || strings.HasPrefix(rule, ";") {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 func splitLines(rules []string) []string {
@@ -250,7 +283,11 @@ func (s *Source) allowsAddr(addr netip.Addr) bool {
 	s.mu.RLock()
 	hasBlack, hasWhite := s.hasBlack, s.hasWhite
 	priority := s.priority
+	invalid := s.invalid
 	s.mu.RUnlock()
+	if invalid {
+		return false
+	}
 	black, white := s.matches(addr)
 	switch {
 	case !hasBlack && !hasWhite:
@@ -366,8 +403,15 @@ func NormalizeSource(scope Scope, rules []string) ([]string, error) {
 
 // Dest evaluates optional destination ACL rules for proxy-capable tunnels.
 type Dest struct {
-	mode  int
-	rules []string
+	mode            int
+	rules           []string
+	geoRequirements []geoRequirement
+	invalid         bool
+}
+
+type geoRequirement struct {
+	kind     string
+	category string
 }
 
 func CompileDest(mode int, rules string) (*Dest, error) {
@@ -375,11 +419,16 @@ func CompileDest(mode int, rules string) (*Dest, error) {
 		return nil, nil
 	}
 	lines := splitLines([]string{rules})
-	if maxRules > 0 && len(lines) > maxRules {
-		lines = lines[:maxRules]
+	count := activeRuleCount(lines)
+	dest := &Dest{mode: mode}
+	var errs []error
+	if maxRules > 0 && count > maxRules {
+		errs = append(errs, fmt.Errorf("destination list has %d rules, maximum is %d", count, maxRules))
+		dest.invalid = true
+		return dest, joinErrors(errs)
 	}
 	valid := make([]string, 0, len(lines))
-	var errs []error
+	var geoRequirements []geoRequirement
 	for index, raw := range lines {
 		rule := strings.ToLower(strings.TrimSpace(raw))
 		if rule == "" || strings.HasPrefix(rule, "#") || strings.HasPrefix(rule, ";") {
@@ -390,8 +439,16 @@ func CompileDest(mode int, rules string) (*Dest, error) {
 			continue
 		}
 		valid = append(valid, rule)
+		if requirement, ok := destinationGeoRequirement(rule); ok {
+			geoRequirements = append(geoRequirements, requirement)
+		}
 	}
-	return &Dest{mode: mode, rules: valid}, joinErrors(errs)
+	dest.rules = valid
+	dest.geoRequirements = geoRequirements
+	if len(errs) > 0 {
+		dest.invalid = true
+	}
+	return dest, joinErrors(errs)
 }
 
 func joinErrors(errs []error) error {
@@ -403,7 +460,8 @@ func joinErrors(errs []error) error {
 
 func validDestinationRule(rule string) bool {
 	if strings.HasPrefix(rule, "geoip:") || strings.HasPrefix(rule, "geosite:") {
-		return false
+		requirement, ok := destinationGeoRequirement(rule)
+		return ok && geoCategoryExists(requirement.kind, requirement.category)
 	}
 	if !strings.ContainsAny(rule, ".:/\\ \t") {
 		// Bare destination tokens are keyword matches.
@@ -433,6 +491,25 @@ func validDestinationRule(rule string) bool {
 	return strings.ContainsAny(rule, ".*_-") && !strings.ContainsAny(rule, " \t/\\")
 }
 
+func destinationGeoRequirement(rule string) (geoRequirement, bool) {
+	index := strings.IndexByte(rule, ':')
+	if index <= 0 {
+		return geoRequirement{}, false
+	}
+	kind := strings.ToLower(strings.TrimSpace(rule[:index]))
+	category := strings.ToLower(strings.TrimSpace(rule[index+1:]))
+	if kind != "geoip" && kind != "geosite" {
+		return geoRequirement{}, false
+	}
+	if kind == "geoip" && strings.HasPrefix(category, "!") {
+		category = strings.TrimSpace(strings.TrimPrefix(category, "!"))
+	}
+	if category == "" || strings.ContainsAny(category, " \t\r\n,;|") || strings.HasPrefix(category, "!") {
+		return geoRequirement{}, false
+	}
+	return geoRequirement{kind: kind, category: category}, true
+}
+
 func hostPart(text string) string {
 	text = strings.TrimSpace(strings.ToLower(text))
 	if host, _, err := net.SplitHostPort(text); err == nil {
@@ -445,6 +522,14 @@ func (d *Dest) Allows(addr string) bool {
 	if d == nil || d.mode == 0 {
 		return true
 	}
+	if d.invalid {
+		return false
+	}
+	for _, requirement := range d.geoRequirements {
+		if !geoCategoryExists(requirement.kind, requirement.category) {
+			return false
+		}
+	}
 	host := hostPart(addr)
 	matched := false
 	for _, raw := range d.rules {
@@ -452,6 +537,20 @@ func (d *Dest) Allows(addr string) bool {
 		kind := ""
 		if index := strings.IndexByte(rule, ':'); index > 0 {
 			kind, rule = rule[:index], rule[index+1:]
+		}
+		if strings.HasPrefix(raw, "geosite:") {
+			matched = geoSiteRuleMatches(strings.TrimPrefix(raw, "geosite:"), host)
+			if matched {
+				break
+			}
+			continue
+		}
+		if kind == "geoip" {
+			if addr, ok := addressFromString(host); ok && geoIPRuleMatches(rule, addr) {
+				matched = true
+				break
+			}
+			continue
 		}
 		if prefix, err := parseIPPrefix(host); err == nil {
 			if prefix.Addr().String() == rule || (strings.Contains(rule, "/") && prefixMatches(rule, prefix.Addr())) {

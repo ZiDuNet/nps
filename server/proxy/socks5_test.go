@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
@@ -8,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
 )
@@ -316,6 +319,105 @@ func TestSock5HandshakeTimesOut(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("SOCKS5 handshake did not time out")
+	}
+}
+
+func TestSock5UDPAssociateUsesSharedRegistry(t *testing.T) {
+	withSocks5TestDB(t, nil)
+	client := file.NewClient("vkey", false, false)
+	client.Id = 13
+	client.MaxConn = 2
+	bridgePeer, bridgeTarget := net.Pipe()
+	defer bridgePeer.Close()
+	bridge := &socks5TestBridge{target: bridgeTarget}
+	server := newSocks5TestServer(client, bridge)
+	server.task.ServerIp = "127.0.0.1"
+	server.task.Port = 0
+
+	startDone := make(chan error, 1)
+	go func() { startDone <- server.Start() }()
+	listener := waitForSocks5Listener(t, server)
+	defer func() {
+		_ = server.Close()
+		select {
+		case err := <-startDone:
+			if err != nil {
+				t.Errorf("socks5 listener returned %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Error("socks5 listener did not stop")
+		}
+	}()
+
+	control, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial socks5 listener: %v", err)
+	}
+	defer control.Close()
+	if _, err := control.Write([]byte{5, 1, 0}); err != nil {
+		t.Fatal(err)
+	}
+	var greeting [2]byte
+	if _, err := io.ReadFull(control, greeting[:]); err != nil {
+		t.Fatalf("read SOCKS greeting: %v", err)
+	}
+	if greeting != [2]byte{5, 0} {
+		t.Fatalf("greeting = %v, want no-auth success", greeting)
+	}
+	// ASSOCIATE 0.0.0.0:0. The registry returns the task's shared UDP port.
+	if _, err := control.Write([]byte{5, associateMethod, 0, ipV4, 0, 0, 0, 0, 0, 0}); err != nil {
+		t.Fatal(err)
+	}
+	var reply [10]byte
+	if _, err := io.ReadFull(control, reply[:]); err != nil {
+		t.Fatalf("read UDP associate reply: %v", err)
+	}
+	if reply[1] != succeeded {
+		t.Fatalf("UDP associate reply = %d, want %d", reply[1], succeeded)
+	}
+	udpPort := int(binary.BigEndian.Uint16(reply[8:]))
+	udpConn, err := net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: udpPort})
+	if err != nil {
+		t.Fatalf("dial SOCKS5 UDP port: %v", err)
+	}
+	defer udpConn.Close()
+
+	request := common.NewUDPDatagram(common.NewUDPHeader(0, 0, &common.Addr{Type: ipV4, Host: "198.51.100.10", Port: 5353}), []byte("request"))
+	var requestBytes bytes.Buffer
+	if err := request.Write(&requestBytes); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := udpConn.Write(requestBytes.Bytes()); err != nil {
+		t.Fatalf("write UDP request: %v", err)
+	}
+	bridgePeer.SetReadDeadline(time.Now().Add(time.Second))
+	got := make([]byte, requestBytes.Len())
+	if _, err := io.ReadFull(bridgePeer, got); err != nil {
+		t.Fatalf("read request on NPC stream: %v", err)
+	}
+	if !bytes.Equal(got, requestBytes.Bytes()) {
+		t.Fatalf("NPC request = %q, want %q", got, requestBytes.Bytes())
+	}
+
+	response := common.NewUDPDatagram(common.NewUDPHeader(0, 0, &common.Addr{Type: ipV4, Host: "203.0.113.9", Port: 53}), []byte("response"))
+	var responseBytes bytes.Buffer
+	if err := response.Write(&responseBytes); err != nil {
+		t.Fatal(err)
+	}
+	framed, err := conn.GetLenBytes(responseBytes.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bridgePeer.Write(framed); err != nil {
+		t.Fatalf("write response on NPC stream: %v", err)
+	}
+	udpConn.SetReadDeadline(time.Now().Add(time.Second))
+	got = make([]byte, responseBytes.Len())
+	if _, err := io.ReadFull(udpConn, got); err != nil {
+		t.Fatalf("read UDP response: %v", err)
+	}
+	if !bytes.Equal(got, responseBytes.Bytes()) {
+		t.Fatalf("UDP response = %q, want %q", got, responseBytes.Bytes())
 	}
 }
 

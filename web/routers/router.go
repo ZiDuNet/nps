@@ -28,6 +28,15 @@ func Init() {
 			beego.NSRouter("/global/config", &controllers.GlobalController{}, "GET:Config"),
 			beego.NSRouter("/global/config/save", &controllers.GlobalController{}, "POST:SaveConfig"),
 			beego.NSRouter("/global/config/restart", &controllers.GlobalController{}, "POST:Restart"),
+			beego.NSRouter("/global/banlist", &controllers.GlobalController{}, "GET:Banlist;POST:Banlist"),
+			beego.NSRouter("/global/unban", &controllers.GlobalController{}, "POST:Unban"),
+			beego.NSRouter("/global/unbanall", &controllers.GlobalController{}, "POST:Unbanall"),
+			beego.NSRouter("/global/banclean", &controllers.GlobalController{}, "POST:Banclean"),
+			beego.NSRouter("/global/ipregister", &controllers.GlobalController{}, "GET:IPRegisterPage"),
+			beego.NSRouter("/global/ipregister/list", &controllers.GlobalController{}, "POST:IPRegisterList"),
+			beego.NSRouter("/global/ipregister/revoke", &controllers.GlobalController{}, "POST:IPRegisterRevoke"),
+			beego.NSRouter("/global/ipregister/clean", &controllers.GlobalController{}, "POST:IPRegisterClean"),
+			beego.NSRouter("/global/ipregister/clear", &controllers.GlobalController{}, "POST:IPRegisterClear"),
 			beego.NSAutoRouter(&controllers.GlobalController{}),
 			beego.NSAutoRouter(&controllers.AuditController{}),
 		)
@@ -51,6 +60,15 @@ func Init() {
 		beego.Router("/global/config", &controllers.GlobalController{}, "GET:Config")
 		beego.Router("/global/config/save", &controllers.GlobalController{}, "POST:SaveConfig")
 		beego.Router("/global/config/restart", &controllers.GlobalController{}, "POST:Restart")
+		beego.Router("/global/banlist", &controllers.GlobalController{}, "GET:Banlist;POST:Banlist")
+		beego.Router("/global/unban", &controllers.GlobalController{}, "POST:Unban")
+		beego.Router("/global/unbanall", &controllers.GlobalController{}, "POST:Unbanall")
+		beego.Router("/global/banclean", &controllers.GlobalController{}, "POST:Banclean")
+		beego.Router("/global/ipregister", &controllers.GlobalController{}, "GET:IPRegisterPage")
+		beego.Router("/global/ipregister/list", &controllers.GlobalController{}, "POST:IPRegisterList")
+		beego.Router("/global/ipregister/revoke", &controllers.GlobalController{}, "POST:IPRegisterRevoke")
+		beego.Router("/global/ipregister/clean", &controllers.GlobalController{}, "POST:IPRegisterClean")
+		beego.Router("/global/ipregister/clear", &controllers.GlobalController{}, "POST:IPRegisterClear")
 		beego.AutoRouter(&controllers.GlobalController{})
 		beego.AutoRouter(&controllers.AuditController{})
 

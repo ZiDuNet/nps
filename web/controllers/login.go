@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,8 +54,38 @@ const (
 const powChallengeTTL = 2 * time.Minute
 
 type loginAttemptRecord struct {
-	count      int
-	windowFrom time.Time
+	key         string
+	count       int
+	windowFrom  time.Time
+	lastAttempt time.Time
+}
+
+type loginPolicy struct {
+	minInterval time.Duration
+	ipWindow    time.Duration
+	userWindow  time.Duration
+	maxFails    int
+}
+
+func defaultLoginPolicy() loginPolicy {
+	return loginPolicy{ipWindow: loginFailureWindow, userWindow: loginFailureWindow, maxFails: maxLoginFailures}
+}
+
+func configuredLoginPolicy() loginPolicy {
+	policy := loginPolicy{
+		minInterval: time.Duration(maxInt(beego.AppConfig.DefaultInt("login_ban_time", 5), 0)) * time.Second,
+		ipWindow:    time.Duration(maxInt(beego.AppConfig.DefaultInt("login_ip_ban_time", 180), 1)) * time.Second,
+		userWindow:  time.Duration(maxInt(beego.AppConfig.DefaultInt("login_user_ban_time", 3600), 1)) * time.Second,
+		maxFails:    maxInt(beego.AppConfig.DefaultInt("login_max_fail_times", maxLoginFailures), 1),
+	}
+	return policy
+}
+
+func maxInt(value, fallback int) int {
+	if value < fallback {
+		return fallback
+	}
+	return value
 }
 
 type loginAttemptLimiter struct {
@@ -76,28 +107,32 @@ func newLoginAttemptLimiter(capacity int) *loginAttemptLimiter {
 	}
 }
 
-func (s *loginAttemptLimiter) cleanupLocked(now time.Time) {
+func (s *loginAttemptLimiter) cleanupLocked(now time.Time, policy loginPolicy) {
 	if now.Before(s.nextCleanupTime) {
 		return
 	}
-	s.removeExpiredLocked(now)
+	s.removeExpiredLocked(now, policy)
 	s.nextCleanupTime = now.Add(loginCleanupPeriod)
 }
 
-func (s *loginAttemptLimiter) removeExpiredLocked(now time.Time) {
+func (s *loginAttemptLimiter) removeExpiredLocked(now time.Time, policy loginPolicy) {
 	for key, entry := range s.byIP {
-		if entry == nil || !now.Before(entry.windowFrom.Add(loginFailureWindow)) {
+		if entry == nil || !now.Before(entry.windowFrom.Add(policy.ipWindow)) {
 			delete(s.byIP, key)
 		}
 	}
 	for key, entry := range s.byUsername {
-		if entry == nil || !now.Before(entry.windowFrom.Add(loginFailureWindow)) {
+		if entry == nil || !now.Before(entry.windowFrom.Add(policy.userWindow)) {
 			delete(s.byUsername, key)
 		}
 	}
 }
 
 func (s *loginAttemptLimiter) reserve(ip, username string, now time.Time) bool {
+	return s.reserveWith(ip, username, now, defaultLoginPolicy())
+}
+
+func (s *loginAttemptLimiter) reserveWith(ip, username string, now time.Time, policy loginPolicy) bool {
 	ip = strings.TrimSpace(ip)
 	username = loginUsernameKey(username)
 	if ip == "" {
@@ -105,19 +140,25 @@ func (s *loginAttemptLimiter) reserve(ip, username string, now time.Time) bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.cleanupLocked(now)
+	s.cleanupLocked(now, policy)
 	ipEntry, hasIP := s.byIP[ip]
 	userEntry, hasUsername := s.byUsername[username]
-	if hasIP && now.Before(ipEntry.windowFrom.Add(loginFailureWindow)) && ipEntry.count >= maxLoginFailures {
+	if hasIP && now.Before(ipEntry.lastAttempt.Add(policy.minInterval)) {
 		return false
 	}
-	if hasUsername && now.Before(userEntry.windowFrom.Add(loginFailureWindow)) && userEntry.count >= maxLoginFailures {
+	if hasUsername && now.Before(userEntry.lastAttempt.Add(policy.minInterval)) {
+		return false
+	}
+	if hasIP && now.Before(ipEntry.windowFrom.Add(policy.ipWindow)) && ipEntry.count >= policy.maxFails {
+		return false
+	}
+	if hasUsername && now.Before(userEntry.windowFrom.Add(policy.userWindow)) && userEntry.count >= policy.maxFails {
 		return false
 	}
 	if (!hasIP && len(s.byIP) >= s.capacity) || (!hasUsername && len(s.byUsername) >= s.capacity) {
 		// A full store triggers one opportunistic expiry pass before failing
 		// closed. Unlike the old code this is not an every-request full scan.
-		s.removeExpiredLocked(now)
+		s.removeExpiredLocked(now, policy)
 		ipEntry, hasIP = s.byIP[ip]
 		userEntry, hasUsername = s.byUsername[username]
 		if (!hasIP && len(s.byIP) >= s.capacity) || (!hasUsername && len(s.byUsername) >= s.capacity) {
@@ -125,20 +166,121 @@ func (s *loginAttemptLimiter) reserve(ip, username string, now time.Time) bool {
 		}
 	}
 	if !hasIP {
-		ipEntry = &loginAttemptRecord{windowFrom: now}
+		ipEntry = &loginAttemptRecord{key: ip, windowFrom: now}
 		s.byIP[ip] = ipEntry
-	} else if !now.Before(ipEntry.windowFrom.Add(loginFailureWindow)) {
+	} else if !now.Before(ipEntry.windowFrom.Add(policy.ipWindow)) {
 		ipEntry.count, ipEntry.windowFrom = 0, now
 	}
 	if !hasUsername {
-		userEntry = &loginAttemptRecord{windowFrom: now}
+		userEntry = &loginAttemptRecord{key: username, windowFrom: now}
 		s.byUsername[username] = userEntry
-	} else if !now.Before(userEntry.windowFrom.Add(loginFailureWindow)) {
+	} else if !now.Before(userEntry.windowFrom.Add(policy.userWindow)) {
 		userEntry.count, userEntry.windowFrom = 0, now
 	}
 	ipEntry.count++
 	userEntry.count++
+	ipEntry.lastAttempt = now
+	userEntry.lastAttempt = now
 	return true
+}
+
+// loginBanRecord is the administrator-facing snapshot of the bounded login
+// protection state. Username keys are intentionally stored as a stable hash in
+// memory; the UI exposes that opaque key so an administrator can still remove
+// a record without revealing credentials or retaining plaintext usernames.
+type loginBanRecord struct {
+	Key           string `json:"key"`
+	FailTimes     int    `json:"fail_times"`
+	LastLoginTime string `json:"last_login_time"`
+	IsBanned      bool   `json:"is_banned"`
+	BanType       string `json:"ban_type"`
+}
+
+func (s *loginAttemptLimiter) banList(policy loginPolicy, now time.Time) []loginBanRecord {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.removeExpiredLocked(now, policy)
+	rows := make([]loginBanRecord, 0, len(s.byIP)+len(s.byUsername))
+	appendRecord := func(entry *loginAttemptRecord, kind string, window time.Duration) {
+		if entry == nil {
+			return
+		}
+		banned := now.Before(entry.lastAttempt.Add(policy.minInterval)) ||
+			(entry.count >= policy.maxFails && now.Before(entry.windowFrom.Add(window)))
+		rows = append(rows, loginBanRecord{
+			Key:           entry.key,
+			FailTimes:     entry.count,
+			LastLoginTime: entry.lastAttempt.Local().Format("2006-01-02 15:04:05"),
+			IsBanned:      banned,
+			BanType:       kind,
+		})
+	}
+	for _, entry := range s.byIP {
+		appendRecord(entry, "ip", policy.ipWindow)
+	}
+	for _, entry := range s.byUsername {
+		appendRecord(entry, "username", policy.userWindow)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].IsBanned != rows[j].IsBanned {
+			return rows[i].IsBanned
+		}
+		return rows[i].LastLoginTime > rows[j].LastLoginTime
+	})
+	return rows
+}
+
+func (s *loginAttemptLimiter) removeBan(key string) bool {
+	if s == nil {
+		return false
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	removed := false
+	if _, ok := s.byIP[key]; ok {
+		delete(s.byIP, key)
+		removed = true
+	}
+	hashed := loginUsernameKey(key)
+	if _, ok := s.byUsername[hashed]; ok {
+		delete(s.byUsername, hashed)
+		removed = true
+	}
+	for hashedKey, entry := range s.byUsername {
+		if entry != nil && entry.key == key {
+			delete(s.byUsername, hashedKey)
+			removed = true
+		}
+	}
+	return removed
+}
+
+func (s *loginAttemptLimiter) removeAllBans() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.byIP = make(map[string]*loginAttemptRecord)
+	s.byUsername = make(map[string]*loginAttemptRecord)
+	s.nextCleanupTime = time.Time{}
+	s.mu.Unlock()
+}
+
+func (s *loginAttemptLimiter) cleanBans(policy loginPolicy, now time.Time) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.removeExpiredLocked(now, policy)
+	s.nextCleanupTime = now.Add(loginCleanupPeriod)
+	s.mu.Unlock()
 }
 
 func (s *loginAttemptLimiter) clear(ip, username string) {
@@ -152,7 +294,7 @@ func (s *loginAttemptLimiter) clear(ip, username string) {
 
 func (s *loginAttemptLimiter) clearExpired(now time.Time) {
 	s.mu.Lock()
-	s.removeExpiredLocked(now)
+	s.removeExpiredLocked(now, defaultLoginPolicy())
 	s.nextCleanupTime = now.Add(loginCleanupPeriod)
 	s.mu.Unlock()
 }
@@ -187,18 +329,35 @@ func captchaFilterPath(webBaseURL string) string {
 }
 
 func (self *LoginController) Index() {
+	setNoStore(self.Ctx)
 	// Try login implicitly, will succeed if it's configured as no-auth(empty username&password).
 	webBaseUrl := beego.AppConfig.String("web_base_url")
 	if self.doLogin("", "", false) {
 		self.Redirect(webBaseUrl+"/index/index", 302)
 	}
+	loginNonce := crypt.GetRandomString(16)
+	self.SetSession("login_nonce", loginNonce)
+	// Cookie-backed sessions must be released while the response headers are
+	// still writable. Beego's deferred release runs after template rendering,
+	// at which point the response may already have started and the nonce cookie
+	// would be dropped. Without this explicit release the next login attempt
+	// cannot validate the page nonce and is reported as expired.
+	self.releaseCookieSession()
+	publicKey, _ := crypt.GetRSAPublicKeyPEM()
 	self.Data["web_base_url"] = webBaseUrl
 	self.Data["register_allow"], _ = beego.AppConfig.Bool("allow_user_register")
 	self.Data["captcha_open"], _ = beego.AppConfig.Bool("open_captcha")
 	self.Data["totp_enabled"] = strings.TrimSpace(beego.AppConfig.String("totp_secret")) != ""
 	self.Data["pow_enabled"] = beego.AppConfig.DefaultBool("force_pow", false)
 	self.Data["pow_bits"] = powDifficulty()
-	self.Data["ip_register_enabled"] = ipRegistrationConfigured()
+	self.Data["login_nonce"] = loginNonce
+	self.Data["public_key"] = publicKey
+	self.Data["login_max_skew"] = configuredLoginMaxSkew()
+	// Keep the public entry point discoverable even before an administrator has
+	// configured a public registration key. The page explains the disabled
+	// state instead of making the feature appear to be missing entirely.
+	self.Data["ip_register_enabled"] = true
+	self.Data["ip_registration_configured"] = ipRegistrationConfigured()
 	self.Data["version"] = version.VERSION
 	self.TplName = "login/index.html"
 }
@@ -207,12 +366,16 @@ func (self *LoginController) Index() {
 // lives on the login controller so it does not require an authenticated panel
 // session; the submitted registration key is the only credential needed.
 func (self *LoginController) IPRegister() {
+	setNoStore(self.Ctx)
 	webBaseURL := beego.AppConfig.String("web_base_url")
 	if self.Ctx.Request.Method == http.MethodGet {
+		visitorIP, visitorSource := requestVisitorIPDetails(self.Ctx.Request)
 		self.Data["web_base_url"] = webBaseURL
 		self.Data["version"] = version.VERSION
-		self.Data["ip"] = requestVisitorIP(self.Ctx)
+		self.Data["ip"] = visitorIP
+		self.Data["ip_source"] = visitorSource
 		self.Data["default_hours"] = registrationDefaultHours()
+		self.Data["ip_registration_configured"] = ipRegistrationConfigured()
 		self.Data["login_url"] = webBaseURL + "/login/index"
 		self.TplName = "login/ipregister.html"
 		return
@@ -227,8 +390,9 @@ func (self *LoginController) IPRegister() {
 
 // IPRegisterStandaloneHandler returns a small public-only HTTP handler for
 // deployments that want the IP registration page on its own listener instead
-// of exposing the full management panel. It deliberately trusts only the TCP
-// peer address on that listener; forwarded headers are not accepted here.
+// of exposing the full management panel. It uses the same trusted-proxy rules
+// as the management-panel endpoint; by default it still trusts only the TCP
+// peer address on that listener.
 func IPRegisterStandaloneHandler() http.Handler {
 	mux := http.NewServeMux()
 	page := template.Must(template.New("ip-register-standalone").Parse(ipRegisterStandaloneHTML))
@@ -238,16 +402,14 @@ func IPRegisterStandaloneHandler() http.Handler {
 			return
 		}
 		if r.Method == http.MethodGet {
-			remoteIP := ""
-			if parsed, ok := ipreg.ParseIP(r.RemoteAddr); ok {
-				remoteIP = parsed.String()
-			}
+			remoteIP, remoteSource := requestVisitorIPDetails(r)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")
 			if err := page.Execute(w, struct {
 				IP           string
+				IPSource     string
 				DefaultHours int
-			}{IP: remoteIP, DefaultHours: registrationDefaultHours()}); err != nil {
+			}{IP: remoteIP, IPSource: remoteSource, DefaultHours: registrationDefaultHours()}); err != nil {
 				http.Error(w, "页面暂时无法显示", http.StatusInternalServerError)
 			}
 			return
@@ -262,10 +424,7 @@ func IPRegisterStandaloneHandler() http.Handler {
 			http.Error(w, "请求内容无效", http.StatusBadRequest)
 			return
 		}
-		remoteIP := ""
-		if parsed, ok := ipreg.ParseIP(r.RemoteAddr); ok {
-			remoteIP = parsed.String()
-		}
+		remoteIP := requestVisitorIPFromRequest(r)
 		hours, _ := strconv.Atoi(strings.TrimSpace(r.Form.Get("hours")))
 		result := registerVisitorIP(r.Form.Get("key"), hours, remoteIP)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -283,7 +442,7 @@ const ipRegisterStandaloneHTML = `<!doctype html>
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 15% 5%,#e1edff,transparent 42%),var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
 .card{width:min(100%,440px);padding:32px;border:1px solid #fff;border-radius:20px;background:#ffffffed;box-shadow:0 20px 60px #19345516}.eyebrow{margin:0 0 8px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}h1{margin:0;font-size:25px;letter-spacing:-.03em}.intro{margin:8px 0 24px;color:var(--muted)}label{display:block;margin:17px 0 7px;font-size:13px;font-weight:650}input{width:100%;height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit}input[readonly]{background:#f5f7fa;color:var(--muted)}button{width:100%;height:46px;margin-top:22px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.65;cursor:wait}.hint{margin:14px 0 0;color:var(--muted);font-size:12px}.result{min-height:24px;margin-top:14px;font-size:13px}.result.error{color:#b42318}.result.success{color:#147a45}
 </style></head><body><main class="card"><p class="eyebrow">NPS · ACCESS</p><h1>登记访问 IP</h1><p class="intro">登记后，管理员启用“仅允许已登记 IP”的资源才会接受此地址的访问。</p>
-<form id="register-form"><label for="visitor-ip">当前访问地址</label><input id="visitor-ip" value="{{.IP}}" readonly>
+<form id="register-form"><label for="visitor-ip">当前访问地址</label><input id="visitor-ip" value="{{.IP}}" readonly><p class="hint">地址来源：{{.IPSource}}。仅在服务端明确配置可信反代并允许真实 IP 头时，才会显示反代传递的公网 IP。</p>
 <label for="register-key">登记密钥</label><input id="register-key" name="key" type="password" autocomplete="off" required placeholder="输入管理员或客户端提供的登记密钥">
 <label for="register-hours">有效时长（小时）</label><input id="register-hours" name="hours" type="number" min="1" max="{{.DefaultHours}}" value="{{.DefaultHours}}">
 <button id="register-submit" type="submit">登记此 IP</button><p class="hint">登记有效时长受服务端配置限制。此页不会保存密钥。</p><div id="register-result" class="result" role="status" aria-live="polite"></div></form></main>
@@ -388,22 +547,94 @@ func requestVisitorIP(ctx *beecontext.Context) string {
 	if ctx == nil || ctx.Request == nil {
 		return ""
 	}
-	// Beego's Input.IP trusts the first X-Forwarded-For value without checking
-	// whether the peer is a configured trusted proxy. Registration is an access
-	// control credential, so only use the observed TCP peer until trusted-proxy
-	// support is explicitly configured.
-	if parsed, ok := ipreg.ParseIP(strings.TrimSpace(ctx.Request.RemoteAddr)); ok {
-		return parsed.String()
+	return requestVisitorIPFromRequest(ctx.Request)
+}
+
+// requestVisitorIPFromRequest returns the address used by IP registration.
+// Forwarded headers are opt-in through allow_x_real_ip.  The setting is meant
+// for the common Nginx/Docker deployment and therefore does not require a
+// second trusted-proxy list; X-NPS-Http-Only remains an explicit per-request
+// override for deployments that cannot change the global setting.
+func requestVisitorIPFromRequest(request *http.Request) string {
+	ip, _ := requestVisitorIPDetails(request)
+	return ip
+}
+
+func requestVisitorIPDetails(request *http.Request) (string, string) {
+	if request == nil {
+		return "", ""
 	}
-	return ""
+	peer := ""
+	if parsed, ok := ipreg.ParseIP(strings.TrimSpace(request.RemoteAddr)); ok {
+		peer = parsed.String()
+	}
+	if peer == "" {
+		return "", "无法识别 TCP 对端地址"
+	}
+	if !requestMayUseForwardedIP(request) {
+		return peer, "NPS 直接看到的 TCP 对端地址"
+	}
+	effective := common.EffectiveHTTPClientIP(
+		request.RemoteAddr,
+		request.Header.Get("X-Real-IP"),
+		request.Header.Get("X-Forwarded-For"),
+		true,
+	)
+	for _, candidate := range []struct {
+		value  string
+		source string
+	}{
+		{value: request.Header.Get("X-Real-IP"), source: "可信反代的 X-Real-IP"},
+		{value: firstHeaderValue(request.Header.Get("X-Forwarded-For")), source: "可信反代的 X-Forwarded-For"},
+	} {
+		if parsed, ok := ipreg.ParseIP(strings.TrimSpace(candidate.value)); ok {
+			if parsed.String() == effective {
+				return effective, candidate.source
+			}
+		}
+	}
+	return peer, "可信反代未提供有效真实 IP，回退到 TCP 对端地址"
+}
+
+func requestMayUseForwardedIP(request *http.Request) bool {
+	if request == nil {
+		return false
+	}
+	if beego.AppConfig.DefaultBool("allow_x_real_ip", false) {
+		return true
+	}
+	secret := strings.TrimSpace(beego.AppConfig.String("x_nps_http_only"))
+	provided := strings.TrimSpace(request.Header.Get("X-NPS-Http-Only"))
+	return secret != "" && provided != "" && subtle.ConstantTimeCompare([]byte(secret), []byte(provided)) == 1
 }
 
 func (self *LoginController) Verify() {
+	setNoStore(self.Ctx)
 	if !self.requirePost() {
 		return
 	}
+	maxBody := int64(beego.AppConfig.DefaultInt("login_max_body", 1024))
+	if maxBody <= 0 {
+		maxBody = 1024
+	}
+	if self.Ctx != nil && self.Ctx.Request != nil {
+		if self.Ctx.Request.ContentLength > maxBody {
+			self.Ctx.Output.SetStatus(http.StatusRequestEntityTooLarge)
+			self.Data["json"] = map[string]interface{}{"status": 0, "msg": "登录请求过大"}
+			self.ServeJSON()
+			return
+		}
+		self.Ctx.Request.Body = http.MaxBytesReader(self.Ctx.ResponseWriter, self.Ctx.Request.Body, maxBody)
+		if err := self.Ctx.Request.ParseForm(); err != nil {
+			self.Ctx.Output.SetStatus(http.StatusRequestEntityTooLarge)
+			self.Data["json"] = map[string]interface{}{"status": 0, "msg": "登录请求过大"}
+			self.ServeJSON()
+			return
+		}
+	}
 	username := self.GetString("username")
-	password := self.GetString("password")
+	rawPassword := self.GetString("password")
+	password := rawPassword
 	totpCode := strings.TrimSpace(self.GetString("totp"))
 	if beego.AppConfig.DefaultBool("force_pow", false) && !verifyLoginPoW(username, self.GetString("pow_nonce"), self.GetString("pow_solution")) {
 		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "工作量证明校验失败，请重试"}
@@ -418,6 +649,15 @@ func (self *LoginController) Verify() {
 			return
 		}
 	}
+	if payload, err := crypt.ParseLoginPayload(rawPassword); err == nil {
+		if !self.verifyLoginPayload(payload) {
+			self.Data["json"] = self.loginPayloadError("登录请求已过期，请刷新页面")
+			self.releaseCookieSession()
+			self.ServeJSON()
+			return
+		}
+		password = payload.Password
+	}
 	if self.doLoginWithTOTP(username, password, totpCode, true) {
 		appendLoginAudit(self, username, true, "")
 		self.Data["json"] = map[string]interface{}{"status": 1, "msg": "login success"}
@@ -428,10 +668,53 @@ func (self *LoginController) Verify() {
 	self.ServeJSON()
 }
 
+// configuredLoginMaxSkew returns the browser login timestamp tolerance in
+// milliseconds. A non-positive value disables the timestamp check while the
+// encrypted nonce envelope remains accepted for compatibility.
+func configuredLoginMaxSkew() time.Duration {
+	value := beego.AppConfig.DefaultInt("login_max_skew", 300000)
+	if value <= 0 {
+		return 0
+	}
+	return time.Duration(value) * time.Millisecond
+}
+
+func (self *LoginController) verifyLoginPayload(payload *crypt.LoginPayload) bool {
+	if payload == nil || strings.TrimSpace(payload.Nonce) == "" || payload.Password == "" || payload.Timestamp <= 0 {
+		return false
+	}
+	storedNonce, _ := self.GetSession("login_nonce").(string)
+	if storedNonce == "" || subtle.ConstantTimeCompare([]byte(storedNonce), []byte(payload.Nonce)) != 1 {
+		return false
+	}
+	maxSkew := configuredLoginMaxSkew()
+	if maxSkew > 0 {
+		now := time.Now()
+		stamp := time.UnixMilli(payload.Timestamp)
+		if stamp.Before(now.Add(-maxSkew)) || stamp.After(now.Add(maxSkew)) {
+			return false
+		}
+	}
+	return true
+}
+
+func (self *LoginController) loginPayloadError(message string) map[string]interface{} {
+	nonce := crypt.GetRandomString(16)
+	self.SetSession("login_nonce", nonce)
+	publicKey, _ := crypt.GetRSAPublicKeyPEM()
+	return map[string]interface{}{
+		"status": 0,
+		"msg":    message,
+		"nonce":  nonce,
+		"cert":   publicKey,
+	}
+}
+
 // Pow returns a short-lived login challenge. It is intentionally a separate
 // endpoint so the browser can compute the solution without embedding a
 // server-side secret in the login page.
 func (self *LoginController) Pow() {
+	setNoStore(self.Ctx)
 	if self.Ctx.Request.Method != http.MethodGet {
 		self.Ctx.Output.SetStatus(http.StatusMethodNotAllowed)
 		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "method not allowed"}
@@ -601,7 +884,7 @@ func (self *LoginController) doLoginWithTOTP(username, password, totpCode string
 		server.Bridge.Register.Store(common.GetIpByAddr(self.Ctx.Input.IP()), time.Now().Add(time.Hour*time.Duration(2)))
 	}
 	b, err := beego.AppConfig.Bool("allow_user_login")
-	if err == nil && b && !auth {
+	if err == nil && b && beego.AppConfig.DefaultBool("allow_user_vkey_login", true) && !auth {
 		if user, err := file.GetDb().GetUserByName(username); err == nil {
 			user.RLock()
 			userID, userName, userPassword := user.Id, user.UserName, user.Password
@@ -686,16 +969,37 @@ func allowLoginAttemptWith(limiter *loginAttemptLimiter, ip, username string, ex
 	if !explicit {
 		return true
 	}
-	return limiter.reserve(ip, username, now)
+	return limiter.reserveWith(ip, username, now, configuredLoginPolicy())
+}
+
+func currentLoginBanList() []loginBanRecord {
+	return loginAttempts.banList(configuredLoginPolicy(), time.Now())
+}
+
+func removeLoginBan(key string) bool {
+	return loginAttempts.removeBan(key)
+}
+
+func removeAllLoginBans() {
+	loginAttempts.removeAllBans()
+}
+
+func cleanLoginBans() {
+	loginAttempts.cleanBans(configuredLoginPolicy(), time.Now())
 }
 
 // reserveLoginAttempt atomically admits at most maxLoginFailures explicit
 // attempts in one window. A successful login removes the reservation again.
 // Implicit no-auth checks on the login page must never count as failures.
 func (self *LoginController) Register() {
+	setNoStore(self.Ctx)
 	if self.Ctx.Request.Method == "GET" {
 		self.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
 		self.Data["version"] = version.VERSION
+		self.Data["login_nonce"] = crypt.GetRandomString(16)
+		self.SetSession("login_nonce", self.Data["login_nonce"])
+		self.releaseCookieSession()
+		self.Data["public_key"], _ = crypt.GetRSAPublicKeyPEM()
 		self.TplName = "login/register.html"
 		return
 	}
@@ -707,7 +1011,19 @@ func (self *LoginController) Register() {
 		self.ServeJSON()
 		return
 	}
-	if self.GetString("username") == "" || self.GetString("password") == "" || len(self.GetString("password")) < 6 || self.GetString("username") == beego.AppConfig.String("web_username") {
+	username := self.GetString("username")
+	rawPassword := self.GetString("password")
+	password := rawPassword
+	if payload, err := crypt.ParseLoginPayload(rawPassword); err == nil {
+		if !self.verifyLoginPayload(payload) {
+			self.Data["json"] = self.loginPayloadError("注册请求已过期，请刷新页面")
+			self.releaseCookieSession()
+			self.ServeJSON()
+			return
+		}
+		password = payload.Password
+	}
+	if username == "" || password == "" || len(password) < 6 || username == beego.AppConfig.String("web_username") {
 		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "please check your input (password min 6 chars)"}
 		self.ServeJSON()
 		return
@@ -716,21 +1032,22 @@ func (self *LoginController) Register() {
 		Id:          int(file.GetDb().JsonDb.GetClientId()),
 		Status:      true,
 		Cnf:         &file.Config{},
-		WebUserName: self.GetString("username"),
-		WebPassword: self.GetString("password"),
+		WebUserName: username,
+		WebPassword: password,
 		Flow:        &file.Flow{},
 	}
 	if err := file.GetDb().NewClient(t); err != nil {
-		appendAuthAudit(self, "auth.register", self.GetString("username"), false, err.Error())
+		appendAuthAudit(self, "auth.register", username, false, err.Error())
 		self.Data["json"] = map[string]interface{}{"status": 0, "msg": err.Error()}
 	} else {
-		appendAuthAudit(self, "auth.register", self.GetString("username"), true, "")
+		appendAuthAudit(self, "auth.register", username, true, "")
 		self.Data["json"] = map[string]interface{}{"status": 1, "msg": "register success"}
 	}
 	self.ServeJSON()
 }
 
 func (self *LoginController) Out() {
+	setNoStore(self.Ctx)
 	appendAuthAudit(self, "auth.logout", "", true, "")
 	clearAuthenticationSession(self.DelSession)
 	self.releaseCookieSession()
@@ -814,16 +1131,46 @@ func (self *LoginController) releaseCookieSession() {
 
 func (self *LoginController) requirePost() bool {
 	if self.Ctx.Request.Method != http.MethodPost {
+		setNoStore(self.Ctx)
 		self.Ctx.Output.SetStatus(http.StatusMethodNotAllowed)
 		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "method not allowed"}
 		self.ServeJSON()
 		return false
 	}
-	if !isSameOriginRequest(self.Ctx.Request) {
+	// A reverse proxy may rewrite Host and omit the forwarded authority headers.
+	// The login page still carries an encrypted nonce bound to the browser session.
+	// browser session. Accepting that valid envelope is safe for this endpoint
+	// and keeps login working through older proxies/browsers that do not send
+	// Fetch Metadata; all other state-changing management requests remain strict
+	// same-origin checks in BaseController.RequirePost.
+	if !isSameOriginRequest(self.Ctx.Request) && !self.hasValidLoginPayload() {
+		setNoStore(self.Ctx)
 		self.Ctx.Output.SetStatus(http.StatusForbidden)
 		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "invalid request origin"}
 		self.ServeJSON()
 		return false
 	}
 	return true
+}
+
+func (self *LoginController) hasValidLoginPayload() bool {
+	if self == nil || self.Ctx == nil || self.Ctx.Request == nil {
+		return false
+	}
+	payload, err := crypt.ParseLoginPayload(self.GetString("password"))
+	return err == nil && self.verifyLoginPayload(payload)
+}
+
+// setNoStore marks authentication pages and responses as private, dynamic
+// content. A cached login page can replay an old nonce after a restart or
+// across users, which surfaces to the browser as "登录请求已过期" and is
+// especially common when the panel is behind Nginx/CDN caching.
+func setNoStore(ctx *beecontext.Context) {
+	if ctx == nil || ctx.ResponseWriter == nil {
+		return
+	}
+	header := ctx.ResponseWriter.Header()
+	header.Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	header.Set("Pragma", "no-cache")
+	header.Set("Expires", "0")
 }

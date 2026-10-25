@@ -41,6 +41,14 @@ TLS 客户端默认校验证书。NPS 首次启动会在日志中打印服务端
 ./npc -server=<服务器IP>:8024 -vkey=key1,key2,key3
 ```
 
+也可以同时连接多个 NPS 服务端。各列表按位置对应；`vkey`、`type`、`local_ip`
+列表较短时会复用最后一项，`type=tls` 等价于 TCP Bridge 并启用 TLS：
+
+```bash
+./npc -server=nps-a.example.com:8024,nps-b.example.com:8025 \
+  -vkey=key-a,key-b -type=tcp,tls
+```
+
 Windows：
 
 ```cmd
@@ -73,7 +81,11 @@ npc.exe -server=<服务器IP>:8024 -vkey=<VerifyKey>
 | `-tls_server_name` | TLS SNI/证书名称 | 服务端地址 |
 | `-tls_fingerprint` | 服务端证书 SHA-256 指纹 | 空 |
 | `-tls_insecure_skip_verify` | 显式关闭 TLS 证书校验（不推荐） | `false` |
-| `-proxy` | 通过 SOCKS5 代理连接服务端 | 空 |
+| `-proxy` | 通过 HTTP/HTTPS CONNECT、SOCKS4/4a、SOCKS5/SOCKS5H 代理连接服务端 | 空 |
+| `-local_ip` | 指定 NPC 对 NPS 的本地出站地址 | 空 |
+| `-local_ip_forward` | 将本地出站地址用于公网目标的 TCP/UDP/SOCKS5 UDP 转发 | `false` |
+| `-dns_server` | 自定义 DNS 服务器，多个地址用逗号分隔 | 系统解析器 |
+| `-disable_remote_update` | 忽略服务端下发的远程更新指令 | `false` |
 | `-disconnect_timeout` | 心跳超时倍数，单位为 5 秒 | `60` |
 | `-log` | 日志输出方式，`stdout` 或 `file` | `stdout` |
 | `-log_level` | 日志级别，`0` 到 `7` | `7` |
@@ -93,6 +105,12 @@ npc.exe -server=<服务器IP>:8024 -vkey=<VerifyKey>
 
 ```bash
 ./npc -config=npc.conf
+```
+
+需要同时运行多份相互独立的配置时，可传入逗号分隔的文件路径：
+
+```bash
+./npc -config=/etc/nps/npc-a.conf,/etc/nps/npc-b.conf
 ```
 
 未指定 `-config` 时，源码默认查找：

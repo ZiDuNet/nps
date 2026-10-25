@@ -15,11 +15,12 @@
             <div class="ibox-content form-workflow-content">
                 <form id="user-form" class="form form-horz form-workflow-form zui-form" data-form-workflow="user-edit" autocomplete="off">
                     <input type="hidden" name="id" value="{{.u.Id}}">
-                    <div class="form-section-title"><i class="fa fa-user" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
+                    <div class="form-section-title" data-section-tier="primary"><i class="fa fa-user" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
                     <div class="form-group">
                         <label class="form-label font-bold" for="user-username" data-i18n-zh="用户名" data-i18n-en="Username">用户名</label>
                         <div class="form-group-wrapper">
                             <input id="user-username" class="form-control" value="{{.u.UserName}}" type="text" name="username" autocomplete="off" required>
+                            <span class="help-block" data-i18n-zh="用于登录管理面板的唯一用户名；修改后需要使用新用户名登录。" data-i18n-en="The unique username used to sign in to the management panel; use the new name after changing it.">用于登录管理面板的唯一用户名；修改后需要使用新用户名登录。</span>
                         </div>
                     </div>
                     <div class="form-group">
@@ -38,10 +39,11 @@
                         <label class="form-label font-bold" for="user-remark" data-i18n-zh="备注" data-i18n-en="Remark">备注</label>
                         <div class="form-group-wrapper">
                             <input id="user-remark" class="form-control" value="{{.u.Remark}}" type="text" name="remark" autocomplete="off">
+                            <span class="help-block" data-i18n-zh="用于管理员识别账号的备注，不影响登录或权限。" data-i18n-en="An administrator-facing note for identifying the account; it does not affect login or permissions.">用于管理员识别账号的备注，不影响登录或权限。</span>
                         </div>
                     </div>
 
-                    <div class="form-section-title"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
+                    <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="为该用户设置资源配额" data-section-summary-en="Set quotas for this user"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
                     <div class="form-group">
                         <label class="form-label font-bold" for="user-max-client" data-i18n-zh="最大客户端数" data-i18n-en="Client limit">最大客户端数</label>
                         <div class="form-group-wrapper">
@@ -57,7 +59,7 @@
                         </div>
                     </div>
 
-                    <div class="form-section-title"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
+                    <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="用户到期后停止访问资源" data-section-summary-en="Stop access after user expiry"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
                     <div class="form-group">
                         <label class="form-label font-bold" for="date-picker-user-expire-picker" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</label>
                         <div class="form-group-wrapper">

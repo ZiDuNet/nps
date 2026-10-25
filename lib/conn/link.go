@@ -37,6 +37,7 @@ type Option func(*Options)
 
 type Options struct {
 	Timeout time.Duration
+	NeedAck bool
 }
 
 var defaultTimeOut = time.Second * 5
@@ -60,6 +61,7 @@ func NewLink(connType string, host string, cryptEnabled bool, compress bool, rem
 func newOptions(opts ...Option) Options {
 	opt := Options{
 		Timeout: defaultTimeOut,
+		NeedAck: false,
 	}
 	for _, o := range opts {
 		o(&opt)

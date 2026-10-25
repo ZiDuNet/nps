@@ -64,3 +64,25 @@ func TestValidateHostDomainRequestRequiresExactlyOneMode(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateBridgeTargetPermissionRestrictsSystemRoutesToAdmins(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		isAdmin   bool
+		target    string
+		wantError bool
+	}{
+		{name: "admin may use bridge route", isAdmin: true, target: "bridge://web"},
+		{name: "admin multi-target bridge route", isAdmin: true, target: "127.0.0.1:8080\nbridge://ipreg"},
+		{name: "ordinary user cannot use bridge route", target: "bridge://web", wantError: true},
+		{name: "ordinary user cannot hide bridge route in target list", target: "127.0.0.1:8080\n bridge://tcp", wantError: true},
+		{name: "ordinary user may use regular nested tunnel", target: "tunnel://42"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateBridgeTargetPermission(test.isAdmin, test.target)
+			if (err != nil) != test.wantError {
+				t.Fatalf("validateBridgeTargetPermission() error = %v, wantError %t", err, test.wantError)
+			}
+		})
+	}
+}

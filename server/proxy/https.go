@@ -34,6 +34,8 @@ type HttpsServer struct {
 	closeOnce        sync.Once
 	closed           atomic.Bool
 	closeErr         error
+	autoSSLListener  *HttpsListener
+	autoSSLServer    *http.Server
 }
 
 var httpsHandshakeTimeout = 10 * time.Second
@@ -110,7 +112,23 @@ func (https *HttpsServer) Start() error {
 				_ = c.Close()
 				return
 			}
+			if https.httpServer.autoSSLHostEnabled(host) {
+				https.enqueueAutoSSLCertificate(host, c, rb)
+				return
+			}
 			if certFilePath == "" || keyFilePath == "" {
+				host.RLock()
+				justProxy := host.HTTPSJustProxy
+				tlsOffload := host.TLSOffload
+				host.RUnlock()
+				if justProxy {
+					https.handleHTTPSJustProxy(c, host, serverName, rb)
+					return
+				}
+				if tlsOffload {
+					https.handleTLSOffload(c, host, serverName, rb, r)
+					return
+				}
 				logs.Debug("加载客户端本地证书")
 				https.handleHttps2(c, serverName, rb, r)
 			} else {
@@ -118,6 +136,13 @@ func (https *HttpsServer) Start() error {
 
 				// 判断是路径还是证书，-----BEGIN 开头的为证书
 				if strings.Contains(certFilePath, "-----BEGIN") || strings.Contains(keyFilePath, "-----BEGIN") {
+					host.RLock()
+					tlsOffload := host.TLSOffload
+					host.RUnlock()
+					if tlsOffload {
+						https.handleTLSOffload(c, host, serverName, rb, r)
+						return
+					}
 					logs.Debug("通过上传文件加载证书")
 					https.cert(host, c, rb, certFilePath, keyFilePath)
 				} else {
@@ -125,6 +150,19 @@ func (https *HttpsServer) Start() error {
 					if !common.FileExists(certFilePath) || !common.FileExists(keyFilePath) {
 						logs.Error("证书或秘钥文件不存在", keyFilePath, certFilePath)
 						https.enqueueCachedCertificate(host.Id, c, rb)
+						return
+					}
+					host.RLock()
+					tlsOffload := host.TLSOffload
+					host.RUnlock()
+					if tlsOffload {
+						certPEM, certErr := common.ReadAllFromFile(certFilePath)
+						keyPEM, keyErr := common.ReadAllFromFile(keyFilePath)
+						if certErr != nil || keyErr != nil {
+							_ = c.Close()
+							return
+						}
+						https.handleTLSOffloadWithCert(c, host, serverName, rb, string(certPEM), string(keyPEM))
 						return
 					}
 
@@ -296,6 +334,48 @@ func (https *HttpsServer) cert(host *file.Host, c net.Conn, rb []byte, certFileU
 	}
 
 	https.enqueueCertificateListener(l, c, rb)
+}
+
+// enqueueAutoSSLCertificate routes an opted-in Host through one shared TLS
+// listener. The listener performs the handshake itself so the ACME manager
+// can serve HTTP-01-issued certificates on demand and the normal net/http
+// server can negotiate both HTTP/2 and HTTP/1.1.
+func (https *HttpsServer) enqueueAutoSSLCertificate(host *file.Host, c net.Conn, rb []byte) {
+	if https == nil || host == nil || c == nil || https.acmeManager == nil {
+		if c != nil {
+			_ = c.Close()
+		}
+		return
+	}
+	https.listenerMu.Lock()
+	if https.closed.Load() {
+		https.listenerMu.Unlock()
+		_ = c.Close()
+		return
+	}
+	listener := https.autoSSLListener
+	if listener == nil {
+		listener = NewHttpsListener(https.listener)
+		server := https.httpServer.NewServer(0, "https")
+		server.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			NextProtos: []string{"h2", "http/1.1"},
+			GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				return https.acmeManager.GetCertificate(hello)
+			},
+		}
+		https.autoSSLListener = listener
+		https.autoSSLServer = server
+		go func() {
+			if err := server.ServeTLS(listener, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logs.Error("ACME HTTPS listener exited: %v", err)
+			}
+		}()
+	}
+	https.listenerMu.Unlock()
+	acceptConn := conn.NewConn(c)
+	acceptConn.Rb = rb
+	listener.enqueue(acceptConn, c)
 }
 
 // certificateMaterialKey validates a complete certificate/private-key pair
@@ -510,11 +590,20 @@ func (https *HttpsServer) Close() error {
 			}
 			return true
 		})
+		if https.autoSSLListener != nil {
+			listeners = append(listeners, https.autoSSLListener)
+		}
+		autoSSLServer := https.autoSSLServer
 		parent := https.listener
 		https.listenerMu.Unlock()
 
 		for _, listener := range listeners {
 			if err := listener.Close(); err != nil && https.closeErr == nil {
+				https.closeErr = err
+			}
+		}
+		if autoSSLServer != nil {
+			if err := autoSSLServer.Close(); err != nil && https.closeErr == nil {
 				https.closeErr = err
 			}
 		}
@@ -599,6 +688,95 @@ func (https *HttpsServer) handleHttps(c net.Conn) {
 	hostTarget.RUnlock()
 	logs.Trace("new https connection,clientId %d,host %s,remote address %s", clientID, r.Host, c.RemoteAddr().String())
 	https.DealClient(conn.NewConn(c), hostClient, targetAddr, rb, common.CONN_TCP, nil, nil, localProxy, nil, host)
+}
+
+// handleHTTPSJustProxy forwards the already inspected TLS ClientHello without
+// terminating TLS at NPS. It is deliberately separate from handleHttps,
+// which is retained for the legacy path that performs its own ClientHello
+// inspection.
+func (https *HttpsServer) handleHTTPSJustProxy(c net.Conn, host *file.Host, hostName string, rb []byte) {
+	if c == nil || host == nil {
+		if c != nil {
+			_ = c.Close()
+		}
+		return
+	}
+	hostClient, hostTarget, _, valid := snapshotHostProxyParts(host)
+	if !valid || hostTarget == nil || hostClient == nil {
+		_ = c.Close()
+		return
+	}
+	targetAddr, err := hostTarget.GetRandomTarget()
+	if err != nil {
+		_ = c.Close()
+		return
+	}
+	hostClient.RLock()
+	clientID := hostClient.Id
+	localProxy := hostTarget.LocalProxy
+	hostClient.RUnlock()
+	logs.Info("HTTPS 原样透传 host=%s client=%d target=%s remote=%s", hostName, clientID, targetAddr, c.RemoteAddr())
+	_ = https.DealClient(conn.NewConn(c), hostClient, targetAddr, rb, common.CONN_TCP, nil, nil, localProxy, nil, host)
+}
+
+// handleTLSOffload terminates the public TLS session with the host's
+// certificate, then forwards the decrypted byte stream to the private target.
+// No HTTP parser is involved, which is useful for TLS-wrapped protocols that
+// should be exposed behind a managed certificate.
+func (https *HttpsServer) handleTLSOffload(c net.Conn, host *file.Host, hostName string, rb []byte, _ *http.Request) {
+	host.RLock()
+	certFile, keyFile := host.CertFilePath, host.KeyFilePath
+	host.RUnlock()
+	if strings.Contains(certFile, "-----BEGIN") || strings.Contains(keyFile, "-----BEGIN") {
+		https.handleTLSOffloadWithCert(c, host, hostName, rb, certFile, keyFile)
+		return
+	}
+	certPEM, certErr := common.ReadAllFromFile(certFile)
+	keyPEM, keyErr := common.ReadAllFromFile(keyFile)
+	if certErr != nil || keyErr != nil {
+		_ = c.Close()
+		return
+	}
+	https.handleTLSOffloadWithCert(c, host, hostName, rb, string(certPEM), string(keyPEM))
+}
+
+func (https *HttpsServer) handleTLSOffloadWithCert(c net.Conn, host *file.Host, hostName string, rb []byte, certPEM, keyPEM string) {
+	if c == nil || host == nil {
+		if c != nil {
+			_ = c.Close()
+		}
+		return
+	}
+	cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+	if err != nil {
+		_ = c.Close()
+		return
+	}
+	buffered := conn.NewConn(c)
+	buffered.Rb = rb
+	tlsConn := tls.Server(buffered, &tls.Config{Certificates: []tls.Certificate{cert}})
+	_ = tlsConn.SetDeadline(time.Now().Add(httpsHandshakeTimeout))
+	if err := tlsConn.Handshake(); err != nil {
+		_ = tlsConn.Close()
+		return
+	}
+	_ = tlsConn.SetDeadline(time.Time{})
+	hostClient, hostTarget, _, valid := snapshotHostProxyParts(host)
+	if !valid || hostTarget == nil || hostClient == nil {
+		_ = tlsConn.Close()
+		return
+	}
+	targetAddr, err := hostTarget.GetRandomTarget()
+	if err != nil {
+		_ = tlsConn.Close()
+		return
+	}
+	hostClient.RLock()
+	clientID := hostClient.Id
+	localProxy := hostTarget.LocalProxy
+	hostClient.RUnlock()
+	logs.Info("TLS 卸载 host=%s client=%d target=%s remote=%s", hostName, clientID, targetAddr, c.RemoteAddr())
+	_ = https.DealClient(conn.NewConn(tlsConn), hostClient, targetAddr, nil, common.CONN_TCP, nil, nil, localProxy, nil, host)
 }
 
 type HttpsListener struct {

@@ -351,8 +351,11 @@
             if (column.class) classes.push(column.class);
             var $cell = $('<th></th>').addClass(classes.join(' '));
             if (column.width) $cell.css('width', column.width);
+            var headerLabel = columnTitle(column);
+            if (headerLabel) $cell.attr('title', headerLabel);
             if (column.sortable && column.field) $cell.attr({'data-sort-field': column.field, 'aria-sort': self.sortField === column.field ? (self.sortOrder === 'desc' ? 'descending' : 'ascending') : 'none'});
             var $inner = $('<div class="nps-table__header-inner"></div>');
+            if (headerLabel) $inner.attr('title', headerLabel);
             if (column.halign) $inner.css('justify-content', column.halign === 'right' ? 'flex-end' : column.halign);
             if (column.checkbox) {
                 $inner.append('<label class="nps-checkbox__label"><input type="checkbox" class="nps-table__select-all" aria-label="'

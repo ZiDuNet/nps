@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"ehang.io/nps/lib/common"
 	"github.com/quic-go/quic-go"
 )
 
@@ -41,6 +42,7 @@ func (c *QuicStreamConn) Close() error { return c.stream.Close() }
 type QuicAutoCloseConn struct {
 	*QuicStreamConn
 	closeOnce sync.Once
+	cleanup   func()
 }
 
 func NewQuicAutoCloseConn(stream *quic.Stream, sess *quic.Conn) *QuicAutoCloseConn {
@@ -58,6 +60,9 @@ func (c *QuicAutoCloseConn) Close() error {
 			case <-timer.C:
 			}
 			_ = c.sess.CloseWithError(0, "close")
+			if c.cleanup != nil {
+				c.cleanup()
+			}
 		}()
 	})
 	return nil
@@ -75,6 +80,39 @@ func DialQuic(ctx context.Context, server string, tlsConfig *tls.Config, quicCon
 		return nil, err
 	}
 	return NewQuicAutoCloseConn(stream, sess), nil
+}
+
+// DialQuicWithLocalIP opens a QUIC Bridge session using an optional local UDP
+// source address. QUIC does not take ownership of caller-supplied packet
+// sockets, so the socket is closed after the session is torn down.
+func DialQuicWithLocalIP(ctx context.Context, server string, tlsConfig *tls.Config, quicConfig *quic.Config, localIP string) (net.Conn, error) {
+	bindAddr := common.BuildUDPBindAddr(localIP)
+	if bindAddr == nil {
+		return DialQuic(ctx, server, tlsConfig, quicConfig)
+	}
+	remoteAddr, err := net.ResolveUDPAddr("udp", server)
+	if err != nil {
+		return nil, err
+	}
+	packetConn, err := net.ListenUDP("udp", bindAddr)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := quic.Dial(ctx, packetConn, remoteAddr, tlsConfig, quicConfig)
+	if err != nil {
+		_ = packetConn.Close()
+		return nil, err
+	}
+	stream, err := sess.OpenStreamSync(ctx)
+	if err != nil {
+		_ = sess.CloseWithError(0, "open bridge stream")
+		_ = packetConn.Close()
+		return nil, err
+	}
+	return &QuicAutoCloseConn{
+		QuicStreamConn: NewQuicStreamConn(stream, sess),
+		cleanup:        func() { _ = packetConn.Close() },
+	}, nil
 }
 
 // ServeQuic accepts sessions and invokes f for the first bidirectional stream.

@@ -106,6 +106,21 @@
         return !secondary || !tunnelListCompact;
     }
 
+    function tunnelStatusChip(labelKey, active, valueKey) {
+        return '<span class="tunnel-status-chip ' + (active ? 'is-open' : 'is-closed') + '" title="' + labelKey + '">'
+            + '<span class="tunnel-status-chip__label" langtag="' + labelKey + '"></span>'
+            + '<span class="tunnel-status-chip__value" langtag="' + valueKey + '"></span></span>';
+    }
+
+    function tunnelStatusSummary(row) {
+        var clientOnline = !!(row && row.Client && row.Client.IsConnect);
+        return '<div class="tunnel-status-summary" aria-label="配置、监听、客户端状态">'
+            + tunnelStatusChip('word-configstatus', !!(row && row.Status), row && row.Status ? 'word-open' : 'word-close')
+            + tunnelStatusChip('word-listenstatus', !!(row && row.RunStatus), row && row.RunStatus ? 'word-open' : 'word-close')
+            + tunnelStatusChip('word-clientstatus', clientOnline, clientOnline ? 'word-online' : 'word-offline')
+            + '</div>';
+    }
+
     /* ZUI-compatible remote table */
     $('#table').npsTable({
         toolbar: "#toolbar",
@@ -305,33 +320,15 @@
                 escape: true
             },
             {
-                field: 'Status',//域值
-                title: '<span langtag="word-configstatus"></span>',//内容
+                field: 'statusSummary',
+                title: '<span data-i18n-zh="配置 | 监听 | 客户端" data-i18n-en="Config | Listener | Client">配置 | 监听 | 客户端</span>',
                 align: 'center',
                 halign: 'center',
-                visible: true,//false表示不显示
-                sortable: true,
-                formatter: function (value, row, index) {
-                    if (value) {
-                        return '<span class="badge badge-primary" langtag="word-open"></span>'
-                    } else {
-                        return '<span class="badge badge-badge" langtag="word-close"></span>'
-                    }
-                }
-            },
-            {
-                field: 'RunStatus',//域值
-                title: '<span langtag="word-listenstatus"></span>',//内容
-                align: 'center',
-                halign: 'center',
-                visible: tunnelListColumnVisible('runstatus', true),//false表示不显示
-                sortable: true,
-                formatter: function (value, row, index) {
-                    if (value) {
-                        return '<span class="badge badge-primary" langtag="word-open"></span>'
-                    } else {
-                        return '<span class="badge badge-badge" langtag="word-close"></span>'
-                    }
+                class: 'tunnel-list__status',
+                visible: true,
+                sortable: false,
+                formatter: function (value, row) {
+                    return tunnelStatusSummary(row);
                 }
             },
             {
@@ -343,21 +340,6 @@
                 sortable: true,
                 formatter: function (value) {
                     return tunnelText(value || 0);
-                }
-            },
-            {
-                field: 'IsConnect',//域值
-                title: '<span langtag="word-clientstatus"></span>',//内容
-                align: 'center',
-                halign: 'center',
-                visible: tunnelListColumnVisible('clientstatus', true),//false表示不显示
-                sortable: true,
-                formatter: function (value, row, index) {
-                    if (row.Client && row.Client.IsConnect) {
-                        return '<span class="badge badge-primary" langtag="word-online"></span>'
-                    } else {
-                        return '<span class="badge badge-badge" langtag="word-offline"></span>'
-                    }
                 }
             },
             {

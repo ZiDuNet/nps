@@ -1,0 +1,49 @@
+<section class="form-page form-page-global" aria-labelledby="login-ban-title">
+    <header class="dashboard-page-header form-page-header">
+        <div class="form-page-heading">
+            <div class="dashboard-page-kicker" data-i18n-zh="运行安全" data-i18n-en="Runtime security">运行安全</div>
+            <h1 id="login-ban-title" data-i18n-zh="登录封禁" data-i18n-en="Login bans">登录封禁</h1>
+            <p data-i18n-zh="查看并清理登录保护产生的临时 IP/账号记录。记录只保存在内存中，重启 NPS 后自动清空。"
+               data-i18n-en="Review and clear temporary IP/account records created by login protection. Records are kept in memory and disappear when NPS restarts.">查看并清理登录保护产生的临时 IP/账号记录。记录只保存在内存中，重启 NPS 后自动清空。</p>
+        </div>
+        <div class="dashboard-page-actions form-page-actions">
+            <button type="button" class="btn btn-outline btn-warning" onclick="cleanLoginBans()"><i class="fa fa-broom" aria-hidden="true"></i><span data-i18n-zh="清理过期" data-i18n-en="Clean expired">清理过期</span></button>
+            <button type="button" class="btn btn-outline btn-danger" onclick="clearLoginBans()"><i class="fa fa-eraser" aria-hidden="true"></i><span data-i18n-zh="全部解封" data-i18n-en="Clear all">全部解封</span></button>
+        </div>
+    </header>
+    <section class="panel ibox zui-panel"><div class="ibox-content">
+        <div class="table-responsive">
+            <table id="login-ban-table" class="table table-hover nps-table"><thead><tr>
+                <th data-i18n-zh="键" data-i18n-en="Key">键</th>
+                <th data-i18n-zh="类型" data-i18n-en="Type">类型</th>
+                <th data-i18n-zh="失败次数" data-i18n-en="Failures">失败次数</th>
+                <th data-i18n-zh="状态" data-i18n-en="Status">状态</th>
+                <th data-i18n-zh="最后失败" data-i18n-en="Last failure">最后失败</th>
+                <th data-i18n-zh="操作" data-i18n-en="Actions">操作</th>
+            </tr></thead><tbody><tr><td colspan="6" class="text-muted" data-i18n-zh="加载中…" data-i18n-en="Loading…">加载中…</td></tr></tbody></table>
+        </div>
+    </div></section>
+</section>
+<script>
+(function () {
+    var endpoint = '{{.web_base_url}}/global/banlist';
+    function escape(value) { return $('<div>').text(value == null ? '' : String(value)).html(); }
+    function refresh() {
+        $.post(endpoint, {}, function (response) {
+            var body = $('#login-ban-table tbody').empty();
+            var rows = response && Array.isArray(response.rows) ? response.rows : [];
+            if (!rows.length) { body.append('<tr><td colspan="6" class="text-muted">暂无记录</td></tr>'); return; }
+            rows.forEach(function (row) {
+                var status = row.is_banned ? '<span class="label label-danger">封禁中</span>' : '<span class="label label-success">已过期</span>';
+                var type = row.ban_type === 'ip' ? 'IP' : '账号哈希';
+                body.append('<tr><td><code>' + escape(row.key) + '</code></td><td>' + type + '</td><td>' + escape(row.fail_times) + '</td><td>' + status + '</td><td>' + escape(row.last_login_time) + '</td><td><button type="button" class="btn btn-xs btn-outline btn-danger js-unban" data-key="' + escape(row.key) + '">解封</button></td></tr>');
+            });
+            if (typeof $('body').setLang === 'function') $('body').setLang('#login-ban-table');
+        }).fail(function () { $('#login-ban-table tbody').html('<tr><td colspan="6" class="text-danger">读取封禁记录失败</td></tr>'); });
+    }
+    window.cleanLoginBans = function () { $.post('{{.web_base_url}}/global/banclean', {}, refresh); };
+    window.clearLoginBans = function () { if (confirm('确认清空所有登录封禁记录？')) $.post('{{.web_base_url}}/global/unbanall', {}, refresh); };
+    $('#login-ban-table').on('click', '.js-unban', function () { var key = $(this).data('key'); $.post('{{.web_base_url}}/global/unban', {key: key}, refresh); });
+    refresh();
+}());
+</script>

@@ -418,6 +418,7 @@ func (s *ClientController) List() {
 	if s.Ctx.Request.Method == "GET" {
 		s.Data["menu"] = "client"
 		s.Data["client_update_min_version"] = npsversion.ClientUpdateMinVersion
+		s.Data["allow_remote_update"] = beego.AppConfig.DefaultBool("allow_remote_update", true)
 		s.setOwnerFilterData()
 		s.SetInfo("client")
 		s.display("client/list")
@@ -439,8 +440,12 @@ func (s *ClientController) List() {
 		list, cnt = server.GetClientListForAllowedIds(start, length, search, sort, order, clientId, s.GetAllowedClientIds())
 	}
 	cmd := make(map[string]interface{})
-	ip := s.Ctx.Request.Host
-	cmd["ip"] = common.GetIpByAddr(ip)
+	global := file.GetDb().GetGlobal()
+	serverURL := ""
+	if global != nil {
+		serverURL = global.ServerUrl
+	}
+	cmd["ip"] = publicBridgeHost(s.Ctx.Request.Host, serverURL, beego.AppConfig.String("bridge_addr"))
 	cmd["bridgeType"] = beego.AppConfig.String("bridge_type")
 	cmd["bridgePort"] = server.Bridge.TunnelPort
 	s.AjaxTable(newClientListRows(list), cnt, cnt, cmd)
@@ -450,6 +455,10 @@ func (s *ClientController) List() {
 // Updating is asynchronous; success here means only that the signal was sent.
 func (s *ClientController) Upgrade() {
 	if !s.RequirePost() || !s.RequireAdmin() {
+		return
+	}
+	if !beego.AppConfig.DefaultBool("allow_remote_update", true) {
+		s.AjaxErr("服务端已全局禁止远程升级")
 		return
 	}
 	id := s.GetIntNoErr("id")

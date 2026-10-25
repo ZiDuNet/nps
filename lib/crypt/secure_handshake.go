@@ -106,6 +106,30 @@ func VerifySecureHandshakeServerProof(verifyKey string, clientPayload, challenge
 	return nil
 }
 
+// SecureHandshakeFingerprintProof authenticates the Bridge certificate pin
+// that the server sends after its challenge-response proof. It lets a modern
+// NPC verify the pin before using it for direct P2P TLS.
+func SecureHandshakeFingerprintProof(verifyKey string, fingerprint []byte) ([]byte, error) {
+	if verifyKey == "" || len(fingerprint) != sha256.Size {
+		return nil, errors.New("invalid secure handshake fingerprint")
+	}
+	mac := hmac.New(sha256.New, []byte(verifyKey))
+	writeHandshakeField(mac, []byte("nps-bridge-fingerprint-v1"))
+	writeHandshakeField(mac, fingerprint)
+	return mac.Sum(nil), nil
+}
+
+func VerifySecureHandshakeFingerprintProof(verifyKey string, fingerprint, proof []byte) error {
+	want, err := SecureHandshakeFingerprintProof(verifyKey, fingerprint)
+	if err != nil {
+		return err
+	}
+	if len(proof) != secureHandshakeProofSize || subtle.ConstantTimeCompare(proof, want) != 1 {
+		return errors.New("secure handshake fingerprint proof mismatch")
+	}
+	return nil
+}
+
 func secureHandshakeClientProof(verifyKey, coreVersion, productVersion string, timestamp, challenge []byte) []byte {
 	mac := hmac.New(sha256.New, []byte(verifyKey))
 	writeHandshakeField(mac, []byte("nps-client-handshake-v1"))

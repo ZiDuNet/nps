@@ -72,6 +72,18 @@ func TestPublicServerHostSeparatesHostnameFromSchemeAndPort(t *testing.T) {
 	}
 }
 
+func TestPublicBridgeHostPrefersConfiguredBridgeAddress(t *testing.T) {
+	if got := publicBridgeHost("panel.example:8081", "https://web.example:443/nps", "bridge.example:9443"); got != "bridge.example" {
+		t.Fatalf("public bridge host = %q, want bridge.example", got)
+	}
+	if got := publicBridgeHost("panel.example:8081", "https://web.example:443/nps", ""); got != "web.example" {
+		t.Fatalf("bridge host fallback = %q, want web.example", got)
+	}
+	if got := publicBridgeHost("panel.example:8081", "", ""); got != "panel.example" {
+		t.Fatalf("request-host fallback = %q, want panel.example", got)
+	}
+}
+
 func TestTunnelListRowsExposeConfiguredPublicAccessAddress(t *testing.T) {
 	db := file.GetDb()
 	oldGlobal := db.GetGlobal()
@@ -165,6 +177,15 @@ func TestIsAdminAuthorizedKeepsAPICredentialsRequestScoped(t *testing.T) {
 }
 
 func TestSameOriginRequest(t *testing.T) {
+	oldTrustedProxyIPs := beego.AppConfig.String("trusted_proxy_ips")
+	oldWebHost := beego.AppConfig.String("web_host")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("trusted_proxy_ips", oldTrustedProxyIPs)
+		_ = beego.AppConfig.Set("web_host", oldWebHost)
+	})
+	_ = beego.AppConfig.Set("trusted_proxy_ips", "192.0.2.1")
+	_ = beego.AppConfig.Set("web_host", "")
+
 	request := httptest.NewRequest("POST", "http://nps.example:8081/index/add", nil)
 	request.Host = "nps.example:8081"
 	request.Header.Set("Origin", "http://nps.example:8081")
@@ -186,6 +207,74 @@ func TestSameOriginRequest(t *testing.T) {
 	request.Header.Set("X-Forwarded-Proto", "https")
 	if !isSameOriginRequest(request) {
 		t.Fatal("trusted proxy scheme should be used when checking origin")
+	}
+}
+
+func TestSameOriginRequestAcceptsTrustedForwardedAuthority(t *testing.T) {
+	oldTrustedProxyIPs := beego.AppConfig.String("trusted_proxy_ips")
+	oldWebHost := beego.AppConfig.String("web_host")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("trusted_proxy_ips", oldTrustedProxyIPs)
+		_ = beego.AppConfig.Set("web_host", oldWebHost)
+	})
+	_ = beego.AppConfig.Set("trusted_proxy_ips", "127.0.0.1")
+	_ = beego.AppConfig.Set("web_host", "")
+
+	request := httptest.NewRequest("POST", "http://127.0.0.1:30080/index/add", nil)
+	request.RemoteAddr = "127.0.0.1:41822"
+	request.Host = "127.0.0.1:30080"
+	request.Header.Set("Origin", "https://console.example.com")
+	request.Header.Set("X-Forwarded-Host", "console.example.com")
+	request.Header.Set("X-Forwarded-Proto", "https")
+	if !isSameOriginRequest(request) {
+		t.Fatal("forwarded host and proto should match the public origin")
+	}
+
+	request.RemoteAddr = "198.51.100.11:41822"
+	if !isSameOriginRequest(request) {
+		t.Fatal("Docker/Nginx bridge peers should not require a trusted-proxy list")
+	}
+}
+
+func TestSameOriginRequestAcceptsConfiguredWebHost(t *testing.T) {
+	oldTrustedProxyIPs := beego.AppConfig.String("trusted_proxy_ips")
+	oldWebHost := beego.AppConfig.String("web_host")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("trusted_proxy_ips", oldTrustedProxyIPs)
+		_ = beego.AppConfig.Set("web_host", oldWebHost)
+	})
+	_ = beego.AppConfig.Set("trusted_proxy_ips", "")
+	_ = beego.AppConfig.Set("web_host", "console.example.com")
+
+	request := httptest.NewRequest("POST", "http://127.0.0.1:30080/index/add", nil)
+	request.Host = "127.0.0.1:30080"
+	request.Header.Set("Origin", "http://console.example.com")
+	if !isSameOriginRequest(request) {
+		t.Fatal("configured web_host should be accepted as a panel origin")
+	}
+}
+
+func TestSameOriginRequestAcceptsBrowserSameOriginBehindHostRewritingProxy(t *testing.T) {
+	oldWebHost := beego.AppConfig.String("web_host")
+	oldAllow := beego.AppConfig.String("allow_x_real_ip")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("web_host", oldWebHost)
+		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
+	})
+	_ = beego.AppConfig.Set("web_host", "")
+	_ = beego.AppConfig.Set("allow_x_real_ip", "false")
+
+	request := httptest.NewRequest("POST", "http://127.0.0.1:30080/login/verify", nil)
+	request.Host = "127.0.0.1:30080"
+	request.Header.Set("Origin", "https://panel.example.com")
+	request.Header.Set("Sec-Fetch-Site", "same-origin")
+	if !isSameOriginRequest(request) {
+		t.Fatal("browser same-origin metadata should survive a proxy Host rewrite")
+	}
+
+	request.Header.Set("Sec-Fetch-Site", "cross-site")
+	if isSameOriginRequest(request) {
+		t.Fatal("cross-site metadata must not bypass the origin check")
 	}
 }
 

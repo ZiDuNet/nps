@@ -324,6 +324,7 @@
                     // and may be hidden on compact screens or by a saved
                     // column preference, which previously made this action
                     // impossible to discover.
+                    {{if .allow_remote_update}}
                     var supported = row.CanRemoteUpdate === true;
                     var online = row.IsConnect === true && row.Status === true && row.NoStore !== true;
                     var disabled = !supported || !online;
@@ -342,6 +343,7 @@
                         + ' data-title-en="' + npsEscapeHtml(titleEn) + '"'
                         + ' data-aria-label-en="' + npsEscapeHtml(titleEn) + '">'
                         + '<i class="fa fa-cloud-download" aria-hidden="true"></i></button>';
+                    {{end}}
                     if (row.Status) {
                         btn_group += '<button type="button" onclick="submitform(\'stop\', \'{{.web_base_url}}/client/changestatus\', {\'id\':' + clientId
                         btn_group += ', \'status\': 0})" class="btn btn-outline btn-warning" data-title-zh="停用客户端" data-title-en="Disable client" data-aria-label-zh="停用客户端" data-aria-label-en="Disable client"><i class="fa fa-pause" aria-hidden="true"></i></button>'

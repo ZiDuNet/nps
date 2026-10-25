@@ -4,9 +4,12 @@
 package proxy
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -22,6 +25,7 @@ import (
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/instancekey"
 	"ehang.io/nps/server/connection"
+	"ehang.io/nps/server/tool"
 	"ehang.io/nps/server/traffic"
 	"ehang.io/nps/web"
 	"github.com/astaxie/beego"
@@ -34,6 +38,7 @@ type TunnelModeServer struct {
 	listener   net.Listener
 	listenerMu sync.RWMutex
 	closed     bool
+	virtual    map[net.Conn]struct{}
 }
 
 // tcp|http|host
@@ -89,20 +94,79 @@ func (s *TunnelModeServer) Close() error {
 	s.closed = true
 	listener := s.listener
 	s.listener = nil
+	virtual := make([]net.Conn, 0, len(s.virtual))
+	for c := range s.virtual {
+		virtual = append(virtual, c)
+		delete(s.virtual, c)
+	}
 	s.listenerMu.Unlock()
+	for _, c := range virtual {
+		_ = c.Close()
+	}
 	if listener == nil {
 		return nil
 	}
 	return listener.Close()
 }
 
+// DialVirtual injects a connection into this tunnel's normal processing path
+// without opening a second public TCP socket. The target sees the original
+// visitor address, so source ACLs, logging, and PROXY-protocol generation keep
+// their usual semantics for nested tunnel routing.
+func (s *TunnelModeServer) DialVirtual(remote string) (net.Conn, error) {
+	if s == nil || s.task == nil || s.process == nil {
+		return nil, errors.New("target tunnel is not configured")
+	}
+	remoteAddr, err := net.ResolveTCPAddr("tcp", strings.TrimSpace(remote))
+	if err != nil {
+		return nil, errors.New("invalid virtual visitor address")
+	}
+	clientConn, serverConn := net.Pipe()
+	s.listenerMu.Lock()
+	listener := s.listener
+	if s.closed || listener == nil {
+		s.listenerMu.Unlock()
+		_ = clientConn.Close()
+		_ = serverConn.Close()
+		return nil, errors.New("target tunnel is not running")
+	}
+	if s.virtual == nil {
+		s.virtual = make(map[net.Conn]struct{})
+	}
+	s.virtual[serverConn] = struct{}{}
+	s.listenerMu.Unlock()
+
+	wrapped := &virtualAddressConn{Conn: serverConn, local: listener.Addr(), remote: remoteAddr}
+	go func() {
+		defer func() {
+			s.listenerMu.Lock()
+			delete(s.virtual, serverConn)
+			s.listenerMu.Unlock()
+			_ = serverConn.Close()
+		}()
+		_ = s.process(conn.NewConn(wrapped), s)
+	}()
+	return clientConn, nil
+}
+
+type virtualAddressConn struct {
+	net.Conn
+	local  net.Addr
+	remote net.Addr
+}
+
+func (c *virtualAddressConn) LocalAddr() net.Addr  { return c.local }
+func (c *virtualAddressConn) RemoteAddr() net.Addr { return c.remote }
+
 // web管理方式
 type WebServer struct {
 	BaseServer
-	lifecycleMu sync.Mutex
-	server      *http.Server
-	listener    net.Listener
-	closed      bool
+	lifecycleMu   sync.Mutex
+	server        *http.Server
+	virtualServer *http.Server
+	listener      net.Listener
+	virtual       *tool.VirtualListener
+	closed        bool
 }
 
 // 开始
@@ -111,8 +175,8 @@ func (s *WebServer) Start() error {
 		return errors.New("web server is nil")
 	}
 	p, _ := beego.AppConfig.Int("web_port")
-	if p == 0 {
-		return errors.New("web management port is not configured")
+	if p < 0 || p > 65535 {
+		return fmt.Errorf("web management port is invalid: %d", p)
 	}
 	beego.BConfig.WebConfig.Session.SessionOn = true
 	// The web server below calls ServeTLS directly instead of Beego's HTTPS
@@ -128,38 +192,58 @@ func (s *WebServer) Start() error {
 		return err
 	}
 	web.InitBeegoAssets()
-	err := errors.New("Web management startup failure ")
-	var l net.Listener
-	if l, err = connection.GetWebManagerListener(); err == nil {
-		beego.InitBeforeHTTPRun()
-		server := newManagedHTTPServer(beego.BeeApp.Handlers)
-		s.lifecycleMu.Lock()
-		if s.closed {
-			s.lifecycleMu.Unlock()
-			_ = l.Close()
-			return net.ErrClosed
+	beego.InitBeforeHTTPRun()
+	handler := beego.BeeApp.Handlers
+	virtual := tool.NewVirtualListener(nil)
+	virtualServer := newManagedHTTPServer(handler)
+	var listener net.Listener
+	var err error
+	if p > 0 {
+		listener, err = connection.GetWebManagerListener()
+		if err != nil {
+			_ = virtual.Close()
+			return fmt.Errorf("start Web management listener: %w", err)
 		}
-		s.listener = l
-		s.server = server
-		s.lifecycleMu.Unlock()
-		if useTLS {
-			keyPath := beego.AppConfig.String("web_key_file")
-			certPath := beego.AppConfig.String("web_cert_file")
-			keyPath = resolveWebTLSPath(keyPath)
-			certPath = resolveWebTLSPath(certPath)
-			err = server.ServeTLS(l, certPath, keyPath)
-		} else {
-			err = server.Serve(l)
-		}
-		s.lifecycleMu.Lock()
-		if s.server == server {
-			s.server = nil
-			s.listener = nil
-		}
-		s.lifecycleMu.Unlock()
-	} else {
-		logs.Error(err)
 	}
+	var server *http.Server
+	if listener != nil {
+		server = newManagedHTTPServer(handler)
+	}
+	s.lifecycleMu.Lock()
+	if s.closed {
+		s.lifecycleMu.Unlock()
+		_ = virtual.Close()
+		if listener != nil {
+			_ = listener.Close()
+		}
+		return net.ErrClosed
+	}
+	s.listener, s.server = listener, server
+	s.virtual, s.virtualServer = virtual, virtualServer
+	tool.SetWebServerListener(virtual)
+	s.lifecycleMu.Unlock()
+	go func() {
+		if serveErr := virtualServer.Serve(virtual); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) && !errors.Is(serveErr, net.ErrClosed) {
+			logs.Error("in-process Web management listener stopped: %v", serveErr)
+		}
+	}()
+	if listener == nil {
+		logs.Info("web_port=0: management panel is available only through the in-process Bridge route")
+		return nil
+	}
+	if useTLS {
+		keyPath := resolveWebTLSPath(beego.AppConfig.String("web_key_file"))
+		certPath := resolveWebTLSPath(beego.AppConfig.String("web_cert_file"))
+		err = server.ServeTLS(listener, certPath, keyPath)
+	} else {
+		err = server.Serve(listener)
+	}
+	s.lifecycleMu.Lock()
+	if s.server == server {
+		s.server = nil
+		s.listener = nil
+	}
+	s.lifecycleMu.Unlock()
 	return err
 }
 
@@ -221,8 +305,13 @@ func configureWebSessionSecurity(useTLS bool) error {
 		return err
 	}
 	managerConfig, err := json.Marshal(map[string]interface{}{
-		"cookieName":      "nps_session",
-		"enableSetCookie": true,
+		"cookieName": "nps_session",
+		// SessionStart otherwise emits a temporary unsigned-looking session id
+		// before the cookie provider serializes the encrypted state. That creates
+		// duplicate Set-Cookie headers and some reverse proxies keep the first
+		// value, losing the login nonce. The deferred/manual SessionRelease calls
+		// below are responsible for the single encrypted cookie.
+		"enableSetCookie": false,
 		"gclifetime":      beego.BConfig.WebConfig.Session.SessionGCMaxLifetime,
 		"maxLifetime":     beego.BConfig.WebConfig.Session.SessionGCMaxLifetime,
 		"secure":          useTLS,
@@ -240,10 +329,99 @@ func configureWebSessionSecurity(useTLS bool) error {
 }
 
 func newManagedHTTPServer(handler http.Handler) *http.Server {
+	if beego.AppConfig.DefaultBool("web_close_on_not_found", false) {
+		handler = closeUnknownWebPaths(handler)
+	}
 	return &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 		IdleTimeout:       httpIdleTimeout,
+	}
+}
+
+// closeUnknownWebPaths keeps the optional hardening behavior local to the
+// management server. Beego still renders normal errors when disabled; when
+// enabled, a 404 is discarded and an HTTP/1.x connection is closed whenever
+// the server supports Hijack. HTTP/2 clients receive the regular 404 because
+// the protocol has no connection-level hijack primitive.
+func closeUnknownWebPaths(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capture := &notFoundCapture{ResponseWriter: w}
+		next.ServeHTTP(capture, r)
+		capture.flush()
+	})
+}
+
+type notFoundCapture struct {
+	http.ResponseWriter
+	status    int
+	committed bool
+	body      bytes.Buffer
+}
+
+func (w *notFoundCapture) WriteHeader(status int) {
+	if w.committed {
+		return
+	}
+	w.status = status
+}
+
+func (w *notFoundCapture) Write(data []byte) (int, error) {
+	if w.committed {
+		return w.ResponseWriter.Write(data)
+	}
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	return w.body.Write(data)
+}
+
+func (w *notFoundCapture) Flush() {
+	w.flushToUnderlying()
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (w *notFoundCapture) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("management response does not support hijacking")
+	}
+	w.committed = true
+	return hijacker.Hijack()
+}
+
+func (w *notFoundCapture) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w *notFoundCapture) flush() {
+	if w.committed {
+		return
+	}
+	if w.status == http.StatusNotFound {
+		if hijacker, ok := w.ResponseWriter.(http.Hijacker); ok {
+			if connection, _, err := hijacker.Hijack(); err == nil {
+				_ = connection.Close()
+				w.committed = true
+				return
+			}
+		}
+	}
+	w.flushToUnderlying()
+}
+
+func (w *notFoundCapture) flushToUnderlying() {
+	if w.committed {
+		return
+	}
+	w.committed = true
+	status := w.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	w.ResponseWriter.WriteHeader(status)
+	if w.body.Len() > 0 {
+		_, _ = w.ResponseWriter.Write(w.body.Bytes())
 	}
 }
 
@@ -266,13 +444,24 @@ func (s *WebServer) Close() error {
 		return nil
 	}
 	s.closed = true
-	server, listener := s.server, s.listener
-	s.server, s.listener = nil, nil
+	server, virtualServer, listener, virtual := s.server, s.virtualServer, s.listener, s.virtual
+	s.server, s.virtualServer, s.listener, s.virtual = nil, nil, nil, nil
+	tool.SetWebServerListener(nil)
 	s.lifecycleMu.Unlock()
 
 	var closeErr error
 	if server != nil {
 		closeErr = server.Close()
+	}
+	if virtualServer != nil {
+		if err := virtualServer.Close(); err != nil && closeErr == nil {
+			closeErr = err
+		}
+	}
+	if virtual != nil {
+		if err := virtual.Close(); err != nil && closeErr == nil {
+			closeErr = err
+		}
 	}
 	if listener != nil {
 		if err := listener.Close(); err != nil && closeErr == nil {

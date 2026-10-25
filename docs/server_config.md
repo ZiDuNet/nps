@@ -25,6 +25,9 @@ Linux/macOS 上可通过 `nps reload` 重新加载 `web_username`、`web_passwor
 | `web_open_ssl` | Web 面板是否启用 HTTPS | `false` |
 | `web_cert_file` | Web HTTPS 证书路径 | `conf/server.pem` |
 | `web_key_file` | Web HTTPS 私钥路径 | `conf/server.key` |
+| `allow_x_real_ip` | 是否读取前置反向代理覆盖后的 `X-Real-IP`/`X-Forwarded-For`；Docker + Nginx 场景只需开启此项并确保代理覆盖这些请求头 | `false` |
+| `trusted_proxy_ips` | 旧版可信代理列表兼容字段；当前 Web 登录和 HTTP/IP 登记来源识别不要求额外填写此列表 | `127.0.0.1` |
+| `x_nps_http_only` | 可选的反代共享密钥；请求携带匹配的 `X-NPS-Http-Only` 时允许使用真实 IP 头并保持 HTTP 入口 | 空 |
 | `open_captcha` | 登录验证码 | `false` |
 | `audit_log_path` | 操作审计日志 JSONL 文件路径；相对路径以程序运行目录为准 | `audit.log` |
 
@@ -34,7 +37,7 @@ Linux/macOS 上可通过 `nps reload` 重新加载 `web_username`、`web_passwor
 
 管理操作审计日志默认保存为 `audit.log`，记录登录、用户/客户端/隧道/Host/全局配置等控制面变更，不记录密码、验证密钥、API Token 原文或代理请求体。文件按 JSONL 追加写入，权限为仅服务账号可读写；管理员可在面板的「操作审计」页面查询。
 
-安全部署建议：保持 `web_ip=127.0.0.1`，通过 HTTPS 反向代理访问；若必须远程直连，只允许受控管理网段并启用 `web_open_ssl`。Docker 容器可用 `NPS_WEB_IP=0.0.0.0` 让容器内反向代理访问，但宿主机端口应只发布到回环或管理网卡。防火墙只开放实际使用的 Bridge、代理和管理端口。不要启用公共密钥 `public_vkey`，除非确实需要；配置和 JSON 数据文件应限制为服务账号可读。
+安全部署建议：保持 `web_ip=127.0.0.1`，通过 HTTPS 反向代理访问；若必须远程直连，只允许受控管理网段并启用 `web_open_ssl`。反代需要保留浏览器的 `Host`，或覆盖设置 `X-Forwarded-Host` 与 `X-Forwarded-Proto`；NPS 会按这些转发后的访问权威检查浏览器 Origin，不要求额外登记代理 IP/域名。启用 `allow_x_real_ip` 后，代理必须覆盖而不是追加真实 IP 头，避免客户端伪造。Docker 容器可用 `NPS_WEB_IP=0.0.0.0` 让容器内反向代理访问，但宿主机端口应只发布到回环或管理网卡。防火墙只开放实际使用的 Bridge、代理和管理端口。不要启用公共密钥 `public_vkey`，除非确实需要；配置和 JSON 数据文件应限制为服务账号可读。
 
 ## Bridge 客户端连接
 
@@ -115,7 +118,7 @@ allow_ports=9001-9009,10001,11000-12000
 
 支持单端口、逗号分隔列表和端口范围。
 
-IP 登记页面可使用 `/ip/register`。填写 `ip_register_port` 后，NPS 会启动只包含登记页面的独立 HTTP 监听，不会暴露管理面板的其他路由；默认绑定 `127.0.0.1`，需要公网或内网其他机器访问时，应显式将 `ip_register_ip` 设为对应网卡地址，并建议同时配置证书与私钥。独立监听只相信 TCP 对端地址，不接受 `X-Forwarded-For` 等可伪造请求头。
+IP 登记页面可使用 `/ip/register`。填写 `ip_register_port` 后，NPS 会启动只包含登记页面的独立 HTTP 监听，不会暴露管理面板的其他路由；默认绑定 `127.0.0.1`，需要公网或内网其他机器访问时，应显式将 `ip_register_ip` 设为对应网卡地址，并建议同时配置证书与私钥。登记页面默认只相信 TCP 对端地址；若经过反向代理，开启 `allow_x_real_ip=true` 后读取代理覆盖的 `X-Real-IP`（无效时回退到 `X-Forwarded-For` 首地址），也可以使用匹配的 `X-NPS-Http-Only` 密钥只对特定入口启用。页面会标明当前使用的是反代传递的公网 IP 还是 NPS 看到的代理 IP；浏览器本身不能可靠地直接提供公网 IP。`trusted_proxy_ips` 仅为旧配置保留，不是 Docker + Nginx 的额外必填项。
 
 登记密钥可以是客户端单独配置的登记密钥/验证密钥，也可以是 `public_register_key`（该密钥将登记应用到所有启用“仅允许已登记 IP”的客户端资源）。登记记录仅保存在内存中，服务端重启后需重新登记。
 

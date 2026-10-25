@@ -1,7 +1,10 @@
 package tool
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -122,6 +125,87 @@ func TestCounterDeltaHandlesCounterReset(t *testing.T) {
 	}
 	if got := counterDelta(5, 100); got != 0 {
 		t.Fatalf("expected reset counter delta to be clamped to zero, got %d", got)
+	}
+}
+
+func TestVirtualListenerDialPreservesVisitorAddressAndTransfersBytes(t *testing.T) {
+	listener := NewVirtualListener(nil)
+	defer listener.Close()
+
+	accepted := make(chan net.Conn, 1)
+	acceptErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			acceptErr <- err
+			return
+		}
+		accepted <- conn
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	client, err := listener.Dial(ctx, "198.51.100.8:43210")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+
+	var server net.Conn
+	select {
+	case server = <-accepted:
+	case err := <-acceptErr:
+		t.Fatalf("accept virtual connection: %v", err)
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for virtual connection")
+	}
+	defer server.Close()
+	if got, want := server.RemoteAddr().String(), "198.51.100.8:43210"; got != want {
+		t.Fatalf("accepted remote address = %q, want %q", got, want)
+	}
+
+	request := make([]byte, 4)
+	readRequest := make(chan error, 1)
+	go func() {
+		_, err := io.ReadFull(server, request)
+		readRequest <- err
+	}()
+	if _, err := client.Write([]byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-readRequest; err != nil {
+		t.Fatal(err)
+	}
+	if string(request) != "ping" {
+		t.Fatalf("request = %q, want ping", request)
+	}
+	response := make([]byte, 4)
+	readResponse := make(chan error, 1)
+	go func() {
+		_, err := io.ReadFull(client, response)
+		readResponse <- err
+	}()
+	if _, err := server.Write([]byte("pong")); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-readResponse; err != nil {
+		t.Fatal(err)
+	}
+	if string(response) != "pong" {
+		t.Fatalf("response = %q, want pong", response)
+	}
+}
+
+func TestVirtualListenerCloseRejectsNewDials(t *testing.T) {
+	listener := NewVirtualListener(nil)
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := listener.Dial(context.Background(), "198.51.100.8:43210"); err == nil {
+		t.Fatal("dial on a closed virtual listener unexpectedly succeeded")
+	}
+	if _, err := listener.Accept(); err == nil {
+		t.Fatal("accept on a closed virtual listener unexpectedly succeeded")
 	}
 }
 

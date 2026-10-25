@@ -1,14 +1,13 @@
 module ehang.io/nps
 
-go 1.24.0
-
-toolchain go1.24.9
+go 1.26.0
 
 require (
 	fyne.io/fyne/v2 v2.2.0
 	github.com/astaxie/beego v1.12.0
 	github.com/c4milo/unpackit v0.0.0-20170704181138-4ed373e9ef1c
 	github.com/ccding/go-stun v0.0.0-20180726100737-be486d185f3d
+	github.com/djylb/holepunch v0.0.0-20261018033353-48c6e4cf6d9e
 	github.com/fatih/color v1.18.0
 	github.com/golang/snappy v0.0.3
 	github.com/google/uuid v1.6.0
@@ -17,9 +16,11 @@ require (
 	github.com/panjf2000/ants/v2 v2.4.2
 	github.com/pires/go-proxyproto v0.8.0
 	github.com/pkg/errors v0.9.1
+	github.com/quic-go/quic-go v0.54.0
 	github.com/shirou/gopsutil/v3 v3.23.10
 	github.com/xtaci/kcp-go v5.4.20+incompatible
-	golang.org/x/net v0.28.0
+	golang.org/x/crypto v0.58.0
+	golang.org/x/net v0.61.0
 	golang.org/x/time v0.14.0
 )
 
@@ -40,6 +41,7 @@ require (
 	github.com/goki/freetype v0.0.0-20181231101311-fa8a33aabaff // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
 	github.com/hooklift/assert v0.0.0-20170704181755-9d1defd6d214 // indirect
+	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/jsummers/gobmp v0.0.0-20151104160322-e2ba15ffa76e // indirect
 	github.com/klauspost/compress v1.4.1 // indirect
 	github.com/klauspost/cpuid v1.3.1 // indirect
@@ -51,7 +53,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
-	github.com/quic-go/quic-go v0.54.0 // indirect
+	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/shiena/ansicolor v0.0.0-20151119151921-a422bbe96644 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/srwiley/oksvg v0.0.0-20200311192757-870daf9aa564 // indirect
@@ -67,14 +69,13 @@ require (
 	github.com/yuin/goldmark v1.4.13 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.uber.org/mock v0.5.0 // indirect
-	golang.org/x/crypto v0.26.0 // indirect
 	golang.org/x/image v0.0.0-20220601225756-64ec528b34cd // indirect
 	golang.org/x/mobile v0.0.0-20211207041440-4e6c2922fdee // indirect
-	golang.org/x/mod v0.18.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.25.0 // indirect
-	golang.org/x/text v0.17.0 // indirect
-	golang.org/x/tools v0.22.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/tools v0.51.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/js/dom v0.0.0-20210725211120-f030747120f2 // indirect

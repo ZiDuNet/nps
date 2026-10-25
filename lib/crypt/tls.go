@@ -8,7 +8,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"log"
@@ -16,13 +18,16 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/astaxie/beego/logs"
 )
 
 var (
-	cert tls.Certificate
+	cert     tls.Certificate
+	rsaKey   *rsa.PrivateKey
+	rsaKeyMu sync.Mutex
 )
 
 func InitTls() {
@@ -33,6 +38,35 @@ func InitTls() {
 	if err != nil {
 		log.Fatalln("Error initializing crypto certs", err)
 	}
+	ensureLoginRSAKey()
+}
+
+// InitTlsFromFiles loads the Bridge certificate configured by the operator.
+// When either path is empty, unreadable, or invalid, callers can fall back to
+// InitTls so an existing installation keeps its historical self-signed
+// behaviour. The certificate is process-local and is shared by Bridge TLS,
+// QUIC and the modern P2P control channel.
+func InitTlsFromFiles(certPath, keyPath string) error {
+	certPath = strings.TrimSpace(certPath)
+	keyPath = strings.TrimSpace(keyPath)
+	if certPath == "" || keyPath == "" {
+		return fmt.Errorf("Bridge certificate and key paths must both be configured")
+	}
+	certPEM, err := os.ReadFile(certPath)
+	if err != nil {
+		return fmt.Errorf("read Bridge certificate %q: %w", certPath, err)
+	}
+	keyPEM, err := os.ReadFile(keyPath)
+	if err != nil {
+		return fmt.Errorf("read Bridge private key %q: %w", keyPath, err)
+	}
+	loaded, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return fmt.Errorf("parse Bridge certificate: %w", err)
+	}
+	cert = loaded
+	ensureLoginRSAKey()
+	return nil
 }
 
 func GetCert() tls.Certificate {
@@ -48,6 +82,155 @@ func GetCertFingerprint() string {
 	}
 	digest := sha256.Sum256(cert.Certificate[0])
 	return hex.EncodeToString(digest[:])
+}
+
+// GetCertificateFingerprint returns the SHA-256 fingerprint of a supplied
+// certificate's leaf. NPC uses this to authenticate the peer on a direct P2P
+// QUIC connection without relying on a public certificate authority.
+func GetCertificateFingerprint(certificate tls.Certificate) []byte {
+	if len(certificate.Certificate) == 0 {
+		return nil
+	}
+	digest := sha256.Sum256(certificate.Certificate[0])
+	return digest[:]
+}
+
+// EnsureTls initializes the process-local certificate when a client uses
+// modern P2P. The NPC certificate is ephemeral and never replaces the NPS
+// server's configured Bridge or HTTPS certificate.
+func EnsureTls() {
+	if len(cert.Certificate) == 0 {
+		InitTls()
+	}
+	ensureLoginRSAKey()
+}
+
+// ensureLoginRSAKey keeps Web login encryption available even when the
+// operator configured an ECDSA/Ed25519 Bridge certificate. Historically the
+// login form submitted a plain password; the RSA key is a separate process
+// local key and is never persisted or used for Bridge traffic.
+func ensureLoginRSAKey() {
+	rsaKeyMu.Lock()
+	defer rsaKeyMu.Unlock()
+	if rsaKey != nil {
+		return
+	}
+	if key, ok := cert.PrivateKey.(*rsa.PrivateKey); ok && key != nil {
+		rsaKey = key
+		return
+	}
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		logs.Error("生成 Web 登录 RSA 密钥失败: %v", err)
+		return
+	}
+	rsaKey = key
+}
+
+// GetRSAPublicKeyPEM returns the public key used by the browser-side login
+// payload. It is generated lazily so tests and standalone handlers do not have
+// to initialise the Bridge TLS listener first.
+func GetRSAPublicKeyPEM() (string, error) {
+	ensureLoginRSAKey()
+	if rsaKey == nil {
+		return "", fmt.Errorf("RSA login key is not initialized")
+	}
+	der, err := x509.MarshalPKIXPublicKey(&rsaKey.PublicKey)
+	if err != nil {
+		return "", err
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})), nil
+}
+
+// LoginPayload is the browser-to-server envelope used to avoid sending the
+// clear-text Web password over a plain HTTP management listener. The nonce is
+// issued by the login page and the timestamp is checked against login_max_skew
+// when the feature is enabled.
+type LoginPayload struct {
+	Nonce     string `json:"n"`
+	Timestamp int64  `json:"t"`
+	Password  string `json:"p"`
+}
+
+// ParseLoginPayload decrypts an RSA-OAEP payload and retains a PKCS#1 v1.5
+// fallback for the JSEncrypt versions shipped by older browsers.
+func ParseLoginPayload(base64Cipher string) (*LoginPayload, error) {
+	plain, err := decryptLoginPayload(base64Cipher)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt login payload: %w", err)
+	}
+	var payload LoginPayload
+	if err := json.Unmarshal(plain, &payload); err != nil {
+		return nil, fmt.Errorf("unmarshal login payload: %w", err)
+	}
+	if strings.TrimSpace(payload.Nonce) == "" || payload.Timestamp <= 0 || payload.Password == "" {
+		return nil, fmt.Errorf("login payload is incomplete")
+	}
+	return &payload, nil
+}
+
+func decryptLoginPayload(base64Cipher string) ([]byte, error) {
+	ensureLoginRSAKey()
+	if rsaKey == nil {
+		return nil, fmt.Errorf("RSA login key is not initialized")
+	}
+	ciphertext, err := base64.StdEncoding.DecodeString(strings.TrimSpace(base64Cipher))
+	if err != nil {
+		return nil, fmt.Errorf("base64 decode error: %w", err)
+	}
+	plain, oaepErr := rsa.DecryptOAEP(sha256.New(), rand.Reader, rsaKey, ciphertext, nil)
+	if oaepErr == nil {
+		return plain, nil
+	}
+	// JSEncrypt defaults to PKCS#1 v1.5. Keep this fallback for compatibility
+	// with the existing browser bundle and older deployments.
+	//nolint:staticcheck // PKCS#1 v1.5 is required for browser compatibility.
+	plain, legacyErr := rsa.DecryptPKCS1v15(rand.Reader, rsaKey, ciphertext)
+	if legacyErr != nil {
+		return nil, fmt.Errorf("RSA decrypt error: oaep: %w; pkcs1v15: %v", oaepErr, legacyErr)
+	}
+	return plain, nil
+}
+
+// NewPinnedTlsClientConfig accepts only the leaf certificate whose SHA-256
+// fingerprint was delivered over an authenticated Bridge stream.
+func NewPinnedTlsClientConfig(fingerprint []byte) *tls.Config {
+	return &tls.Config{
+		MinVersion:         tls.VersionTLS13,
+		InsecureSkipVerify: true, // verified explicitly against the authenticated pin
+		VerifyConnection: func(state tls.ConnectionState) error {
+			if len(fingerprint) != sha256.Size || len(state.PeerCertificates) == 0 {
+				return fmt.Errorf("P2P peer certificate fingerprint is missing")
+			}
+			got := sha256.Sum256(state.PeerCertificates[0].Raw)
+			if subtle.ConstantTimeCompare(got[:], fingerprint) != 1 {
+				return fmt.Errorf("P2P peer certificate fingerprint mismatch")
+			}
+			return nil
+		},
+	}
+}
+
+// NewPinnedTlsServerConfig requires a client certificate and verifies it
+// against the fingerprint exchanged over the authenticated coordinator.
+func NewPinnedTlsServerConfig(fingerprint []byte, certificate tls.Certificate, alpn string) *tls.Config {
+	return &tls.Config{
+		MinVersion:             tls.VersionTLS13,
+		Certificates:           []tls.Certificate{certificate},
+		ClientAuth:             tls.RequireAnyClientCert,
+		SessionTicketsDisabled: true,
+		NextProtos:             []string{alpn},
+		VerifyConnection: func(state tls.ConnectionState) error {
+			if len(fingerprint) != sha256.Size || len(state.PeerCertificates) == 0 {
+				return fmt.Errorf("P2P peer certificate fingerprint is missing")
+			}
+			got := sha256.Sum256(state.PeerCertificates[0].Raw)
+			if subtle.ConstantTimeCompare(got[:], fingerprint) != 1 {
+				return fmt.Errorf("P2P peer certificate fingerprint mismatch")
+			}
+			return nil
+		},
+	}
 }
 
 func NewTlsServerConn(conn net.Conn) net.Conn {

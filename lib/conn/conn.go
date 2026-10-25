@@ -26,8 +26,10 @@ import (
 )
 
 type Conn struct {
-	Conn net.Conn
-	Rb   []byte
+	Conn            net.Conn
+	Rb              []byte
+	PeerFingerprint []byte
+	RemoteServerIP  string
 }
 
 // new conn

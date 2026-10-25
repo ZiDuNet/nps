@@ -28,6 +28,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/crypto/acme/autocert"
 )
 
 func constantTimeSecretEqual(stored, supplied string) bool {
@@ -48,6 +50,7 @@ func formatHTTPFailure(status int, contentType string, body []byte) []byte {
 
 type httpServer struct {
 	BaseServer
+	bridgeServer  *bridge.Bridge
 	lifecycleMu   sync.Mutex
 	started       bool
 	closed        bool
@@ -57,11 +60,22 @@ type httpServer struct {
 	httpsServer   *http.Server
 	httpListener  net.Listener
 	httpsListener net.Listener
+	http3Port     int
+	http3Packet   net.PacketConn
+	http3Server   http3Service
 	httpsProxy    *HttpsServer
+	acmeManager   *autocert.Manager
 	useCache      bool
 	addOrigin     bool
 	cache         *cache.Cache
 	cacheLen      int
+}
+
+// http3Service is the lifecycle surface shared by the optional HTTP/3
+// listener. Keeping it private lets the rest of the proxy remain independent
+// from the concrete quic-go server implementation.
+type http3Service interface {
+	Close() error
 }
 
 const (
@@ -99,18 +113,24 @@ func waitHTTPResponse(wg *sync.WaitGroup, c *conn.Conn) bool {
 	}
 }
 
-func NewHttp(bridge *bridge.Bridge, c *file.Tunnel, httpPort, httpsPort int, useCache bool, cacheLen int, addOrigin bool) *httpServer {
+func NewHttp(bridge *bridge.Bridge, c *file.Tunnel, httpPort, httpsPort int, useCache bool, cacheLen int, addOrigin bool, http3Ports ...int) *httpServer {
+	http3Port := 0
+	if len(http3Ports) > 0 {
+		http3Port = http3Ports[0]
+	}
 	httpServer := &httpServer{
 		BaseServer: BaseServer{
 			task:   c,
 			bridge: bridge,
 			Mutex:  sync.Mutex{},
 		},
-		httpPort:  httpPort,
-		httpsPort: httpsPort,
-		useCache:  useCache,
-		cacheLen:  cacheLen,
-		addOrigin: addOrigin,
+		bridgeServer: bridge,
+		httpPort:     httpPort,
+		httpsPort:    httpsPort,
+		http3Port:    http3Port,
+		useCache:     useCache,
+		cacheLen:     cacheLen,
+		addOrigin:    addOrigin,
 	}
 	if useCache {
 		httpServer.cache = cache.New(cacheLen)
@@ -122,7 +142,10 @@ func (s *httpServer) ipWhiteResponse(c *conn.Conn, r *http.Request, client *file
 	if client == nil {
 		return nil, false
 	}
-	ip := common.GetIpByAddr(c.RemoteAddr().String())
+	ip := effectiveHTTPRemoteAddr(r)
+	if strings.TrimSpace(ip) == "" {
+		ip = common.GetIpByAddr(c.RemoteAddr().String())
+	}
 	if r.URL.Path == "/authIp" {
 		pass := ""
 		if r.Method == http.MethodPost {
@@ -164,7 +187,7 @@ func (s *httpServer) ipWhiteResponse(c *conn.Conn, r *http.Request, client *file
 	}
 
 	errorContent, _ := web.ReadStaticFile("page/auth.html")
-	authHTML := strings.ReplaceAll(string(errorContent), "${ip}", ipWhiteChallengeIP(c.RemoteAddr().String()))
+	authHTML := strings.ReplaceAll(string(errorContent), "${ip}", ipWhiteChallengeIP(ip))
 	return formatHTTPFailure(http.StatusUnauthorized, "text/html; charset=utf-8", []byte(authHTML)), true
 }
 
@@ -186,6 +209,9 @@ func (s *httpServer) Start() error {
 		return errors.New("http server already started")
 	}
 	s.started = true
+	if err := s.initACME(); err != nil {
+		logs.Warn("ACME 自动证书未启用: %v", err)
+	}
 	if s.httpPort > 0 {
 		var listener net.Listener
 		listener, err = connection.GetHttpListener()
@@ -221,6 +247,17 @@ func (s *httpServer) Start() error {
 		}
 		httpsSrv := s.NewServer(s.httpsPort, "https")
 		httpsProxy := NewHttpsServer(listener, s.bridge, s.useCache, s.cacheLen)
+		// Carry the shared HTTP configuration into the custom HTTPS acceptor.
+		// The HTTPS path performs SNI inspection before handing a connection to
+		// net/http, so it otherwise would not see ACME/HTTP3 settings.
+		httpsProxy.bridge = s.bridge
+		httpsProxy.task = s.task
+		httpsProxy.errorContent = s.errorContent
+		httpsProxy.httpPort = s.httpPort
+		httpsProxy.httpsPort = s.httpsPort
+		httpsProxy.http3Port = s.http3Port
+		httpsProxy.addOrigin = s.addOrigin
+		httpsProxy.acmeManager = s.acmeManager
 		s.httpsListener = listener
 		s.httpsServer = httpsSrv
 		s.httpsProxy = httpsProxy
@@ -230,6 +267,16 @@ func (s *httpServer) Start() error {
 				_ = s.Close()
 			}
 		}()
+	}
+	if s.http3Port > 0 {
+		if s.httpsPort <= 0 {
+			logs.Warn("HTTP/3 反代需要启用 HTTPS 入口，已跳过 UDP %d", s.http3Port)
+		} else if packetConn, http3Server, listenErr := s.startHTTP3(); listenErr != nil {
+			logs.Warn("HTTP/3 反代启动失败，继续提供 HTTP/HTTPS: %v", listenErr)
+		} else {
+			s.http3Packet = packetConn
+			s.http3Server = http3Server
+		}
 	}
 	s.lifecycleMu.Unlock()
 	return nil
@@ -246,15 +293,25 @@ func (s *httpServer) Close() error {
 	}
 	s.closed = true
 	httpsProxy, httpsListener, httpsServer := s.httpsProxy, s.httpsListener, s.httpsServer
+	http3Server := s.http3Server
 	httpServer, httpListener := s.httpServer, s.httpListener
 	s.httpsProxy, s.httpsListener, s.httpsServer = nil, nil, nil
 	s.httpServer, s.httpListener = nil, nil
+	s.http3Server, s.http3Packet = nil, nil
 	s.lifecycleMu.Unlock()
 
 	var closeErr error
 	if httpsProxy != nil {
 		closeErr = httpsProxy.Close()
 	}
+	if http3Server != nil {
+		if err := http3Server.Close(); err != nil && closeErr == nil {
+			closeErr = err
+		}
+	}
+	// The concrete HTTP/3 service owns the UDP packet connection. Do not close
+	// it a second time here: quic-go reports the second close as net.ErrClosed,
+	// which used to make an otherwise clean shutdown look like a proxy failure.
 	if httpsServer != nil {
 		if err := httpsServer.Close(); err != nil && closeErr == nil {
 			closeErr = err
@@ -294,8 +351,14 @@ func (s *httpServer) handleTunneling(w http.ResponseWriter, r *http.Request) {
 	}
 	host.RLock()
 	autoHTTPS, hostName := host.AutoHttps, host.Host
+	targetIsHTTPS, httpsJustProxy, tlsOffload := host.TargetIsHTTPS, host.HTTPSJustProxy, host.TLSOffload
 	redirectURL, compatMode := host.RedirectURL, host.CompatMode
 	host.RUnlock()
+	if httpsJustProxy {
+		// The HTTPS listener handles opaque TLS separately. If a client reaches
+		// this HTTP handler with that rule, keep the response deterministic.
+		compatMode = true
+	}
 
 	// 自动 http 301 https
 	if autoHTTPS && r.TLS == nil {
@@ -307,7 +370,7 @@ func (s *httpServer) handleTunneling(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Header.Get("Upgrade") != "" || compatMode {
+	if r.ProtoMajor >= 2 || r.Header.Get("Upgrade") != "" || compatMode || targetIsHTTPS || tlsOffload {
 		rProxy := NewHttpReverseProxy(s)
 		rProxy.ServeHTTP(w, r)
 	} else {
@@ -398,13 +461,18 @@ reset:
 	responseDone = make(chan struct{})
 	responseStreaming = make(chan struct{})
 	requestQueue := newRequestQueue()
-	remoteAddr = strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
-	if len(remoteAddr) == 0 {
+	remoteAddr = effectiveHTTPRemoteAddr(r)
+	if strings.TrimSpace(remoteAddr) == "" {
 		remoteAddr = c.RemoteAddr().String()
 	}
+	// Keep every downstream decision and the bridge link on the same visitor
+	// address.  In a Docker + Nginx deployment Request.RemoteAddr is normally
+	// the container bridge peer, while the effective address comes from the
+	// explicitly enabled forwarding headers.
+	r.RemoteAddr = remoteAddr
 
 	// 判断访问地址是否在全局黑名单内
-	if IsGlobalBlackIp(c.RemoteAddr().String()) {
+	if IsGlobalBlackIp(remoteAddr) {
 		c.Close()
 		return
 	}
@@ -434,18 +502,19 @@ reset:
 	hostTarget.RUnlock()
 	host.RLock()
 	hostName, hostChange, headerChange = host.Host, host.HostChange, host.HeaderChange
+	targetIsHTTPS := host.TargetIsHTTPS
 	pathRewrite = host.PathRewrite
 	registeredOnly = host.RegisteredOnly
 	host.RUnlock()
-	if SourceDenied(c.Conn.RemoteAddr(), hostClient, &host.SourceLists, "host "+strconv.Itoa(host.Id)) {
+	if SourceDeniedString(remoteAddr, hostClient, &host.SourceLists, "host "+strconv.Itoa(host.Id)) {
 		c.Close()
 		return
 	}
-	if isIPWhiteBlocked(hostClient, c.RemoteAddr().String()) {
+	if isIPWhiteBlocked(hostClient, remoteAddr) {
 		failureContent, failureRaw = s.ipWhiteResponse(c, r, hostClient)
 		return
 	}
-	if isClientBlackBlocked(hostClient, c.RemoteAddr().String()) {
+	if isClientBlackBlocked(hostClient, remoteAddr) {
 		c.Close()
 		return
 	}
@@ -490,6 +559,18 @@ reset:
 		return
 	}
 	connClient = conn.GetConnWithLimits(target, lk.Crypt, lk.Compress, clientRate, true, nil, host)
+	if targetIsHTTPS {
+		sni := hostName
+		if hostChange != "" {
+			sni = hostChange
+		}
+		tlsConn, tlsErr := conn.GetTlsConn(readWriteCloserAsNetConn(connClient), sni)
+		if tlsErr != nil {
+			logs.Warn("HTTPS backend handshake failed for host %s target %s: %v", hostName, targetAddr, tlsErr)
+			return
+		}
+		connClient = tlsConn
+	}
 	currentHost := host
 
 	// Read response bytes from the client-side target connection.
@@ -787,16 +868,20 @@ func copyRawChunked(w io.Writer, br *bufio.Reader, capture *traffic.BodyCapture)
 }
 
 func (s *httpServer) NewServer(port int, scheme string) *http.Server {
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Scheme = scheme
+		s.handleTunneling(w, r)
+	}))
+	if scheme == "http" && s.acmeManager != nil {
+		// ACME HTTP-01 challenges must be answered before Host routing. All
+		// non-challenge requests fall through to the normal reverse proxy.
+		handler = s.acmeManager.HTTPHandler(handler)
+	}
 	return &http.Server{
 		Addr:              ":" + strconv.Itoa(port),
 		ReadHeaderTimeout: httpReadHeaderTimeout,
 		IdleTimeout:       httpIdleTimeout,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.URL.Scheme = scheme
-			s.handleTunneling(w, r)
-		}),
-		// Disable HTTP/2.
-		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
+		Handler:           handler,
 	}
 }
 
@@ -826,9 +911,7 @@ func (s *httpServer) NewServerWithTls(port int, scheme string, l net.Listener, c
 			r.URL.Scheme = scheme
 			s.handleTunneling(w, r)
 		}),
-		// Disable HTTP/2.
-		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
-		TLSConfig:    config,
+		TLSConfig: config,
 	}
 
 	return s2.ServeTLS(l, "", "")

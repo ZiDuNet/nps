@@ -44,3 +44,42 @@ func TestRegistrationExpiresAndNormalizesIPv4MappedIPv6(t *testing.T) {
 		t.Fatal("expired registration remained active")
 	}
 }
+
+func TestListAndRevokeExposeOnlyActiveRegistrations(t *testing.T) {
+	Reset()
+	t.Cleanup(Reset)
+	first, _ := ParseIP("198.51.100.11")
+	second, _ := ParseIP("198.51.100.12")
+	Register(7, first, time.Hour)
+	Register(AnyClient, second, time.Hour)
+	rows := List()
+	if len(rows) != 2 {
+		t.Fatalf("List returned %d rows, want 2", len(rows))
+	}
+	if rows[0].ClientID != AnyClient || rows[1].ClientID != 7 {
+		t.Fatalf("List ordering = %#v, want global bucket before client bucket", rows)
+	}
+	if !RevokeString(7, "198.51.100.11:443") {
+		t.Fatal("RevokeString did not remove client registration")
+	}
+	if RegisteredString(7, "198.51.100.11") {
+		t.Fatal("revoked registration remained active")
+	}
+	if len(List()) != 1 {
+		t.Fatal("List still included revoked registration")
+	}
+}
+
+func TestClearExpiredReportsRemovedEntries(t *testing.T) {
+	Reset()
+	t.Cleanup(Reset)
+	ip, _ := ParseIP("203.0.113.44")
+	Register(3, ip, 10*time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+	if removed := ClearExpired(); removed != 1 {
+		t.Fatalf("ClearExpired removed %d entries, want 1", removed)
+	}
+	if Count() != 0 {
+		t.Fatal("expired registration remained after ClearExpired")
+	}
+}

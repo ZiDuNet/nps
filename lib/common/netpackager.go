@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"io/ioutil"
 	"net"
 	"strconv"
 )
@@ -123,23 +122,30 @@ type UDPDatagram struct {
 }
 
 func ReadUDPDatagram(r io.Reader) (*UDPDatagram, error) {
-	b := BufPoolUdp.Get().([]byte)
-	defer BufPoolUdp.Put(b)
-
-	// when r is a streaming (such as TCP connection), we may read more than the required data,
-	// but we don't know how to handle it. So we use io.ReadFull to instead of io.ReadAtLeast
-	// to make sure that no redundant data will be discarded.
-	n, err := io.ReadFull(r, b[:5])
-	if err != nil {
+	// Read the fixed prefix first, then grow the packet as needed. The old
+	// implementation used the MTU-sized UDP pool for the complete datagram;
+	// valid SOCKS5 UDP payloads can be larger than one Ethernet frame and must
+	// not be truncated (or panic while slicing the fixed buffer).
+	prefix := make([]byte, 5)
+	if _, err := io.ReadFull(r, prefix); err != nil {
 		return nil, err
 	}
+	if len(prefix) < 5 {
+		return nil, io.ErrUnexpectedEOF
+	}
+	var raw []byte
+	raw = append(raw, prefix...)
 
 	header := &UDPHeader{
-		Rsv:  binary.BigEndian.Uint16(b[:2]),
-		Frag: b[2],
+		Rsv:  binary.BigEndian.Uint16(prefix[:2]),
+		Frag: prefix[2],
 	}
 
-	atype := b[3]
+	// when r is a streaming (such as TCP connection), callers use the
+	// reserved length field to delimit the packet. For a regular SOCKS5 UDP
+	// datagram the reader already contains exactly one packet, so consume the
+	// remainder without imposing the old MTU-sized limit.
+	atype := prefix[3]
 	hlen := 0
 	switch atype {
 	case ipV4:
@@ -147,36 +153,38 @@ func ReadUDPDatagram(r io.Reader) (*UDPDatagram, error) {
 	case ipV6:
 		hlen = 22
 	case domainName:
-		hlen = 7 + int(b[4])
+		hlen = 7 + int(prefix[4])
 	default:
 		return nil, errors.New("addr not support")
 	}
 	dlen := int(header.Rsv)
-	if dlen == 0 { // standard SOCKS5 UDP datagram
-		extra, err := ioutil.ReadAll(r) // we assume no redundant data
+	if dlen == 0 {
+		extra, err := io.ReadAll(r)
 		if err != nil {
 			return nil, err
 		}
-		copy(b[n:], extra)
-		n += len(extra) // total length
-		dlen = n - hlen // data length
-	} else { // extended feature, for UDP over TCP, using reserved field as data length
-		if _, err := io.ReadFull(r, b[n:hlen+dlen]); err != nil {
+		raw = append(raw, extra...)
+	} else {
+		need := hlen + dlen - len(raw)
+		if need < 0 {
+			return nil, errors.New("invalid UDP data length")
+		}
+		extra := make([]byte, need)
+		if _, err := io.ReadFull(r, extra); err != nil {
 			return nil, err
 		}
-		n = hlen + dlen
+		raw = append(raw, extra...)
+	}
+	if len(raw) < hlen {
+		return nil, io.ErrUnexpectedEOF
 	}
 	header.Addr = new(Addr)
-	if err := header.Addr.Decode(b[3:hlen]); err != nil {
+	if err := header.Addr.Decode(raw[3:hlen]); err != nil {
 		return nil, err
 	}
-	data := make([]byte, dlen)
-	copy(data, b[hlen:n])
-	d := &UDPDatagram{
-		Header: header,
-		Data:   data,
-	}
-	return d, nil
+	data := make([]byte, len(raw)-hlen)
+	copy(data, raw[hlen:])
+	return &UDPDatagram{Header: header, Data: data}, nil
 }
 
 func NewUDPDatagram(header *UDPHeader, data []byte) *UDPDatagram {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -54,9 +55,10 @@ var socks5HandshakeTimeout = 10 * time.Second
 
 type Sock5ModeServer struct {
 	BaseServer
-	listener   net.Listener
-	listenerMu sync.RWMutex
-	closed     bool
+	listener    net.Listener
+	listenerMu  sync.RWMutex
+	udpRegistry *socks5UDPRegistry
+	closed      bool
 }
 
 type socksTaskSnapshot struct {
@@ -362,6 +364,20 @@ func (s *Sock5ModeServer) handleUDP(c net.Conn) {
 }
 
 func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSnapshot) {
+	// A SOCKS5 UDP associate uses a shared UDP socket in the modern path. The
+	// legacy implementation below remains available for direct callers and for
+	// old in-process integrations that do not have a registry attached.
+	s.listenerMu.RLock()
+	registry := s.udpRegistry
+	s.listenerMu.RUnlock()
+	if registry != nil {
+		if err := registry.newSession(c, snapshot); err != nil {
+			logs.Warn("reject socks5 UDP associate from %s: %s", c.RemoteAddr(), err)
+			_ = c.Close()
+		}
+		return
+	}
+
 	if c == nil {
 		return
 	}
@@ -466,8 +482,8 @@ func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSn
 	var clientAddrMu sync.Mutex
 	// copy buffer
 	go func() {
-		b := common.BufPoolUdp.Get().([]byte)
-		defer common.BufPoolUdp.Put(b)
+		b := common.BufPool.Get().([]byte)
+		defer common.BufPool.Put(b)
 		defer c.Close()
 
 		for {
@@ -500,11 +516,11 @@ func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSn
 
 	go func() {
 		var l int32
-		b := common.BufPoolUdp.Get().([]byte)
-		defer common.BufPoolUdp.Put(b)
+		b := common.BufPool.Get().([]byte)
+		defer common.BufPool.Put(b)
 		defer c.Close()
 		for {
-			if err := binary.Read(targetStream, binary.LittleEndian, &l); err != nil || l >= common.PoolSizeUdp || l <= 0 {
+			if err := binary.Read(targetStream, binary.LittleEndian, &l); err != nil || l >= common.PoolSize || l <= 0 {
 				if err != nil {
 					logs.Warn("read len bytes error", err.Error())
 				} else {
@@ -529,8 +545,8 @@ func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSn
 		}
 	}()
 
-	b := common.BufPoolUdp.Get().([]byte)
-	defer common.BufPoolUdp.Put(b)
+	b := common.BufPool.Get().([]byte)
+	defer common.BufPool.Put(b)
 	for {
 		_, err := io.ReadFull(c, b)
 		if err != nil {
@@ -701,14 +717,39 @@ func (s *Sock5ModeServer) Start() error {
 	if err != nil {
 		return err
 	}
+	// TCP and UDP may share a port. Binding the UDP associate socket after the
+	// TCP listener also supports port=0 by reusing the port selected by the
+	// kernel for the TCP listener.
+	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok || tcpAddr == nil {
+		_ = listener.Close()
+		return errors.New("socks5 listener has invalid address")
+	}
+	udpAddr := &net.UDPAddr{IP: tcpAddr.IP, Port: tcpAddr.Port}
+	udpListener, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("bind socks5 UDP associate listener: %w", err)
+	}
+	registry, err := newSocks5UDPRegistry(s.bridge, s.task, udpListener)
+	if err != nil {
+		_ = udpListener.Close()
+		_ = listener.Close()
+		return err
+	}
+	registry.owner = s
+
 	s.listenerMu.Lock()
 	if s.closed {
 		s.listenerMu.Unlock()
+		_ = registry.Close()
 		_ = listener.Close()
 		return net.ErrClosed
 	}
 	s.listener = listener
+	s.udpRegistry = registry
 	s.listenerMu.Unlock()
+	registry.start()
 	conn.Accept(listener, func(c net.Conn) {
 		// SOCKS consumes a slot when a CONNECT/UDP ASSOCIATE request is accepted,
 		// not when a TCP handshake arrives. Reserving it here as well would count
@@ -745,7 +786,12 @@ func (s *Sock5ModeServer) Close() error {
 	s.closed = true
 	listener := s.listener
 	s.listener = nil
+	registry := s.udpRegistry
+	s.udpRegistry = nil
 	s.listenerMu.Unlock()
+	if registry != nil {
+		_ = registry.Close()
+	}
 	if listener == nil {
 		return nil
 	}

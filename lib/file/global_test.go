@@ -44,11 +44,11 @@ func TestGlobalIPDeniedSupportsCIDRAndPriority(t *testing.T) {
 	}
 }
 
-func TestGlobalIPDeniedSkipsInvalidLegacyRules(t *testing.T) {
+func TestGlobalIPDeniedFailsClosedForInvalidPersistedRules(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	db.setGlobal(&Glob{BlackIpList: []string{"not-an-ip"}})
-	if db.GlobalIPDenied("198.51.100.7:1234") {
-		t.Fatal("invalid legacy blacklist entries should be ignored as before")
+	if !db.GlobalIPDenied("198.51.100.7:1234") {
+		t.Fatal("invalid persisted global rules should fail closed")
 	}
 }
 

@@ -135,6 +135,18 @@ func runSecureHandshakePeer(peer net.Conn, verifyKey string) error {
 	if _, err := c.Write(serverProof); err != nil {
 		return err
 	}
+	crypt.EnsureTls()
+	fingerprint := crypt.GetCertificateFingerprint(crypt.GetCert())
+	if err := c.WriteLenContent(fingerprint); err != nil {
+		return err
+	}
+	fingerprintProof, err := crypt.SecureHandshakeFingerprintProof(verifyKey, fingerprint)
+	if err != nil {
+		return err
+	}
+	if _, err := c.Write(fingerprintProof); err != nil {
+		return err
+	}
 	flag, err := c.ReadFlag()
 	if err != nil {
 		return err

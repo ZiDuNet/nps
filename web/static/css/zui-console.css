@@ -520,12 +520,48 @@ body.zui-app .form-section-toggle {
     text-align: left;
     cursor: pointer;
 }
+body.zui-app .form-section-toggle__label {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    color: inherit;
+}
+body.zui-app .form-section-toggle__label > i { flex: 0 0 auto; }
+body.zui-app .form-section-toggle__meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    margin-left: auto;
+    color: var(--nps-muted);
+    font-size: 11px;
+    font-weight: 500;
+}
+body.zui-app .form-section-toggle__summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.zui-app .form-section-toggle__tier {
+    flex: 0 0 auto;
+    padding: 3px 7px;
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .02em;
+}
 body.zui-app .form-section-toggle:focus-visible { outline: 2px solid var(--nps-primary) !important; outline-offset: 2px; }
 body.zui-app .form-section-toggle__chevron { flex: 0 0 auto; margin: 0 !important; transition: transform .16s ease; }
 body.zui-app .form-section-title:not(.is-collapsed) .form-section-toggle__chevron { transform: rotate(180deg); }
 body.zui-app .form-workflow-form > .form-section-content-collapsed { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
     body.zui-app .form-section-toggle__chevron { transition: none; }
+}
+@media (max-width: 640px) {
+    body.zui-app .form-section-toggle__summary { display: none; }
+    body.zui-app .form-section-toggle__meta { gap: 6px; }
 }
 body.zui-app .hr-line-dashed { margin: 28px 0 !important; border-top: 1px solid var(--nps-line) !important; background: none !important; }
 body.zui-app .toggle-field { display: inline-flex; align-items: center; gap: 9px; min-height: 39px; }
@@ -2442,6 +2478,53 @@ body.zui-app .management-page--host .nps-table__grid td.host-list__status {
     white-space: nowrap;
     overflow: visible !important;
 }
+body.zui-app .management-page--tunnel .nps-table__grid th.tunnel-list__status,
+body.zui-app .management-page--tunnel .nps-table__grid td.tunnel-list__status {
+    width: 190px !important;
+    min-width: 190px !important;
+    max-width: 190px !important;
+    padding-right: 6px !important;
+    padding-left: 6px !important;
+    text-align: center !important;
+    white-space: nowrap;
+    overflow: visible !important;
+}
+.tunnel-status-summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    max-width: 100%;
+}
+.tunnel-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    padding: 4px 5px;
+    border: 1px solid var(--nps-line);
+    border-radius: 5px;
+    color: var(--nps-muted);
+    background: var(--nps-surface-subtle);
+    font-size: 10px;
+    line-height: 1;
+    white-space: nowrap;
+}
+.tunnel-status-chip::before {
+    width: 6px;
+    height: 6px;
+    content: '';
+    border-radius: 50%;
+    background: var(--nps-faint);
+}
+.tunnel-status-chip.is-open {
+    color: var(--nps-success);
+    border-color: var(--nps-success);
+    background: var(--nps-success-soft);
+}
+.tunnel-status-chip.is-open::before { background: var(--nps-success); }
+.tunnel-status-chip__label { font-weight: 700; }
+.tunnel-status-chip__value { font-weight: 600; }
 body.zui-app .management-page--tunnel .nps-table__grid th.tunnel-list__actions,
 body.zui-app .management-page--tunnel .nps-table__grid td.tunnel-list__actions {
     width: 210px !important;

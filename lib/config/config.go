@@ -26,14 +26,24 @@ type CommonConfig struct {
 	ProxyUrl              string
 	Client                *file.Client
 	DisconnectTime        int
+	LocalIP               string
+	LocalIPForward        bool
+	DnsServer             string
+	NtpServer             string
+	NtpInterval           int
+	FallbackSecret        bool
+	SecretLink            bool
+	DisableRemoteUpdate   bool
 }
 
 type LocalServer struct {
-	Type     string
-	Port     int
-	Ip       string
-	Password string
-	Target   string
+	Type       string
+	Port       int
+	Ip         string
+	Password   string
+	Target     string
+	Fallback   bool
+	LocalProxy bool
 }
 
 type Config struct {
@@ -218,6 +228,22 @@ func dealCommon(s string) *CommonConfig {
 			ensureClientConfig(c).Cnf.Crypt = common.GetBoolByStr(value)
 		case "proxy_url":
 			c.ProxyUrl = value
+		case "local_ip":
+			c.LocalIP = value
+		case "local_ip_forward":
+			c.LocalIPForward = common.GetBoolByStr(value)
+		case "dns_server":
+			c.DnsServer = value
+		case "ntp_server":
+			c.NtpServer = value
+		case "ntp_interval":
+			c.NtpInterval = common.GetIntNoErrByStr(value)
+		case "fallback_secret":
+			c.FallbackSecret = common.GetBoolByStr(value)
+		case "secret_link":
+			c.SecretLink = common.GetBoolByStr(value)
+		case "disable_remote_update":
+			c.DisableRemoteUpdate = common.GetBoolByStr(value)
 		case "rate_limit":
 			ensureClientConfig(c).RateLimit = common.GetIntNoErrByStr(value)
 		case "flow_limit":
@@ -286,6 +312,14 @@ func dealHost(s string) *file.Host {
 			h.AutoCORS = common.GetBoolByStr(value)
 		case "compat_mode":
 			h.CompatMode = common.GetBoolByStr(value)
+		case "target_is_https":
+			h.TargetIsHTTPS = common.GetBoolByStr(value)
+		case "https_just_proxy":
+			h.HTTPSJustProxy = common.GetBoolByStr(value)
+		case "auto_ssl":
+			h.AutoSSL = common.GetBoolByStr(value)
+		case "tls_offload":
+			h.TLSOffload = common.GetBoolByStr(value)
 		case "auth":
 			h.Auth = value
 		case "multi_account":
@@ -437,6 +471,10 @@ func delLocalService(s string) *LocalServer {
 			l.Password = value
 		case "target_addr":
 			l.Target = value
+		case "fallback_secret":
+			l.Fallback = common.GetBoolByStr(value)
+		case "local_proxy":
+			l.LocalProxy = common.GetBoolByStr(value)
 		}
 	}
 	return l

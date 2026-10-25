@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const VERSION = "1.1.29"
+const VERSION = "1.1.30"
 
 // SecureHandshakeMinVersion is the first NPC release that uses the secure
 // Bridge handshake. Clients at or below 1.1.28 remain on the legacy handshake
@@ -38,6 +38,26 @@ const ClientUpdateMinVersion = "1.1.23"
 // older clients because their control reader would interpret the payload as a
 // different message and desynchronise the connection.
 const HealthConfigMinVersion = "1.1.29"
+
+// ModernP2PMinVersion is the first ZiDuNet NPC release that understands the
+// hole-punch control protocol. Older clients continue to use the historical
+// UDP/KCP P2P path and are never sent modern control frames.
+const ModernP2PMinVersion = "1.1.29"
+
+// KeyedFileMinVersion is the first NPC release that identifies each file
+// access mux independently. Older clients continue to use the legacy shared
+// file channel and handshake without an extra payload.
+const KeyedFileMinVersion = "1.1.30"
+
+func SupportsKeyedFiles(release string) bool {
+	comparison, err := Compare(release, KeyedFileMinVersion)
+	return err == nil && comparison >= 0
+}
+
+func SupportsModernP2P(release string) bool {
+	comparison, err := Compare(release, ModernP2PMinVersion)
+	return err == nil && comparison >= 0
+}
 
 // GitHubRepository is the canonical source for release metadata and binaries.
 const GitHubRepository = "ZiDuNet/nps"

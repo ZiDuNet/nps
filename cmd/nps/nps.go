@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"ehang.io/nps/bridge"
 	"ehang.io/nps/lib/daemon"
 	"ehang.io/nps/server"
@@ -18,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	npsconf "ehang.io/nps/conf"
 	"ehang.io/nps/lib/file"
@@ -29,6 +31,7 @@ import (
 	"ehang.io/nps/web/controllers"
 	"ehang.io/nps/web/routers"
 
+	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/web"
@@ -47,6 +50,8 @@ var (
 	npsLogPath       = flag.String("log_path", "", "nps log path")
 	ipRegisterMu     sync.Mutex
 	ipRegisterServer *server.IPRegistrationServer
+	accessListMu     sync.Mutex
+	accessListCancel context.CancelFunc
 )
 
 func main() {
@@ -104,7 +109,34 @@ func main() {
 		log.Fatalln("load config file error", err.Error())
 	}
 	file.SetConnectionHistoryLimit(beego.AppConfig.DefaultInt("client_history_limit", 5))
+	file.SetFlowLimitType(beego.AppConfig.String("flow_limit_type"))
 	audit.Configure(beego.AppConfig.String("audit_log_path"))
+	if timezone := strings.TrimSpace(beego.AppConfig.String("timezone")); timezone != "" {
+		if err := common.SetTimezone(timezone); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid timezone %q: %v\n", timezone, err)
+		}
+	}
+	if ntpServer := strings.TrimSpace(beego.AppConfig.String("ntp_server")); ntpServer != "" {
+		interval := time.Duration(beego.AppConfig.DefaultInt("ntp_interval", 5)) * time.Minute
+		common.ConfigureTimeSync(ntpServer, interval)
+	}
+	if dnsServer := strings.TrimSpace(beego.AppConfig.String("dns_server")); dnsServer != "" {
+		if err := common.SetCustomDNS(dnsServer); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid dns_server %q: %v\n", dnsServer, err)
+		}
+	}
+	geoIPPath := strings.TrimSpace(beego.AppConfig.String("geoip_path"))
+	geoSitePath := strings.TrimSpace(beego.AppConfig.String("geosite_path"))
+	if geoIPPath != "" || geoSitePath != "" {
+		if geoIPPath != "" && !filepath.IsAbs(geoIPPath) {
+			geoIPPath = filepath.Join(common.GetRunPath(), geoIPPath)
+		}
+		if geoSitePath != "" && !filepath.IsAbs(geoSitePath) {
+			geoSitePath = filepath.Join(common.GetRunPath(), geoSitePath)
+		}
+		acl.SetGeoData(geoIPPath, geoSitePath)
+	}
+	acl.SetMaxRules(beego.AppConfig.DefaultInt("acl_max_rules", acl.DefaultMaxRules))
 
 	common.InitPProfFromFile()
 	if level = beego.AppConfig.String("log_level"); level == "" {
@@ -453,6 +485,7 @@ func (p *nps) Start(s service.Service) error {
 func (p *nps) Stop(s service.Service) error {
 	_, _ = s.Status()
 	closeIPRegistrationServer()
+	stopAccessListWatcher()
 	p.stopOnce.Do(func() { close(p.exit) })
 	if service.Interactive() {
 		os.Exit(0)
@@ -493,9 +526,27 @@ func run() error {
 	logs.Info("日志路径：" + *npsLogPath)
 	logs.Info("the config path is:" + common.GetRunPath())
 	logs.Info("the version of server is %s ,allow client core version to be %s,tls enable is %t", version.VERSION, version.GetVersion(), bridge.ServerTlsEnable)
-	connection.InitConnectionService()
-	//crypt.InitTls(filepath.Join(common.GetRunPath(), "conf", "server.pem"), filepath.Join(common.GetRunPath(), "conf", "server.key"))
-	crypt.InitTls()
+	if err := connection.InitConnectionService(); err != nil {
+		return fmt.Errorf("initialize connection listeners: %w", err)
+	}
+	bridgeCert := strings.TrimSpace(beego.AppConfig.String("bridge_cert_file"))
+	bridgeKey := strings.TrimSpace(beego.AppConfig.String("bridge_key_file"))
+	if bridgeCert != "" && !filepath.IsAbs(bridgeCert) {
+		bridgeCert = filepath.Join(common.GetRunPath(), bridgeCert)
+	}
+	if bridgeKey != "" && !filepath.IsAbs(bridgeKey) {
+		bridgeKey = filepath.Join(common.GetRunPath(), bridgeKey)
+	}
+	if bridgeCert != "" || bridgeKey != "" {
+		if err := crypt.InitTlsFromFiles(bridgeCert, bridgeKey); err != nil {
+			logs.Warn("配置的 Bridge 证书加载失败，将生成临时证书：%v", err)
+			crypt.InitTls()
+		} else {
+			logs.Info("已加载配置的 Bridge TLS 证书")
+		}
+	} else {
+		crypt.InitTls()
+	}
 	if fingerprint := crypt.GetCertFingerprint(); fingerprint != "" {
 		logs.Info("TLS Bridge certificate SHA-256 fingerprint: %s", fingerprint)
 	}
@@ -511,6 +562,7 @@ func run() error {
 		return fmt.Errorf("start standalone IP registration page: %w", err)
 	}
 	if err := server.StartNewServer(bridgePort, task, beego.AppConfig.String("bridge_type"), timeout); err != nil {
+		stopAccessListWatcher()
 		if registrationServer != nil {
 			_ = registrationServer.Close()
 		}
@@ -519,7 +571,40 @@ func run() error {
 	ipRegisterMu.Lock()
 	ipRegisterServer = registrationServer
 	ipRegisterMu.Unlock()
+	startAccessListWatcher()
 	return nil
+}
+
+// startAccessListWatcher keeps GeoIP/Geosite-backed ACLs in sync with files
+// updated by an external downloader. It is intentionally started only when a
+// data path is configured, and is idempotent across service reload paths.
+func startAccessListWatcher() {
+	if strings.TrimSpace(beego.AppConfig.String("geoip_path")) == "" && strings.TrimSpace(beego.AppConfig.String("geosite_path")) == "" {
+		return
+	}
+	accessListMu.Lock()
+	defer accessListMu.Unlock()
+	if accessListCancel != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	accessListCancel = cancel
+	interval := time.Minute
+	if seconds := beego.AppConfig.DefaultInt("geo_reload_interval", 60); seconds > 0 {
+		interval = time.Duration(seconds) * time.Second
+	}
+	go file.WatchAccessLists(ctx, interval)
+	logs.Info("GeoIP/Geosite ACL 热加载已启用，检查周期：%s", interval)
+}
+
+func stopAccessListWatcher() {
+	accessListMu.Lock()
+	cancel := accessListCancel
+	accessListCancel = nil
+	accessListMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func closeIPRegistrationServer() {

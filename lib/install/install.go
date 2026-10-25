@@ -207,6 +207,21 @@ func UpdateNpc() {
 	UpdateNpcNew()
 }
 
+// ForceUpdateNpc re-downloads and installs the latest formal Release even
+// when its version is equal to the binary currently running. This is useful
+// for repairing a partially replaced binary or refreshing a locally built
+// executable back to the published artifact.
+func ForceUpdateNpc() {
+	updated, err := ForceUpdateNpcResult()
+	if err != nil {
+		log.Println("客户端强制更新失败：", err)
+		return
+	}
+	if updated {
+		fmt.Println("强制更新成功，请重启客户端")
+	}
+}
+
 func UpdateNpcNew() {
 	updated, err := UpdateNpcResult()
 	if err != nil {
@@ -224,7 +239,14 @@ func UpdateNpcNew() {
 func UpdateNpcResult() (bool, error) {
 	npcUpdateMu.Lock()
 	defer npcUpdateMu.Unlock()
-	return updateNpcResult("")
+	return updateNpcResult("", false)
+}
+
+// ForceUpdateNpcResult is the programmatic form of `npc update-force`.
+func ForceUpdateNpcResult() (bool, error) {
+	npcUpdateMu.Lock()
+	defer npcUpdateMu.Unlock()
+	return updateNpcResult("", true)
 }
 
 // UpdateNpcResultAt is the same update operation but writes the NPC binary to
@@ -234,22 +256,26 @@ func UpdateNpcResult() (bool, error) {
 func UpdateNpcResultAt(targetPath string) (bool, error) {
 	npcUpdateMu.Lock()
 	defer npcUpdateMu.Unlock()
-	return updateNpcResult(targetPath)
+	return updateNpcResult(targetPath, false)
 }
 
-func updateNpcResult(targetPath string) (bool, error) {
+func updateNpcResult(targetPath string, force bool) (bool, error) {
 	release, err := fetchLatestRelease()
 	if err != nil {
 		return false, fmt.Errorf("获取最新版本失败：%w", err)
 	}
 	log.Println("NPC 最新版本为：", release.TagName)
-	available, err := updateAvailable(release.TagName)
-	if err != nil {
-		return false, fmt.Errorf("检查版本失败：%w", err)
-	}
-	if !available {
-		log.Println("NPC 当前已是最新版本，无需更新")
-		return false, nil
+	if !force {
+		available, err := updateAvailable(release.TagName)
+		if err != nil {
+			return false, fmt.Errorf("检查版本失败：%w", err)
+		}
+		if !available {
+			log.Println("NPC 当前已是最新版本，无需更新")
+			return false, nil
+		}
+	} else {
+		log.Println("已启用强制更新，将重新安装 Release：", release.TagName)
 	}
 	// Downloads must not require the service account to write into the
 	// installation directory. Only the final executable replacement needs

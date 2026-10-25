@@ -46,6 +46,11 @@ func (s *AuthController) GetAuthKey() {
 }
 
 func (s *AuthController) GetTime() {
+	if s.Ctx != nil && s.Ctx.ResponseWriter != nil {
+		s.Ctx.ResponseWriter.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		s.Ctx.ResponseWriter.Header().Set("Pragma", "no-cache")
+		s.Ctx.ResponseWriter.Header().Set("Expires", "0")
+	}
 	m := make(map[string]interface{})
 	m["time"] = time.Now().Unix()
 	s.Data["json"] = m

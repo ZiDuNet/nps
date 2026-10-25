@@ -75,6 +75,19 @@ func TestSecureClientHandshakeAuthenticatesClientAndServer(t *testing.T) {
 	if err := crypt.VerifySecureHandshakeServerProof(verifyKey, payload, challenge, serverProof); err != nil {
 		t.Fatalf("server proof verification failed: %v", err)
 	}
+	// Modern clients also receive the Bridge certificate fingerprint and its
+	// key-bound proof before the connection type is read.
+	fingerprint, err := client.GetShortLenContent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fingerprintProof, err := client.GetShortContent(32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := crypt.VerifySecureHandshakeFingerprintProof(verifyKey, fingerprint, fingerprintProof); err != nil {
+		t.Fatalf("bridge fingerprint proof verification failed: %v", err)
+	}
 	result := <-serverResult
 	if result.err != nil {
 		t.Fatal(result.err)
@@ -457,5 +470,99 @@ func TestRequestClientHealthConfigIsVersionGatedAndWireCompatible(t *testing.T) 
 				t.Fatalf("requestClientHealthConfig: %v", err)
 			}
 		})
+	}
+}
+
+func TestSelectSessionRoundRobinUsesEveryLiveSignal(t *testing.T) {
+	if err := SetClientSelectMode("roundrobin"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = SetClientSelectMode("primary") })
+	rootServer, rootPeer := net.Pipe()
+	defer rootPeer.Close()
+	variantServer, variantPeer := net.Pipe()
+	defer variantPeer.Close()
+	root := NewClient(nil, nil, conn.NewConn(rootServer), "1.1.29")
+	variant := NewClient(nil, nil, conn.NewConn(variantServer), "1.1.30")
+	variant.parent = root
+	root.sessions = []*Client{root, variant}
+	b := &Bridge{}
+	b.Client.Store(9, root)
+	first := b.selectSession(9, "signal")
+	second := b.selectSession(9, "signal")
+	if first != root || second != variant {
+		t.Fatalf("round-robin sessions = %p, %p; want root then variant", first, second)
+	}
+}
+
+func TestSelectSessionRandomCanChooseAllLiveSignals(t *testing.T) {
+	if err := SetClientSelectMode("random"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = SetClientSelectMode("primary") })
+	rootServer, rootPeer := net.Pipe()
+	defer rootPeer.Close()
+	variantServer, variantPeer := net.Pipe()
+	defer variantPeer.Close()
+	root := NewClient(nil, nil, conn.NewConn(rootServer), "1.1.29")
+	variant := NewClient(nil, nil, conn.NewConn(variantServer), "1.1.30")
+	variant.parent = root
+	root.sessions = []*Client{root, variant}
+	b := &Bridge{}
+	b.Client.Store(10, root)
+	seen := map[*Client]bool{}
+	for i := 0; i < 128; i++ {
+		seen[b.selectSession(10, "signal")] = true
+	}
+	if !seen[root] || !seen[variant] {
+		t.Fatalf("random selection did not visit both sessions: %#v", seen)
+	}
+}
+
+func TestDelClientClosesAllDuplicateSignals(t *testing.T) {
+	rootServer, rootPeer := net.Pipe()
+	defer rootPeer.Close()
+	variantServer, variantPeer := net.Pipe()
+	defer variantPeer.Close()
+	root := NewClient(nil, nil, conn.NewConn(rootServer), "1.1.29")
+	variant := NewClient(nil, nil, conn.NewConn(variantServer), "1.1.30")
+	variant.parent = root
+	root.sessions = []*Client{root, variant}
+	b := &Bridge{CloseClient: make(chan int, 1)}
+	b.Client.Store(11, root)
+	b.DelClient(11)
+	if _, ok := b.Client.Load(11); ok {
+		t.Fatal("duplicate client entry survived DelClient")
+	}
+	for name, peer := range map[string]net.Conn{"root": rootPeer, "variant": variantPeer} {
+		_ = peer.SetReadDeadline(time.Now().Add(time.Second))
+		var one [1]byte
+		if _, err := peer.Read(one[:]); err == nil {
+			t.Fatalf("%s signal remained open after DelClient", name)
+		}
+	}
+}
+
+func TestSessionForLockedPairsDataWithNewestSignalWithoutData(t *testing.T) {
+	if err := SetClientSelectMode("roundrobin"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = SetClientSelectMode("primary") })
+	root := NewClient(nil, nil, nil, "1.1.29")
+	root.sessions = []*Client{root}
+	firstServer, firstPeer := net.Pipe()
+	defer firstPeer.Close()
+	secondServer, secondPeer := net.Pipe()
+	defer secondPeer.Close()
+	first := NewClient(nil, nil, conn.NewConn(firstServer), "1.1.29")
+	second := NewClient(nil, nil, conn.NewConn(secondServer), "1.1.29")
+	first.parent, second.parent = root, root
+	root.sessions = []*Client{first, second}
+	b := &Bridge{}
+	b.clientsMu.Lock()
+	selected := b.sessionForLocked(root, "tunnel", "1.1.29")
+	b.clientsMu.Unlock()
+	if selected != second {
+		t.Fatalf("data channel paired with %p, want newest signal %p", selected, second)
 	}
 }

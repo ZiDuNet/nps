@@ -45,7 +45,7 @@
         <div class="panel ibox float-e-margins form-workflow-card zui-panel">
             <div class="ibox-content form-workflow-content">
                 <form class="form form-horz form-workflow-form zui-form" data-form-workflow="tunnel-create" autocomplete="off">
-                    <div class="form-section-title"><i class="fa fa-cog" aria-hidden="true"></i><span data-i18n-zh="隧道类型" data-i18n-en="Tunnel type">隧道类型</span></div>
+                    <div class="form-section-title" data-section-tier="primary" data-section-summary-zh="先选择代理模式" data-section-summary-en="Choose the proxy mode first"><i class="fa fa-cog" aria-hidden="true"></i><span data-i18n-zh="隧道类型" data-i18n-en="Tunnel type">隧道类型</span></div>
                     <div class="form-group form-group--wide">
                         <label class="form-label font-bold" for="type" langtag="word-scheme"></label>
                         <div class="form-group-wrapper">
@@ -61,21 +61,23 @@
                                 <option value="p2p" langtag="scheme-p2p"></option>
                                 <option value="file" langtag="scheme-file"></option>
                             </select>
+                            <span class="help-block" data-i18n-zh="TCP/UDP 用于端口转发，混合代理同时提供 HTTP 与 SOCKS5，Secret/P2P 用于私密或点对点访问，文件模式用于发布目录。选择后页面会自动隐藏不适用字段。" data-i18n-en="TCP/UDP provide port forwarding, mixed proxy exposes HTTP and SOCKS5, Secret/P2P provide private or peer-to-peer access, and file mode publishes a directory. Fields not used by the selected mode are hidden automatically.">TCP/UDP 用于端口转发，混合代理同时提供 HTTP 与 SOCKS5，Secret/P2P 用于私密或点对点访问，文件模式用于发布目录。选择后页面会自动隐藏不适用字段。</span>
                             {{end}}
                         </div>
                     </div>
 
-                    <div class="form-section-title"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="基础配置" data-i18n-en="Connection">基础配置</span></div>
+                    <div class="form-section-title" data-section-tier="primary" data-section-summary-zh="客户端、备注和监听端口" data-section-summary-en="Client, label, and listen port"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="基础配置" data-i18n-en="Connection">基础配置</span></div>
                     <div class="form-group tunnel-mode-field" id="client_id" data-tunnel-field="client_id">
                         <label class="form-label font-bold" for="nps_client_id" langtag="word-clientid"></label>
                         <div class="form-group-wrapper">
                             <select class="form-control" name="client_id" placeholder="" id="nps_client_id"
                                     langtag="word-belongclient"></select>
+                            <span class="help-block" data-i18n-zh="选择承载这条隧道的 NPC 客户端；目标地址由该客户端所在内网访问。" data-i18n-en="Select the NPC client that will carry this tunnel; the target is reached from that client's private network.">选择承载这条隧道的 NPC 客户端；目标地址由该客户端所在内网访问。</span>
                         </div>
                     </div>
                     <div class="form-group" id="registered_only">
                         <label class="form-label font-bold" data-i18n-zh="仅允许已登记 IP" data-i18n-en="Registered IPs only">仅允许已登记 IP</label>
-                        <div class="form-group-wrapper"><div class="toggle-field"><input type="hidden" name="registered_only" value="0"><label class="toggle-switch"><input type="checkbox"><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="no">否</span></div><span class="help-block" data-i18n-zh="开启后，访问者必须先在 IP 登记页面登记，才能访问此隧道。" data-i18n-en="Visitors must register their IP before accessing this tunnel.">开启后，访问者必须先在 IP 登记页面登记，才能访问此隧道。</span></div>
+                        <div class="form-group-wrapper"><div class="toggle-field"><input type="hidden" name="registered_only" value="0"><label class="toggle-switch"><input type="checkbox"><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="no">否</span></div><span class="help-block" data-i18n-zh="开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用客户端登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。" data-i18n-en="When enabled, visitors must pass the lists and register their IP first with npc register or the client's registration key/VKEY. Registrations stay in memory and end when NPS restarts.">开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用客户端登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。</span></div>
                     </div>
                     <div class="form-group form-group--wide" data-tunnel-field="mix_proxy">
                         <label class="form-label font-bold" data-i18n-zh="混合代理协议" data-i18n-en="Mixed proxy protocols">混合代理协议</label>
@@ -97,18 +99,19 @@
                     </div>
                     <div class="form-group form-group--wide" data-tunnel-field="acl">
                         <label class="form-label font-bold" for="tunnel-acl-black" data-i18n-zh="隧道黑名单（IP/CIDR）" data-i18n-en="Tunnel denylist (IP/CIDR)">隧道黑名单（IP/CIDR）</label>
-                        <div class="form-group-wrapper"><textarea id="tunnel-acl-black" class="form-control" rows="2" name="blackiplist" placeholder="203.0.113.10"></textarea></div>
+                        <div class="form-group-wrapper"><textarea id="tunnel-acl-black" class="form-control" rows="2" name="blackiplist" placeholder="203.0.113.10"></textarea><span class="help-block" data-i18n-zh="每行一个 IP、CIDR 或 Geo 规则；命中的来源会按名单优先级拒绝或放行。留空表示本层不增加黑名单限制。" data-i18n-en="One IP, CIDR, or Geo rule per line; matches are handled by the list priority. Leave empty to add no denylist at this level.">每行一个 IP、CIDR 或 Geo 规则；命中的来源会按名单优先级拒绝或放行。留空表示本层不增加黑名单限制。</span></div>
                     </div>
                     <div class="form-group form-group--wide" data-tunnel-field="acl">
                         <label class="form-label font-bold" for="tunnel-acl-white" data-i18n-zh="隧道白名单（IP/CIDR）" data-i18n-en="Tunnel allowlist (IP/CIDR)">隧道白名单（IP/CIDR）</label>
                         <div class="form-group-wrapper"><textarea id="tunnel-acl-white" class="form-control" rows="2" name="whiteiplist" placeholder="198.51.100.0/24"></textarea><span class="help-block" data-i18n-zh="留空表示不增加这一层限制。" data-i18n-en="Leave empty to disable this level.">留空表示不增加这一层限制。</span></div>
                     </div>
-                    <div class="form-group" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-priority" data-i18n-zh="名单冲突策略" data-i18n-en="List conflict policy">名单冲突策略</label><div class="form-group-wrapper"><select id="tunnel-acl-priority" class="form-control" name="iplistpriority"><option value="0">黑名单优先</option><option value="1">白名单优先</option></select></div></div>
+                    <div class="form-group" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-priority" data-i18n-zh="名单冲突策略" data-i18n-en="List conflict policy">名单冲突策略</label><div class="form-group-wrapper"><select id="tunnel-acl-priority" class="form-control" name="iplistpriority"><option value="0">黑名单优先</option><option value="1">白名单优先</option></select><span class="help-block" data-i18n-zh="同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。" data-i18n-en="Applies when both lists are configured: deny-first rejects denylisted addresses and allows only allowlisted others; allow-first allows allowlisted addresses and any others not on the denylist. With one list, both policies are equivalent.">同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。</span></div></div>
                     <div class="form-group" id="remark_group">
                         <label class="form-label font-bold" for="tunnel-remark" langtag="word-remark"></label>
                         <div class="form-group-wrapper">
                             <input id="tunnel-remark" class="form-control" type="text" name="remark" placeholder=""
                                    langtag="info-unrestricted" required>
+                            <span class="help-block" data-i18n-zh="用于识别这条隧道的备注，不影响转发协议或访问地址。" data-i18n-en="A label for identifying this tunnel; it does not affect the forwarding protocol or access address.">用于识别这条隧道的备注，不影响转发协议或访问地址。</span>
                         </div>
                     </div>
                     {{if eq true .allow_multi_ip}}
@@ -117,6 +120,7 @@
                         <div class="form-group-wrapper">
                             <input id="tunnel-server-ip" class="form-control" type="text" value="0.0.0.0" name="server_ip" placeholder=""
                                    langtag="info-suchasip">
+                            <span class="help-block" data-i18n-zh="服务器有多块网卡时，指定监听的本机地址；0.0.0.0 表示监听所有地址。" data-i18n-en="On servers with multiple network interfaces, choose the local listen address; 0.0.0.0 listens on all addresses.">服务器有多块网卡时，指定监听的本机地址；0.0.0.0 表示监听所有地址。</span>
                         </div>
                     </div>
                     {{end}}
@@ -126,10 +130,11 @@
                         <div class="form-group-wrapper">
                             <input id="tunnel-port" class="form-control" type="text" name="port" placeholder=""
                                    langtag="info-suchasport">
+                            <span class="help-block" data-i18n-zh="公网访问端口；必须是服务器上未被占用且允许映射的端口。" data-i18n-en="The public access port; it must be unused and allowed by the server port policy.">公网访问端口；必须是服务器上未被占用且允许映射的端口。</span>
                         </div>
                     </div>
                     {{end}}
-                    {{if eq true .allow_local_proxy}}
+                    {{if and .allow_local_proxy (or .isAdmin .allow_user_local)}}
                     {{if or (not .dedicated) (eq $mode "tcp") (eq $mode "udp")}}
                     <div class="form-group tunnel-mode-field" id="local_proxy" data-tunnel-field="local_proxy">
                         <label class="form-label font-bold" for="tunnel-local-proxy" langtag="word-proxytolocal"></label>
@@ -139,13 +144,14 @@
                                 <label class="toggle-switch"><input id="tunnel-local-proxy" type="checkbox"><span class="toggle-slider"></span></label>
                                 <span class="toggle-label" data-i18n-zh="否" data-i18n-en="No">否</span>
                             </div>
+                            <span class="help-block" data-i18n-zh="开启后由 NPS 本机访问目标端口，不经过 NPC；仅适用于 NPS 与目标服务在同一台主机的场景。" data-i18n-en="NPS accesses the target locally without NPC; use only when NPS and the target service share a host.">开启后由 NPS 本机访问目标端口，不经过 NPC；仅适用于 NPS 与目标服务在同一台主机的场景。</span>
                         </div>
                     </div>
                     {{end}}
                     {{end}}
 
                     {{if or (not .dedicated) (eq $mode "tcp") (eq $mode "udp") (eq $mode "secret") (eq $mode "p2p") (eq $mode "file")}}
-                    <div class="form-section-title" data-tunnel-section="target" data-default-open="true"><i class="fa fa-bullseye" aria-hidden="true"></i><span data-i18n-zh="目标配置" data-i18n-en="Target">目标配置</span></div>
+                    <div class="form-section-title" data-tunnel-section="target" data-section-tier="primary" data-default-open="true" data-section-summary-zh="内网服务地址（必填）" data-section-summary-en="Private service address (required)"><i class="fa fa-bullseye" aria-hidden="true"></i><span data-i18n-zh="目标配置" data-i18n-en="Target">目标配置</span></div>
                     {{if or (not .dedicated) (eq $mode "tcp") (eq $mode "udp") (eq $mode "secret") (eq $mode "p2p")}}
                     <div class="form-group form-group--wide tunnel-mode-field" id="target" data-tunnel-field="target">
                         <label class="form-label font-bold" for="tunnel-target" langtag="word-target"></label>
@@ -162,6 +168,7 @@
                         <div class="form-group-wrapper">
                             <input id="tunnel-local-path" class="form-control" type="text" name="local_path" placeholder=""
                                    langtag="info-suchaslocalpath">
+                            <span class="help-block" data-i18n-zh="文件访问模式的本地目录；路径必须位于 NPC 允许访问的文件系统范围内。" data-i18n-en="The local directory for file access; it must be within the filesystem area allowed by NPC.">文件访问模式的本地目录；路径必须位于 NPC 允许访问的文件系统范围内。</span>
                         </div>
                     </div>
                     <div class="form-group tunnel-mode-field" id="strip_pre" data-tunnel-field="strip_pre">
@@ -169,12 +176,13 @@
                         <div class="form-group-wrapper">
                             <input id="tunnel-strip-pre" class="form-control" type="text" name="strip_pre" placeholder=""
                                    langtag="info-suchasstripprefix">
+                            <span class="help-block" data-i18n-zh="文件访问时从请求路径中去掉的前缀；留空表示保留完整路径。" data-i18n-en="Prefix removed from the request path in file access mode; leave empty to keep the full path.">文件访问时从请求路径中去掉的前缀；留空表示保留完整路径。</span>
                         </div>
                     </div>
                     {{end}}
                     {{end}}
 
-                    <div class="form-section-title" data-tunnel-section="rate"><i class="fa fa-tachometer" aria-hidden="true"></i><span data-i18n-zh="资源限速" data-i18n-en="Resource limits">资源限速</span></div>
+                    <div class="form-section-title" data-tunnel-section="rate" data-section-tier="advanced" data-section-summary-zh="按需限制带宽" data-section-summary-en="Optional bandwidth limits"><i class="fa fa-tachometer" aria-hidden="true"></i><span data-i18n-zh="资源限速" data-i18n-en="Resource limits">资源限速</span></div>
                     <div class="form-group tunnel-mode-field" id="upload_limit" data-tunnel-field="upload_limit">
                         <label class="form-label font-bold" for="tunnel-upload-limit" data-i18n-zh="上行限速（KB/s）" data-i18n-en="Upload limit (KB/s)">上行限速（KB/s）</label>
                         <div class="form-group-wrapper"><input id="tunnel-upload-limit" class="form-control" type="number" min="0" step="1" name="upload_limit" value="0"><span class="help-block" data-i18n-zh="访问者到内网服务的速度；0 表示不限速。同一隧道的所有连接共享此额度。" data-i18n-en="Visitor to private service speed; 0 means unlimited. All connections on this tunnel share the limit.">访问者到内网服务的速度；0 表示不限速。同一隧道的所有连接共享此额度。</span></div>
@@ -185,7 +193,7 @@
                     </div>
 
                     {{if or (not .dedicated) (eq $mode "tcp")}}
-                    <div class="form-section-title" data-tunnel-section="health"><i class="fa fa-heartbeat" aria-hidden="true"></i><span data-i18n-zh="后端健康检查" data-i18n-en="Backend health check">后端健康检查</span></div>
+                    <div class="form-section-title" data-tunnel-section="health" data-section-tier="advanced" data-section-summary-zh="故障目标自动摘除" data-section-summary-en="Automatically remove failed targets"><i class="fa fa-heartbeat" aria-hidden="true"></i><span data-i18n-zh="后端健康检查" data-i18n-en="Backend health check">后端健康检查</span></div>
                     <div class="form-group tunnel-mode-field" id="health_check_type" data-tunnel-field="health_check_type">
                         <label class="form-label font-bold" for="health-check-type" data-i18n-zh="检查类型" data-i18n-en="Check type">检查类型</label>
                         <div class="form-group-wrapper"><select id="health-check-type" class="form-control" name="health_check_type"><option value="tcp" data-i18n-zh="TCP 连接" data-i18n-en="TCP connect">TCP 连接</option><option value="http" data-i18n-zh="HTTP 200" data-i18n-en="HTTP 200">HTTP 200</option></select><span class="help-block" data-i18n-zh="仅 TCP 隧道支持；由客户端 NPC 从内网探测目标并自动摘除故障地址。" data-i18n-en="Supported for TCP tunnels; NPC probes targets from the private network and removes failed addresses.">仅 TCP 隧道支持；由客户端 NPC 从内网探测目标并自动摘除故障地址。</span></div>
@@ -194,14 +202,14 @@
                         <label class="form-label font-bold" for="health-check-target" data-i18n-zh="检查目标" data-i18n-en="Check targets">检查目标</label>
                         <div class="form-group-wrapper"><textarea id="health-check-target" class="form-control" name="health_check_target" rows="3" placeholder="127.0.0.1:8080&#10;127.0.0.1:8081"></textarea><span class="help-block" data-i18n-zh="每行一个 host:port；留空表示关闭健康检查。" data-i18n-en="One host:port per line; leave empty to disable health checks.">每行一个 host:port；留空表示关闭健康检查。</span></div>
                     </div>
-                    <div class="form-group tunnel-mode-field" id="health_check_timeout" data-tunnel-field="health_check_timeout"><label class="form-label font-bold" for="health-check-timeout" data-i18n-zh="单次超时（秒）" data-i18n-en="Timeout (s)">单次超时（秒）</label><div class="form-group-wrapper"><input id="health-check-timeout" class="form-control" type="number" min="1" max="300" name="health_check_timeout" value="2"></div></div>
-                    <div class="form-group tunnel-mode-field" id="health_max_failed" data-tunnel-field="health_max_failed"><label class="form-label font-bold" for="health-max-failed" data-i18n-zh="连续失败次数" data-i18n-en="Max failures">连续失败次数</label><div class="form-group-wrapper"><input id="health-max-failed" class="form-control" type="number" min="1" max="100" name="health_max_failed" value="3"></div></div>
-                    <div class="form-group tunnel-mode-field" id="health_check_interval" data-tunnel-field="health_check_interval"><label class="form-label font-bold" for="health-check-interval" data-i18n-zh="检查间隔（秒）" data-i18n-en="Interval (s)">检查间隔（秒）</label><div class="form-group-wrapper"><input id="health-check-interval" class="form-control" type="number" min="1" max="3600" name="health_check_interval" value="10"></div></div>
+                    <div class="form-group tunnel-mode-field" id="health_check_timeout" data-tunnel-field="health_check_timeout"><label class="form-label font-bold" for="health-check-timeout" data-i18n-zh="单次超时（秒）" data-i18n-en="Timeout (s)">单次超时（秒）</label><div class="form-group-wrapper"><input id="health-check-timeout" class="form-control" type="number" min="1" max="300" name="health_check_timeout" value="2"><span class="help-block" data-i18n-zh="一次 TCP 或 HTTP 健康检查等待响应的最长时间。" data-i18n-en="Maximum time to wait for one TCP or HTTP health check response.">一次 TCP 或 HTTP 健康检查等待响应的最长时间。</span></div></div>
+                    <div class="form-group tunnel-mode-field" id="health_max_failed" data-tunnel-field="health_max_failed"><label class="form-label font-bold" for="health-max-failed" data-i18n-zh="连续失败次数" data-i18n-en="Max failures">连续失败次数</label><div class="form-group-wrapper"><input id="health-max-failed" class="form-control" type="number" min="1" max="100" name="health_max_failed" value="3"><span class="help-block" data-i18n-zh="目标连续失败达到此次数后暂时摘除；恢复成功后会重新加入轮询。" data-i18n-en="Temporarily removes a target after this many consecutive failures; it is added again after a successful check.">目标连续失败达到此次数后暂时摘除；恢复成功后会重新加入轮询。</span></div></div>
+                    <div class="form-group tunnel-mode-field" id="health_check_interval" data-tunnel-field="health_check_interval"><label class="form-label font-bold" for="health-check-interval" data-i18n-zh="检查间隔（秒）" data-i18n-en="Interval (s)">检查间隔（秒）</label><div class="form-group-wrapper"><input id="health-check-interval" class="form-control" type="number" min="1" max="3600" name="health_check_interval" value="10"><span class="help-block" data-i18n-zh="两次健康检查之间的间隔；间隔越短，故障摘除越快但探测流量更多。" data-i18n-en="Interval between checks; shorter intervals remove failed targets faster but generate more probes.">两次健康检查之间的间隔；间隔越短，故障摘除越快但探测流量更多。</span></div></div>
                     <div class="form-group tunnel-mode-field" id="health_http_url" data-tunnel-field="health_http_url"><label class="form-label font-bold" for="health-http-url" data-i18n-zh="HTTP 检查路径" data-i18n-en="HTTP check path">HTTP 检查路径</label><div class="form-group-wrapper"><input id="health-http-url" class="form-control" type="text" name="health_http_url" value="/" placeholder="/healthz"><span class="help-block" data-i18n-zh="HTTP 检查时请求 http://目标+此路径，并要求返回 200。" data-i18n-en="HTTP checks request http://target plus this path and require status 200.">HTTP 检查时请求 http://目标+此路径，并要求返回 200。</span></div></div>
                     {{end}}
 
                     {{if or (not .dedicated) (eq $mode "tcp") (eq $mode "secret") (eq $mode "p2p")}}
-                    <div class="form-section-title" data-tunnel-section="security"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="安全配置" data-i18n-en="Security">安全配置</span></div>
+                    <div class="form-section-title" data-tunnel-section="security" data-section-tier="advanced" data-section-summary-zh="认证与协议扩展" data-section-summary-en="Authentication and protocol options"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="安全配置" data-i18n-en="Security">安全配置</span></div>
                     {{if or (not .dedicated) (eq $mode "secret") (eq $mode "p2p")}}
                     <div class="form-group tunnel-mode-field" id="password" data-tunnel-field="password">
                         <label class="form-label font-bold" for="tunnel-password" langtag="word-identificationkey"></label>

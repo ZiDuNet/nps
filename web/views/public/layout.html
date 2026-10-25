@@ -112,6 +112,14 @@
                 <a href="{{.web_base_url}}/audit/list"><i class="icon icon-list-alt" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="操作审计" data-i18n-en="Audit log">操作审计</span></a>
                 </li>
+                <li class="{{if eq "banlist" .menu}}active{{end}}">
+                <a href="{{.web_base_url}}/global/banlist"><i class="icon icon-shield" aria-hidden="true"></i>
+                    <span class="nav-label" data-i18n-zh="登录封禁" data-i18n-en="Login bans">登录封禁</span></a>
+                </li>
+                <li class="{{if eq "ipregister" .menu}}active{{end}}">
+                <a href="{{.web_base_url}}/global/ipregister"><i class="icon icon-map-marker" aria-hidden="true"></i>
+                    <span class="nav-label" data-i18n-zh="IP 登记" data-i18n-en="IP registrations">IP 登记</span></a>
+                </li>
                 {{end}}
                 <li class="{{if eq "help" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/index/help"><i class="icon icon-lightbulb" aria-hidden="true"></i>
@@ -217,14 +225,17 @@
                     <div class="form-group">
                         <label class="form-label" for="change-password-current" data-i18n-zh="当前密码" data-i18n-en="Current password">当前密码</label>
                         <input id="change-password-current" class="form-control" type="password" name="current_password" autocomplete="current-password" required>
+                        <span class="help-block" data-i18n-zh="验证当前账号身份，不能留空。" data-i18n-en="Verifies the current account and cannot be left blank.">验证当前账号身份，不能留空。</span>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="change-password-new" data-i18n-zh="新密码" data-i18n-en="New password">新密码</label>
                         <input id="change-password-new" class="form-control" type="password" name="new_password" autocomplete="new-password" minlength="6" required aria-describedby="change-password-hint">
+                        <span class="help-block" data-i18n-zh="至少 6 个字符；填写后才会替换现有密码。" data-i18n-en="Use at least 6 characters. The existing password changes only when this field is filled.">至少 6 个字符；填写后才会替换现有密码。</span>
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="change-password-confirm" data-i18n-zh="确认新密码" data-i18n-en="Confirm new password">确认新密码</label>
                         <input id="change-password-confirm" class="form-control" type="password" name="confirm_password" autocomplete="new-password" minlength="6" required>
+                        <span class="help-block" data-i18n-zh="再次输入新密码，两次内容必须完全一致。" data-i18n-en="Enter the new password again. Both values must match exactly.">再次输入新密码，两次内容必须完全一致。</span>
                     </div>
                     <p id="change-password-hint" class="help-block nps-password-modal__hint" data-i18n-zh="密码至少需要 6 个字符。保存后当前会话仍保持有效。" data-i18n-en="Use at least 6 characters. Your current session stays active after saving.">密码至少需要 6 个字符。保存后当前会话仍保持有效。</p>
                 </form>
@@ -310,12 +321,39 @@
                     }
 
                     var toggle = document.createElement('button');
-                    var open = heading.getAttribute('data-default-open') === 'true' || index < 2;
+                    var tier = heading.getAttribute('data-section-tier') || (index === 0 ? 'primary' : 'advanced');
+                    // Explicit section tiers are the source of truth.  The
+                    // previous index-based fallback left the second section
+                    // open on client/user forms even when it contained only
+                    // advanced options, defeating progressive disclosure.
+                    var open = heading.getAttribute('data-default-open') === 'true' || tier === 'primary';
                     toggle.type = 'button';
                     toggle.className = 'form-section-toggle';
                     toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
                     if (controlled.length) toggle.setAttribute('aria-controls', controlled.join(' '));
-                    while (heading.firstChild) toggle.appendChild(heading.firstChild);
+                    var label = document.createElement('span');
+                    label.className = 'form-section-toggle__label';
+                    while (heading.firstChild) label.appendChild(heading.firstChild);
+                    toggle.appendChild(label);
+                    var meta = document.createElement('span');
+                    meta.className = 'form-section-toggle__meta';
+                    var summaryZh = heading.getAttribute('data-section-summary-zh');
+                    var summaryEn = heading.getAttribute('data-section-summary-en');
+                    if (summaryZh || summaryEn) {
+                        var summary = document.createElement('span');
+                        summary.className = 'form-section-toggle__summary';
+                        summary.setAttribute('data-i18n-zh', summaryZh || summaryEn);
+                        summary.setAttribute('data-i18n-en', summaryEn || summaryZh);
+                        summary.textContent = summaryZh || summaryEn;
+                        meta.appendChild(summary);
+                    }
+                    var tierLabel = document.createElement('span');
+                    tierLabel.className = 'form-section-toggle__tier';
+                    tierLabel.setAttribute('data-i18n-zh', tier === 'primary' ? '主要' : '高级');
+                    tierLabel.setAttribute('data-i18n-en', tier === 'primary' ? 'Primary' : 'Advanced');
+                    tierLabel.textContent = tier === 'primary' ? '主要' : '高级';
+                    meta.appendChild(tierLabel);
+                    toggle.appendChild(meta);
                     var chevron = document.createElement('i');
                     chevron.className = 'fa fa-chevron-down form-section-toggle__chevron';
                     chevron.setAttribute('aria-hidden', 'true');

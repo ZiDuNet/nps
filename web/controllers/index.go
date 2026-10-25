@@ -89,6 +89,10 @@ type hostListRow struct {
 	Scheme              string
 	IsClose             bool
 	AutoHttps           bool
+	TargetIsHTTPS       bool
+	HTTPSJustProxy      bool
+	AutoSSL             bool
+	TLSOffload          bool
 	RegisteredOnly      bool
 	PlatformManaged     bool
 	BasicAuthSet        bool
@@ -183,6 +187,10 @@ func newHostListRows(hosts []*file.Host) []*hostListRow {
 			Scheme:           host.Scheme,
 			IsClose:          host.IsClose,
 			AutoHttps:        host.AutoHttps,
+			TargetIsHTTPS:    host.TargetIsHTTPS,
+			HTTPSJustProxy:   host.HTTPSJustProxy,
+			AutoSSL:          host.AutoSSL,
+			TLSOffload:       host.TLSOffload,
 			RegisteredOnly:   host.RegisteredOnly,
 			PlatformManaged:  host.PlatformDomainID != "",
 			BasicAuthSet:     file.BasicAuthConfigured(host.Auth),
@@ -420,8 +428,47 @@ func validateHostDomainRequest(requestedMode, hostName, platformID, prefix strin
 	return mode, nil
 }
 
-func requestedLocalProxy(requested bool) bool {
-	return requested && beego.AppConfig.DefaultBool("allow_local_proxy", false)
+// validateHostTLSOptions keeps mutually exclusive HTTPS modes explicit. The
+// public listener can terminate TLS, connect to an HTTPS backend, or proxy the
+// opaque TLS stream, but a single rule must not request two incompatible
+// termination strategies at once.
+func validateHostTLSOptions(scheme string, httpsJustProxy, autoSSL, tlsOffload bool) error {
+	scheme = strings.ToLower(strings.TrimSpace(scheme))
+	if httpsJustProxy || autoSSL || tlsOffload {
+		if scheme == "http" {
+			return errors.New("HTTPS 选项仅适用于 HTTPS 或 HTTP+HTTPS 规则")
+		}
+	}
+	if httpsJustProxy && tlsOffload {
+		return errors.New("HTTPS 原样透传与 TLS 卸载不能同时开启")
+	}
+	if httpsJustProxy && autoSSL {
+		return errors.New("HTTPS 原样透传不能同时申请平台证书")
+	}
+	return nil
+}
+
+func (s *IndexController) requestedLocalProxy(requested bool) bool {
+	if !requested || !beego.AppConfig.DefaultBool("allow_local_proxy", false) {
+		return false
+	}
+	// Administrators keep the historical global switch semantics. Ordinary
+	// users need the explicit second gate so enabling server-side local proxy
+	// does not silently grant every tenant access to the NPS host network.
+	return s.IsAdmin() || beego.AppConfig.DefaultBool("allow_user_local", false)
+}
+
+func validateBridgeTargetPermission(isAdmin bool, target string) error {
+	if isAdmin {
+		return nil
+	}
+	target = strings.ReplaceAll(target, "\r\n", "\n")
+	for _, item := range strings.Split(target, "\n") {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(item)), "bridge://") {
+			return errors.New("bridge:// 系统入口仅允许管理员配置")
+		}
+	}
+	return nil
 }
 
 func healthFieldsSubmitted(request *http.Request) bool {
@@ -1022,12 +1069,17 @@ func (s *IndexController) Add() {
 			s.AjaxErr("健康检查目前仅支持 TCP 隧道")
 			return
 		}
+		target := s.getEscapeString("target")
+		if err := validateBridgeTargetPermission(s.IsAdmin(), target); err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
 		id := int(file.GetDb().JsonDb.GetTaskId())
 		t := &file.Tunnel{
 			Port:           s.GetIntNoErr("port"),
 			ServerIp:       s.getEscapeString("server_ip"),
 			Mode:           tunnelMode,
-			Target:         &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy"))},
+			Target:         &file.Target{TargetStr: target, LocalProxy: s.requestedLocalProxy(s.GetBoolNoErr("local_proxy"))},
 			Id:             id,
 			Status:         true,
 			Remark:         s.getEscapeString("remark"),
@@ -1359,8 +1411,13 @@ func (s *IndexController) Edit() {
 					return
 				}
 			}
-			desiredTarget := &file.Target{TargetStr: s.getEscapeString("target")}
-			desiredTarget.LocalProxy = requestedLocalProxy(s.GetBoolNoErr("local_proxy"))
+			desiredTargetValue := s.getEscapeString("target")
+			if err := validateBridgeTargetPermission(s.IsAdmin(), desiredTargetValue); err != nil {
+				s.AjaxErr(err.Error())
+				return
+			}
+			desiredTarget := &file.Target{TargetStr: desiredTargetValue}
+			desiredTarget.LocalProxy = s.requestedLocalProxy(s.GetBoolNoErr("local_proxy"))
 			// Build the replacement atomically. Proxy workers take the same
 			// task lock when selecting their client, target and mode.
 			t.Lock()
@@ -1699,12 +1756,25 @@ func (s *IndexController) AddHost() {
 			s.AjaxErr("add fail, " + proxyProtocolErr.Error())
 			return
 		}
+		targetIsHTTPS := s.GetBoolNoErr("target_is_https")
+		httpsJustProxy := s.GetBoolNoErr("https_just_proxy")
+		autoSSL := s.GetBoolNoErr("auto_ssl")
+		tlsOffload := s.GetBoolNoErr("tls_offload")
+		if err := validateHostTLSOptions(s.getEscapeString("scheme"), httpsJustProxy, autoSSL, tlsOffload); err != nil {
+			s.AjaxErr("add fail, " + err.Error())
+			return
+		}
+		target := s.getEscapeString("target")
+		if err := validateBridgeTargetPermission(s.IsAdmin(), target); err != nil {
+			s.AjaxErr("add fail, " + err.Error())
+			return
+		}
 		id := int(file.GetDb().JsonDb.GetHostId())
 		h := &file.Host{
 			Id:                   id,
 			Host:                 hostName,
 			PlatformDomainID:     platformDomainID,
-			Target:               &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy")), ProxyProtocol: proxyProtocol},
+			Target:               &file.Target{TargetStr: target, LocalProxy: s.requestedLocalProxy(s.GetBoolNoErr("local_proxy")), ProxyProtocol: proxyProtocol},
 			HeaderChange:         s.getEscapeString("header"),
 			ResponseHeaderChange: s.getEscapeString("response_header"),
 			HostChange:           s.getEscapeString("hostchange"),
@@ -1719,6 +1789,10 @@ func (s *IndexController) AddHost() {
 			KeyFilePath:          s.getEscapeString("key_file_path"),
 			CertFilePath:         s.getEscapeString("cert_file_path"),
 			AutoHttps:            s.GetBoolNoErr("AutoHttps"),
+			TargetIsHTTPS:        targetIsHTTPS,
+			HTTPSJustProxy:       httpsJustProxy,
+			AutoSSL:              autoSSL,
+			TLSOffload:           tlsOffload,
 			AutoCORS:             s.GetBoolNoErr("auto_cors"),
 			CompatMode:           s.GetBoolNoErr("compat_mode"),
 			RegisteredOnly:       s.GetBoolNoErr("registered_only"),
@@ -1863,7 +1937,12 @@ func (s *IndexController) EditHost() {
 				s.AjaxErr("modified error," + proxyProtocolErr.Error())
 				return
 			}
-			desiredTarget := &file.Target{TargetStr: s.getEscapeString("target"), LocalProxy: requestedLocalProxy(s.GetBoolNoErr("local_proxy")), ProxyProtocol: proxyProtocol}
+			desiredTargetValue := s.getEscapeString("target")
+			if err := validateBridgeTargetPermission(s.IsAdmin(), desiredTargetValue); err != nil {
+				s.AjaxErr("modified error," + err.Error())
+				return
+			}
+			desiredTarget := &file.Target{TargetStr: desiredTargetValue, LocalProxy: s.requestedLocalProxy(s.GetBoolNoErr("local_proxy")), ProxyProtocol: proxyProtocol}
 			desiredAuth := strings.TrimSpace(s.GetString("auth"))
 			clearHostAuth := strings.EqualFold(strings.TrimSpace(s.GetString("clear_host_auth")), "1") || strings.EqualFold(strings.TrimSpace(s.GetString("clear_host_auth")), "true")
 			if desiredAuth == "" && !clearHostAuth {
@@ -1887,6 +1966,28 @@ func (s *IndexController) EditHost() {
 			if _, submitted := s.Ctx.Request.Form["registered_only"]; submitted {
 				desiredRegisteredOnly = s.GetBoolNoErr("registered_only")
 			}
+			storedHost.RLock()
+			desiredTargetIsHTTPS := storedHost.TargetIsHTTPS
+			desiredHTTPSJustProxy := storedHost.HTTPSJustProxy
+			desiredAutoSSL := storedHost.AutoSSL
+			desiredTLSOffload := storedHost.TLSOffload
+			storedHost.RUnlock()
+			if _, submitted := s.Ctx.Request.Form["target_is_https"]; submitted {
+				desiredTargetIsHTTPS = s.GetBoolNoErr("target_is_https")
+			}
+			if _, submitted := s.Ctx.Request.Form["https_just_proxy"]; submitted {
+				desiredHTTPSJustProxy = s.GetBoolNoErr("https_just_proxy")
+			}
+			if _, submitted := s.Ctx.Request.Form["auto_ssl"]; submitted {
+				desiredAutoSSL = s.GetBoolNoErr("auto_ssl")
+			}
+			if _, submitted := s.Ctx.Request.Form["tls_offload"]; submitted {
+				desiredTLSOffload = s.GetBoolNoErr("tls_offload")
+			}
+			if err := validateHostTLSOptions(desiredScheme, desiredHTTPSJustProxy, desiredAutoSSL, desiredTLSOffload); err != nil {
+				s.AjaxErr("modified error," + err.Error())
+				return
+			}
 			replacement := &file.Host{
 				Id:                   id,
 				Host:                 desiredHost,
@@ -1906,6 +2007,10 @@ func (s *IndexController) EditHost() {
 				KeyFilePath:          s.getEscapeString("key_file_path"),
 				CertFilePath:         s.getEscapeString("cert_file_path"),
 				AutoHttps:            autoHTTPS,
+				TargetIsHTTPS:        desiredTargetIsHTTPS,
+				HTTPSJustProxy:       desiredHTTPSJustProxy,
+				AutoSSL:              desiredAutoSSL,
+				TLSOffload:           desiredTLSOffload,
 				AutoCORS:             s.GetBoolNoErr("auto_cors"),
 				CompatMode:           s.GetBoolNoErr("compat_mode"),
 				RegisteredOnly:       desiredRegisteredOnly,

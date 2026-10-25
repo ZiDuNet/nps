@@ -34,3 +34,53 @@ func TestExtractWebFilesSyncsEmbeddedViews(t *testing.T) {
 		t.Fatal("synced template does not contain the mode-aware tunnel field rule")
 	}
 }
+
+func TestLoginAndRegistrationTemplatesFailClosedWithoutPasswordEncryption(t *testing.T) {
+	tests := []struct {
+		path        string
+		encryptCall string
+		failureCheck string
+	}{
+		{path: "views/login/index.html", encryptCall: "var encryptedPassword = npsEncryptedPassword(data.password)", failureCheck: "if (!encryptedPassword)"},
+		{path: "views/login/register.html", encryptCall: "data.password = npsRSAEncryptor.encrypt(payload)", failureCheck: "if (!data.password)"},
+	}
+	for _, test := range tests {
+		content, err := ViewsFS.ReadFile(test.path)
+		if err != nil {
+			t.Fatalf("read embedded template %s: %v", test.path, err)
+		}
+		template := string(content)
+		for _, marker := range []string{
+			"typeof JSEncrypt === 'function' ? new JSEncrypt() : null",
+			test.encryptCall,
+			test.failureCheck,
+			"npsNotify('error'",
+			"return false;",
+		} {
+			if !strings.Contains(template, marker) {
+				t.Errorf("%s must fail closed when password encryption is unavailable; missing %q", test.path, marker)
+			}
+		}
+		for _, unsafeFallback := range []string{"return password", "|| password", "|| data.password"} {
+			if strings.Contains(template, unsafeFallback) {
+				t.Errorf("%s must not fall back to submitting a plaintext password via %q", test.path, unsafeFallback)
+			}
+		}
+		if test.path == "views/login/index.html" && !strings.Contains(template, "data.password = encryptedPassword") {
+			t.Errorf("%s must submit the encrypted password after encryption succeeds", test.path)
+		}
+	}
+}
+
+func TestJSEncryptEmbeddedAssetIncludesLicense(t *testing.T) {
+	if _, err := ReadStaticFile("js/jsencrypt.min.js"); err != nil {
+		t.Fatalf("read embedded JSEncrypt bundle: %v", err)
+	}
+	license, err := ReadStaticFile("js/jsencrypt.min.js.LICENSE.txt")
+	if err != nil {
+		t.Fatalf("read embedded JSEncrypt license: %v", err)
+	}
+	if !strings.Contains(string(license), "MIT License") {
+		t.Fatal("embedded JSEncrypt license does not include its MIT license text")
+	}
+}

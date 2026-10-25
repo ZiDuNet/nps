@@ -143,6 +143,7 @@ func (s *BaseController) Prepare() {
 	s.Data["system_info_display"], _ = beego.AppConfig.Bool("system_info_display")
 	s.Data["allow_tunnel_num_limit"], _ = beego.AppConfig.Bool("allow_tunnel_num_limit")
 	s.Data["allow_local_proxy"], _ = beego.AppConfig.Bool("allow_local_proxy")
+	s.Data["allow_user_local"], _ = beego.AppConfig.Bool("allow_user_local")
 	s.Data["allow_user_change_username"], _ = beego.AppConfig.Bool("allow_user_change_username")
 	showHttpProxyPort := beego.AppConfig.DefaultBool("show_http_proxy_port", true)
 	httpPort := publicAccessPort("http_proxy_access_port", "http_proxy_port")
@@ -435,22 +436,185 @@ func (s *BaseController) rejectRequest(status int, message string) {
 }
 
 func isSameOriginRequest(request *http.Request) bool {
-	origin := strings.TrimSpace(request.Header.Get("Origin"))
-	if origin == "" || request.Host == "" {
+	if request == nil {
 		return false
 	}
-	expected := requestScheme(request) + "://" + request.Host
-	return strings.EqualFold(origin, expected)
+	origin := strings.TrimSpace(request.Header.Get("Origin"))
+	if origin == "" {
+		return false
+	}
+
+	parsedOrigin, err := url.Parse(origin)
+	if err != nil || parsedOrigin.Host == "" || (parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https") {
+		return false
+	}
+	// When a proxy rewrites Host and does not forward X-Forwarded-Host, modern
+	// browsers still provide Fetch Metadata.  A same-origin request from the
+	// panel is safe to accept even though NPS only sees the upstream Host; a
+	// cross-site request keeps going through the strict authority comparison.
+	if !useForwardedAuthority(request) && strings.EqualFold(strings.TrimSpace(request.Header.Get("Sec-Fetch-Site")), "same-origin") {
+		return true
+	}
+
+	// A reverse proxy may terminate TLS and expose a public hostname while the
+	// request that reaches NPS still has the proxy's private Host header.  The
+	// Web panel intentionally follows the deployment's forwarded authority
+	// headers without requiring a second proxy-IP/domain registration: Docker
+	// deployments commonly see an ephemeral bridge address here. Operators
+	// should configure Nginx to overwrite (not append) these headers.
+	forwardedAuthority := useForwardedAuthority(request)
+	expectedScheme := requestScheme(request, forwardedAuthority)
+	expectedHosts := []string{}
+	if request.Host != "" {
+		expectedHosts = append(expectedHosts, request.Host)
+	}
+	if forwardedAuthority {
+		if forwardedHost := firstForwardedHost(request); forwardedHost != "" {
+			expectedHosts = append(expectedHosts, forwardedHost)
+		}
+	}
+	// web_host is also a valid public authority for deployments that route the
+	// panel by a configured hostname but do not preserve the original Host in
+	// the proxy hop.  It is an explicit server setting, not request data.
+	if configuredHost := configuredWebHost(); configuredHost != "" {
+		expectedHosts = append(expectedHosts, configuredHost)
+	}
+	for _, host := range expectedHosts {
+		if sameOriginAuthority(parsedOrigin.Scheme, parsedOrigin.Host, expectedScheme, host) {
+			return true
+		}
+	}
+	return false
 }
 
-func requestScheme(request *http.Request) string {
-	if forwarded := strings.TrimSpace(strings.Split(request.Header.Get("X-Forwarded-Proto"), ",")[0]); forwarded == "http" || forwarded == "https" {
-		return forwarded
+func useForwardedAuthority(request *http.Request) bool {
+	if request == nil {
+		return false
+	}
+	if requestMayUseForwardedIP(request) {
+		return true
+	}
+	// A reverse proxy can preserve the public authority even when the operator
+	// does not enable real-IP handling.  Accepting these headers is what keeps
+	// the browser Origin check working for a Docker-host Nginx deployment; the
+	// proxy must overwrite them with its own values.
+	return firstForwardedHost(request) != "" ||
+		strings.TrimSpace(request.Header.Get("X-Forwarded-Proto")) != "" ||
+		strings.TrimSpace(request.Header.Get("Forwarded")) != ""
+}
+
+func requestScheme(request *http.Request, trustedProxy ...bool) string {
+	trustForwarded := len(trustedProxy) > 0 && trustedProxy[0]
+	if trustForwarded {
+		if forwarded := strings.ToLower(strings.TrimSpace(strings.Split(request.Header.Get("X-Forwarded-Proto"), ",")[0])); forwarded == "http" || forwarded == "https" {
+			return forwarded
+		}
+		if forwarded := strings.ToLower(strings.TrimSpace(forwardedParameter(request.Header.Get("Forwarded"), "proto"))); forwarded == "http" || forwarded == "https" {
+			return forwarded
+		}
 	}
 	if request.TLS != nil {
 		return "https"
 	}
 	return "http"
+}
+
+func firstForwardedHost(request *http.Request) string {
+	if request == nil {
+		return ""
+	}
+	if host := firstHeaderValue(request.Header.Get("X-Forwarded-Host")); host != "" {
+		return host
+	}
+	return firstHeaderValue(forwardedParameter(request.Header.Get("Forwarded"), "host"))
+}
+
+func firstHeaderValue(value string) string {
+	return strings.TrimSpace(strings.Split(value, ",")[0])
+}
+
+// forwardedParameter reads the first RFC 7239 Forwarded element. Quoted
+// values are accepted because common reverse proxies quote IPv6 authorities.
+func forwardedParameter(value, key string) string {
+	value = strings.TrimSpace(strings.Split(value, ",")[0])
+	for _, part := range strings.Split(value, ";") {
+		pieces := strings.SplitN(strings.TrimSpace(part), "=", 2)
+		if len(pieces) != 2 || !strings.EqualFold(strings.TrimSpace(pieces[0]), key) {
+			continue
+		}
+		return strings.Trim(strings.TrimSpace(pieces[1]), "\"")
+	}
+	return ""
+}
+
+func sameOriginAuthority(originScheme, originHost, expectedScheme, expectedHost string) bool {
+	originScheme = strings.ToLower(strings.TrimSpace(originScheme))
+	expectedScheme = strings.ToLower(strings.TrimSpace(expectedScheme))
+	if originScheme == "" || originScheme != expectedScheme {
+		return false
+	}
+	originHost = normalizeOriginHost(originHost)
+	expectedHost = normalizeOriginHost(expectedHost)
+	return originHost != "" && originHost == expectedHost
+}
+
+func normalizeOriginHost(host string) string {
+	host = strings.TrimSpace(strings.TrimSuffix(host, "."))
+	if host == "" {
+		return ""
+	}
+	if strings.Contains(host, "://") {
+		if parsed, err := url.Parse(host); err == nil {
+			host = parsed.Host
+		}
+	}
+	return strings.ToLower(strings.TrimSuffix(host, "."))
+}
+
+func configuredWebHost() string {
+	host := strings.TrimSpace(beego.AppConfig.String("web_host"))
+	if host == "" {
+		return ""
+	}
+	if strings.Contains(host, "://") {
+		if parsed, err := url.Parse(host); err == nil {
+			host = parsed.Host
+		}
+	}
+	return normalizeOriginHost(host)
+}
+
+func isTrustedProxyPeer(request *http.Request) bool {
+	if request == nil {
+		return false
+	}
+	peer := strings.TrimSpace(request.RemoteAddr)
+	if host, _, err := net.SplitHostPort(peer); err == nil {
+		peer = host
+	}
+	peerIP := net.ParseIP(strings.Trim(peer, "[]"))
+	if peerIP == nil {
+		return false
+	}
+	raw := strings.TrimSpace(beego.AppConfig.String("trusted_proxy_ips"))
+	if raw == "" {
+		// Keep local reverse-proxy deployments working out of the box while
+		// requiring an explicit list for non-local proxy hops.
+		raw = "127.0.0.1,::1"
+	}
+	for _, token := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ';' || r == '\n' || r == '\r' || r == ' ' || r == '\t' }) {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		if ip := net.ParseIP(strings.Trim(token, "[]")); ip != nil && ip.Equal(peerIP) {
+			return true
+		}
+		if _, network, err := net.ParseCIDR(token); err == nil && network.Contains(peerIP) {
+			return true
+		}
+	}
+	return false
 }
 
 // sessionBool accepts the values produced by Beego's session backends. Some
@@ -532,14 +696,12 @@ func (s *BaseController) display(tpl ...string) {
 	} else {
 		tplname = s.controllerName + "/" + s.actionName + ".html"
 	}
-	ip := common.GetIpByAddr(s.Ctx.Request.Host)
 	global := file.GetDb().GetGlobal()
+	serverURL := ""
 	if global != nil {
-		if configuredHost := publicServerHost(global.ServerUrl); configuredHost != "" {
-			ip = configuredHost
-		}
+		serverURL = global.ServerUrl
 	}
-	s.Data["ip"] = ip
+	s.Data["ip"] = publicBridgeHost(s.Ctx.Request.Host, serverURL, beego.AppConfig.String("bridge_addr"))
 
 	s.Data["bridgeType"] = beego.AppConfig.String("bridge_type")
 	if common.IsWindows() {
@@ -587,6 +749,18 @@ func publicServerHost(serverAddress string) string {
 		candidate = parsed.Host
 	}
 	return common.GetIpByAddr(candidate)
+}
+
+// publicBridgeHost resolves the public hostname used in generated NPC
+// commands. bridge_addr has precedence for installations behind NAT or a
+// reverse proxy; the global server URL and current request host are fallbacks.
+func publicBridgeHost(requestHost, serverURL, bridgeAddr string) string {
+	for _, candidate := range []string{bridgeAddr, serverURL, requestHost} {
+		if host := publicServerHost(candidate); host != "" {
+			return host
+		}
+	}
+	return ""
 }
 
 // 错误

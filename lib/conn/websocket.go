@@ -18,6 +18,7 @@ const websocketStreamReadLimit = 64 << 20
 // boundaries from the protocol implementation.
 type WebSocketStream struct {
 	ws       *websocket.Conn
+	remote   net.Addr
 	reader   io.Reader
 	readMu   sync.Mutex
 	writeMu  sync.Mutex
@@ -26,11 +27,19 @@ type WebSocketStream struct {
 }
 
 func NewWebSocketStream(ws *websocket.Conn) (*WebSocketStream, error) {
+	return NewWebSocketStreamWithRemote(ws, nil)
+}
+
+// NewWebSocketStreamWithRemote is equivalent to NewWebSocketStream but lets a
+// trusted HTTP reverse proxy supply the peer address visible to the Bridge
+// protocol. The underlying socket remains the source of truth when remote is
+// nil, preserving direct WebSocket behavior.
+func NewWebSocketStreamWithRemote(ws *websocket.Conn, remote net.Addr) (*WebSocketStream, error) {
 	if ws == nil || ws.NetConn() == nil {
 		return nil, errors.New("websocket connection is nil")
 	}
 	ws.SetReadLimit(websocketStreamReadLimit)
-	return &WebSocketStream{ws: ws}, nil
+	return &WebSocketStream{ws: ws, remote: remote}, nil
 }
 
 func (s *WebSocketStream) Read(p []byte) (int, error) {
@@ -93,8 +102,13 @@ func (s *WebSocketStream) Close() error {
 	return s.closeErr
 }
 
-func (s *WebSocketStream) LocalAddr() net.Addr  { return s.ws.NetConn().LocalAddr() }
-func (s *WebSocketStream) RemoteAddr() net.Addr { return s.ws.NetConn().RemoteAddr() }
+func (s *WebSocketStream) LocalAddr() net.Addr { return s.ws.NetConn().LocalAddr() }
+func (s *WebSocketStream) RemoteAddr() net.Addr {
+	if s.remote != nil {
+		return s.remote
+	}
+	return s.ws.NetConn().RemoteAddr()
+}
 
 func (s *WebSocketStream) SetDeadline(t time.Time) error {
 	return s.ws.NetConn().SetDeadline(t)
