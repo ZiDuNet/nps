@@ -684,6 +684,10 @@ body.nps-bootstrap .form-page-user .form-workflow-form > .form-workflow-actions 
     margin: 0 !important;
     padding: 0 !important;
 }
+/* User forms keep the two primary actions (save and cancel) on one line. */
+body.nps-bootstrap .form-page-user .form-workflow-form > .form-workflow-actions > .form-actions {
+    flex-wrap: nowrap !important;
+}
 
 /* Domain and global settings share the same centered, two-column operation form. */
 body.nps-bootstrap .form-page-host .form-workflow-card,
@@ -772,6 +776,9 @@ body.nps-bootstrap #platform-host-status.is-valid { color: var(--nps-success) !i
 body.nps-bootstrap #platform-host-status.is-invalid { color: var(--nps-danger) !important; }
 body.nps-bootstrap .host-certificate-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 body.nps-bootstrap .host-certificate-fields .help-block { grid-column: 1 / -1; }
+body.nps-bootstrap .host-certificate-field { display: grid; gap: 6px; min-width: 0; }
+body.nps-bootstrap .host-certificate-field__label { color: var(--nps-muted); font-size: 12px; font-weight: 650; }
+body.nps-bootstrap .host-certificate-field .form-control { min-height: 92px; }
 body.nps-bootstrap .host-certificate-lock { display: flex; align-items: flex-start; gap: 9px; padding: 12px 13px; color: var(--nps-muted); background: var(--nps-primary-soft); border: 1px solid var(--nps-line); border-radius: 6px; line-height: 1.55; }
 body.nps-bootstrap .host-certificate-lock i { padding-top: 2px; color: var(--nps-primary); }
 
@@ -1057,7 +1064,7 @@ body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__bars .management
     gap: 8px;
     padding: 0 !important;
 }
-body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__search { margin-left: auto !important; }
+body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__columns { margin-left: auto !important; }
 
 /* Long client commands reserve a fixed action column and wrap inside their own track. */
 body.nps-bootstrap .client-detail__command {
@@ -2121,6 +2128,8 @@ body.nps-bootstrap .nps-table__column-option { display: flex; align-items: cente
 body.nps-bootstrap .nps-table__column-option:hover { background: var(--nps-primary-soft); color: var(--nps-primary); }
 body.nps-bootstrap .nps-table__column-option input { margin: 0; }
 body.nps-bootstrap .nps-table__search { margin-left: auto; }
+body.nps-bootstrap .nps-table__columns { margin-left: auto; }
+body.nps-bootstrap .nps-table__search { margin-left: 0; }
 body.nps-bootstrap .nps-table__search-field { position: relative; display: flex; align-items: center; margin: 0; }
 body.nps-bootstrap .nps-table__search-field > i { position: absolute; left: 12px; z-index: 1; color: var(--nps-faint); font-size: 12px; pointer-events: none; }
 body.nps-bootstrap .nps-table__search-input { width: 232px !important; min-height: 36px !important; padding-left: 32px !important; }
@@ -3092,10 +3101,10 @@ body.nps-bootstrap .nps-table__search {
         flex: 1 1 auto;
     }
     body.nps-bootstrap .nps-table__bar-actions {
-        order: 2;
+        order: 3;
     }
     body.nps-bootstrap .nps-table__columns {
-        order: 3;
+        order: 2;
     }
     body.nps-bootstrap .nps-table__search {
         order: 4;
@@ -3856,15 +3865,30 @@ body.nps-bootstrap .nps-password-modal .modal-footer {
     border-top: 0;
 }
 body.nps-bootstrap .nps-password-modal .modal-footer .btn { min-width: 88px; }
+body.nps-bootstrap .nps-confirm-modal .nps-confirm-modal__body { display: flex; align-items: flex-start; gap: 12px; }
+body.nps-bootstrap .nps-confirm-modal .nps-confirm-modal__body i { flex: 0 0 auto; margin-top: 2px; color: var(--nps-primary); font-size: 18px; }
+body.nps-bootstrap .nps-confirm-modal .nps-confirm-modal__body i.fa-exclamation-triangle { color: var(--nps-danger, #dc3545); }
+body.nps-bootstrap .nps-confirm-modal .nps-confirm-modal__message { margin: 0; color: var(--nps-ink); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 body.nps-bootstrap #change-password-modal .modal-dialog {
     width: min(440px, calc(100% - 32px));
     margin: 8vh auto;
 }
+/* Keep save/cancel pairs on one line on normal viewports; they may wrap only
+   when the viewport becomes too narrow to hold both buttons comfortably. */
+body.nps-bootstrap .form-page .form-workflow-form > .form-workflow-actions > .form-actions,
+body.nps-bootstrap .form-page .form-workflow-form .form-workflow-actions > .form-actions {
+    flex-wrap: nowrap;
+}
+body.nps-bootstrap .form-page .form-workflow-actions .btn { white-space: nowrap; }
 @media (max-width: 600px) {
     body.nps-bootstrap #change-password-modal .modal-dialog { width: calc(100% - 24px); }
     body.nps-bootstrap .nps-password-modal .modal-header,
     body.nps-bootstrap .nps-password-modal .modal-body,
     body.nps-bootstrap .nps-password-modal .modal-footer { padding-right: 18px; padding-left: 18px; }
+    body.nps-bootstrap .form-page .form-workflow-form > .form-workflow-actions > .form-actions,
+    body.nps-bootstrap .form-page .form-workflow-form .form-workflow-actions > .form-actions {
+        flex-wrap: wrap;
+    }
 }
 
 /* Brand and account rail: keep the identity compact, then pin the account

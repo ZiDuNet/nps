@@ -97,14 +97,24 @@
             else notify('error', response && response.msg ? response.msg : '操作失败');
         }, 'json').fail(function () { notify('error', '请求失败，请刷新后重试'); });
     }
+    function confirmAction(message, danger, confirmLabel) {
+        return typeof npsConfirmDialog === 'function'
+            ? npsConfirmDialog(message, { danger: danger, confirmLabel: confirmLabel || (npsIsEnglish() ? 'Confirm' : '确认') })
+            : Promise.resolve(window.confirm(message));
+    }
     $('#ip-register-search').on('input', function () { window.clearTimeout(this._npsTimer); this._npsTimer = window.setTimeout(refresh, 220); });
     $table.on('click', '.js-ip-register-revoke', function () {
         var button = this, clientID = $(button).data('client-id'), ip = $(button).data('ip');
-        if (!window.confirm('确认撤销 ' + ip + ' 的 IP 登记？')) return;
-        postAction('/revoke', {client_id: clientID, ip: ip}, '已撤销 IP 登记');
+        confirmAction('确认撤销 ' + ip + ' 的 IP 登记？', true, '撤销').then(function (confirmed) {
+            if (confirmed) postAction('/revoke', {client_id: clientID, ip: ip}, '已撤销 IP 登记');
+        });
     });
     $('#ip-register-clean').on('click', function () { postAction('/clean', {}, '已清理过期登记'); });
-    $('#ip-register-clear').on('click', function () { if (window.confirm('确认清空全部 IP 登记？访问者需要重新登记。')) postAction('/clear', {}, '已清空 IP 登记'); });
+    $('#ip-register-clear').on('click', function () {
+        confirmAction('确认清空全部 IP 登记？访问者需要重新登记。', true, '清空').then(function (confirmed) {
+            if (confirmed) postAction('/clear', {}, '已清空 IP 登记');
+        });
+    });
     refresh();
 }());
 </script>

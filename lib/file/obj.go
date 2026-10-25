@@ -278,8 +278,12 @@ type User struct {
 	// credential encrypted at rest for authorized owners who need to reopen it.
 	DashboardKeyHash       string `json:"dashboard_key_hash,omitempty"`
 	DashboardKeyCiphertext string `json:"dashboard_key_ciphertext,omitempty"`
-	Status                 bool
-	Remark                 string
+	// APIKeyCiphertext stores the user API token encrypted at rest so the
+	// account owner can view it again after generation. APIKeyHash remains the
+	// digest used for authentication; the ciphertext is only used for display.
+	APIKeyCiphertext string `json:"api_key_ciphertext,omitempty"`
+	Status           bool
+	Remark           string
 	// MaxClientNum limits the number of clients owned by this user. A zero
 	// value intentionally means unlimited so records written by older NPS
 	// versions remain compatible when decoded from JSON.

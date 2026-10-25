@@ -412,32 +412,37 @@
         var question = english
             ? 'Send an update request? The client will download and verify the latest GitHub release, then restart. Tunnels may briefly disconnect.'
             : '确定下发升级指令吗？客户端会下载并校验 GitHub 最新版本，随后自动重启，隧道可能短暂中断。';
-        if (!button || !clientId || !window.confirm(question)) return;
-
-        var $button = $(button);
-        var originalMarkup = $button.html();
-        $button.prop('disabled', true).attr('aria-busy', 'true');
-        $button.html('<i class="fa fa-spinner fa-spin" aria-hidden="true"></i>');
-        $.ajax({
-            type: 'POST',
-            url: '{{.web_base_url}}/client/upgrade',
-            data: { id: clientId }
-        }).done(function (response) {
-            if (response && response.status === 1) {
-                var sentLabel = english ? 'Update request sent' : '升级指令已下发';
-                $button.html('<i class="fa fa-check" aria-hidden="true"></i>')
-                    .attr('title', sentLabel).attr('aria-label', sentLabel).removeAttr('aria-busy');
-                npsNotify('success', english
-                    ? 'Update request sent. The client restarts after downloading and verifying the release.'
-                    : '升级指令已下发，客户端将在下载并校验完成后自动重启。');
-            } else {
+        if (!button || !clientId) return;
+        var confirmRequest = typeof npsConfirmDialog === 'function'
+            ? npsConfirmDialog(question, { danger: true, confirmLabel: english ? 'Send' : '下发升级' })
+            : Promise.resolve(window.confirm(question));
+        confirmRequest.then(function (confirmed) {
+            if (!confirmed) return;
+            var $button = $(button);
+            var originalMarkup = $button.html();
+            $button.prop('disabled', true).attr('aria-busy', 'true');
+            $button.html('<i class="fa fa-spinner fa-spin" aria-hidden="true"></i>');
+            $.ajax({
+                type: 'POST',
+                url: '{{.web_base_url}}/client/upgrade',
+                data: { id: clientId }
+            }).done(function (response) {
+                if (response && response.status === 1) {
+                    var sentLabel = english ? 'Update request sent' : '升级指令已下发';
+                    $button.html('<i class="fa fa-check" aria-hidden="true"></i>')
+                        .attr('title', sentLabel).attr('aria-label', sentLabel).removeAttr('aria-busy');
+                    npsNotify('success', english
+                        ? 'Update request sent. The client restarts after downloading and verifying the release.'
+                        : '升级指令已下发，客户端将在下载并校验完成后自动重启。');
+                } else {
+                    $button.html(originalMarkup).prop('disabled', false).removeAttr('aria-busy');
+                    npsNotify('error', response && response.msg ? response.msg : npsRequestErrorMessage());
+                }
+            }).fail(function (xhr) {
                 $button.html(originalMarkup).prop('disabled', false).removeAttr('aria-busy');
-                npsNotify('error', response && response.msg ? response.msg : npsRequestErrorMessage());
-            }
-        }).fail(function (xhr) {
-            $button.html(originalMarkup).prop('disabled', false).removeAttr('aria-busy');
-            var message = xhr && xhr.responseJSON && xhr.responseJSON.msg;
-            npsNotify('error', message || npsRequestErrorMessage());
+                var message = xhr && xhr.responseJSON && xhr.responseJSON.msg;
+                npsNotify('error', message || npsRequestErrorMessage());
+            });
         });
     }
 

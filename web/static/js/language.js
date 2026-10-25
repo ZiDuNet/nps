@@ -358,12 +358,67 @@ function npsIsEnglish() {
 }
 
 function npsEscapeHtml(value) {
-    var element = document.createElement('div');
-    element.textContent = value == null ? '' : String(value);
+	var element = document.createElement('div');
+	element.textContent = value == null ? '' : String(value);
     return element.innerHTML
         .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-        .replace(/`/g, '&#x60;');
+		.replace(/'/g, '&#39;')
+		.replace(/`/g, '&#x60;');
+}
+
+// Normalize a multi-line host target list. Pasted URLs are tolerated: an
+// optional scheme (http://, https://, tcp://) and trailing slashes are
+// removed. Each line must then be host:port, or a bare port when the field
+// allows local-port targets. Returns {value, error}; error is a localized
+// message or an empty string.
+function npsNormalizeTargets(raw, options) {
+	options = options || {};
+	var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
+	var lines = String(raw == null ? '' : raw).split(/\r\n|\r|\n/);
+	var cleaned = [];
+	for (var i = 0; i < lines.length; i++) {
+		var line = String(lines[i]).trim();
+		if (!line) { cleaned.push(''); continue; }
+		var scheme = line.match(/^[a-z][a-z0-9+.-]*:\/\//i);
+		if (scheme) line = line.slice(scheme[0].length);
+		line = line.replace(/\/+$/, '');
+		var hostPort = line.match(/^(\[[0-9A-Fa-f:.]+\]|[^\s:\[\]]+):(\d{1,5})$/);
+		if (hostPort) {
+			var port = Number(hostPort[2]);
+			if (port < 1 || port > 65535) {
+				return { error: english
+					? 'Line ' + (i + 1) + ' has an invalid port (1-65535).'
+					: '第 ' + (i + 1) + ' 行的端口无效（应为 1-65535）。' };
+			}
+			cleaned.push(hostPort[1] + ':' + hostPort[2]);
+			continue;
+		}
+		if (!options.requireHost && /^\d{1,5}$/.test(line)) {
+			var barePort = Number(line);
+			if (barePort < 1 || barePort > 65535) {
+				return { error: english
+					? 'Line ' + (i + 1) + ' has an invalid port (1-65535).'
+					: '第 ' + (i + 1) + ' 行的端口无效（应为 1-65535）。' };
+			}
+			cleaned.push(line);
+			continue;
+		}
+		return { error: english
+			? 'Line ' + (i + 1) + ' is not a valid host:port address: ' + line
+			: '第 ' + (i + 1) + ' 行不是有效的 主机:端口 地址：' + line };
+	}
+	return { value: cleaned.join('\n'), error: '' };
+}
+
+// Apply target normalization to a textarea and return the localized error
+// message, or an empty string on success. The textarea value is updated in
+// place when normalization succeeds.
+function npsApplyTargetNormalization(input, options) {
+	if (!input) return '';
+	var result = npsNormalizeTargets(input.value, options);
+	if (result.error) return result.error;
+	input.value = result.value;
+	return '';
 }
 
 function npsBooleanMarkup(value) {
@@ -379,8 +434,8 @@ function npsRequestErrorMessage() {
 }
 
 function npsNotify(type, msg) {
-    msg = msg == null ? '' : String(msg);
-    if (typeof toastr !== 'undefined') {
+	msg = msg == null ? '' : String(msg);
+	if (typeof toastr !== 'undefined') {
         var opts = { positionClass: 'toast-top-center', timeOut: 3000, closeButton: true };
         var safeMsg = npsEscapeHtml(msg);
         if (type === 'error') toastr.error(safeMsg, '', opts);
@@ -409,7 +464,56 @@ function npsNotify(type, msg) {
             notice.classList.remove('is-visible');
             window.setTimeout(function () { notice.remove(); }, 180);
         }, 3200);
-    }
+	}
+}
+
+// Promise-based confirmation dialog. Prefer this over window.confirm so
+// destructive actions get the same visual language as the rest of the panel.
+// It falls back to window.confirm when the Bootstrap modal runtime is absent.
+function npsConfirmDialog(message, options) {
+	options = options || {};
+	message = message == null ? '' : String(message);
+	var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
+	var title = options.title || (english ? 'Confirm' : '确认操作');
+	var confirmLabel = options.confirmLabel || (english ? 'Confirm' : '确认');
+	var cancelLabel = options.cancelLabel || (english ? 'Cancel' : '取消');
+	var danger = !!options.danger;
+	var icon = options.icon || (danger ? 'fa-exclamation-triangle' : 'fa-question-circle');
+	var hasBootstrap = typeof window.bootstrap !== 'undefined' && typeof window.bootstrap.Modal === 'function';
+	if (!hasBootstrap || !window.jQuery) {
+		return Promise.resolve(window.confirm(message));
+	}
+	var $ = window.jQuery;
+	var holder = document.createElement('div');
+	holder.innerHTML = '<div class="modal fade nps-confirm-modal" tabindex="-1" role="dialog" aria-modal="true" aria-hidden="true">'
+		+ '<div class="modal-dialog modal-dialog-centered modal-sm" role="document"><div class="modal-content nps-password-modal">'
+		+ '<div class="modal-header"><div><h2 class="modal-title"></h2></div>'
+		+ '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="' + (english ? 'Close' : '关闭') + '"></button></div>'
+		+ '<div class="modal-body"><div class="nps-confirm-modal__body"><i class="fa ' + icon + '" aria-hidden="true"></i><p class="nps-confirm-modal__message"></p></div></div>'
+		+ '<div class="modal-footer"><button type="button" class="btn btn-outline" data-bs-dismiss="modal"></button><button type="button" class="btn"></button></div>'
+		+ '</div></div></div>';
+	document.body.appendChild(holder);
+	var $modal = $(holder).children('.modal').first();
+	$modal.find('.modal-title').text(title);
+	$modal.find('.nps-confirm-modal__message').text(message);
+	var $confirm = $modal.find('.modal-footer .btn').eq(1);
+	$confirm.addClass(danger ? 'btn-danger' : 'btn-primary').text(confirmLabel);
+	$modal.find('.modal-footer .btn').eq(0).text(cancelLabel);
+	var instance = new window.bootstrap.Modal(holder.querySelector('.modal'), { backdrop: 'static' });
+	return new Promise(function (resolve) {
+		var settled = false;
+		function finish(value) {
+			if (settled) return;
+			settled = true;
+			instance.hide();
+			$modal.off('hidden.bs.modal');
+			resolve(value);
+		}
+		$confirm.on('click', function () { finish(true); });
+		$modal.on('hidden.bs.modal', function () { finish(false); });
+		$modal.on('hidden.bs.modal', function () { $(holder).remove(); });
+		instance.show();
+	});
 }
 
 function npsTableState(kind, loading) {
@@ -545,40 +649,53 @@ function npsSafeReturnUrl(referrer) {
 }
 
 function submitform(action, url, postdata) {
-    postsubmit = false;
-    switch (action) {
-        case 'start':
-        case 'stop':
-        case 'delete':
+	function postForAction(isMutation) {
+		var form = document.querySelector('form.form-horz');
+		if (!validateNpsForm(form, true)) return;
+		$.ajax({
+			type: "POST",
+			url: url,
+			data: postdata,
+			success: function (res) {
+				npsNotify(res.status ? 'success' : 'error', langreply(res.msg));
+				if (!res.status) return;
+				if (isMutation) {
+					// List pages refresh in place instead of reloading the whole
+					// document so current filters and scroll position survive.
+					var table = $('#table').data('npsTable');
+					if (table && typeof table.refresh === 'function') {
+						table.refresh();
+						return;
+					}
+					document.location.reload();
+				} else {
+					window.location.href = npsSafeReturnUrl(document.referrer);
+				}
+			},
+			error: function () {
+				npsNotify('error', npsRequestErrorMessage());
+			}
+		});
+	}
+	switch (action) {
+		case 'start':
+		case 'stop':
+		case 'delete':
 		case 'copy':
-            var confirmCatalog = languages && languages['content'] && languages['content']['confirm'];
-            var langobj = confirmCatalog && confirmCatalog[action];
-            action = (langobj && (langobj[languages['current']] || langobj[languages['default']]))
-                || (npsIsEnglish() ? 'Are you sure you want to ' + action + ' it?' : '确定要执行此操作吗？');
-            if (! confirm(action)) return;
-            postsubmit = true;
-        case 'add':
-        case 'edit':
-            var form = document.querySelector('form.form-horz');
-            if (!validateNpsForm(form, true)) return;
-            $.ajax({
-                type: "POST",
-                url: url,
-                data: postdata,
-                success: function (res) {
-                    npsNotify(res.status ? 'success' : 'error', langreply(res.msg));
-                    if (res.status) {
-                        if (postsubmit) {
-							document.location.reload();
-						}else{
-                            window.location.href = npsSafeReturnUrl(document.referrer);
-                        }
-                    }
-                },
-                error: function () {
-                    npsNotify('error', npsRequestErrorMessage());
-                }
-            });
+			var confirmCatalog = languages && languages['content'] && languages['content']['confirm'];
+			var langobj = confirmCatalog && confirmCatalog[action];
+			var message = (langobj && (langobj[languages['current']] || langobj[languages['default']]))
+				|| (npsIsEnglish() ? 'Are you sure you want to ' + action + ' it?' : '确定要执行此操作吗？');
+			return npsConfirmDialog(message, {
+				danger: action === 'delete',
+				confirmLabel: npsIsEnglish() ? 'Confirm' : '确认',
+				cancelLabel: npsIsEnglish() ? 'Cancel' : '取消'
+			}).then(function (confirmed) {
+				if (confirmed) postForAction(true);
+			});
+		case 'add':
+		case 'edit':
+			postForAction(false);
 			return;
 		case 'global':
 			var formG = document.querySelector('form.form-horz');
@@ -597,7 +714,7 @@ function submitform(action, url, postdata) {
 					npsNotify('error', npsRequestErrorMessage());
 				}
 			});
-    }
+	}
 }
 
 function changeunit(limit) {

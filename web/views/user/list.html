@@ -22,6 +22,34 @@
     </div>
 </section>
 
+<div id="user-api-token-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="user-api-token-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content nps-password-modal">
+            <div class="modal-header">
+                <div>
+                    <div class="nps-modal-kicker" data-i18n-zh="系统接入" data-i18n-en="System integration">系统接入</div>
+                    <h2 id="user-api-token-title" class="modal-title" data-i18n-zh="用户 API Token" data-i18n-en="User API token">用户 API Token</h2>
+                </div>
+                <button type="button" class="nps-modal-close" data-bs-dismiss="modal" aria-label="关闭" data-aria-label-zh="关闭" data-aria-label-en="Close"><i class="fa fa-times" aria-hidden="true"></i><span class="sr-only" data-i18n-zh="关闭" data-i18n-en="Close">关闭</span></button>
+            </div>
+            <div class="modal-body">
+                <p class="nps-password-modal__account"><span data-i18n-zh="用户" data-i18n-en="User">用户</span><strong id="user-api-token-account">-</strong></p>
+                <p class="help-block" data-i18n-zh="Token 会加密保存在服务端，管理员可以随时再次查看。重新生成会使旧 Token 立即失效；撤销后调用方将无法通过该 Token 认证。" data-i18n-en="The token is encrypted at rest and administrators can view it again at any time. Rotating it invalidates the previous token immediately; revoking it stops API authentication with this token.">Token 会加密保存在服务端，管理员可以随时再次查看。重新生成会使旧 Token 立即失效；撤销后调用方将无法通过该 Token 认证。</p>
+                <div class="form-group">
+                    <label class="form-label" for="user-api-token-value" data-i18n-zh="Token" data-i18n-en="Token">Token</label>
+                    <div class="input-group">
+                        <input id="user-api-token-value" class="form-control" type="text" readonly autocomplete="off" spellcheck="false">
+                        <button id="user-api-token-copy" type="button" class="btn btn-outline btn-primary" title="复制 Token" data-title-zh="复制 Token" data-title-en="Copy token" aria-label="复制 Token" data-aria-label-zh="复制 Token" data-aria-label-en="Copy token"><i class="fa fa-copy" aria-hidden="true"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" data-bs-dismiss="modal" data-i18n-zh="关闭" data-i18n-en="Close">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     $('#table').npsTable({
         toolbar: "#toolbar",
@@ -110,8 +138,9 @@
                         ? '<span class="badge badge-primary">' + (npsIsEnglish() ? 'Enabled' : '已启用') + '</span>'
                         : '<span class="badge badge-default">' + (npsIsEnglish() ? 'Not set' : '未配置') + '</span>';
                     var actions = '<span class="user-token-actions">';
-                    actions += '<button type="button" onclick="regenerateUserAPIKey(' + userId + ')" class="btn btn-outline btn-info btn-xs" title="' + (npsIsEnglish() ? 'Rotate API key' : (value ? '重新生成 API 密钥' : '生成 API 密钥')) + '" aria-label="' + (npsIsEnglish() ? 'Rotate API key' : (value ? '重新生成 API 密钥' : '生成 API 密钥')) + '"><i class="fa fa-key" aria-hidden="true"></i></button>';
-                    if (value) actions += '<button type="button" onclick="revokeUserAPIKey(' + userId + ')" class="btn btn-outline btn-warning btn-xs" title="' + (npsIsEnglish() ? 'Revoke API key' : '撤销 API 密钥') + '" aria-label="' + (npsIsEnglish() ? 'Revoke API key' : '撤销 API 密钥') + '"><i class="fa fa-unlink" aria-hidden="true"></i></button>';
+                    if (value) actions += '<button type="button" onclick="showUserAPIToken(' + userId + ', ' + npsJsonAttr(row.UserName) + ')" class="btn btn-outline btn-primary btn-xs" title="' + (npsIsEnglish() ? 'View API token' : '查看 API Token') + '" aria-label="' + (npsIsEnglish() ? 'View API token' : '查看 API Token') + '"><i class="fa fa-eye" aria-hidden="true"></i></button>';
+                    actions += '<button type="button" onclick="regenerateUserAPIKey(' + userId + ', ' + npsJsonAttr(row.UserName) + ')" class="btn btn-outline btn-info btn-xs" title="' + (npsIsEnglish() ? 'Rotate API token' : (value ? '重新生成 API Token' : '生成 API Token')) + '" aria-label="' + (npsIsEnglish() ? 'Rotate API token' : (value ? '重新生成 API Token' : '生成 API Token')) + '"><i class="fa fa-key" aria-hidden="true"></i></button>';
+                    if (value) actions += '<button type="button" onclick="revokeUserAPIKey(' + userId + ')" class="btn btn-outline btn-warning btn-xs" title="' + (npsIsEnglish() ? 'Revoke API token' : '撤销 API Token') + '" aria-label="' + (npsIsEnglish() ? 'Revoke API token' : '撤销 API Token') + '"><i class="fa fa-unlink" aria-hidden="true"></i></button>';
                     actions += '</span>';
                     return '<div class="user-token-cell">' + status + actions + '</div>';
                 }
@@ -153,34 +182,75 @@
         return npsIsEnglish() ? 'Unlimited' : '不限';
     }
 
-    function regenerateUserAPIKey(userId) {
+    function npsJsonAttr(value) {
+        var text = value == null || value === '' ? '-' : String(value);
+        return "'" + text
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/\r/g, '\\r')
+            .replace(/\n/g, '\\n')
+            .replace(/</g, '\\u003C') + "'";
+    }
+
+    function userAPITokenModal() {
+        return window.bootstrap && window.bootstrap.Modal
+            ? new window.bootstrap.Modal(document.getElementById('user-api-token-modal'))
+            : null;
+    }
+
+    function fillUserAPITokenModal(userName, token) {
+        $('#user-api-token-account').text(userName == null || userName === '' ? '-' : userName);
+        $('#user-api-token-value').val(token || '');
+        var modal = userAPITokenModal();
+        if (modal) modal.show();
+    }
+
+    function showUserAPIToken(userId, userName) {
+        $.get('{{.web_base_url}}/user/apikeystatus', { id: userId }, function (response) {
+            if (!response || Number(response.status) !== 1) {
+                npsNotify('error', response && response.msg ? response.msg : (npsIsEnglish() ? 'Failed to read the API token' : '读取 API Token 失败'));
+                return;
+            }
+            if (response.token) {
+                fillUserAPITokenModal(userName, response.token);
+            } else {
+                npsNotify('warning', npsIsEnglish()
+                    ? 'This token was created by an older version and cannot be viewed again. Rotate it to generate a new one.'
+                    : '该 Token 由旧版本创建，无法再次查看；请重新生成后再查看。');
+            }
+        }, 'json').fail(function () { npsNotify('error', npsRequestErrorMessage()); });
+    }
+
+    function regenerateUserAPIKey(userId, userName) {
         $.post('{{.web_base_url}}/user/regenerateapikey', { id: userId }, function (response) {
             if (!response || Number(response.status) !== 1) {
-                npsNotify('error', response && response.msg ? response.msg : (npsIsEnglish() ? 'Failed to generate API key' : '生成 API 密钥失败'));
+                npsNotify('error', response && response.msg ? response.msg : (npsIsEnglish() ? 'Failed to generate API token' : '生成 API Token 失败'));
                 return;
             }
             var token = response.token || '';
-            if (window.layer && layer.open) {
-                layer.open({
-                    type: 1,
-                    title: npsIsEnglish() ? 'User API key' : '用户 API 密钥',
-                    area: ['560px', '220px'],
-                    content: '<div style="padding:24px"><p>' + (npsIsEnglish() ? 'This token is shown once. Save it now.' : '密钥只显示这一次，请立即保存。') + '</p><textarea class="form-control" readonly style="min-height:74px;word-break:break-all">' + $('<div>').text(token).html() + '</textarea></div>'
-                });
-            } else {
-                window.prompt(npsIsEnglish() ? 'Copy and save this API key' : '请复制并保存此 API 密钥', token);
-            }
-        }, 'json');
+            fillUserAPITokenModal(userName, token);
+            $('#table').npsTable('refresh');
+        }, 'json').fail(function () { npsNotify('error', npsRequestErrorMessage()); });
     }
 
     function revokeUserAPIKey(userId) {
-        $.post('{{.web_base_url}}/user/revokeapikey', { id: userId }, function (response) {
-            if (!response || Number(response.status) !== 1) {
-                npsNotify('error', response && response.msg ? response.msg : (npsIsEnglish() ? 'Failed to revoke API key' : '撤销 API 密钥失败'));
-                return;
-            }
-            npsNotify('success', response.msg || (npsIsEnglish() ? 'API key revoked' : 'API 密钥已撤销'));
-            $('#table').bootstrapTable('refresh');
-        }, 'json');
+        var message = npsIsEnglish()
+            ? 'Revoking immediately stops API authentication with this token. Continue?'
+            : '撤销后，调用方将立即无法使用该 Token 认证。确定继续吗？';
+        npsConfirmDialog(message, { danger: true, confirmLabel: npsIsEnglish() ? 'Revoke' : '撤销' }).then(function (confirmed) {
+            if (!confirmed) return;
+            $.post('{{.web_base_url}}/user/revokeapikey', { id: userId }, function (response) {
+                if (!response || Number(response.status) !== 1) {
+                    npsNotify('error', response && response.msg ? response.msg : (npsIsEnglish() ? 'Failed to revoke API token' : '撤销 API Token 失败'));
+                    return;
+                }
+                npsNotify('success', response.msg || (npsIsEnglish() ? 'API token revoked' : 'API Token 已撤销'));
+                $('#table').npsTable('refresh');
+            }, 'json').fail(function () { npsNotify('error', npsRequestErrorMessage()); });
+        });
     }
+
+    $('#user-api-token-copy').on('click', function () {
+        npsCopyText($('#user-api-token-value').val(), npsIsEnglish() ? 'Token copied' : 'Token 已复制');
+    });
 </script>

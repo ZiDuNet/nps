@@ -76,10 +76,14 @@ type Source struct {
 	priority int
 	black    []netip.Prefix
 	white    []netip.Prefix
-	hasBlack bool
-	hasWhite bool
-	invalid  bool
-	mu       sync.RWMutex
+	// Negated GeoIP rules (for example geoip:!cn) cannot be expanded into a
+	// finite prefix set. They are kept verbatim and evaluated at match time.
+	blackNegGeo []string
+	whiteNegGeo []string
+	hasBlack    bool
+	hasWhite    bool
+	invalid     bool
+	mu          sync.RWMutex
 }
 
 // CompileSource builds an IP/CIDR source policy. Host names and Geosite rules
@@ -97,8 +101,8 @@ func CompileSource(scope Scope, priority int, black, white []string) (*Source, e
 		hasWhite: hasActiveRule(whiteLines),
 	}
 	var errs []error
-	s.black, errs = compileIPRules(scope, "black", blackLines, errs)
-	s.white, errs = compileIPRules(scope, "white", whiteLines, errs)
+	s.black, s.blackNegGeo, errs = compileIPRules(scope, "black", blackLines, errs)
+	s.white, s.whiteNegGeo, errs = compileIPRules(scope, "white", whiteLines, errs)
 	if len(errs) == 0 {
 		return s, nil
 	}
@@ -119,15 +123,16 @@ func hasActiveRule(lines []string) bool {
 	return false
 }
 
-func compileIPRules(scope Scope, name string, rules []string, errs []error) ([]netip.Prefix, []error) {
+func compileIPRules(scope Scope, name string, rules []string, errs []error) ([]netip.Prefix, []string, []error) {
 	lines := splitLines(rules)
 	count := activeRuleCount(lines)
 	if scope == ScopeUser && maxRules > 0 && count > maxRules {
 		errs = append(errs, fmt.Errorf("%s list has %d rules, maximum is %d", name, count, maxRules))
-		return nil, errs
+		return nil, nil, errs
 	}
 	seen := make(map[string]struct{}, len(lines))
 	out := make([]netip.Prefix, 0, len(lines))
+	var negGeo []string
 	for index, raw := range lines {
 		rule := strings.TrimSpace(raw)
 		if rule == "" || strings.HasPrefix(rule, "#") || strings.HasPrefix(rule, ";") {
@@ -135,6 +140,20 @@ func compileIPRules(scope Scope, name string, rules []string, errs []error) ([]n
 		}
 		if strings.HasPrefix(strings.ToLower(rule), "geoip:") {
 			category := strings.TrimSpace(rule[len("geoip:"):])
+			if strings.HasPrefix(category, "!") {
+				base := strings.TrimSpace(strings.TrimPrefix(category, "!"))
+				if !geoCategoryExists("geoip", base) {
+					errs = append(errs, fmt.Errorf("%s rule %d %q requires geoip data", name, index+1, rule))
+					continue
+				}
+				key := "!" + strings.ToLower(base)
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				seen[key] = struct{}{}
+				negGeo = append(negGeo, "!"+strings.ToLower(base))
+				continue
+			}
 			prefixes := geoPrefixes(category)
 			if len(prefixes) == 0 {
 				errs = append(errs, fmt.Errorf("%s rule %d %q requires geoip data", name, index+1, rule))
@@ -169,7 +188,8 @@ func compileIPRules(scope Scope, name string, rules []string, errs []error) ([]n
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Bits() < out[j].Bits() || (out[i].Bits() == out[j].Bits() && out[i].String() < out[j].String())
 	})
-	return out, errs
+	sort.Strings(negGeo)
+	return out, negGeo, errs
 }
 
 func activeRuleCount(lines []string) int {
@@ -203,6 +223,9 @@ func parseIPPrefix(raw string) (netip.Prefix, error) {
 	} else if strings.HasPrefix(raw, "[") && strings.HasSuffix(raw, "]") {
 		raw = strings.TrimSuffix(strings.TrimPrefix(raw, "["), "]")
 	}
+	if prefix, ok, err := parseIPv4Wildcard(raw); ok || err != nil {
+		return prefix, err
+	}
 	if strings.Contains(raw, "/") {
 		prefix, err := netip.ParsePrefix(raw)
 		if err != nil {
@@ -218,6 +241,69 @@ func parseIPPrefix(raw string) (netip.Prefix, error) {
 		return netip.PrefixFrom(addr, 32), nil
 	}
 	return netip.PrefixFrom(addr, 128), nil
+}
+
+// parseIPv4Wildcard converts the historical dotted wildcard forms, such as
+// "192.168.*" or "10.*", into an equivalent IPv4 prefix. ok reports whether
+// the input is a wildcard form; a wildcard form that cannot be interpreted
+// returns an error.
+func parseIPv4Wildcard(raw string) (netip.Prefix, bool, error) {
+	if !strings.Contains(raw, "*") {
+		return netip.Prefix{}, false, nil
+	}
+	if strings.Contains(raw, ":") {
+		return netip.Prefix{}, true, errors.New("IPv6 wildcard rules are not supported")
+	}
+	parts := strings.Split(raw, ".")
+	if len(parts) < 1 || len(parts) > 4 {
+		return netip.Prefix{}, true, errors.New("invalid IPv4 wildcard rule")
+	}
+	octets := make([]string, 4)
+	wildcard := false
+	for index, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "*" {
+			wildcard = true
+			for i := index; i < 4; i++ {
+				octets[i] = "0"
+			}
+			break
+		}
+		if !isDecimalOctet(part) {
+			return netip.Prefix{}, true, errors.New("invalid IPv4 wildcard rule")
+		}
+		octets[index] = part
+	}
+	if !wildcard {
+		return netip.Prefix{}, true, errors.New("invalid IPv4 wildcard rule")
+	}
+	prefixLength := 0
+	for _, octet := range parts {
+		if strings.TrimSpace(octet) == "*" {
+			break
+		}
+		prefixLength += 8
+	}
+	joined := strings.Join(octets, ".")
+	addr, err := netip.ParseAddr(joined)
+	if err != nil || !addr.Is4() {
+		return netip.Prefix{}, true, errors.New("invalid IPv4 wildcard rule")
+	}
+	return netip.PrefixFrom(addr, prefixLength).Masked(), true, nil
+}
+
+func isDecimalOctet(value string) bool {
+	if value == "" || len(value) > 3 {
+		return false
+	}
+	number := 0
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+		number = number*10 + int(char-'0')
+	}
+	return number >= 0 && number <= 255
 }
 
 func addressOf(addr net.Addr) (netip.Addr, bool) {
@@ -257,8 +343,20 @@ func (s *Source) matches(addr netip.Addr) (black, white bool) {
 			break
 		}
 	}
+	for _, rule := range s.blackNegGeo {
+		if geoIPRuleMatches(rule, addr) {
+			black = true
+			break
+		}
+	}
 	for _, rule := range s.white {
 		if rule.Contains(addr) {
+			white = true
+			break
+		}
+	}
+	for _, rule := range s.whiteNegGeo {
+		if geoIPRuleMatches(rule, addr) {
 			white = true
 			break
 		}

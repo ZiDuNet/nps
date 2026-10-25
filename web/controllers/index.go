@@ -1043,6 +1043,7 @@ func (s *IndexController) Add() {
 		// /index/add URL without a type as the mode-picker fallback.
 		s.Data["dedicated"] = rawTunnelType != ""
 		s.Data["client_id"] = s.getEscapeString("client_id")
+		s.Data["allow_ports"] = strings.TrimSpace(beego.AppConfig.String("allow_ports"))
 		s.SetInfo("add tunnel")
 		if rawTunnelType == "" {
 			s.display("index/add")
@@ -1313,6 +1314,7 @@ func (s *IndexController) Edit() {
 			s.Data["menu"] = tunnelSidebarMenu(tunnelMode)
 			t.RUnlock()
 			s.Data["dedicated"] = true
+			s.Data["allow_ports"] = strings.TrimSpace(beego.AppConfig.String("allow_ports"))
 		}
 		s.SetInfo("edit tunnel")
 		s.display(tunnelTemplatePath(tunnelMode, "edit"))

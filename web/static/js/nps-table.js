@@ -649,41 +649,47 @@
         }
         var zh = chineseLabel || '批量操作';
         var en = englishLabel || 'Apply action';
-        if (!window.confirm(localText('确定要对选中的 ' + ids.length + ' 条记录执行“' + zh + '”吗？', 'Apply "' + en + '" to ' + ids.length + ' selected record(s)?'))) return false;
         payload = payload && typeof payload === 'object' ? payload : {};
-        var succeeded = 0;
-        var failed = 0;
-        var failureMessages = [];
-        var applyNext = function (index) {
-            if (index >= ids.length) {
-                $('#table').npsTable('refresh');
-                if (typeof window.npsNotify === 'function') {
-                    if (!failed) {
-                        window.npsNotify('success', localText(zh + '成功。', en + ' completed successfully.'));
-                    } else if (succeeded) {
-                        window.npsNotify('warning', localText(zh + '完成：成功 ' + succeeded + ' 条，失败 ' + failed + ' 条。', en + ' completed: ' + succeeded + ' succeeded, ' + failed + ' failed.'));
-                    } else {
-                        window.npsNotify('error', localText(zh + '失败。', en + ' failed.'));
+        var confirmMessage = localText('确定要对选中的 ' + ids.length + ' 条记录执行“' + zh + '”吗？', 'Apply "' + en + '" to ' + ids.length + ' selected record(s)?');
+        var requestConfirm = typeof window.npsConfirmDialog === 'function'
+            ? window.npsConfirmDialog(confirmMessage)
+            : Promise.resolve(window.confirm(confirmMessage));
+        requestConfirm.then(function (confirmed) {
+            if (!confirmed) return;
+            var succeeded = 0;
+            var failed = 0;
+            var failureMessages = [];
+            var applyNext = function (index) {
+                if (index >= ids.length) {
+                    $('#table').npsTable('refresh');
+                    if (typeof window.npsNotify === 'function') {
+                        if (!failed) {
+                            window.npsNotify('success', localText(zh + '成功。', en + ' completed successfully.'));
+                        } else if (succeeded) {
+                            window.npsNotify('warning', localText(zh + '完成：成功 ' + succeeded + ' 条，失败 ' + failed + ' 条。', en + ' completed: ' + succeeded + ' succeeded, ' + failed + ' failed.'));
+                        } else {
+                            window.npsNotify('error', localText(zh + '失败。', en + ' failed.'));
+                        }
                     }
-                }
-                return;
-            }
-            var requestData = $.extend({}, payload, {id: ids[index]});
-            $.ajax({type: 'POST', url: url, data: requestData, dataType: 'json'}).done(function (result) {
-                if (!result || !result.status) {
-                    failed++;
-                    if (result && result.msg && failureMessages.length < 3) failureMessages.push(result.msg);
-                    applyNext(index + 1);
                     return;
                 }
-                succeeded++;
-                applyNext(index + 1);
-            }).fail(function () {
-                failed++;
-                applyNext(index + 1);
-            });
-        };
-        applyNext(0);
+                var requestData = $.extend({}, payload, {id: ids[index]});
+                $.ajax({type: 'POST', url: url, data: requestData, dataType: 'json'}).done(function (result) {
+                    if (!result || !result.status) {
+                        failed++;
+                        if (result && result.msg && failureMessages.length < 3) failureMessages.push(result.msg);
+                        applyNext(index + 1);
+                        return;
+                    }
+                    succeeded++;
+                    applyNext(index + 1);
+                }).fail(function () {
+                    failed++;
+                    applyNext(index + 1);
+                });
+            };
+            applyNext(0);
+        });
         return false;
     };
 

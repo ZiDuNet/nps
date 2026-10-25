@@ -865,6 +865,16 @@
 		<en-US>IPV4</en-US>
 	</lang>
 
+	<lang id="info-iplistrules">
+		<zh-CN>每行一条：IP、CIDR（如 10.0.0.0/8）、IPv4 前缀通配（如 192.168.*）、geoip:cn、geoip:!cn（取反）、geoip:private，# 开头为注释。访问需依次通过全局、客户端、隧道或域名三层名单，上级拒绝的访问下级无法放行。</zh-CN>
+		<en-US>One per line: IP, CIDR (e.g. 10.0.0.0/8), IPv4 prefix wildcard (e.g. 192.168.*), geoip:cn, geoip:!cn (negated), geoip:private. Lines starting with # are comments. Access has to pass the global, client and tunnel or host lists in turn; what a higher level denies, a lower level cannot allow.</en-US>
+	</lang>
+
+	<lang id="info-suchasaclrules">
+		<zh-CN>例如&#10;1.2.3.4&#10;10.0.0.0/8&#10;192.168.*&#10;geoip:cn</zh-CN>
+		<en-US>Such as&#10;1.2.3.4&#10;10.0.0.0/8&#10;192.168.*&#10;geoip:cn</en-US>
+	</lang>
+
 	<lang id="word-blackip">
 		<zh-CN>IP黑名单</zh-CN>
 		<en-US>IP Black List</en-US>

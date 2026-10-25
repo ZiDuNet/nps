@@ -179,7 +179,7 @@ func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
 		`npsApplyTableState(this, 'client')`,
 		`type="button"`,
 		`data-title-en="Disable client"`,
-		`data-title-en="Delete my client"`,
+		`data-title-en="Delete client"`,
 		`data-title-en="Copy command"`,
 		`storageKey: 'client-v3'`,
 		`client-version-update`,

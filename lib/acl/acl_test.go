@@ -85,6 +85,54 @@ func TestCompileSourceSupportsConfiguredGeoIPAndRejectsGeosite(t *testing.T) {
 	}
 }
 
+func TestCompileSourceSupportsIPv4PrefixWildcards(t *testing.T) {
+	tests := []struct {
+		rule    string
+		want    string
+		wantErr bool
+	}{
+		{rule: "192.168.*", want: "192.168.0.0/16"},
+		{rule: "10.*", want: "10.0.0.0/8"},
+		{rule: "10.1.2.*", want: "10.1.2.0/24"},
+		{rule: "192.168.*.*", want: "192.168.0.0/16"},
+		{rule: "192.168.256.*", wantErr: true},
+		{rule: "2001:db8::*", wantErr: true},
+	}
+	for _, test := range tests {
+		source, err := CompileSource(ScopeUser, DenyFirst, nil, []string{test.rule})
+		if (err != nil) != test.wantErr {
+			t.Fatalf("CompileSource(%q) error = %v, wantErr %t", test.rule, err, test.wantErr)
+		}
+		if test.wantErr {
+			continue
+		}
+		if source == nil || len(source.white) != 1 || source.white[0].String() != test.want {
+			t.Fatalf("CompileSource(%q) = %#v, want single prefix %q", test.rule, source, test.want)
+		}
+	}
+}
+
+func TestCompileSourceSupportsNegatedGeoIP(t *testing.T) {
+	resetGeoTestData(t)
+	path := filepath.Join(t.TempDir(), "geoip.dat")
+	writeGeoTestFile(t, path, "cn,198.51.100.0/24\n", time.Time{})
+	SetGeoData(path, "")
+
+	source, err := CompileSource(ScopeUser, DenyFirst, []string{"geoip:!cn"}, nil)
+	if err != nil || source == nil {
+		t.Fatalf("CompileSource() error = %v, source = %v", err, source)
+	}
+	if !source.AllowsString("198.51.100.8:443") {
+		t.Fatal("geoip:!cn denylist must allow addresses inside cn")
+	}
+	if source.AllowsString("203.0.113.8:443") {
+		t.Fatal("geoip:!cn denylist must deny addresses outside cn")
+	}
+	if _, err := CompileSource(ScopeUser, DenyFirst, nil, []string{"geoip:!missing"}); err == nil {
+		t.Fatal("negated geoip with missing data must fail closed")
+	}
+}
+
 func TestCompileSourceEvaluatesValidListsAndPriority(t *testing.T) {
 	black := []string{"198.51.100.0/24"}
 	white := []string{"198.51.100.8", "203.0.113.0/24"}

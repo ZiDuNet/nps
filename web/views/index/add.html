@@ -50,6 +50,10 @@
                         <label class="form-label font-bold" for="type" langtag="word-scheme"></label>
                         <div class="form-group-wrapper">
                             <input type="hidden" name="type" id="type" value="{{.type}}">
+                            {{if .dedicated}}
+                            <div class="tunnel-mode-readonly" aria-readonly="true"><i class="fa fa-exchange" aria-hidden="true"></i><span langtag="scheme-{{$mode}}"></span></div>
+                            <span class="help-block" data-i18n-zh="当前页面只维护该模式隧道；如需创建其他类型的隧道，请从左侧菜单进入对应页面。" data-i18n-en="This page manages tunnels of this mode only. To create another type, open the matching page from the menu.">当前页面只维护该模式隧道；如需创建其他类型的隧道，请从左侧菜单进入对应页面。</span>
+                            {{else}}
                             <div class="tunnel-mode-choice-grid" role="radiogroup" aria-label="代理模式" data-aria-label-zh="代理模式" data-aria-label-en="Proxy mode">
                                 <label class="tunnel-mode-choice{{if or (not .type) (eq $mode "tcp")}} is-selected{{end}}"><input type="radio" name="type_choice" value="tcp"{{if or (not .type) (eq $mode "tcp")}} checked{{end}}{{if .dedicated}} disabled{{end}}><span><i class="fa fa-plug" aria-hidden="true"></i><span><strong langtag="scheme-tcp"></strong><small data-i18n-zh="端口转发" data-i18n-en="Port forwarding">端口转发</small></span></span></label>
                                 <label class="tunnel-mode-choice{{if eq $mode "udp"}} is-selected{{end}}"><input type="radio" name="type_choice" value="udp"{{if eq $mode "udp"}} checked{{end}}{{if .dedicated}} disabled{{end}}><span><i class="fa fa-satellite-dish" aria-hidden="true"></i><span><strong langtag="scheme-udp"></strong><small data-i18n-zh="UDP 数据报" data-i18n-en="UDP datagrams">UDP 数据报</small></span></span></label>
@@ -59,6 +63,7 @@
                                 <label class="tunnel-mode-choice{{if eq $mode "file"}} is-selected{{end}}"><input type="radio" name="type_choice" value="file"{{if eq $mode "file"}} checked{{end}}{{if .dedicated}} disabled{{end}}><span><i class="fa fa-folder-open" aria-hidden="true"></i><span><strong langtag="scheme-file"></strong><small data-i18n-zh="文件发布" data-i18n-en="File publishing">文件发布</small></span></span></label>
                             </div>
                             <span class="help-block" data-i18n-zh="TCP/UDP 用于端口转发，混合代理同时提供 HTTP 与 SOCKS5，Secret/P2P 用于私密或点对点访问，文件模式用于发布目录。选择后页面会自动隐藏不适用字段。" data-i18n-en="TCP/UDP provide port forwarding, mixed proxy exposes HTTP and SOCKS5, Secret/P2P provide private or peer-to-peer access, and file mode publishes a directory. Fields not used by the selected mode are hidden automatically.">TCP/UDP 用于端口转发，混合代理同时提供 HTTP 与 SOCKS5，Secret/P2P 用于私密或点对点访问，文件模式用于发布目录。选择后页面会自动隐藏不适用字段。</span>
+                            {{end}}
                         </div>
                     </div>
 
@@ -105,7 +110,8 @@
                         <div class="form-group-wrapper">
                             <input id="tunnel-port" class="form-control" type="number" name="port" min="1" max="65535" step="1" inputmode="numeric" placeholder=""
                                    langtag="info-suchasport">
-                            <span class="help-block" data-i18n-zh="公网访问端口；必须是服务器上未被占用且允许映射的端口。" data-i18n-en="The public access port; it must be unused and allowed by the server port policy.">公网访问端口；必须是服务器上未被占用且允许映射的端口。</span>
+                            <span class="help-block" data-i18n-zh="公网访问端口，留空由系统自动分配；必须是服务器上未被占用且允许映射的端口。" data-i18n-en="The public access port; leave blank for automatic assignment. It must be unused and allowed by the server port policy.">公网访问端口，留空由系统自动分配；必须是服务器上未被占用且允许映射的端口。</span>
+                            <span class="help-block port-range-hint"><span data-i18n-zh="允许端口范围（读取自 nps.conf 的 allow_ports）：" data-i18n-en="Allowed port range (from allow_ports in nps.conf): ">允许端口范围（读取自 nps.conf 的 allow_ports）：</span><code class="port-range-value">{{if .allow_ports}}{{.allow_ports}}{{else}}<span data-i18n-zh="未限制（1-65535）" data-i18n-en="Unrestricted (1-65535)">未限制（1-65535）</span>{{end}}</code></span>
                         </div>
                     </div>
                     {{end}}
@@ -132,7 +138,7 @@
                         <div class="form-group-wrapper">
                             <textarea id="tunnel-target" class="form-control" name="target" rows="4" placeholder=""
                                       langtag="info-suchasiplist"></textarea>
-                            <span class="help-block m-b-none" langtag="info-targettunnel"></span>
+                            <span class="help-block m-b-none" data-i18n-zh="每行一个 IP:端口；可直接粘贴 http://127.0.0.1:2222 这类地址，保存时会自动去掉协议头并校验格式。开启本地代理时也可以只填写端口号；只有 TCP 模式支持多个目标轮询。" data-i18n-en="One IP:port per line. Pasting an address such as http://127.0.0.1:2222 is fine; the scheme is stripped and the format validated on save. With local proxy enabled you may enter just a port. Only TCP mode supports multiple round-robin targets.">每行一个 IP:端口；可直接粘贴 http://127.0.0.1:2222 这类地址，保存时会自动去掉协议头并校验格式。开启本地代理时也可以只填写端口号；只有 TCP 模式支持多个目标轮询。</span>
                         </div>
                     </div>
                     {{end}}
@@ -180,11 +186,11 @@
                     </div>
                     <div class="form-group form-group--wide" data-tunnel-field="acl">
                         <label class="form-label font-bold" for="tunnel-acl-black" data-i18n-zh="隧道黑名单（IP/CIDR）" data-i18n-en="Tunnel denylist (IP/CIDR)">隧道黑名单（IP/CIDR）</label>
-                        <div class="form-group-wrapper"><textarea id="tunnel-acl-black" class="form-control" rows="2" name="blackiplist" placeholder="203.0.113.10"></textarea><span class="help-block" data-i18n-zh="每行一个 IP、CIDR 或 Geo 规则；命中的来源会按名单优先级拒绝或放行。留空表示本层不增加黑名单限制。" data-i18n-en="One IP, CIDR, or Geo rule per line; matches are handled by the list priority. Leave empty to add no denylist at this level.">每行一个 IP、CIDR 或 Geo 规则；命中的来源会按名单优先级拒绝或放行。留空表示本层不增加黑名单限制。</span></div>
+                        <div class="form-group-wrapper"><textarea id="tunnel-acl-black" class="form-control" rows="3" name="blackiplist" placeholder="" langtag="info-suchasaclrules"></textarea><span class="help-block" data-i18n-zh="每行一条：IP、CIDR（如 10.0.0.0/8）、IPv4 前缀通配（如 192.168.*）、geoip:cn、geoip:!cn（取反）、geoip:private，# 开头为注释。访问需依次通过全局、客户端、隧道或域名三层名单，上级拒绝的访问下级无法放行。留空表示本层不增加黑名单限制。" data-i18n-en="One per line: IP, CIDR (e.g. 10.0.0.0/8), IPv4 prefix wildcard (e.g. 192.168.*), geoip:cn, geoip:!cn (negated), geoip:private. Lines starting with # are comments. Access has to pass the global, client and tunnel or host lists in turn; what a higher level denies, a lower level cannot allow. Leave empty to add no denylist at this level.">每行一条：IP、CIDR（如 10.0.0.0/8）、IPv4 前缀通配（如 192.168.*）、geoip:cn、geoip:!cn（取反）、geoip:private，# 开头为注释。访问需依次通过全局、客户端、隧道或域名三层名单，上级拒绝的访问下级无法放行。留空表示本层不增加黑名单限制。</span></div>
                     </div>
                     <div class="form-group form-group--wide" data-tunnel-field="acl">
                         <label class="form-label font-bold" for="tunnel-acl-white" data-i18n-zh="隧道白名单（IP/CIDR）" data-i18n-en="Tunnel allowlist (IP/CIDR)">隧道白名单（IP/CIDR）</label>
-                        <div class="form-group-wrapper"><textarea id="tunnel-acl-white" class="form-control" rows="2" name="whiteiplist" placeholder="198.51.100.0/24"></textarea><span class="help-block" data-i18n-zh="留空表示不增加这一层限制。" data-i18n-en="Leave empty to disable this level.">留空表示不增加这一层限制。</span></div>
+                        <div class="form-group-wrapper"><textarea id="tunnel-acl-white" class="form-control" rows="3" name="whiteiplist" placeholder="" langtag="info-suchasaclrules"></textarea><span class="help-block" data-i18n-zh="每行一条：IP、CIDR（如 10.0.0.0/8）、IPv4 前缀通配（如 192.168.*）、geoip:cn、geoip:!cn（取反）、geoip:private，# 开头为注释。配置后未命中的来源通常会被拒绝。留空表示本层不增加白名单限制。" data-i18n-en="One per line: IP, CIDR (e.g. 10.0.0.0/8), IPv4 prefix wildcard (e.g. 192.168.*), geoip:cn, geoip:!cn (negated), geoip:private. Lines starting with # are comments. Once configured, non-matching sources are normally denied. Leave empty to add no allowlist at this level.">每行一条：IP、CIDR（如 10.0.0.0/8）、IPv4 前缀通配（如 192.168.*）、geoip:cn、geoip:!cn（取反）、geoip:private，# 开头为注释。配置后未命中的来源通常会被拒绝。留空表示本层不增加白名单限制。</span></div>
                     </div>
                     <div class="form-group" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-priority" data-i18n-zh="名单冲突策略" data-i18n-en="List conflict policy">名单冲突策略</label><div class="form-group-wrapper"><select id="tunnel-acl-priority" class="form-control" name="iplistpriority"><option value="0">黑名单优先</option><option value="1">白名单优先</option></select><span class="help-block" data-i18n-zh="同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。" data-i18n-en="Applies when both lists are configured: deny-first rejects denylisted addresses and allows only allowlisted others; allow-first allows allowlisted addresses and any others not on the denylist. With one list, both policies are equivalent.">同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。</span></div></div>
 
@@ -201,11 +207,11 @@
                     {{if or (not .dedicated) (eq $mode "tcp")}}
                     <div class="form-group tunnel-mode-field" id="health_check_type" data-tunnel-field="health_check_type">
                         <label class="form-label font-bold" for="health-check-type" data-i18n-zh="检查类型" data-i18n-en="Check type">检查类型</label>
-                        <div class="form-group-wrapper"><select id="health-check-type" class="form-control" name="health_check_type"><option value="tcp" data-i18n-zh="TCP 连接" data-i18n-en="TCP connect">TCP 连接</option><option value="http" data-i18n-zh="HTTP 200" data-i18n-en="HTTP 200">HTTP 200</option></select><span class="help-block" data-i18n-zh="仅 TCP 隧道支持；由客户端 NPC 从内网探测目标并自动摘除故障地址。" data-i18n-en="Supported for TCP tunnels; NPC probes targets from the private network and removes failed addresses.">仅 TCP 隧道支持；由客户端 NPC 从内网探测目标并自动摘除故障地址。</span></div>
+                        <div class="form-group-wrapper"><select id="health-check-type" class="form-control" name="health_check_type"><option value="tcp" data-i18n-zh="TCP 连接" data-i18n-en="TCP connect">TCP 连接</option><option value="http" data-i18n-zh="HTTP 200" data-i18n-en="HTTP 200">HTTP 200</option></select><span class="help-block" data-i18n-zh="仅 TCP 隧道支持，且只在下方“检查目标”非空时生效：TCP 连接只要端口能建立连接即视为健康；HTTP 200 会请求 http://目标+检查路径并要求返回 200。探测由客户端 NPC 从内网发起。" data-i18n-en="Available for TCP tunnels and active only when check targets are configured. TCP connect only requires the port to accept a connection; HTTP 200 requests http://target plus the check path and requires status 200. NPC probes targets from the private network.">仅 TCP 隧道支持，且只在下方“检查目标”非空时生效：TCP 连接只要端口能建立连接即视为健康；HTTP 200 会请求 http://目标+检查路径并要求返回 200。探测由客户端 NPC 从内网发起。</span></div>
                     </div>
                     <div class="form-group form-group--wide tunnel-mode-field" id="health_check_target" data-tunnel-field="health_check_target">
                         <label class="form-label font-bold" for="health-check-target" data-i18n-zh="检查目标" data-i18n-en="Check targets">检查目标</label>
-                        <div class="form-group-wrapper"><textarea id="health-check-target" class="form-control" name="health_check_target" rows="3" placeholder="127.0.0.1:8080&#10;127.0.0.1:8081"></textarea><span class="help-block" data-i18n-zh="每行一个 host:port；留空表示关闭健康检查。" data-i18n-en="One host:port per line; leave empty to disable health checks.">每行一个 host:port；留空表示关闭健康检查。</span></div>
+                        <div class="form-group-wrapper"><textarea id="health-check-target" class="form-control" name="health_check_target" rows="3" placeholder="127.0.0.1:8080&#10;127.0.0.1:8081"></textarea><span class="help-block" data-i18n-zh="每行一个 host:port，由客户端 NPC 从内网探测。留空 = 完全关闭健康检查（检查类型、超时等参数全部忽略，也不会自动使用上面的内网目标，需显式填写）。只填写一个目标时同样会检查；该目标连续失败达到阈值后会被摘除，此时隧道将暂时没有可用后端。" data-i18n-en="One host:port per line, probed by NPC from the private network. Leave empty to disable health checks entirely (type, timeout and other values are ignored; the internal targets above are not reused automatically). A single target is still checked; after consecutive failures reach the threshold it is removed and the tunnel temporarily has no healthy backend.">每行一个 host:port，由客户端 NPC 从内网探测。留空 = 完全关闭健康检查（检查类型、超时等参数全部忽略，也不会自动使用上面的内网目标，需显式填写）。只填写一个目标时同样会检查；该目标连续失败达到阈值后会被摘除，此时隧道将暂时没有可用后端。</span></div>
                     </div>
                     <div class="form-group tunnel-mode-field" id="health_check_timeout" data-tunnel-field="health_check_timeout"><label class="form-label font-bold" for="health-check-timeout" data-i18n-zh="单次超时（秒）" data-i18n-en="Timeout (s)">单次超时（秒）</label><div class="form-group-wrapper"><input id="health-check-timeout" class="form-control" type="number" min="1" max="300" name="health_check_timeout" value="2"><span class="help-block" data-i18n-zh="一次 TCP 或 HTTP 健康检查等待响应的最长时间。" data-i18n-en="Maximum time to wait for one TCP or HTTP health check response.">一次 TCP 或 HTTP 健康检查等待响应的最长时间。</span></div></div>
                     <div class="form-group tunnel-mode-field" id="health_max_failed" data-tunnel-field="health_max_failed"><label class="form-label font-bold" for="health-max-failed" data-i18n-zh="连续失败次数" data-i18n-en="Max failures">连续失败次数</label><div class="form-group-wrapper"><input id="health-max-failed" class="form-control" type="number" min="1" max="100" name="health_max_failed" value="3"><span class="help-block" data-i18n-zh="目标连续失败达到此次数后暂时摘除；恢复成功后会重新加入轮询。" data-i18n-en="Temporarily removes a target after this many consecutive failures; it is added again after a successful check.">目标连续失败达到此次数后暂时摘除；恢复成功后会重新加入轮询。</span></div></div>
@@ -232,7 +238,7 @@
                     <div class="form-group form-workflow-actions">
                         <div class="form-actions">
                             <button class="btn btn-success" type="button"
-                                    onclick="submitform('add', '{{.web_base_url}}/index/add', $(this).closest('form').serializeArray())">
+                                    onclick="submitTunnelCreate()">
                                 <i class="fa fa-fw fa-lg fa-check-circle"></i> <span langtag="word-add"></span>
                             </button>
                         </div>
@@ -315,6 +321,16 @@
         }
     }
 
+    function submitTunnelCreate() {
+        var targetInput = document.getElementById('tunnel-target');
+        var type = $("#type").val() || "tcp";
+        if (targetInput && !targetInput.disabled && targetInput.offsetParent !== null) {
+            var targetError = npsApplyTargetNormalization(targetInput, { requireHost: false });
+            if (targetError) { npsNotify('error', targetError); return; }
+        }
+        submitform('add', '{{.web_base_url}}/index/add', $('.form-workflow-form').serializeArray());
+    }
+
     $(function () {
         $("#type").val(('{{.type}}' == '') ? 'tcp' : '{{.type}}');
         resetForm();
@@ -329,6 +345,11 @@
         });
         $("#tunnel-dest-acl-mode").on("change", updateConditionalFields);
         $("#health-check-type").on("change", updateConditionalFields);
+        $("#tunnel-target").on("blur", function () {
+            if (!this.disabled && this.offsetParent !== null) {
+                npsApplyTargetNormalization(this, { requireHost: false });
+            }
+        });
 
         // Toggle labels
         $('.toggle-switch input[type="checkbox"]').on('change', function() {

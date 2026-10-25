@@ -105,13 +105,14 @@ func parseUserStatus(value string) (bool, error) {
 
 func newUserUpdateCandidate(existing *file.User, username, password, remark string, maxClientNum, maxTunnelNum int, expireTime string) *file.User {
 	existing.RLock()
-	id, existingPassword, existingAPIKeyHash, existingDashboardKeyHash, existingDashboardKeyCiphertext, status, createTime := existing.Id, existing.Password, existing.APIKeyHash, existing.DashboardKeyHash, existing.DashboardKeyCiphertext, existing.Status, existing.CreateTime
+	id, existingPassword, existingAPIKeyHash, existingAPIKeyCiphertext, existingDashboardKeyHash, existingDashboardKeyCiphertext, status, createTime := existing.Id, existing.Password, existing.APIKeyHash, existing.APIKeyCiphertext, existing.DashboardKeyHash, existing.DashboardKeyCiphertext, existing.Status, existing.CreateTime
 	existing.RUnlock()
 	updated := &file.User{
 		Id:                     id,
 		UserName:               username,
 		Password:               existingPassword,
 		APIKeyHash:             existingAPIKeyHash,
+		APIKeyCiphertext:       existingAPIKeyCiphertext,
 		DashboardKeyHash:       existingDashboardKeyHash,
 		DashboardKeyCiphertext: existingDashboardKeyCiphertext,
 		Status:                 status,
@@ -163,8 +164,16 @@ func (s *UserController) RegenerateAPIKey() {
 		s.AjaxErr("API 密钥生成失败")
 		return
 	}
+	ciphertext := ""
+	if encrypted, encryptErr := encryptUserAPIToken(token); encryptErr == nil {
+		ciphertext = encrypted
+	} else if !errors.Is(encryptErr, errUserAPITokenEncryptionKeyMissing) {
+		s.AjaxErr("API 密钥加密保存失败，请检查 auth_key 或 auth_crypt_key 配置")
+		return
+	}
 	user.Lock()
 	user.APIKeyHash = tokenHash
+	user.APIKeyCiphertext = ciphertext
 	username := user.UserName
 	user.Unlock()
 	file.GetDb().JsonDb.StoreUsersToJsonFile()
@@ -174,9 +183,10 @@ func (s *UserController) RegenerateAPIKey() {
 	s.StopRun()
 }
 
-// APIKeyStatus reports whether the current user's credential exists without
-// ever returning the credential itself. Administrators use the user list
-// response instead of this self-service endpoint.
+// APIKeyStatus reports whether the target credential exists. The raw token is
+// returned only when the caller is the account owner or an administrator and
+// the stored ciphertext decrypts and matches the persisted digest; otherwise
+// only the enabled flag and a masked placeholder are returned.
 func (s *UserController) APIKeyStatus() {
 	if !s.IsAdmin() {
 		if _, ok := s.currentUserPrincipalID(); !ok {
@@ -185,7 +195,12 @@ func (s *UserController) APIKeyStatus() {
 		}
 	}
 	userID := s.GetIntNoErr("id")
-	if !s.IsAdmin() {
+	if s.IsAdmin() {
+		if userID <= 0 {
+			s.AjaxErr("user ID not found")
+			return
+		}
+	} else {
 		userID, _ = s.currentUserPrincipalID()
 	}
 	user, err := file.GetDb().GetUser(userID)
@@ -195,10 +210,34 @@ func (s *UserController) APIKeyStatus() {
 	}
 	user.RLock()
 	enabled := strings.TrimSpace(user.APIKeyHash) != ""
+	ciphertext := user.APIKeyCiphertext
 	user.RUnlock()
-	s.Data["json"] = map[string]interface{}{"status": 1, "enabled": enabled}
+	response := map[string]interface{}{"status": 1, "enabled": enabled, "masked": maskedUserAPIToken(enabled)}
+	if enabled {
+		if token, decryptErr := decryptUserAPIToken(ciphertext); decryptErr == nil && validUserAPIToken(fileUserAPIKeyHash(user), token) {
+			response["token"] = token
+		}
+	}
+	s.Data["json"] = response
 	s.ServeJSON()
 	s.StopRun()
+}
+
+func maskedUserAPIToken(enabled bool) string {
+	if !enabled {
+		return ""
+	}
+	return userAPITokenPrefix + "••••••••"
+}
+
+func fileUserAPIKeyHash(user *file.User) string {
+	if user == nil {
+		return ""
+	}
+	user.RLock()
+	hash := user.APIKeyHash
+	user.RUnlock()
+	return hash
 }
 
 // RevokeAPIKey immediately disables the selected user's API credential. The
@@ -233,6 +272,7 @@ func (s *UserController) RevokeAPIKey() {
 	}
 	user.Lock()
 	user.APIKeyHash = ""
+	user.APIKeyCiphertext = ""
 	username := user.UserName
 	user.Unlock()
 	file.GetDb().JsonDb.StoreUsersToJsonFile()
@@ -403,7 +443,7 @@ func (s *UserController) ChangePassword() {
 
 	user.RLock()
 	username, currentPassword, status, remark := user.UserName, user.Password, user.Status, user.Remark
-	maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash, dashboardKeyHash, dashboardKeyCiphertext := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash, user.DashboardKeyHash, user.DashboardKeyCiphertext
+	maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash, apiKeyCiphertext, dashboardKeyHash, dashboardKeyCiphertext := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash, user.APIKeyCiphertext, user.DashboardKeyHash, user.DashboardKeyCiphertext
 	user.RUnlock()
 	if !s.IsAdmin() {
 		current := s.GetString("current_password")
@@ -421,6 +461,7 @@ func (s *UserController) ChangePassword() {
 		UserName:               username,
 		Password:               newPassword,
 		APIKeyHash:             apiKeyHash,
+		APIKeyCiphertext:       apiKeyCiphertext,
 		DashboardKeyHash:       dashboardKeyHash,
 		DashboardKeyCiphertext: dashboardKeyCiphertext,
 		Status:                 status,
