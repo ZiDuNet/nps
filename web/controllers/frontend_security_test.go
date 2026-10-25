@@ -33,11 +33,12 @@ func TestLanguageSubmitUsesSameOriginReturnUrl(t *testing.T) {
 	}
 }
 
-func TestConsoleTemplatesUseZUIWithoutBootstrap(t *testing.T) {
+func TestConsoleTemplatesUseBootstrapWithoutZUI(t *testing.T) {
 	paths := []string{
 		"../views/public/layout.html",
 		"../views/login/index.html",
 		"../views/login/register.html",
+		"../views/login/ipregister.html",
 	}
 	disallowed := []string{
 		"static/css/style.css",
@@ -45,6 +46,12 @@ func TestConsoleTemplatesUseZUIWithoutBootstrap(t *testing.T) {
 		"bootstrap-table",
 		"bootstrap.min.js",
 		"popper.min.js",
+		"zui-3.0.0",
+		"zui-console.css",
+		"data-toggle=",
+		"data-dismiss=",
+		"icon icon-",
+		"window.zui",
 	}
 	for _, path := range paths {
 		content, err := os.ReadFile(path)
@@ -52,12 +59,19 @@ func TestConsoleTemplatesUseZUIWithoutBootstrap(t *testing.T) {
 			t.Fatalf("read console template %s: %v", path, err)
 		}
 		template := string(content)
-		if !strings.Contains(template, "zui-3.0.0") {
-			t.Fatalf("console template %s must load ZUI", path)
+		for _, required := range []string{
+			"bootstrap-5.3.3.min.css",
+			"bootstrap-5.3.3.bundle.min.js",
+			"nps-console.css",
+			"bootstrap-nps.css",
+		} {
+			if !strings.Contains(template, required) {
+				t.Fatalf("console template %s must load %q", path, required)
+			}
 		}
 		for _, token := range disallowed {
 			if strings.Contains(template, token) {
-				t.Fatalf("console template %s still references removed Bootstrap asset %q", path, token)
+				t.Fatalf("console template %s still references removed asset or legacy contract %q", path, token)
 			}
 		}
 		if strings.Contains(template, `onclick="return switchLanguage(`) {
@@ -67,7 +81,7 @@ func TestConsoleTemplatesUseZUIWithoutBootstrap(t *testing.T) {
 }
 
 func TestLanguageDropdownKeepsCompactViewportBoundaries(t *testing.T) {
-	content, err := os.ReadFile("../static/css/zui-console.css")
+	content, err := os.ReadFile("../static/css/nps-console.css")
 	if err != nil {
 		t.Fatalf("read console stylesheet: %v", err)
 	}
@@ -122,7 +136,7 @@ func TestPublicLayoutKeepsShellAndNavigatesContentOnly(t *testing.T) {
 }
 
 func TestConsoleContentNavigationStylesKeepPreviousContentVisible(t *testing.T) {
-	content, err := os.ReadFile("../static/css/zui-console.css")
+	content, err := os.ReadFile("../static/css/nps-console.css")
 	if err != nil {
 		t.Fatalf("read console stylesheet: %v", err)
 	}
@@ -138,7 +152,7 @@ func TestConsoleContentNavigationStylesKeepPreviousContentVisible(t *testing.T) 
 	}
 }
 
-func TestBootstrapAssetsAreNotShipped(t *testing.T) {
+func TestVendoredBootstrapReplacesLegacyUIStacks(t *testing.T) {
 	assets := []string{
 		"../static/css/bootstrap.min.css",
 		"../static/css/bootstrap-table.min.css",
@@ -148,10 +162,23 @@ func TestBootstrapAssetsAreNotShipped(t *testing.T) {
 		"../static/js/bootstrap-table.min.js",
 		"../static/js/bootstrap-table-locale-all.min.js",
 		"../static/js/popper.min.js",
+		"../static/css/zui-3.0.0.css",
+		"../static/js/zui-3.0.0.js",
+		"../static/webfonts/zenicon.woff",
 	}
 	for _, asset := range assets {
 		if _, err := os.Stat(asset); !os.IsNotExist(err) {
-			t.Errorf("legacy Bootstrap asset must not be shipped: %s (err: %v)", asset, err)
+			t.Errorf("legacy UI asset must not be shipped: %s (err: %v)", asset, err)
+		}
+	}
+	for _, asset := range []string{
+		"../static/css/bootstrap-5.3.3.min.css",
+		"../static/js/bootstrap-5.3.3.bundle.min.js",
+		"../static/css/nps-console.css",
+		"../static/css/bootstrap-nps.css",
+	} {
+		if _, err := os.Stat(asset); err != nil {
+			t.Errorf("vendored Bootstrap asset must be shipped: %s (err: %v)", asset, err)
 		}
 	}
 }

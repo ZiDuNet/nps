@@ -3,7 +3,7 @@
  *
  * The console keeps the server-side table contract used by the Go handlers
  * (offset, limit, search, sort and order), while rendering the table with
- * native HTML and ZUI-compatible primitives. This keeps the data workflow
+ * native HTML primitives. This keeps the data workflow
  * small and avoids coupling the UI to a second component framework.
  */
 (function ($, window, document) {

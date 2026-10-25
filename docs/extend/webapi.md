@@ -13,6 +13,30 @@
 
 > 单个查询接口（`GetClient`、`GetOneTunnel`、`GetHost`）返回 `{"code": 1, "data": {...}}` 或 `{"code": 0}`。
 
+所有由管理控制器返回的写操作响应会额外包含 `code` 和 `request_id` 字段；原有的
+`status`、`msg`、`id` 字段继续保留，旧版调用方无需修改。`code` 当前为 `ok` 或
+`error`，`request_id` 与响应头 `X-Request-ID` 一致，可用于把接口错误和服务端日志对应起来。
+
+列表响应仍保持 `rows`、`total` 顶层字段，同时增加 `meta`：
+
+```json
+{
+  "rows": [],
+  "total": 0,
+  "meta": {
+    "offset": 0,
+    "limit": 20,
+    "page": 1,
+    "page_size": 20,
+    "has_more": false
+  },
+  "code": "ok",
+  "request_id": "..."
+}
+```
+
+`meta` 是附加信息，不改变旧版表格组件读取 `rows` 和 `total` 的方式。
+
 ---
 
 ## Client 客户端管理

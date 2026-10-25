@@ -8,7 +8,7 @@
     </header>
     <div class="management-page-grid">
         <div class="management-page-column">
-            <section class="panel ibox float-e-margins management-table-card zui-panel">
+            <section class="panel ibox float-e-margins management-table-card nps-panel">
                 <div class="ibox-content management-table-content">
                     <div id="toolbar" class="management-table-toolbar">
                         <a href="{{.web_base_url}}/client/add" class="btn btn-primary dim">
@@ -48,7 +48,7 @@
 </section>
 
 <script>
-    /* ZUI-compatible remote table */
+    /* Remote table backed by server-side pagination and search. */
     var clientListCompact = window.matchMedia && window.matchMedia('(min-width: 992px) and (max-width: 1599px)').matches;
 
     function clientUnlimitedText() {

@@ -8,7 +8,7 @@
     </header>
     <div class="management-page-grid">
         <div class="management-page-column">
-            <section class="panel ibox float-e-margins management-table-card zui-panel">
+            <section class="panel ibox float-e-margins management-table-card nps-panel">
                 <div class="ibox-content management-table-content">
                     <div id="toolbar" class="management-table-toolbar">
                         <a href="{{.web_base_url}}/index/add?type={{.type}}&client_id={{.client_id}}" class="btn btn-primary dim">
@@ -106,22 +106,29 @@
         return !secondary || !tunnelListCompact;
     }
 
-    function tunnelStatusChip(labelKey, active, valueKey) {
-        return '<span class="tunnel-status-chip ' + (active ? 'is-open' : 'is-closed') + '" title="' + labelKey + '">'
-            + '<span class="tunnel-status-chip__label" langtag="' + labelKey + '"></span>'
-            + '<span class="tunnel-status-chip__value" langtag="' + valueKey + '"></span></span>';
+    function tunnelStatusChip(labelZh, labelEn, active, valueZh, valueEn) {
+        var english = npsIsEnglish();
+        var value = english ? valueEn : valueZh;
+        var title = (english ? labelEn + ': ' : labelZh + '：') + value;
+        return '<span class="tunnel-status-chip ' + (active ? 'is-open' : 'is-closed') + '"'
+            + ' title="' + npsEscapeHtml(title) + '"'
+            + ' data-title-zh="' + labelZh + '：' + valueZh + '"'
+            + ' data-title-en="' + labelEn + ': ' + valueEn + '">'
+            + '<span class="tunnel-status-chip__value" data-i18n-zh="' + valueZh + '" data-i18n-en="' + valueEn + '">' + npsEscapeHtml(value) + '</span></span>';
     }
 
     function tunnelStatusSummary(row) {
         var clientOnline = !!(row && row.Client && row.Client.IsConnect);
+        var configOpen = !!(row && row.Status);
+        var listenOpen = !!(row && row.RunStatus);
         return '<div class="tunnel-status-summary" aria-label="配置、监听、客户端状态">'
-            + tunnelStatusChip('word-configstatus', !!(row && row.Status), row && row.Status ? 'word-open' : 'word-close')
-            + tunnelStatusChip('word-listenstatus', !!(row && row.RunStatus), row && row.RunStatus ? 'word-open' : 'word-close')
-            + tunnelStatusChip('word-clientstatus', clientOnline, clientOnline ? 'word-online' : 'word-offline')
+            + tunnelStatusChip('配置状态', 'Config', configOpen, configOpen ? '开放' : '关闭', configOpen ? 'Open' : 'Closed')
+            + tunnelStatusChip('监听状态', 'Listener', listenOpen, listenOpen ? '开放' : '关闭', listenOpen ? 'Open' : 'Closed')
+            + tunnelStatusChip('客户端状态', 'Client', clientOnline, clientOnline ? '在线' : '离线', clientOnline ? 'Online' : 'Offline')
             + '</div>';
     }
 
-    /* ZUI-compatible remote table */
+    /* Remote table backed by server-side pagination and search. */
     $('#table').npsTable({
         toolbar: "#toolbar",
         method: 'post', // 服务器数据的请求方式 get or post

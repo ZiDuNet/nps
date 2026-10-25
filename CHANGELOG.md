@@ -2,6 +2,15 @@
 
 所有重要变更记录在此。
 
+## [未发布]
+
+### Changed
+
+- 管理面板全面移除 ZUI 运行时与资源：统一使用本地内置的 Bootstrap 5.3.3 构建弹窗、下拉菜单、表单和响应式布局。
+- 导航图标由 ZUI ZenIcon 字体迁移到内置 Font Awesome 实心图标；旧版 `data-toggle` / `data-dismiss` 调用全部改为 Bootstrap 5 的 `data-bs-*`。
+- 客户端和用户的有效期选择器由 ZUI DatetimePicker 改为内置 Flatpickr，支持中文界面和深色主题，同时保留无 JavaScript 增强时的纯文本输入回退。
+- 启动时自动清理已部署目录中的 ZUI 静态文件，升级到新版本后不会再残留旧 UI 资源。
+
 ## [1.1.30] - 2026-10-25
 
 ### Added

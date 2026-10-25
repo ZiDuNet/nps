@@ -11,9 +11,9 @@
     </header>
     <div class="form-page-grid">
     <div class="form-page-column">
-        <section class="panel ibox float-e-margins form-workflow-card zui-panel">
+        <section class="panel ibox float-e-margins form-workflow-card nps-panel">
             <div class="ibox-content form-workflow-content">
-                <form id="user-form" class="form form-horz form-workflow-form zui-form" data-form-workflow="user-create" autocomplete="off">
+                <form id="user-form" class="form form-horz form-workflow-form nps-form" data-form-workflow="user-create" autocomplete="off">
                     <div class="form-section-title" data-section-tier="primary"><i class="fa fa-user" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
                     <div class="form-group">
                         <label class="form-label font-bold" for="user-username" data-i18n-zh="用户名" data-i18n-en="Username">用户名</label>
@@ -92,57 +92,29 @@ $(document).ready(function() {
 
     initUserExpirePicker();
 
-    function ensureUserExpireFallback(host, value) {
-        if (!host) return;
-        if (cleanupUserExpireFallback(host)) return;
-        var fallback = document.createElement('input');
-        fallback.id = 'user-expire-picker-fallback';
-        fallback.className = 'form-control';
-        fallback.type = 'text';
-        fallback.name = 'expire_time';
-        fallback.value = value || '';
-        fallback.autocomplete = 'off';
-        fallback.placeholder = 'YYYY-MM-DD HH:MM';
-        host.appendChild(fallback);
-    }
-
-    function cleanupUserExpireFallback(host) {
-        if (!host) return false;
-        var input = host.querySelector('input[type="hidden"][name="expire_time"]');
-        if (!input) return false;
-        var fallback = host.querySelector('#user-expire-picker-fallback');
-        if (fallback) fallback.remove();
-        return true;
-    }
-
     function initUserExpirePicker() {
         var host = document.getElementById('user-expire-time-picker');
         if (!host) return;
-        if (!window.zui || !zui.DatetimePicker) {
-            ensureUserExpireFallback(host, '');
-            return;
-        }
-        if (typeof zui.DatetimePicker.get === 'function' && zui.DatetimePicker.get(host)) {
-            cleanupUserExpireFallback(host);
-            return;
-        }
-        try {
-            zui.DatetimePicker.ensure(host, {
-                id: 'user-expire-picker',
-                name: 'expire_time',
-                defaultValue: '',
-                format: 'yyyy-MM-dd hh:mm',
+        if (host.querySelector('#user-expire-picker')) return;
+        var input = document.createElement('input');
+        input.id = 'user-expire-picker';
+        input.className = 'form-control';
+        input.type = 'text';
+        input.name = 'expire_time';
+        input.autocomplete = 'off';
+        input.placeholder = 'YYYY-MM-DD HH:MM';
+        host.appendChild(input);
+        if (window.flatpickr) {
+            window.flatpickr(input, {
+                enableTime: true,
+                dateFormat: 'Y-m-d H:i',
+                time_24hr: true,
+                minuteIncrement: 5,
                 minDate: 'today',
-                minuteStep: 5,
-                required: false,
-                placeholder: npsIsEnglish() ? 'Select expiration date and time' : '请选择到期时间',
-                icon: true,
-                afterRender: function() {
-                    cleanupUserExpireFallback(host);
-                }
+                allowInput: true,
+                disableMobile: true,
+                locale: 'zh'
             });
-        } catch (error) {
-            ensureUserExpireFallback(host, '');
         }
     }
 

@@ -9,7 +9,7 @@
     </header>
 
     <div class="diagnostic-layout">
-        <section class="panel ibox zui-panel diagnostic-form-card"><div class="ibox-content">
+        <section class="panel ibox nps-panel diagnostic-form-card"><div class="ibox-content">
             <form id="host-diagnose-form" class="diagnostic-form">
                 <div class="diagnostic-form__field"><label for="diagnostic-host" data-i18n-zh="收到的 Host" data-i18n-en="Received Host">收到的 Host</label><input id="diagnostic-host" class="form-control" type="text" name="host" autocomplete="off" required placeholder="app.example.com"><span class="help-block" data-i18n-zh="只填写域名或 Host:端口，不要包含 http://。" data-i18n-en="Enter only a domain or Host:port, without http://.">只填写域名或 Host:端口，不要包含 http://。</span></div>
                 <div class="diagnostic-form__field"><label for="diagnostic-path" data-i18n-zh="请求路径" data-i18n-en="Request path">请求路径</label><input id="diagnostic-path" class="form-control" type="text" name="path" value="/" autocomplete="off" required placeholder="/"><span class="help-block" data-i18n-zh="包含查询参数时可直接填写，例如 /api?health=1。" data-i18n-en="You can include a query string, for example /api?health=1.">包含查询参数时可直接填写，例如 /api?health=1。</span></div>
@@ -18,7 +18,7 @@
             </form>
         </div></section>
 
-        <section id="diagnostic-result" class="panel ibox zui-panel diagnostic-result-card" hidden aria-live="polite"><div class="ibox-content">
+        <section id="diagnostic-result" class="panel ibox nps-panel diagnostic-result-card" hidden aria-live="polite"><div class="ibox-content">
             <div class="diagnostic-result-card__heading"><span id="diagnostic-result-icon" class="diagnostic-result-card__icon"><i class="fa fa-search" aria-hidden="true"></i></span><div><h2 id="diagnostic-result-title" data-i18n-zh="等待诊断" data-i18n-en="Waiting for diagnosis">等待诊断</h2><p id="diagnostic-result-summary"></p></div></div>
             <div id="diagnostic-rule-details" class="diagnostic-rule-details" hidden>
                 <div><span data-i18n-zh="命中规则" data-i18n-en="Matched rule">命中规则</span><strong id="diagnostic-rule-host"></strong></div>

@@ -19,6 +19,19 @@ var StaticFS embed.FS
 //go:embed views
 var ViewsFS embed.FS
 
+// obsoleteStaticAssets lists files removed from the embedded bundle. Upgraded
+// installations keep a copy in the runtime web directory, so remove the known
+// ZUI artifacts during startup to make the switch to Bootstrap complete.
+var obsoleteStaticAssets = []string{
+	"static/css/zui-3.0.0.css",
+	"static/css/zui-console.css",
+	"static/js/zui-3.0.0.js",
+	"static/webfonts/zenicon.svg",
+	"static/webfonts/zenicon.ttf",
+	"static/webfonts/zenicon.woff",
+	"static/licenses/zui-3.0.0-MIT.txt",
+}
+
 func ExtractWebFiles(runPath string) {
 	webDir := filepath.Join(runPath, "web")
 	staticDir := filepath.Join(webDir, "static")
@@ -30,6 +43,21 @@ func ExtractWebFiles(runPath string) {
 	logs.Info("Synced embedded web/static to", staticDir)
 	extractFS(ViewsFS, "views", webDir)
 	logs.Info("Synced embedded web/views to", viewsDir)
+	removeObsoleteStaticAssets(webDir)
+}
+
+func removeObsoleteStaticAssets(webDir string) {
+	webRoot := filepath.Clean(webDir) + string(filepath.Separator)
+	for _, rel := range obsoleteStaticAssets {
+		target := filepath.Join(webDir, filepath.FromSlash(rel))
+		if !strings.HasPrefix(target, webRoot) {
+			logs.Warning("Refused to remove static asset outside web directory:", target)
+			continue
+		}
+		if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+			logs.Warning("Could not remove obsolete static asset:", target, err)
+		}
+	}
 }
 
 // ReadStaticFile reads a file from the embedded static filesystem.

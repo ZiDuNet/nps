@@ -30,6 +30,40 @@ func TestPublicAccessPortFallsBackToListenerAndHonorsReverseProxyPort(t *testing
 	}
 }
 
+func TestPaginationMetadataPreservesLegacyListFields(t *testing.T) {
+	if got := pageNumber(0, 20); got != 1 {
+		t.Fatalf("pageNumber(0, 20) = %d, want 1", got)
+	}
+	if got := pageNumber(40, 20); got != 3 {
+		t.Fatalf("pageNumber(40, 20) = %d, want 3", got)
+	}
+	if got := pageNumber(0, 0); got != 1 {
+		t.Fatalf("pageNumber(0, 0) = %d, want 1", got)
+	}
+	if !hasMoreRows(0, 20, 21) || hasMoreRows(20, 20, 21) {
+		t.Fatal("hasMoreRows did not respect offset, page size and total")
+	}
+}
+
+func TestWithRequestMetaAddsNonBreakingAPIFields(t *testing.T) {
+	controller := &BaseController{requestID: "req-test-1"}
+	response := controller.withRequestMeta(ajax("ok", 1))
+	if response["status"] != 1 || response["msg"] != "ok" {
+		t.Fatalf("legacy response fields changed: %#v", response)
+	}
+	if response["code"] != "ok" || response["request_id"] != "req-test-1" {
+		t.Fatalf("response metadata missing: %#v", response)
+	}
+	failed := controller.withRequestMeta(ajax("bad", 0))
+	if failed["code"] != "error" {
+		t.Fatalf("error response code = %#v, want error", failed["code"])
+	}
+	list := controller.withRequestMeta(map[string]interface{}{"rows": []string{}, "total": 0})
+	if list["code"] != "ok" {
+		t.Fatalf("list response code = %#v, want ok", list["code"])
+	}
+}
+
 func TestSessionBoolAcceptsCommonSessionValues(t *testing.T) {
 	tests := []struct {
 		name  string

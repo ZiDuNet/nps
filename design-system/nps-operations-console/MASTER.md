@@ -1,14 +1,15 @@
 # NPS Operations Console Design System
 
 This file is the visual source of truth for the embedded NPS Web console.
-It applies to `web/views/` and `web/static/css/zui-console.css`.
+It applies to `web/views/`, `web/static/css/nps-console.css`, and
+`web/static/css/bootstrap-nps.css`.
 
 ## Product Direction
 
 - Product: infrastructure operations console for NPS tunnels, clients, users, and server settings.
 - Audience: administrators who scan state, compare records, and repeatedly configure network services.
 - Character: compact, reliable, technical, and quiet. Information density takes priority over decorative effects.
-- Component base: ZUI 3.0.0, vendored locally under `web/static/`; do not introduce a CDN dependency for console UI.
+- Component base: Bootstrap 5.3.3, vendored locally under `web/static/`. ZUI has been removed completely; modals, dropdowns, date pickers, and tables use Bootstrap or NPS-owned primitives. Do not introduce a CDN dependency for console UI.
 
 ## Foundations
 
@@ -27,7 +28,7 @@ It applies to `web/views/` and `web/static/css/zui-console.css`.
 | Warning | `#A46105` | `#F2BF71` |
 | Danger | `#B42332` | `#FF9DA6` |
 
-Use the `--nps-*` semantic tokens from `zui-console.css`; do not add raw per-page colors.
+Use the `--nps-*` semantic tokens from `nps-console.css` and `modern.css`; do not add raw per-page colors.
 Status is always expressed with both color and a text label or icon.
 
 ### Typography And Spacing
@@ -48,7 +49,7 @@ Status is always expressed with both color and a text label or icon.
 
 - Desktop uses a persistent 256px navigation rail and a 60px fixed utility bar.
 - The active navigation item has a restrained blue inset indicator, stronger text, and an icon color change.
-- Navigation icons use the ZUI ZenIcon font and must be `aria-hidden` when their adjacent label names the destination.
+- Navigation icons use the vendored Font Awesome solid set and must be `aria-hidden` when their adjacent label names the destination.
 - Keep primary navigation, language control, theme switch, and logout reachable on every management page.
 - Main content reserves space for the fixed bar with `scroll-padding-top` and wrapper padding so keyboard focus is not obscured.
 
@@ -56,7 +57,7 @@ Status is always expressed with both color and a text label or icon.
 
 ### Panels And Dashboard
 
-- Use ZUI `panel` semantics together with the legacy `ibox` hooks required by existing behavior.
+- Use Bootstrap card semantics together with the legacy `ibox` hooks required by existing dashboard behavior.
 - Dashboard cards use one thin left status accent, not a full saturated card background.
 - Keep chart labels, titles, and state text visible; charts must not communicate state by color alone.
 
@@ -90,7 +91,7 @@ Status is always expressed with both color and a text label or icon.
 
 ## Implementation Boundaries
 
-- Load `zui-3.0.0.css` and `zui-3.0.0.js` locally before legacy jQuery so ZUI does not overwrite jQuery's `$` alias.
-- Load `zui-console.css` after the legacy visual styles. It provides the token layer and compatibility overrides.
-- Keep existing NPS data, modal, and controller contracts intact while using ZUI primitives for the rendered controls; do not reintroduce Bootstrap assets or plugins.
-- Retain the ZUI 3 MIT license notice in `web/static/licenses/zui-3.0.0-MIT.txt`.
+- Load `bootstrap-5.3.3.min.css` locally first, followed by `modern.css`, `nps-console.css`, and finally `bootstrap-nps.css`. The Bootstrap bundle provides all interactive components.
+- Use Bootstrap 5 markup and `data-bs-*` attributes everywhere. Legacy `data-toggle`/`data-dismiss` contracts and the ZUI runtime must not be reintroduced.
+- Keep existing NPS data, modal, and controller contracts intact. Do not load assets from a CDN.
+- Retain the Bootstrap MIT license notice in `web/static/licenses/bootstrap-5.3.3-MIT.txt`.

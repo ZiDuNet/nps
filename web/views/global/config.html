@@ -73,7 +73,7 @@
 
     <form id="server-config-form" class="server-config-stack" autocomplete="off">
         {{range $sectionIndex, $section := .config_sections}}
-        <section class="panel ibox float-e-margins zui-panel server-config-section{{if gt $sectionIndex 0}} is-collapsed{{end}}" data-config-section>
+        <section class="panel ibox float-e-margins nps-panel server-config-section{{if gt $sectionIndex 0}} is-collapsed{{end}}" data-config-section>
             <header class="server-config-section__header">
                 <div class="server-config-section__heading"><h2>{{$section.Name}}</h2><p>{{$section.Description}}</p></div>
                 <button class="server-config-section__toggle" type="button" aria-expanded="{{if eq $sectionIndex 0}}true{{else}}false{{end}}" data-config-section-toggle><span data-i18n-zh="展开/收起" data-i18n-en="Toggle">展开/收起</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
@@ -106,7 +106,7 @@
         {{end}}
 
         {{if .config_unknown}}
-        <section class="panel ibox float-e-margins zui-panel server-config-section server-config-unknown is-collapsed" data-config-section>
+        <section class="panel ibox float-e-margins nps-panel server-config-section server-config-unknown is-collapsed" data-config-section>
             <header class="server-config-section__header"><div class="server-config-section__heading"><h2 data-i18n-zh="兼容与自定义字段" data-i18n-en="Compatibility and custom fields">兼容与自定义字段</h2><p data-i18n-zh="这些键来自历史版本或自定义部署，当前版本不会在线修改，但会在保存时原样保留。" data-i18n-en="These keys come from older releases or custom deployments. They are read-only here and are preserved verbatim when saving.">这些键来自历史版本或自定义部署，当前版本不会在线修改，但会在保存时原样保留。</p></div><button class="server-config-section__toggle" type="button" aria-expanded="false" data-config-section-toggle><span data-i18n-zh="展开/收起" data-i18n-en="Toggle">展开/收起</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button></header>
             <div class="server-config-section__body"><div class="server-config-field" style="display:block;grid-column:1 / -1;border-bottom:0;padding-bottom:8px"><div class="table-responsive"><table class="table table-striped"><thead><tr><th data-i18n-zh="配置键" data-i18n-en="Key">配置键</th><th data-i18n-zh="当前值" data-i18n-en="Current value">当前值</th><th data-i18n-zh="状态" data-i18n-en="Status">状态</th></tr></thead><tbody>{{range .config_unknown}}<tr><td><code>{{.Key}}</code></td><td><code>{{.DisplayValue}}</code></td><td><span class="label label-default" data-i18n-zh="只读并保留" data-i18n-en="Read-only and preserved">只读并保留</span></td></tr>{{end}}</tbody></table></div></div></div>
         </section>

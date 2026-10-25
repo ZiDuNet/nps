@@ -1,0 +1,492 @@
+/*
+   NPS Bootstrap 5 bridge
+
+   Bootstrap is vendored locally. This file is the final, scoped theme layer
+   and gives the console a predictable surface without changing the existing
+   Beego templates or their data-driven components.
+*/
+
+.nps-bootstrap {
+    --bs-body-font-family: "Fira Sans", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    --bs-body-font-size: 0.875rem;
+    --bs-body-line-height: 1.55;
+    --bs-body-color: var(--nps-ink);
+    --bs-body-bg: var(--nps-canvas);
+    --bs-border-color: var(--nps-line);
+    --bs-border-radius: 0.5rem;
+    --bs-border-radius-sm: 0.375rem;
+    --bs-border-radius-lg: 0.75rem;
+    --bs-primary: var(--nps-primary);
+    --bs-primary-rgb: 30, 64, 175;
+    --bs-success: var(--nps-success);
+    --bs-warning: var(--nps-warning);
+    --bs-danger: var(--nps-danger);
+    --bs-secondary-color: var(--nps-muted);
+    --bs-tertiary-bg: var(--nps-surface-subtle);
+}
+
+[data-theme="dark"] .nps-bootstrap {
+    --bs-primary-rgb: 128, 169, 255;
+}
+
+.nps-bootstrap body,
+body.nps-bootstrap {
+    font-family: var(--bs-body-font-family);
+    font-size: var(--bs-body-font-size);
+    line-height: var(--bs-body-line-height);
+    color: var(--bs-body-color);
+    background: var(--bs-body-bg);
+}
+
+.nps-bootstrap .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 36px;
+    padding: 0.45rem 0.75rem;
+    border-radius: var(--bs-border-radius-sm);
+    border-width: 1px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition: color .15s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.nps-bootstrap .btn:focus-visible,
+.nps-bootstrap .form-control:focus-visible,
+.nps-bootstrap .form-select:focus-visible,
+.nps-bootstrap .form-check-input:focus-visible {
+    outline: 0;
+    box-shadow: var(--nps-focus) !important;
+}
+
+.nps-bootstrap .btn-primary,
+.nps-bootstrap .btn-primary:active,
+.nps-bootstrap .btn-primary.active {
+    color: #fff;
+    background: var(--nps-primary);
+    border-color: var(--nps-primary);
+}
+
+.nps-bootstrap .btn-primary:hover,
+.nps-bootstrap .btn-primary:focus-visible {
+    color: #fff;
+    background: var(--nps-primary-hover);
+    border-color: var(--nps-primary-hover);
+}
+
+.nps-bootstrap .btn-default,
+.nps-bootstrap .btn-secondary {
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border-color: var(--nps-line-strong);
+}
+
+.nps-bootstrap .btn-default:hover,
+.nps-bootstrap .btn-secondary:hover {
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+    border-color: var(--nps-primary);
+}
+
+.nps-bootstrap .btn-outline,
+.nps-bootstrap .btn-outline-primary {
+    color: var(--nps-primary);
+    background: transparent;
+    border-color: var(--nps-primary);
+}
+
+.nps-bootstrap .btn-outline:hover,
+.nps-bootstrap .btn-outline-primary:hover {
+    color: #fff;
+    background: var(--nps-primary);
+    border-color: var(--nps-primary);
+}
+
+.nps-bootstrap .btn-success {
+    color: #fff;
+    background: var(--nps-success);
+    border-color: var(--nps-success);
+}
+
+.nps-bootstrap .btn-warning {
+    color: #2a1b00;
+    background: var(--nps-warning);
+    border-color: var(--nps-warning);
+}
+
+.nps-bootstrap .btn-danger {
+    color: #fff;
+    background: var(--nps-danger);
+    border-color: var(--nps-danger);
+}
+
+.nps-bootstrap .btn-sm {
+    min-height: 32px;
+    padding: 0.34rem 0.6rem;
+    font-size: 0.75rem;
+}
+
+.nps-bootstrap .btn-lg {
+    min-height: 44px;
+    padding: 0.6rem 1rem;
+    font-size: 0.9375rem;
+}
+
+.nps-bootstrap .form-label,
+.nps-bootstrap label.form-label,
+.nps-bootstrap .auth-field__label {
+    display: inline-block;
+    margin-bottom: 0.4rem;
+    color: var(--nps-ink);
+    font-size: 0.8125rem;
+    font-weight: 650;
+}
+
+.nps-bootstrap .form-control,
+.nps-bootstrap .form-select,
+.nps-bootstrap select.form-control,
+.nps-bootstrap textarea.form-control,
+.nps-bootstrap input.form-control {
+    min-height: 40px;
+    padding: 0.5rem 0.75rem;
+    color: var(--nps-ink);
+    background-color: var(--nps-surface);
+    border: 1px solid var(--nps-line-strong);
+    border-radius: var(--bs-border-radius-sm);
+    box-shadow: none;
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.nps-bootstrap textarea.form-control {
+    min-height: 92px;
+}
+
+.nps-bootstrap .form-control::placeholder {
+    color: var(--nps-faint);
+    opacity: 1;
+}
+
+.nps-bootstrap .form-control:hover,
+.nps-bootstrap .form-select:hover {
+    border-color: var(--nps-primary);
+}
+
+.nps-bootstrap .form-control:focus,
+.nps-bootstrap .form-select:focus {
+    color: var(--nps-ink);
+    background-color: var(--nps-surface);
+    border-color: var(--nps-primary);
+    box-shadow: var(--nps-focus);
+}
+
+.nps-bootstrap .form-control:disabled,
+.nps-bootstrap .form-select:disabled,
+.nps-bootstrap .form-control[readonly] {
+    color: var(--nps-faint);
+    background: var(--nps-surface-subtle);
+    border-color: var(--nps-line);
+}
+
+.nps-bootstrap .form-check-input {
+    width: 1.05rem;
+    height: 1.05rem;
+    margin-top: 0.2rem;
+    accent-color: var(--nps-primary);
+}
+
+.nps-bootstrap .form-text,
+.nps-bootstrap .help-block,
+.nps-bootstrap .text-muted {
+    color: var(--nps-muted) !important;
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+
+.nps-bootstrap .invalid-feedback,
+.nps-bootstrap .has-error .help-block {
+    color: var(--nps-danger) !important;
+}
+
+.nps-bootstrap .card,
+.nps-bootstrap .panel,
+.nps-bootstrap .ibox,
+.nps-bootstrap .nps-panel {
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line);
+    border-radius: var(--bs-border-radius-lg);
+    box-shadow: var(--nps-shadow-sm);
+}
+
+.nps-bootstrap .card-header,
+.nps-bootstrap .panel-heading,
+.nps-bootstrap .ibox-title {
+    color: var(--nps-ink);
+    background: var(--nps-surface-subtle);
+    border-bottom: 1px solid var(--nps-line);
+}
+
+.nps-bootstrap .card-body,
+.nps-bootstrap .panel-body,
+.nps-bootstrap .ibox-content {
+    color: var(--nps-ink);
+}
+
+.nps-bootstrap .table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--nps-ink);
+    --bs-table-border-color: var(--nps-line);
+    margin-bottom: 0;
+    color: var(--nps-ink);
+    vertical-align: middle;
+}
+
+.nps-bootstrap .table > :not(caption) > * > * {
+    padding: 0.72rem 0.8rem;
+    border-bottom-color: var(--nps-line);
+}
+
+.nps-bootstrap .table thead th {
+    color: var(--nps-muted);
+    background: var(--nps-surface-subtle);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    white-space: nowrap;
+}
+
+.nps-bootstrap .table tbody tr:hover > * {
+    color: var(--nps-ink);
+    background: var(--nps-surface-hover);
+}
+
+.nps-bootstrap .badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0.22rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 650;
+    line-height: 1.2;
+}
+
+.nps-bootstrap .badge-primary {
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+}
+
+.nps-bootstrap .badge-success {
+    color: var(--nps-success);
+    background: var(--nps-success-soft);
+}
+
+.nps-bootstrap .badge-warning {
+    color: var(--nps-warning);
+    background: var(--nps-warning-soft);
+}
+
+.nps-bootstrap .badge-danger {
+    color: var(--nps-danger);
+    background: var(--nps-danger-soft);
+}
+
+.nps-bootstrap .badge-info {
+    color: var(--nps-info);
+    background: var(--nps-info-soft);
+}
+
+.nps-bootstrap .badge-default,
+.nps-bootstrap .badge-badge {
+    color: var(--nps-muted);
+    background: var(--nps-surface-subtle);
+    border: 1px solid var(--nps-line);
+}
+
+.nps-bootstrap .label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 650;
+    line-height: 1.25;
+}
+
+.nps-bootstrap .label-success {
+    color: var(--nps-success);
+    background: var(--nps-success-soft);
+}
+
+.nps-bootstrap .label-danger {
+    color: var(--nps-danger);
+    background: var(--nps-danger-soft);
+}
+
+.nps-bootstrap .label-default {
+    color: var(--nps-muted);
+    background: var(--nps-surface-subtle);
+    border: 1px solid var(--nps-line);
+}
+
+.nps-bootstrap .dropdown-menu {
+    min-width: 10rem;
+    padding: 0.35rem;
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line);
+    border-radius: var(--bs-border-radius);
+    box-shadow: var(--nps-shadow);
+}
+
+.nps-bootstrap .dropdown-menu > li > a,
+.nps-bootstrap .dropdown-item {
+    display: flex;
+    align-items: center;
+    min-height: 36px;
+    padding: 0.45rem 0.65rem;
+    color: var(--nps-ink);
+    border-radius: 0.375rem;
+}
+
+.nps-bootstrap .dropdown-menu > li > a:hover,
+.nps-bootstrap .dropdown-item:hover,
+.nps-bootstrap .dropdown-item:focus {
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+}
+
+.nps-bootstrap .modal-content {
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line);
+    border-radius: var(--bs-border-radius-lg);
+    box-shadow: var(--nps-shadow);
+}
+
+.nps-bootstrap .modal-header,
+.nps-bootstrap .modal-footer {
+    border-color: var(--nps-line);
+}
+
+.nps-bootstrap .modal-header {
+    align-items: flex-start;
+}
+
+.nps-bootstrap .modal-title {
+    color: var(--nps-ink);
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.nps-bootstrap .pagination > li > a,
+.nps-bootstrap .pagination > li > span,
+.nps-bootstrap .page-link {
+    color: var(--nps-primary);
+    background: var(--nps-surface);
+    border-color: var(--nps-line);
+}
+
+.nps-bootstrap .pagination > li.active > a,
+.nps-bootstrap .pagination > li.active > span,
+.nps-bootstrap .page-item.active .page-link {
+    color: #fff;
+    background: var(--nps-primary);
+    border-color: var(--nps-primary);
+}
+
+.nps-bootstrap .alert {
+    color: var(--nps-ink);
+    border-radius: var(--bs-border-radius);
+}
+
+.nps-bootstrap .flatpickr-calendar {
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border-color: var(--nps-line);
+    border-radius: var(--bs-border-radius);
+    box-shadow: var(--nps-shadow);
+}
+
+[data-theme="dark"] .nps-bootstrap .flatpickr-calendar {
+    background: var(--nps-surface);
+    box-shadow: var(--nps-shadow);
+}
+
+[data-theme="dark"] .nps-bootstrap .flatpickr-day,
+[data-theme="dark"] .nps-bootstrap .flatpickr-months .flatpickr-month,
+[data-theme="dark"] .nps-bootstrap .flatpickr-current-month .flatpickr-monthDropdown-months,
+[data-theme="dark"] .nps-bootstrap .flatpickr-weekday,
+[data-theme="dark"] .nps-bootstrap span.flatpickr-weekday {
+    color: var(--nps-ink);
+}
+
+[data-theme="dark"] .nps-bootstrap .flatpickr-day:hover,
+[data-theme="dark"] .nps-bootstrap .flatpickr-day:focus,
+[data-theme="dark"] .nps-bootstrap .flatpickr-day.prevMonthDay:hover,
+[data-theme="dark"] .nps-bootstrap .flatpickr-day.nextMonthDay:hover {
+    color: var(--nps-ink);
+    background: var(--nps-surface-hover);
+    border-color: var(--nps-line-strong);
+}
+
+[data-theme="dark"] .nps-bootstrap .flatpickr-day.selected,
+[data-theme="dark"] .nps-bootstrap .flatpickr-day.startRange,
+[data-theme="dark"] .nps-bootstrap .flatpickr-day.endRange {
+    color: #fff;
+    background: var(--nps-primary);
+    border-color: var(--nps-primary);
+}
+
+[data-theme="dark"] .nps-bootstrap .flatpickr-months .flatpickr-prev-month,
+[data-theme="dark"] .nps-bootstrap .flatpickr-months .flatpickr-next-month,
+[data-theme="dark"] .nps-bootstrap .flatpickr-current-month input.cur-year,
+[data-theme="dark"] .nps-bootstrap .flatpickr-time input {
+    color: var(--nps-ink);
+}
+
+[data-theme="dark"] .nps-bootstrap .flatpickr-months .flatpickr-prev-month:hover svg,
+[data-theme="dark"] .nps-bootstrap .flatpickr-months .flatpickr-next-month:hover svg {
+    fill: var(--nps-primary);
+}
+
+.nps-bootstrap .nps-table__container,
+.nps-bootstrap .table-responsive {
+    border: 1px solid var(--nps-line);
+    border-radius: var(--bs-border-radius);
+    background: var(--nps-surface);
+}
+
+@media (max-width: 768px) {
+    .nps-bootstrap .btn-toolbar,
+    .nps-bootstrap .nps-table__toolbar {
+        align-items: stretch;
+    }
+
+    .nps-bootstrap .btn-toolbar > .btn,
+    .nps-bootstrap .nps-table__toolbar > .btn {
+        flex: 1 1 auto;
+    }
+
+    .nps-bootstrap .table {
+        min-width: 0;
+    }
+
+    .nps-bootstrap .table th,
+    .nps-bootstrap .table td {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .nps-bootstrap .btn,
+    .nps-bootstrap .form-control,
+    .nps-bootstrap .form-select {
+        transition: none;
+    }
+}

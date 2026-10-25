@@ -115,7 +115,7 @@ func TestTunnelListIdentificationKeyScopedToCredentialModes(t *testing.T) {
 }
 
 func TestTunnelModeFieldStylesAvoidFirstPaintFlash(t *testing.T) {
-	content := readTemplateForTest(t, "../static/css/zui-console.css")
+	content := readTemplateForTest(t, "../static/css/nps-console.css")
 	for _, marker := range []string{
 		`.tunnel-form.tunnel-type-tcp [data-tunnel-field="password"]`,
 		`.tunnel-form.tunnel-type-httpProxy [data-tunnel-field="target"]`,

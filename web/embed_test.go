@@ -35,10 +35,27 @@ func TestExtractWebFilesSyncsEmbeddedViews(t *testing.T) {
 	}
 }
 
+func TestExtractWebFilesRemovesObsoleteZUIAssets(t *testing.T) {
+	runPath := t.TempDir()
+	stale := filepath.Join(runPath, "web", "static", "js", "zui-3.0.0.js")
+	if err := os.MkdirAll(filepath.Dir(stale), 0755); err != nil {
+		t.Fatalf("create stale asset dir: %v", err)
+	}
+	if err := os.WriteFile(stale, []byte("stale zui"), 0644); err != nil {
+		t.Fatalf("write stale asset: %v", err)
+	}
+
+	ExtractWebFiles(runPath)
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("obsolete ZUI asset still exists after extraction: %v", err)
+	}
+}
+
 func TestLoginAndRegistrationTemplatesFailClosedWithoutPasswordEncryption(t *testing.T) {
 	tests := []struct {
-		path        string
-		encryptCall string
+		path         string
+		encryptCall  string
 		failureCheck string
 	}{
 		{path: "views/login/index.html", encryptCall: "var encryptedPassword = npsEncryptedPassword(data.password)", failureCheck: "if (!encryptedPassword)"},

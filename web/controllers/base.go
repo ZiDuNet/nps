@@ -22,6 +22,7 @@ import (
 	"ehang.io/nps/web/audit"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
+	"github.com/google/uuid"
 )
 
 type BaseController struct {
@@ -31,6 +32,7 @@ type BaseController struct {
 	apiAuthorized     bool
 	userAPIAuthorized bool
 	apiUserID         int
+	requestID         string
 }
 
 const (
@@ -53,6 +55,10 @@ type accountQuotaSummary struct {
 // 初始化参数
 func (s *BaseController) Prepare() {
 	s.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
+	s.requestID = uuid.NewString()
+	if s.Ctx != nil && s.Ctx.ResponseWriter != nil {
+		s.Ctx.ResponseWriter.Header().Set("X-Request-ID", s.requestID)
+	}
 	audit.Configure(beego.AppConfig.String("audit_log_path"))
 	controllerName, actionName := s.GetControllerAndAction()
 	if len(controllerName) > len("Controller") {
@@ -431,7 +437,7 @@ func (s *BaseController) RequireAdminOrClientOwner(clientID int) bool {
 
 func (s *BaseController) rejectRequest(status int, message string) {
 	s.Ctx.Output.SetStatus(status)
-	s.Data["json"] = ajax(message, 0)
+	s.Data["json"] = s.withRequestMeta(ajax(message, 0))
 	s.ServeJSON()
 }
 
@@ -797,23 +803,45 @@ func (s *BaseController) GetBoolNoErr(key string, def ...bool) bool {
 
 // ajax正确返回
 func (s *BaseController) AjaxOk(str string) {
-	s.Data["json"] = ajax(str, 1)
+	s.Data["json"] = s.withRequestMeta(ajax(str, 1))
 	s.ServeJSON()
 	s.StopRun()
 }
 
 // ajax正确返回
 func (s *BaseController) AjaxOkWithId(str string, id int) {
-	s.Data["json"] = ajaxWithId(str, 1, id)
+	s.Data["json"] = s.withRequestMeta(ajaxWithId(str, 1, id))
 	s.ServeJSON()
 	s.StopRun()
 }
 
 // ajax错误返回
 func (s *BaseController) AjaxErr(str string) {
-	s.Data["json"] = ajax(str, 0)
+	s.Data["json"] = s.withRequestMeta(ajax(str, 0))
 	s.ServeJSON()
 	s.StopRun()
+}
+
+// withRequestMeta adds stable, non-breaking metadata to legacy AJAX responses.
+// Existing callers continue to consume status/msg/id, while API clients can
+// correlate an error or mutation with the server log using X-Request-ID.
+func (s *BaseController) withRequestMeta(payload map[string]interface{}) map[string]interface{} {
+	if payload == nil {
+		payload = map[string]interface{}{}
+	}
+	if _, exists := payload["code"]; !exists {
+		status, statusOK := payload["status"].(int)
+		_, isList := payload["rows"]
+		if (statusOK && status == 1) || isList {
+			payload["code"] = "ok"
+		} else {
+			payload["code"] = "error"
+		}
+	}
+	if s.requestID != "" {
+		payload["request_id"] = s.requestID
+	}
+	return payload
 }
 
 // 组装ajax
@@ -838,6 +866,14 @@ func (s *BaseController) AjaxTable(list interface{}, cnt int, recordsTotal int, 
 	json := make(map[string]interface{})
 	json["rows"] = list
 	json["total"] = recordsTotal
+	offset, limit := s.GetAjaxParams()
+	json["meta"] = map[string]interface{}{
+		"offset":    offset,
+		"limit":     limit,
+		"page":      pageNumber(offset, limit),
+		"page_size": limit,
+		"has_more":  hasMoreRows(offset, limit, recordsTotal),
+	}
 	if kwargs != nil {
 		for k, v := range kwargs {
 			if v != nil {
@@ -845,9 +881,23 @@ func (s *BaseController) AjaxTable(list interface{}, cnt int, recordsTotal int, 
 			}
 		}
 	}
-	s.Data["json"] = json
+	s.Data["json"] = s.withRequestMeta(json)
 	s.ServeJSON()
 	s.StopRun()
+}
+
+func pageNumber(offset, limit int) int {
+	if limit <= 0 || offset < 0 {
+		return 1
+	}
+	return offset/limit + 1
+}
+
+func hasMoreRows(offset, limit, total int) bool {
+	if limit <= 0 || total <= 0 || offset < 0 {
+		return false
+	}
+	return offset+limit < total
 }
 
 // ajax table参数

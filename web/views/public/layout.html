@@ -27,30 +27,34 @@
         window.nps = { "web_base_url": "{{.web_base_url}}", "version": "{{.version}}", "repository": "{{.github_repository}}" };
     </script>
 
-    <link href="{{.web_base_url}}/static/css/zui-3.0.0.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/bootstrap-5.3.3.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/toastr.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20260904-3" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/zui-console.css?v={{.version}}&ui=20260904-3" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/flatpickr.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261026-3" rel="stylesheet">
 
-    <script src="{{.web_base_url}}/static/js/zui-3.0.0.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/bootstrap-5.3.3.bundle.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/clipboard.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/flatpickr.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/flatpickr-l10n-zh.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/nps-table.js?v={{.version}}&ui=20260908-1"></script>
     <script src="{{.web_base_url}}/static/js/traffic-debug.js?v={{.version}}&ui=20260919-1"></script>
     <script src="{{.web_base_url}}/static/js/echarts.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/inspinia.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20260904-3" type="text/javascript"></script>
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20261026-1" type="text/javascript"></script>
 
 </head>
 
-<body class="fixed-nav fixed-nav-basic zui-app">
+<body class="fixed-nav fixed-nav-basic nps-bootstrap">
 <div id="wrapper">
     <nav class="navbar-default navbar-static-side" role="navigation">
         <div class="sidebar-collapse">
-            <ul class="nav metismenu zui-nav" id="side-menu">
+            <ul class="nav metismenu nps-nav" id="side-menu">
                 <li class="nav-header">
                     <div class="nps-brand">
                         <span class="nps-brand-mark"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt="NPS" class="nps-brand-logo"></span>
@@ -60,83 +64,83 @@
                     <button type="button" class="close-canvas-menu" aria-label="关闭导航" data-aria-label-zh="关闭导航" data-aria-label-en="Close navigation" data-title-zh="关闭导航" data-title-en="Close navigation"><i class="fa fa-times" aria-hidden="true"></i></button>
                 </li>
                 <li class="{{if eq "index" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/"><i class="icon icon-dashboard" aria-hidden="true"></i>
+                    <a href="{{.web_base_url}}/"><i class="fa fa-tachometer-alt" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-dashboard">仪表盘</span></a>
                 </li>
                 <li class="{{if eq "client" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/client/list"><i class="icon icon-desktop" aria-hidden="true"></i>
+                    <a href="{{.web_base_url}}/client/list"><i class="fa fa-desktop" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-client">客户端</span></a>
                 </li>
                 {{if eq true .isAdmin}}
                 <li class="{{if eq "user" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/user/list"><i class="icon icon-group" aria-hidden="true"></i>
+                    <a href="{{.web_base_url}}/user/list"><i class="fa fa-users" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="用户管理" data-i18n-en="Users">用户管理</span></a>
                 </li>
                 {{end}}
                 <li class="nav-group-title"><span data-i18n-zh="隧道管理" data-i18n-en="Tunnels">隧道管理</span></li>
                 <li class="{{if eq "host" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/hostlist"><i class="icon icon-globe" aria-hidden="true"></i>
+                    <a href="{{.web_base_url}}/index/hostlist"><i class="fa fa-globe" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-host">域名解析</span></a>
                 </li>
                 <li class="{{if eq "tcp" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/tcp"><i class="icon icon-exchange" aria-hidden="true"></i>
+                    <a href="{{.web_base_url}}/index/tcp"><i class="fa fa-exchange-alt" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-tcp">TCP 隧道</span></a>
                 </li>
                 <li class="{{if eq "udp" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/udp"><i class="icon icon-random" aria-hidden="true"></i>
+                    <a href="{{.web_base_url}}/index/udp"><i class="fa fa-random" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-udp">UDP 隧道</span></a>
                 </li>
                 <li class="{{if eq "mixProxy" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/mixproxy"><i class="icon icon-random" aria-hidden="true"></i>
+                    <a href="{{.web_base_url}}/index/mixproxy"><i class="fa fa-random" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="HTTP / SOCKS 混合代理" data-i18n-en="HTTP / SOCKS mixed proxy">HTTP / SOCKS 混合代理</span></a>
                 </li>
                 <li class="{{if eq "secret" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/secret"><i class="icon icon-eye-close" aria-hidden="true"></i>
+                    <a href="{{.web_base_url}}/index/secret"><i class="fa fa-eye-slash" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-secret">私密代理</span></a>
                 </li>
                 <li class="{{if eq "p2p" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/p2p"><i class="icon icon-share-alt" aria-hidden="true"></i>
+                    <a href="{{.web_base_url}}/index/p2p"><i class="fa fa-share-alt" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-p2p">P2P 连接</span></a>
                 </li>
                 <li class="{{if eq "file" .menu}}active{{end}}">
-                    <a href="{{.web_base_url}}/index/file"><i class="icon icon-file" aria-hidden="true"></i>
+                    <a href="{{.web_base_url}}/index/file"><i class="fa fa-file" aria-hidden="true"></i>
                     <span class="nav-label" langtag="scheme-file">文件访问</span></a>
                 </li>
                 <li class="nav-group-title"><span data-i18n-zh="系统" data-i18n-en="System">系统</span></li>
                 {{if eq true .isAdmin}}
                 <li class="{{if eq "global" .menu}}active{{end}}">
-                <a href="{{.web_base_url}}/global/index"><i class="icon icon-cog" aria-hidden="true"></i>
+                <a href="{{.web_base_url}}/global/index"><i class="fa fa-cog" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-globalparam">全局参数</span></a>
                 </li>
                 <li class="{{if eq "audit" .menu}}active{{end}}">
-                <a href="{{.web_base_url}}/audit/list"><i class="icon icon-list-alt" aria-hidden="true"></i>
+                <a href="{{.web_base_url}}/audit/list"><i class="fa fa-list-alt" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="操作审计" data-i18n-en="Audit log">操作审计</span></a>
                 </li>
                 <li class="{{if eq "banlist" .menu}}active{{end}}">
-                <a href="{{.web_base_url}}/global/banlist"><i class="icon icon-shield" aria-hidden="true"></i>
+                <a href="{{.web_base_url}}/global/banlist"><i class="fa fa-shield-alt" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="登录封禁" data-i18n-en="Login bans">登录封禁</span></a>
                 </li>
                 <li class="{{if eq "ipregister" .menu}}active{{end}}">
-                <a href="{{.web_base_url}}/global/ipregister"><i class="icon icon-map-marker" aria-hidden="true"></i>
+                <a href="{{.web_base_url}}/global/ipregister"><i class="fa fa-map-marker-alt" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="IP 登记" data-i18n-en="IP registrations">IP 登记</span></a>
                 </li>
                 {{end}}
                 <li class="{{if eq "help" .menu}}active{{end}}">
-                <a href="{{.web_base_url}}/index/help"><i class="icon icon-lightbulb" aria-hidden="true"></i>
+                <a href="{{.web_base_url}}/index/help"><i class="fa fa-lightbulb" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-help">使用说明</span></a>
                 </li>
                 <li class="nav-sidebar-footer">
                     {{if eq true .isAdmin}}
                     <div class="nav-account">
-                        <i class="icon icon-shield" aria-hidden="true"></i>
+                        <i class="fa fa-shield-alt" aria-hidden="true"></i>
                         <span><strong class="font-bold" langtag="word-admin">管理员</strong><small langtag="word-system">系统</small></span>
                     </div>
                     {{else}}
-                    <button type="button" class="nav-account nav-account--button" data-toggle="modal" data-target="#change-password-modal" aria-haspopup="dialog" title="修改密码" data-title-zh="修改密码" data-title-en="Change password">
-                        <i class="icon icon-user" aria-hidden="true"></i>
+                    <button type="button" class="nav-account nav-account--button" data-bs-toggle="modal" data-bs-target="#change-password-modal" aria-haspopup="dialog" title="修改密码" data-title-zh="修改密码" data-title-en="Change password">
+                        <i class="fa fa-user" aria-hidden="true"></i>
                         <span><strong class="font-bold">{{.username}}</strong><small langtag="word-user">用户</small></span>
                     </button>
-                    {{if .accountQuota.Visible}}<button type="button" class="nav-account-tool" data-toggle="modal" data-target="#api-access-modal" aria-haspopup="dialog" title="API 接入" data-title-zh="API 接入" data-title-en="API access">
+                    {{if .accountQuota.Visible}}<button type="button" class="nav-account-tool" data-bs-toggle="modal" data-bs-target="#api-access-modal" aria-haspopup="dialog" title="API 接入" data-title-zh="API 接入" data-title-en="API access">
                         <i class="fa fa-key" aria-hidden="true"></i><span data-i18n-zh="API 接入" data-i18n-en="API access">API 接入</span>
                     </button>{{end}}
                     {{end}}
@@ -160,7 +164,7 @@
     </nav>
     <div id="page-wrapper" class="gray-bg">
         <div class="topbar-shell">
-            <nav class="navbar white-bg navbar-fixed-top zui-topbar" role="navigation" style="margin-bottom: 0">
+            <nav class="navbar white-bg navbar-fixed-top nps-topbar" role="navigation" style="margin-bottom: 0">
                 <div class="navbar-header">
                     <button type="button" class="navbar-minimalize minimalize-styl-2 btn btn-primary" aria-label="切换导航" data-aria-label-zh="切换导航" data-aria-label-en="Toggle navigation" data-title-zh="切换导航" data-title-en="Toggle navigation"><i class="fa fa-bars" aria-hidden="true"></i></button>
                 </div>
@@ -184,7 +188,7 @@
                     </li>
                     <li>
                         <span class="btn-group dropdown">
-                            <button id="languagemenu" class="btn btn-primary dropdown-toggle" type="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><i class="fa fa-globe-asia fa-lg"></i><span></span></button>
+                            <button id="languagemenu" class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><i class="fa fa-globe-asia fa-lg"></i><span></span></button>
                             <ul class="dropdown-menu">
                                 <li lang="zh-CN"><a href="#">简体中文</a></li>
                                 <li lang="en-US"><a href="#">English</a></li>
@@ -210,18 +214,18 @@
 
 {{if eq false .isAdmin}}
 <div id="change-password-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="change-password-title" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" role="document" data-size="sm">
+    <div class="modal-dialog modal-dialog-centered modal-sm" role="document">
         <div class="modal-content nps-password-modal">
             <div class="modal-header">
                 <div>
                     <div class="nps-modal-kicker" data-i18n-zh="账号安全" data-i18n-en="Account security">账号安全</div>
                     <h2 id="change-password-title" class="modal-title" data-i18n-zh="修改密码" data-i18n-en="Change password">修改密码</h2>
                 </div>
-                <button type="button" class="nps-modal-close" data-dismiss="modal" aria-label="关闭" data-aria-label-zh="关闭" data-aria-label-en="Close"><i class="fa fa-times" aria-hidden="true"></i><span class="sr-only" data-i18n-zh="关闭" data-i18n-en="Close">关闭</span></button>
+                <button type="button" class="nps-modal-close" data-bs-dismiss="modal" aria-label="关闭" data-aria-label-zh="关闭" data-aria-label-en="Close"><i class="fa fa-times" aria-hidden="true"></i><span class="sr-only" data-i18n-zh="关闭" data-i18n-en="Close">关闭</span></button>
             </div>
             <div class="modal-body">
                 <p class="nps-password-modal__account"><span data-i18n-zh="当前账号" data-i18n-en="Current account">当前账号</span><strong>{{.username}}</strong></p>
-                <form id="change-password-form" class="form form-vertical zui-form" autocomplete="off" novalidate>
+                <form id="change-password-form" class="form form-vertical nps-form" autocomplete="off" novalidate>
                     <div class="form-group">
                         <label class="form-label" for="change-password-current" data-i18n-zh="当前密码" data-i18n-en="Current password">当前密码</label>
                         <input id="change-password-current" class="form-control" type="password" name="current_password" autocomplete="current-password" required>
@@ -241,7 +245,7 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline" data-dismiss="modal" data-i18n-zh="取消" data-i18n-en="Cancel">取消</button>
+                <button type="button" class="btn btn-outline" data-bs-dismiss="modal" data-i18n-zh="取消" data-i18n-en="Cancel">取消</button>
                 <button type="submit" form="change-password-form" class="btn btn-primary" data-i18n-zh="保存密码" data-i18n-en="Save password">保存密码</button>
             </div>
         </div>
@@ -251,11 +255,11 @@
 
 {{if and (eq false .isAdmin) .accountQuota.Visible}}
 <div id="api-access-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="api-access-title" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" role="document" data-size="sm">
+    <div class="modal-dialog modal-dialog-centered modal-sm" role="document">
         <div class="modal-content nps-password-modal">
             <div class="modal-header">
                 <div><div class="nps-modal-kicker" data-i18n-zh="系统接入" data-i18n-en="System integration">系统接入</div><h2 id="api-access-title" class="modal-title" data-i18n-zh="API 接入" data-i18n-en="API access">API 接入</h2></div>
-                <button type="button" class="nps-modal-close" data-dismiss="modal" aria-label="关闭"><i class="fa fa-times" aria-hidden="true"></i></button>
+                <button type="button" class="nps-modal-close" data-bs-dismiss="modal" aria-label="关闭"><i class="fa fa-times" aria-hidden="true"></i></button>
             </div>
             <div class="modal-body">
                 <p class="nps-password-modal__account"><span data-i18n-zh="当前状态" data-i18n-en="Current status">当前状态</span><strong id="api-key-status">读取中…</strong></p>
@@ -269,11 +273,11 @@
 {{end}}
 
 <div id="dashboard-access-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="dashboard-access-title" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" role="document" data-size="sm">
+    <div class="modal-dialog modal-dialog-centered modal-sm" role="document">
         <div class="modal-content nps-password-modal">
             <div class="modal-header">
                 <div><div class="nps-modal-kicker" data-i18n-zh="无人值守访问" data-i18n-en="Unattended access">无人值守访问</div><h2 id="dashboard-access-title" class="modal-title" data-i18n-zh="资源拓扑大屏" data-i18n-en="Resource topology">资源拓扑大屏</h2></div>
-                <button type="button" class="nps-modal-close" data-dismiss="modal" aria-label="关闭"><i class="fa fa-times" aria-hidden="true"></i></button>
+                <button type="button" class="nps-modal-close" data-bs-dismiss="modal" aria-label="关闭"><i class="fa fa-times" aria-hidden="true"></i></button>
             </div>
             <div class="modal-body">
                 <p class="nps-password-modal__account dashboard-key-status-row"><span data-i18n-zh="当前状态" data-i18n-en="Current status">当前状态</span><strong id="dashboard-key-status">读取中…</strong><button id="dashboard-key-open-status" type="button" class="btn btn-outline btn-primary btn-xs" title="打开大屏" aria-label="打开大屏" hidden><i class="fa fa-external-link" aria-hidden="true"></i><span data-i18n-zh="打开大屏" data-i18n-en="Open dashboard">打开大屏</span></button></p>
@@ -521,7 +525,7 @@
 
     // Ordinary users can rotate their own dashboard password without leaving
     // the current page. The endpoint enforces the session ownership again;
-    // this handler only owns the ZUI modal interaction and feedback.
+    // This handler owns the Bootstrap modal interaction and feedback.
     $(document).off('submit.npsChangePassword', '#change-password-form').on('submit.npsChangePassword', '#change-password-form', function (event) {
         event.preventDefault();
         var form = this;
@@ -549,8 +553,9 @@
             if (response && response.status) {
                 npsNotify('success', response.msg || (npsIsEnglish() ? 'Password changed.' : '密码修改成功。'));
                 form.reset();
-                if (window.zui && zui.Modal && typeof zui.Modal.hide === 'function') zui.Modal.hide('#change-password-modal');
-                else $('[data-dismiss="modal"]').first().trigger('click');
+                var passwordModal = document.getElementById('change-password-modal');
+                if (window.bootstrap && passwordModal) bootstrap.Modal.getOrCreateInstance(passwordModal).hide();
+                else $('[data-bs-dismiss="modal"]').first().trigger('click');
                 return;
             }
             npsNotify('error', (response && response.msg) || npsRequestErrorMessage());
