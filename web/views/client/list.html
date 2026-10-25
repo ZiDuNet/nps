@@ -137,6 +137,8 @@
                     kv('<span langtag="word-version"></span>', text(row.Version, '-'))
                     + kv('<span langtag="word-verifykey"></span>', text(row.VerifyKey, '-'))
                     + kv('<span langtag="word-address"></span>', text(row.Addr, '-'))
+                    + kv('<span langtag="word-localaddr"></span>', text(row.LocalAddr, '-'))
+                    + kv(english ? 'Public verify key' : '公开验证密钥模式', npsBooleanMarkup(!!row.NoStore))
                     + kv('<span langtag="word-inletflow"></span>', text(inletFlow))
                     + kv('<span langtag="word-exportflow"></span>', text(exportFlow)))
                 + '<div class="client-detail__columns">'
@@ -149,9 +151,14 @@
                 + '</div>'
                 + '<div class="client-detail__column">'
                 + section('shield-alt', english ? 'Access control' : '访问控制',
-                    kv('<span langtag="word-ipwhite"></span>', npsBooleanMarkup(!!row.IpWhite)))
+                    kv('<span langtag="word-ipwhite"></span>', npsBooleanMarkup(!!row.IpWhite))
+                    + kv(english ? 'List policy' : '名单冲突策略', text(row.IpListPriority === 1 ? (english ? 'Allow first' : '白名单优先') : (english ? 'Deny first' : '黑名单优先'), '-'))
+                    + kv(english ? 'Registered IPs only' : '仅允许已登记 IP', npsBooleanMarkup(!!row.RegisteredOnly))
+                    + kv(english ? 'Registration key' : 'IP 登记密钥', credentialStatus(!!row.RegisterKeySet))
+                    + kv(english ? 'Registration hours' : '登记有效时长', text(row.RegisterMaxHours, 0) + (english ? ' h' : ' 小时')))
                 + '<p class="client-detail__line"><span langtag="word-ipwhitelist"></span>: <span>' + listText(row.IpWhiteList) + '</span></p>'
                 + '<p class="client-detail__line"><span langtag="word-blackip"></span>: <span>' + listText(row.BlackIpList) + '</span></p>'
+                + '<p class="client-detail__line"><span langtag="word-whiteip"></span>: <span>' + listText(row.WhiteIpList) + '</span></p>'
                 + '</div></div>'
                 + section('clock', english ? 'Timestamps' : '时间信息',
                     kv('<span langtag="word-createtime"></span>', text(row.CreateTime, '-'))

@@ -1213,7 +1213,8 @@ func (s *DbUtils) IsHostExist(h *Host) bool {
 		v.RLock()
 		candidateID, candidateHost, candidateLocation, candidateScheme, candidateClient := v.Id, v.Host, v.Location, v.Scheme, v.Client
 		v.RUnlock()
-		if candidateClient != nil && candidateID != hostID && candidateHost == hostName && location == candidateLocation && (candidateScheme == "all" || candidateScheme == scheme) {
+		if candidateClient != nil && candidateID != hostID && candidateHost == hostName &&
+			location == candidateLocation && hostSchemesOverlap(scheme, candidateScheme) {
 			exist = true
 			return false
 		}
@@ -1319,6 +1320,21 @@ func normalizeHostScheme(scheme string) (string, error) {
 	default:
 		return "", errors.New("域名协议必须是 http、https 或 all")
 	}
+}
+
+// hostSchemesOverlap reports whether two host rules can serve the same
+// protocol. "all" intentionally covers both http and https, and the check is
+// symmetric so an existing "all" rule conflicts with a later "http" rule and
+// vice versa.
+func hostSchemesOverlap(a, b string) bool {
+	a, b = strings.ToLower(strings.TrimSpace(a)), strings.ToLower(strings.TrimSpace(b))
+	if a == "" {
+		a = "all"
+	}
+	if b == "" {
+		b = "all"
+	}
+	return a == "all" || b == "all" || a == b
 }
 
 func validHostTargets(targets string) bool {
@@ -1561,13 +1577,8 @@ func (s *DbUtils) IsHostRouteConflict(h *Host) bool {
 		if candidateID == hostID || candidateClient == nil || sameHostOwner(client, candidateClient) {
 			return true
 		}
-		schemeA, schemeB := scheme, strings.ToLower(strings.TrimSpace(candidateScheme))
-		if schemeB == "" {
-			// An empty scheme is treated as the historical default of all.
-			schemeB = "all"
-		}
-		schemesOverlap := schemeA == "all" || schemeB == "all" || schemeA == schemeB
-		if schemesOverlap && hostRulesOverlap(hostName, candidateHost) && hostLocationsOverlap(location, candidateLocation) {
+		if hostSchemesOverlap(scheme, candidateScheme) &&
+			hostRulesOverlap(hostName, candidateHost) && hostLocationsOverlap(location, candidateLocation) {
 			exists = true
 			return false
 		}
@@ -1632,19 +1643,26 @@ func (s *DbUtils) ResolvePlatformHost(platformDomainID, prefix string) (string, 
 	return prefix + "." + strings.TrimPrefix(domain.Wildcard, "*."), nil
 }
 
-// IsPlatformHostAvailable reports whether a generated platform hostname is
-// globally unused. Unlike normal host routes, a platform hostname is reserved
-// as a whole: it cannot be shared by another path, scheme, client, or user.
-func (s *DbUtils) IsPlatformHostAvailable(platformDomainID, prefix string, excludeHostID int) (bool, error) {
+// IsPlatformHostAvailable reports whether a generated platform hostname can
+// carry the requested route. Uniqueness follows normal host routing: the same
+// hostname may be reused by different paths, while a duplicate hostname +
+// path + scheme combination is rejected. Cross-tenant path shadowing is still
+// rejected by IsHostRouteConflict when the record is written.
+func (s *DbUtils) IsPlatformHostAvailable(platformDomainID, prefix, location, scheme string, excludeHostID int) (bool, error) {
 	fullHost, err := s.ResolvePlatformHost(platformDomainID, prefix)
 	if err != nil {
 		return false, err
 	}
-	return s.isPlatformHostUnique(fullHost, excludeHostID), nil
+	return s.isPlatformHostUnique(fullHost, location, scheme, excludeHostID), nil
 }
 
-func (s *DbUtils) isPlatformHostUnique(fullHost string, excludeHostID int) bool {
+func (s *DbUtils) isPlatformHostUnique(fullHost, location, scheme string, excludeHostID int) bool {
 	fullHost = normalizeHostName(fullHost)
+	location = normalizeHostLocation(location)
+	scheme = strings.ToLower(strings.TrimSpace(scheme))
+	if scheme == "" {
+		scheme = "all"
+	}
 	available := true
 	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
 		host, ok := value.(*Host)
@@ -1652,9 +1670,15 @@ func (s *DbUtils) isPlatformHostUnique(fullHost string, excludeHostID int) bool 
 			return true
 		}
 		host.RLock()
-		hostID, hostName := host.Id, host.Host
+		hostID, hostName, hostLocation, hostScheme := host.Id, host.Host, host.Location, host.Scheme
 		host.RUnlock()
-		if hostID != excludeHostID && normalizeHostName(hostName) == fullHost {
+		hostLocation = normalizeHostLocation(hostLocation)
+		hostScheme = strings.ToLower(strings.TrimSpace(hostScheme))
+		if hostScheme == "" {
+			hostScheme = "all"
+		}
+		if hostID != excludeHostID && normalizeHostName(hostName) == fullHost &&
+			location == hostLocation && hostSchemesOverlap(scheme, hostScheme) {
 			available = false
 			return false
 		}
@@ -1840,7 +1864,7 @@ func (s *DbUtils) preparePlatformHost(host *Host, previous *Host) error {
 	if !platformHostMatches(hostName, domain.Wildcard) {
 		return fmt.Errorf("平台域名主机必须使用 %s 的单层前缀", domain.Wildcard)
 	}
-	if !s.isPlatformHostUnique(hostName, host.Id) {
+	if !s.isPlatformHostUnique(hostName, host.Location, host.Scheme, host.Id) {
 		return errors.New("平台域名主机已被使用")
 	}
 	host.PlatformDomainID = domain.ID
@@ -2399,7 +2423,7 @@ func validatePlatformDomainCertificate(domain PlatformDomain) error {
 	if domain.CertFilePath == "" && domain.KeyFilePath == "" {
 		return nil
 	}
-	pair, err := tls.LoadX509KeyPair(domain.CertFilePath, domain.KeyFilePath)
+	pair, err := tls.LoadX509KeyPair(common.ResolveConfigPath(domain.CertFilePath), common.ResolveConfigPath(domain.KeyFilePath))
 	if err != nil {
 		return fmt.Errorf("平台域名 %s 的证书或私钥不可用: %w", domain.Wildcard, err)
 	}

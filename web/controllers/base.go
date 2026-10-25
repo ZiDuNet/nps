@@ -771,8 +771,12 @@ func publicBridgeHost(requestHost, serverURL, bridgeAddr string) string {
 
 // 错误
 func (s *BaseController) error() {
+	s.Data["code"] = 404
+	s.Data["title"] = "页面未找到"
+	s.Data["message"] = "您访问的地址不存在、已被移动，或对应的资源已被删除。"
 	s.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
-	s.Layout = "public/layout.html"
+	s.Data["version"] = version.VERSION
+	s.Data["github_repository"] = version.GitHubRepository
 	s.TplName = "public/error.html"
 }
 

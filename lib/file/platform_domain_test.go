@@ -244,16 +244,26 @@ func TestPlatformHostResolutionAndAvailability(t *testing.T) {
 	if first.CertFilePath != domain.CertFilePath || first.KeyFilePath != domain.KeyFilePath {
 		t.Fatalf("platform certificate paths were not enforced: %#v", first)
 	}
-	available, err := utils.IsPlatformHostAvailable("platform-1", "demo-01", 0)
+	available, err := utils.IsPlatformHostAvailable("platform-1", "demo-01", "/", "all", 0)
 	if err != nil || available {
 		t.Fatalf("used platform hostname must be unavailable: available=%v err=%v", available, err)
+	}
+	available, err = utils.IsPlatformHostAvailable("platform-1", "demo-01", "/api", "all", 0)
+	if err != nil || !available {
+		t.Fatalf("the same platform hostname must remain available on a disjoint path: available=%v err=%v", available, err)
 	}
 
 	second := testPlatformHost(2, resolved, "platform-1")
 	if err := utils.NewHost(second); err == nil {
 		t.Fatal("platform hostname must be globally unique across routes and clients")
 	}
-	custom := testPlatformHost(3, "custom.example.com", "")
+	partitioned := testPlatformHost(3, resolved, "platform-1")
+	partitioned.Client = first.Client
+	partitioned.Location = "/api"
+	if err := utils.NewHost(partitioned); err != nil {
+		t.Fatalf("the same platform hostname must be reusable on a disjoint path: %v", err)
+	}
+	custom := testPlatformHost(5, "custom.example.com", "")
 	if err := utils.NewHost(custom); err == nil {
 		t.Fatal("custom host inside a platform domain must be rejected")
 	}

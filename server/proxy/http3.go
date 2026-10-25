@@ -282,12 +282,8 @@ func loadCertificateMaterial(certFile, keyFile string) (*tls.Certificate, error)
 	if strings.Contains(certFile, "-----BEGIN") || strings.Contains(keyFile, "-----BEGIN") {
 		certPEM, keyPEM = []byte(certFile), []byte(keyFile)
 	} else {
-		if !filepath.IsAbs(certFile) {
-			certFile = filepath.Join(common.GetRunPath(), certFile)
-		}
-		if !filepath.IsAbs(keyFile) {
-			keyFile = filepath.Join(common.GetRunPath(), keyFile)
-		}
+		certFile = common.ResolveConfigPath(certFile)
+		keyFile = common.ResolveConfigPath(keyFile)
 		var err error
 		certPEM, err = os.ReadFile(certFile)
 		if err != nil {

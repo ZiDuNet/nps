@@ -81,35 +81,45 @@ func tunnelTemplatePath(mode, action string) string {
 // must never serialize filesystem certificate paths, private keys, or client
 // credentials to the browser.
 type hostListRow struct {
-	Id                  int
-	Host                string
-	PlatformDomainID    string
-	Remark              string
-	Location            string
-	Scheme              string
-	IsClose             bool
-	AutoHttps           bool
-	TargetIsHTTPS       bool
-	HTTPSJustProxy      bool
-	AutoSSL             bool
-	TLSOffload          bool
-	RegisteredOnly      bool
-	PlatformManaged     bool
-	BasicAuthSet        bool
-	HttpPort            string
-	HttpsPort           string
-	HealthCheckType     string
-	HealthCheckTarget   string
-	HealthCheckTimeout  int
-	HealthMaxFail       int
-	HealthCheckInterval int
-	HttpHealthUrl       string
-	UploadLimit         int
-	DownloadLimit       int
-	UploadRate          int64
-	DownloadRate        int64
-	Client              hostListClient
-	Target              hostListTarget
+	Id                   int
+	Host                 string
+	PlatformDomainID     string
+	Remark               string
+	Location             string
+	Scheme               string
+	IsClose              bool
+	AutoHttps            bool
+	TargetIsHTTPS        bool
+	HTTPSJustProxy       bool
+	AutoSSL              bool
+	TLSOffload           bool
+	RegisteredOnly       bool
+	AutoCORS             bool
+	CompatMode           bool
+	PlatformManaged      bool
+	BasicAuthSet         bool
+	HeaderChange         string
+	ResponseHeaderChange string
+	HostChange           string
+	PathRewrite          string
+	RedirectURL          string
+	IpListPriority       int
+	BlackIpList          []string
+	WhiteIpList          []string
+	HttpPort             string
+	HttpsPort            string
+	HealthCheckType      string
+	HealthCheckTarget    string
+	HealthCheckTimeout   int
+	HealthMaxFail        int
+	HealthCheckInterval  int
+	HttpHealthUrl        string
+	UploadLimit          int
+	DownloadLimit        int
+	UploadRate           int64
+	DownloadRate         int64
+	Client               hostListClient
+	Target               hostListTarget
 }
 
 type hostListClient struct {
@@ -179,23 +189,33 @@ func newHostListRows(hosts []*file.Host) []*hostListRow {
 		host.RLock()
 		client, target := host.Client, host.Target
 		row := &hostListRow{
-			Id:               host.Id,
-			Host:             host.Host,
-			PlatformDomainID: host.PlatformDomainID,
-			Remark:           host.Remark,
-			Location:         host.Location,
-			Scheme:           host.Scheme,
-			IsClose:          host.IsClose,
-			AutoHttps:        host.AutoHttps,
-			TargetIsHTTPS:    host.TargetIsHTTPS,
-			HTTPSJustProxy:   host.HTTPSJustProxy,
-			AutoSSL:          host.AutoSSL,
-			TLSOffload:       host.TLSOffload,
-			RegisteredOnly:   host.RegisteredOnly,
-			PlatformManaged:  host.PlatformDomainID != "",
-			BasicAuthSet:     file.BasicAuthConfigured(host.Auth),
-			HttpPort:         publicProxyPort(publicAccessPort("http_proxy_access_port", "http_proxy_port"), "80"),
-			HttpsPort:        publicProxyPort(publicAccessPort("https_proxy_access_port", "https_proxy_port"), "443"),
+			Id:                   host.Id,
+			Host:                 host.Host,
+			PlatformDomainID:     host.PlatformDomainID,
+			Remark:               host.Remark,
+			Location:             host.Location,
+			Scheme:               host.Scheme,
+			IsClose:              host.IsClose,
+			AutoHttps:            host.AutoHttps,
+			TargetIsHTTPS:        host.TargetIsHTTPS,
+			HTTPSJustProxy:       host.HTTPSJustProxy,
+			AutoSSL:              host.AutoSSL,
+			TLSOffload:           host.TLSOffload,
+			RegisteredOnly:       host.RegisteredOnly,
+			AutoCORS:             host.AutoCORS,
+			CompatMode:           host.CompatMode,
+			PlatformManaged:      host.PlatformDomainID != "",
+			BasicAuthSet:         file.BasicAuthConfigured(host.Auth),
+			HeaderChange:         host.HeaderChange,
+			ResponseHeaderChange: host.ResponseHeaderChange,
+			HostChange:           host.HostChange,
+			PathRewrite:          host.PathRewrite,
+			RedirectURL:          host.RedirectURL,
+			IpListPriority:       host.IpListPriority,
+			BlackIpList:          append([]string(nil), host.BlackIpList...),
+			WhiteIpList:          append([]string(nil), host.WhiteIpList...),
+			HttpPort:             publicProxyPort(publicAccessPort("http_proxy_access_port", "http_proxy_port"), "80"),
+			HttpsPort:            publicProxyPort(publicAccessPort("https_proxy_access_port", "https_proxy_port"), "443"),
 		}
 		host.RUnlock()
 		row.UploadLimit, row.DownloadLimit = host.RateLimitSnapshot()
@@ -384,12 +404,13 @@ func (s *IndexController) hostDomainFromRequest(excludeHostID int) (string, stri
 	if err != nil {
 		return "", "", err
 	}
-	available, err := file.GetDb().IsPlatformHostAvailable(platformID, prefix, excludeHostID)
+	available, err := file.GetDb().IsPlatformHostAvailable(platformID, prefix,
+		s.getEscapeString("location"), s.getEscapeString("scheme"), excludeHostID)
 	if err != nil {
 		return "", "", err
 	}
 	if !available {
-		return "", "", errors.New("平台域名前缀已被使用")
+		return "", "", errors.New("平台域名与路径规则已被使用")
 	}
 	return host, platformID, nil
 }
@@ -1279,6 +1300,8 @@ func (s *IndexController) Edit() {
 		} else {
 			s.Data["t"] = t
 			t.RLock()
+			s.Data["BlackIpList"] = strings.Join(t.BlackIpList, "\r\n")
+			s.Data["WhiteIpList"] = strings.Join(t.WhiteIpList, "\r\n")
 			tunnelMode = normalizedTunnelMode(t.Mode)
 			if tunnelMode == "httpProxy" || tunnelMode == "socks5" {
 				// Legacy proxy records are edited through the unified form. Saving
@@ -1840,6 +1863,8 @@ func (s *IndexController) EditHost() {
 		} else {
 			s.Data["h"] = h
 			h.RLock()
+			s.Data["BlackIpList"] = strings.Join(h.BlackIpList, "\r\n")
+			s.Data["WhiteIpList"] = strings.Join(h.WhiteIpList, "\r\n")
 			platformDomainID, hostName := h.PlatformDomainID, h.Host
 			h.RUnlock()
 			s.Data["hostIsPlatform"] = platformDomainID != ""
@@ -2058,7 +2083,8 @@ func (s *IndexController) PlatformHostAvailable() {
 		s.AjaxErr(err.Error())
 		return
 	}
-	available, err := file.GetDb().IsPlatformHostAvailable(platformID, prefix, s.GetIntNoErr("id"))
+	available, err := file.GetDb().IsPlatformHostAvailable(platformID, prefix,
+		s.getEscapeString("location"), s.getEscapeString("scheme"), s.GetIntNoErr("id"))
 	if err != nil {
 		s.AjaxErr(err.Error())
 		return

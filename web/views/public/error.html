@@ -1,14 +1,96 @@
-<main class="wrapper wrapper-content dashboard-page error-page" aria-labelledby="error-page-title">
-    <section class="error-page-layout">
-        <div class="error-page-column">
-            <article class="panel ibox float-e-margins error-page-card nps-panel">
-                <div class="ibox-content error-page-card__content">
-                    <i class="fa fa-exclamation-circle error-page-card__icon" aria-hidden="true"></i>
-                    <h1 id="error-page-title">Error 404: Page not found</h1>
-                    <p>The page you have requested is not found.</p>
-                    <p class="error-page-card__actions"><a class="btn btn-primary" href="javascript:window.history.back();">Go Back</a></p>
-                </div>
-            </article>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.code}} · {{.title}} - NPS</title>
+    <script>
+        (function () {
+            try {
+                var savedTheme = localStorage.getItem('nps-theme');
+                var systemTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', savedTheme || systemTheme);
+            } catch (error) {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+    </script>
+    <link href="{{.web_base_url}}/static/css/bootstrap-5.3.3.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}" rel="stylesheet">
+    <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}" type="text/javascript"></script>
+    <style>
+        html, body { height: 100%; }
+        body.nps-bootstrap {
+            margin: 0;
+            display: flex;
+            min-height: 100vh;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: var(--nps-canvas);
+            color: var(--nps-ink);
+        }
+        .error-shell { width: 100%; max-width: 520px; }
+        .error-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+            color: var(--nps-primary);
+            font-weight: 750;
+            letter-spacing: .04em;
+        }
+        .error-brand img { width: 30px; height: 30px; }
+        .error-card {
+            padding: 38px 34px;
+            border: 1px solid var(--nps-line);
+            border-radius: 12px;
+            background: var(--nps-surface);
+            box-shadow: var(--nps-shadow);
+            text-align: center;
+        }
+        .error-code {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--nps-primary);
+            font-size: 64px;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: .02em;
+        }
+        .error-title { margin: 0 0 10px; font-size: 20px; font-weight: 720; }
+        .error-message { margin: 0 0 24px; color: var(--nps-muted); line-height: 1.7; }
+        .error-actions { display: flex; justify-content: center; gap: 10px; }
+        .error-actions .btn { min-width: 116px; }
+        .error-footer {
+            margin-top: 18px;
+            text-align: center;
+            color: var(--nps-faint);
+            font-size: 12px;
+        }
+        .error-footer a { color: var(--nps-primary); text-decoration: none; }
+        .error-footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body class="nps-bootstrap">
+    <main class="error-shell" aria-labelledby="error-title">
+        <div class="error-brand">
+            <img src="{{.web_base_url}}/static/img/nps-logo.png" alt="NPS" aria-hidden="true">
+            <span>NPS <span style="color:var(--nps-muted);font-weight:600;">Pro</span></span>
         </div>
-    </section>
-</main>
+        <section class="error-card">
+            <span class="error-code" aria-hidden="true">{{.code}}</span>
+            <h1 id="error-title" class="error-title">{{.title}}</h1>
+            <p class="error-message">{{.message}}</p>
+            <div class="error-actions">
+                <a class="btn btn-primary" href="{{.web_base_url}}/"><i class="fa fa-home" aria-hidden="true"></i> <span data-i18n-zh="返回首页" data-i18n-en="Back to home">返回首页</span></a>
+                <a class="btn btn-outline btn-primary" href="javascript:window.history.back();"><i class="fa fa-arrow-left" aria-hidden="true"></i> <span data-i18n-zh="返回上一页" data-i18n-en="Go back">返回上一页</span></a>
+            </div>
+        </section>
+        <p class="error-footer">By: WuShuo · <a href="https://github.com/{{.github_repository}}" target="_blank" rel="noopener noreferrer"><i class="fa fa-github" aria-hidden="true"></i> {{.github_repository}}</a></p>
+    </main>
+</body>
+</html>

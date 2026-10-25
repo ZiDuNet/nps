@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/acl"
+	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/ipreg"
 )
@@ -217,6 +218,7 @@ type platformDomainStatus struct {
 	CertFilePath   string
 	KeyFilePath    string
 	Status         string
+	Detail         string
 	ExpiresAt      string
 	DaysRemaining  int
 	ReferenceCount int
@@ -235,9 +237,10 @@ func inspectPlatformDomain(domain file.PlatformDomain) platformDomainStatus {
 		status.Status = "未配置证书（仅 HTTP）"
 		return status
 	}
-	pair, err := tls.LoadX509KeyPair(domain.CertFilePath, domain.KeyFilePath)
+	pair, err := tls.LoadX509KeyPair(common.ResolveConfigPath(domain.CertFilePath), common.ResolveConfigPath(domain.KeyFilePath))
 	if err != nil {
 		status.Status = "读取或校验证书失败"
+		status.Detail = firstLine(err.Error())
 		return status
 	}
 	if len(pair.Certificate) == 0 {
@@ -266,6 +269,20 @@ func inspectPlatformDomain(domain file.PlatformDomain) platformDomainStatus {
 		status.Status = "证书有效"
 	}
 	return status
+}
+
+// firstLine keeps UI error details compact while still showing the most
+// actionable part of a load failure (usually the resolved path or PEM parse
+// error).
+func firstLine(message string) string {
+	message = strings.TrimSpace(message)
+	if index := strings.IndexAny(message, "\r\n"); index >= 0 {
+		return message[:index]
+	}
+	if len(message) > 240 {
+		return message[:240] + "…"
+	}
+	return message
 }
 
 // requestedPlatformDomains distinguishes an omitted field from an explicit

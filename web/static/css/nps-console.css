@@ -107,7 +107,8 @@ body.nps-bootstrap #page-wrapper.gray-bg {
     line-height: 1.55;
 }
 
-body.nps-bootstrap a { color: var(--nps-primary); }
+body.nps-bootstrap a { color: var(--nps-primary); text-decoration: none; }
+body.nps-bootstrap a:hover { text-decoration: none; }
 body.nps-bootstrap a:hover,
 body.nps-bootstrap a:focus { color: var(--nps-primary-hover); }
 body.nps-bootstrap :focus-visible { outline: 0; box-shadow: var(--nps-focus) !important; }
@@ -753,6 +754,18 @@ body.nps-bootstrap .host-domain-choice small { grid-column: 2; margin-top: 3px; 
 body.nps-bootstrap .host-domain-choice.is-selected > span { background: var(--nps-primary-soft); border-color: var(--nps-primary); box-shadow: inset 3px 0 var(--nps-primary); }
 body.nps-bootstrap .host-domain-choice:focus-within > span { border-color: var(--nps-primary); box-shadow: var(--nps-focus); }
 body.nps-bootstrap .host-domain-choice.is-disabled { cursor: not-allowed; opacity: .55; }
+body.nps-bootstrap .tunnel-mode-choice-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+body.nps-bootstrap .tunnel-mode-choice { display: block; min-width: 0; margin: 0; cursor: pointer; }
+body.nps-bootstrap .tunnel-mode-choice input { position: absolute; opacity: 0; pointer-events: none; }
+body.nps-bootstrap .tunnel-mode-choice > span { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 10px 12px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 6px; transition: border-color .15s ease, background-color .15s ease; }
+body.nps-bootstrap .tunnel-mode-choice i { width: 18px; color: var(--nps-primary); font-size: 15px; text-align: center; }
+body.nps-bootstrap .tunnel-mode-choice strong { display: block; color: var(--nps-ink); font-size: 13px; font-weight: 700; }
+body.nps-bootstrap .tunnel-mode-choice small { display: block; color: var(--nps-muted); font-size: 11px; line-height: 1.4; }
+body.nps-bootstrap .tunnel-mode-choice.is-selected > span { color: var(--nps-primary); background: var(--nps-primary-soft); border-color: var(--nps-primary); box-shadow: inset 3px 0 var(--nps-primary); }
+body.nps-bootstrap .tunnel-mode-choice:focus-within > span { border-color: var(--nps-primary); box-shadow: var(--nps-focus); }
+@media (max-width: 720px) {
+    body.nps-bootstrap .tunnel-mode-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 body.nps-bootstrap .host-platform-domain-fields { display: grid; grid-template-columns: minmax(180px, .9fr) minmax(0, 1.1fr); gap: 10px; }
 body.nps-bootstrap .host-domain-preview { min-height: 39px; margin-top: 10px; padding: 9px 11px; color: var(--nps-primary); background: var(--nps-primary-soft); border: 1px solid var(--nps-line); border-radius: 6px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; overflow-wrap: anywhere; }
 body.nps-bootstrap #platform-host-status.is-valid { color: var(--nps-success) !important; }
@@ -1368,7 +1381,7 @@ body.nps-bootstrap .form-page .form-section-title i {
     color: var(--nps-primary) !important;
     text-align: center;
 }
-body.nps-bootstrap .form-page .form-workflow-form > .form-group {
+body.nps-bootstrap .form-page .form-workflow-form > .form-group:not(.form-section-content-collapsed):not(.tunnel-field-hidden):not([style*="display: none"]):not([style*="display:none"]) {
     display: grid !important;
     grid-template-columns: minmax(112px, .42fr) minmax(0, 1fr);
     align-items: start;
@@ -1610,6 +1623,17 @@ body.nps-bootstrap .form-page .platform-domain-health dd {
 body.nps-bootstrap .form-page .platform-cert-status {
     color: var(--nps-primary) !important;
 }
+body.nps-bootstrap .form-page .platform-domain-error {
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    background: color-mix(in srgb, var(--nps-danger, #d9534f) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--nps-danger, #d9534f) 28%, transparent);
+    border-radius: 6px;
+    color: var(--nps-danger, #c9302c);
+    font-size: 11.5px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
 
 @media (max-width: 991px) {
     body.nps-bootstrap .form-page .form-workflow-form {
@@ -1673,11 +1697,11 @@ body.nps-bootstrap .form-page {
 body.nps-bootstrap .form-page .form-workflow-form {
     column-gap: var(--nps-form-column-gap) !important;
 }
-body.nps-bootstrap .form-page.form-page-client .form-workflow-form > .form-group,
-body.nps-bootstrap .form-page.form-page-tunnel .form-workflow-form > .form-group,
-body.nps-bootstrap .form-page.form-page-user .form-workflow-form > .form-group,
-body.nps-bootstrap .form-page.form-page-host .form-workflow-form > .form-group,
-body.nps-bootstrap .form-page.form-page-global .form-workflow-form > .form-group {
+body.nps-bootstrap .form-page.form-page-client .form-workflow-form > .form-group:not(.form-section-content-collapsed):not(.tunnel-field-hidden):not([style*="display: none"]):not([style*="display:none"]),
+body.nps-bootstrap .form-page.form-page-tunnel .form-workflow-form > .form-group:not(.form-section-content-collapsed):not(.tunnel-field-hidden):not([style*="display: none"]):not([style*="display:none"]),
+body.nps-bootstrap .form-page.form-page-user .form-workflow-form > .form-group:not(.form-section-content-collapsed):not(.tunnel-field-hidden):not([style*="display: none"]):not([style*="display:none"]),
+body.nps-bootstrap .form-page.form-page-host .form-workflow-form > .form-group:not(.form-section-content-collapsed):not(.tunnel-field-hidden):not([style*="display: none"]):not([style*="display:none"]),
+body.nps-bootstrap .form-page.form-page-global .form-workflow-form > .form-group:not(.form-section-content-collapsed):not(.tunnel-field-hidden):not([style*="display: none"]):not([style*="display:none"]) {
     display: grid !important;
     grid-template-columns: var(--nps-form-label-width) minmax(0, 1fr) !important;
     align-items: start !important;
@@ -2759,7 +2783,8 @@ body.nps-bootstrap .nps-table__columns-menu input[type="checkbox"] {
 
 /* Expanded tunnel rows carry secondary fields in a calm, scannable grid
    rather than an inline string that collides with command controls. */
-body.nps-bootstrap .tunnel-detail-summary {
+body.nps-bootstrap .tunnel-detail-summary,
+body.nps-bootstrap .user-detail-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 9px 18px;
@@ -2767,42 +2792,54 @@ body.nps-bootstrap .tunnel-detail-summary {
     padding: 0 0 14px;
     border-bottom: 1px solid var(--nps-line);
 }
-body.nps-bootstrap .tunnel-detail-summary > div {
+body.nps-bootstrap .tunnel-detail-summary > div,
+body.nps-bootstrap .user-detail-summary > div {
     display: flex;
     min-width: 0;
     align-items: baseline;
     gap: 6px;
     line-height: 1.45;
 }
-body.nps-bootstrap .tunnel-detail-summary b {
+body.nps-bootstrap .tunnel-detail-summary b,
+body.nps-bootstrap .user-detail-summary b {
     flex: 0 0 auto;
     color: var(--nps-muted);
     font-size: 11px;
     font-weight: 700;
     white-space: nowrap;
 }
-body.nps-bootstrap .tunnel-detail-summary > div > span {
+body.nps-bootstrap .tunnel-detail-summary > div > span,
+body.nps-bootstrap .user-detail-summary > div > span {
     min-width: 0;
     color: var(--nps-ink);
     font-size: 12px;
     overflow-wrap: anywhere;
 }
-body.nps-bootstrap .tunnel-detail-summary .badge {
+body.nps-bootstrap .tunnel-detail-summary .badge,
+body.nps-bootstrap .user-detail-summary .badge {
     font-size: 11px;
     line-height: 1.35;
 }
+body.nps-bootstrap .tunnel-detail-summary .tunnel-detail-wide {
+    grid-column: 1 / -1;
+    padding-top: 2px;
+    border-top: 1px dashed var(--nps-line);
+}
 @media (max-width: 1199px) and (min-width: 992px) {
-    body.nps-bootstrap .tunnel-detail-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    body.nps-bootstrap .tunnel-detail-summary,
+    body.nps-bootstrap .user-detail-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
     body.nps-bootstrap .client-detail__history-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
     body.nps-bootstrap .client-detail__history-state { justify-self: start; }
 }
 @media (max-width: 991px) {
-    body.nps-bootstrap .tunnel-detail-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    body.nps-bootstrap .tunnel-detail-summary,
+    body.nps-bootstrap .user-detail-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
-    body.nps-bootstrap .tunnel-detail-summary { grid-template-columns: minmax(0, 1fr); }
+    body.nps-bootstrap .tunnel-detail-summary,
+    body.nps-bootstrap .user-detail-summary { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Platform subdomains read as one value: the editable prefix sits directly

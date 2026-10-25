@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -25,6 +26,34 @@ import (
 
 	"ehang.io/nps/lib/crypt"
 )
+
+// ResolveConfigPath resolves a configuration-relative file path the same way
+// NPS treats other conf-relative assets. Absolute paths and inline PEM blocks
+// are returned unchanged, while relative paths are joined to the run path so
+// a saved configuration keeps working across working-directory changes,
+// systemd services, and Docker deployments. The Docker image mounts the config
+// directory at /conf, so absolute /conf/... paths saved inside a container are
+// transparently remapped onto the active config root (<run_path>/conf) when
+// the runtime is not actually rooted at /conf (bare-metal or local dev).
+func ResolveConfigPath(filePath string) string {
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" || strings.Contains(filePath, "-----BEGIN") {
+		return filePath
+	}
+	if filepath.IsAbs(filePath) {
+		confRoot, err := filepath.Abs(filepath.Join(GetRunPath(), "conf"))
+		if err != nil {
+			return filePath
+		}
+		dockerConfRoot := filepath.Join(string(filepath.Separator), "conf")
+		if rel, relErr := filepath.Rel(dockerConfRoot, filePath); relErr == nil &&
+			rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return filepath.Join(confRoot, rel)
+		}
+		return filePath
+	}
+	return filepath.Join(GetRunPath(), filePath)
+}
 
 // Get the corresponding IP address through domain name
 func GetHostByName(hostname string) string {

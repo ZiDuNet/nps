@@ -2,8 +2,35 @@ package common
 
 import (
 	"net"
+	"path/filepath"
 	"testing"
 )
+
+func TestResolveConfigPath(t *testing.T) {
+	originalRunPath := ConfPath
+	ConfPath = filepath.Join(t.TempDir(), "nps-root")
+	t.Cleanup(func() { ConfPath = originalRunPath })
+
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "empty", input: "", want: ""},
+		{name: "docker conf remapped", input: "/conf/webssl/fullchain.pem", want: filepath.Join(ConfPath, "conf/webssl/fullchain.pem")},
+		{name: "absolute outside docker conf", input: "/etc/certs/fullchain.pem", want: "/etc/certs/fullchain.pem"},
+		{name: "relative", input: "conf/webssl/fullchain.pem", want: filepath.Join(ConfPath, "conf/webssl/fullchain.pem")},
+		{name: "inline PEM", input: "-----BEGIN CERTIFICATE-----\nABC\n-----END CERTIFICATE-----", want: "-----BEGIN CERTIFICATE-----\nABC\n-----END CERTIFICATE-----"},
+		{name: "trimmed", input: "  conf/a.pem  ", want: filepath.Join(ConfPath, "conf/a.pem")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ResolveConfigPath(tc.input); got != tc.want {
+				t.Fatalf("ResolveConfigPath(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
 
 func TestInDoesNotMutateAddressList(t *testing.T) {
 	addresses := []string{"10.0.0.3", "10.0.0.1", "10.0.0.2"}

@@ -147,7 +147,9 @@ func (https *HttpsServer) Start() error {
 					https.cert(host, c, rb, certFilePath, keyFilePath)
 				} else {
 					logs.Debug("通过路径加载证书")
-					if !common.FileExists(certFilePath) || !common.FileExists(keyFilePath) {
+					resolvedCertPath := common.ResolveConfigPath(certFilePath)
+					resolvedKeyPath := common.ResolveConfigPath(keyFilePath)
+					if !common.FileExists(resolvedCertPath) || !common.FileExists(resolvedKeyPath) {
 						logs.Error("证书或秘钥文件不存在", keyFilePath, certFilePath)
 						https.enqueueCachedCertificate(host.Id, c, rb)
 						return
@@ -156,8 +158,8 @@ func (https *HttpsServer) Start() error {
 					tlsOffload := host.TLSOffload
 					host.RUnlock()
 					if tlsOffload {
-						certPEM, certErr := common.ReadAllFromFile(certFilePath)
-						keyPEM, keyErr := common.ReadAllFromFile(keyFilePath)
+						certPEM, certErr := common.ReadAllFromFile(resolvedCertPath)
+						keyPEM, keyErr := common.ReadAllFromFile(resolvedKeyPath)
 						if certErr != nil || keyErr != nil {
 							_ = c.Close()
 							return
@@ -166,13 +168,13 @@ func (https *HttpsServer) Start() error {
 						return
 					}
 
-					cert, err := common.ReadAllFromFile(certFilePath)
+					cert, err := common.ReadAllFromFile(resolvedCertPath)
 					if err != nil {
 						logs.Error("加载证书失败", err)
 						https.enqueueCachedCertificate(host.Id, c, rb)
 						return
 					}
-					key, err := common.ReadAllFromFile(keyFilePath)
+					key, err := common.ReadAllFromFile(resolvedKeyPath)
 					if err != nil {
 						logs.Error("加载证书秘钥失败", err)
 						https.enqueueCachedCertificate(host.Id, c, rb)
@@ -731,8 +733,8 @@ func (https *HttpsServer) handleTLSOffload(c net.Conn, host *file.Host, hostName
 		https.handleTLSOffloadWithCert(c, host, hostName, rb, certFile, keyFile)
 		return
 	}
-	certPEM, certErr := common.ReadAllFromFile(certFile)
-	keyPEM, keyErr := common.ReadAllFromFile(keyFile)
+	certPEM, certErr := common.ReadAllFromFile(common.ResolveConfigPath(certFile))
+	keyPEM, keyErr := common.ReadAllFromFile(common.ResolveConfigPath(keyFile))
 	if certErr != nil || keyErr != nil {
 		_ = c.Close()
 		return

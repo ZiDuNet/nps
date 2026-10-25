@@ -14,7 +14,7 @@
     <header class="dashboard-page-header form-page-header">
         <div class="form-page-heading">
             <div class="dashboard-page-kicker" data-i18n-zh="隧道管理" data-i18n-en="Tunnel management">隧道管理</div>
-            <h1 id="tunnel-form-title" langtag="page-edit"></h1>
+            <h1 id="tunnel-form-title" langtag="page-edittunnel"></h1>
             <p data-i18n-zh="更新隧道参数前，请确认监听端口和目标服务均可用。" data-i18n-en="Confirm that the listening port and target service are available before updating this tunnel.">更新隧道参数前，请确认监听端口和目标服务均可用。</p>
         </div>
         <div class="dashboard-page-actions form-page-actions">
@@ -76,9 +76,13 @@
                             <span class="help-block" data-i18n-zh="更换客户端会把这条隧道迁移到所选客户端，并立即重载转发配置。" data-i18n-en="Changing the client moves this tunnel and immediately reloads its forwarding configuration.">更换客户端会把这条隧道迁移到所选客户端，并立即重载转发配置。</span>
                         </div>
                     </div>
-                    <div class="form-group" id="registered_only">
-                        <label class="form-label font-bold" data-i18n-zh="仅允许已登记 IP" data-i18n-en="Registered IPs only">仅允许已登记 IP</label>
-                        <div class="form-group-wrapper"><div class="toggle-field"><input type="hidden" name="registered_only" value="{{if .t.RegisteredOnly}}1{{else}}0{{end}}"><label class="toggle-switch"><input type="checkbox"{{if .t.RegisteredOnly}} checked{{end}}><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="{{if .t.RegisteredOnly}}yes{{else}}no{{end}}">{{if .t.RegisteredOnly}}是{{else}}否{{end}}</span></div><span class="help-block" data-i18n-zh="开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用客户端登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。" data-i18n-en="When enabled, visitors must pass the lists and register their IP first with npc register or the client's registration key/VKEY. Registrations stay in memory and end when NPS restarts.">开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用客户端登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。</span></div>
+                    <div class="form-group" id="remark_group">
+                        <label class="form-label font-bold" for="tunnel-remark" langtag="word-remark"></label>
+                        <div class="form-group-wrapper">
+                            <input id="tunnel-remark" value="{{.t.Remark}}" class="form-control" type="text" name="remark" placeholder=""
+                                   langtag="info-unrestricted" required>
+                            <span class="help-block" data-i18n-zh="用于识别这条隧道的备注，不影响转发协议或访问地址。" data-i18n-en="A label for identifying this tunnel; it does not affect the forwarding protocol or access address.">用于识别这条隧道的备注，不影响转发协议或访问地址。</span>
+                        </div>
                     </div>
                     <div class="form-group form-group--wide" data-tunnel-field="mix_proxy">
                         <label class="form-label font-bold" data-i18n-zh="混合代理协议" data-i18n-en="Mixed proxy protocols">混合代理协议</label>
@@ -88,25 +92,6 @@
                                 <div class="host-option-toggle"><div class="toggle-field"><input type="hidden" name="enable_socks5" value="{{if or .t.Socks5Proxy $legacySocks5}}1{{else}}0{{end}}"><label class="toggle-switch"><input type="checkbox"{{if or .t.Socks5Proxy $legacySocks5}} checked{{end}}><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="{{if or .t.Socks5Proxy $legacySocks5}}yes{{else}}no{{end}}" data-i18n-zh="SOCKS5 代理：{{if or .t.Socks5Proxy $legacySocks5}}是{{else}}否{{end}}" data-i18n-en="SOCKS5 proxy: {{if or .t.Socks5Proxy $legacySocks5}}Yes{{else}}No{{end}}">SOCKS5 代理：{{if or .t.Socks5Proxy $legacySocks5}}是{{else}}否{{end}}</span></div></div>
                             </div>
                             <span class="help-block" data-i18n-zh="HTTP 与 SOCKS5 共用同一个公网端口；至少启用一种协议。" data-i18n-en="HTTP and SOCKS5 share one public port; enable at least one protocol.">HTTP 与 SOCKS5 共用同一个公网端口；至少启用一种协议。</span>
-                        </div>
-                    </div>
-                    <div class="form-group" data-tunnel-field="dest_acl_mode">
-                        <label class="form-label font-bold" for="tunnel-dest-acl-mode" langtag="word-destacl"></label>
-                        <div class="form-group-wrapper"><select id="tunnel-dest-acl-mode" class="form-control" name="dest_acl_mode"><option value="0" {{if eq .t.DestAclMode 0}}selected{{end}} langtag="word-disable"></option><option value="1" {{if eq .t.DestAclMode 1}}selected{{end}} langtag="word-whitelist"></option><option value="2" {{if eq .t.DestAclMode 2}}selected{{end}} langtag="word-blacklist"></option></select><span class="help-block" langtag="info-destacl"></span></div>
-                    </div>
-                    <div class="form-group form-group--wide" data-tunnel-field="dest_acl_rules">
-                        <label class="form-label font-bold" for="tunnel-dest-acl-rules" langtag="word-destaclrules"></label>
-                        <div class="form-group-wrapper"><textarea id="tunnel-dest-acl-rules" class="form-control" rows="4" name="dest_acl_rules">{{.t.DestAclRules}}</textarea><span class="help-block" langtag="info-destaclrules"></span></div>
-                    </div>
-                    <div class="form-group form-group--wide" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-black" data-i18n-zh="隧道黑名单（IP/CIDR）" data-i18n-en="Tunnel denylist (IP/CIDR)">隧道黑名单（IP/CIDR）</label><div class="form-group-wrapper"><textarea id="tunnel-acl-black" class="form-control" rows="2" name="blackiplist">{{.t.BlackIpList}}</textarea><span class="help-block" data-i18n-zh="每行一个 IP、CIDR 或 Geo 规则；命中的来源会按名单优先级拒绝或放行。留空表示本层不增加黑名单限制。" data-i18n-en="One IP, CIDR, or Geo rule per line; matches are handled by the list priority. Leave empty to add no denylist at this level.">每行一个 IP、CIDR 或 Geo 规则；命中的来源会按名单优先级拒绝或放行。留空表示本层不增加黑名单限制。</span></div></div>
-                    <div class="form-group form-group--wide" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-white" data-i18n-zh="隧道白名单（IP/CIDR）" data-i18n-en="Tunnel allowlist (IP/CIDR)">隧道白名单（IP/CIDR）</label><div class="form-group-wrapper"><textarea id="tunnel-acl-white" class="form-control" rows="2" name="whiteiplist">{{.t.WhiteIpList}}</textarea><span class="help-block" data-i18n-zh="每行一个 IP、CIDR 或 Geo 规则；配置后未命中的来源通常会被拒绝。留空表示本层不增加白名单限制。" data-i18n-en="One IP, CIDR, or Geo rule per line; once configured, non-matching sources are normally denied. Leave empty to add no allowlist at this level.">每行一个 IP、CIDR 或 Geo 规则；配置后未命中的来源通常会被拒绝。留空表示本层不增加白名单限制。</span></div></div>
-                    <div class="form-group" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-priority" data-i18n-zh="名单冲突策略" data-i18n-en="List conflict policy">名单冲突策略</label><div class="form-group-wrapper"><select id="tunnel-acl-priority" class="form-control" name="iplistpriority"><option value="0"{{if ne .t.IpListPriority 1}} selected{{end}}>黑名单优先</option><option value="1"{{if eq .t.IpListPriority 1}} selected{{end}}>白名单优先</option></select><span class="help-block" data-i18n-zh="同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。" data-i18n-en="Applies when both lists are configured: deny-first rejects denylisted addresses and allows only allowlisted others; allow-first allows allowlisted addresses and any others not on the denylist. With one list, both policies are equivalent.">同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。</span></div></div>
-                    <div class="form-group" id="remark_group">
-                        <label class="form-label font-bold" for="tunnel-remark" langtag="word-remark"></label>
-                        <div class="form-group-wrapper">
-                            <input id="tunnel-remark" value="{{.t.Remark}}" class="form-control" type="text" name="remark" placeholder=""
-                                   langtag="info-unrestricted" required>
-                            <span class="help-block" data-i18n-zh="用于识别这条隧道的备注，不影响转发协议或访问地址。" data-i18n-en="A label for identifying this tunnel; it does not affect the forwarding protocol or access address.">用于识别这条隧道的备注，不影响转发协议或访问地址。</span>
                         </div>
                     </div>
                     {{if eq true .allow_multi_ip}}
@@ -177,6 +162,23 @@
                     {{end}}
                     {{end}}
 
+                    <div class="form-section-title" data-tunnel-section="access" data-section-tier="advanced" data-section-summary-zh="来源名单与目标访问规则" data-section-summary-en="Source lists and destination access rules"><i class="fa fa-user-lock" aria-hidden="true"></i><span data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</span></div>
+                    <div class="form-group" id="registered_only" data-tunnel-field="registered_only">
+                        <label class="form-label font-bold" data-i18n-zh="仅允许已登记 IP" data-i18n-en="Registered IPs only">仅允许已登记 IP</label>
+                        <div class="form-group-wrapper"><div class="toggle-field"><input type="hidden" name="registered_only" value="{{if .t.RegisteredOnly}}1{{else}}0{{end}}"><label class="toggle-switch"><input type="checkbox"{{if .t.RegisteredOnly}} checked{{end}}><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="{{if .t.RegisteredOnly}}yes{{else}}no{{end}}">{{if .t.RegisteredOnly}}是{{else}}否{{end}}</span></div><span class="help-block" data-i18n-zh="开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用客户端登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。" data-i18n-en="When enabled, visitors must pass the lists and register their IP first with npc register or the client's registration key/VKEY. Registrations stay in memory and end when NPS restarts.">开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用客户端登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。</span></div>
+                    </div>
+                    <div class="form-group" data-tunnel-field="dest_acl_mode">
+                        <label class="form-label font-bold" for="tunnel-dest-acl-mode" langtag="word-destacl"></label>
+                        <div class="form-group-wrapper"><select id="tunnel-dest-acl-mode" class="form-control" name="dest_acl_mode"><option value="0" {{if eq .t.DestAclMode 0}}selected{{end}} langtag="word-disable"></option><option value="1" {{if eq .t.DestAclMode 1}}selected{{end}} langtag="word-whitelist"></option><option value="2" {{if eq .t.DestAclMode 2}}selected{{end}} langtag="word-blacklist"></option></select><span class="help-block" langtag="info-destacl"></span></div>
+                    </div>
+                    <div class="form-group form-group--wide" data-tunnel-field="dest_acl_rules">
+                        <label class="form-label font-bold" for="tunnel-dest-acl-rules" langtag="word-destaclrules"></label>
+                        <div class="form-group-wrapper"><textarea id="tunnel-dest-acl-rules" class="form-control" rows="4" name="dest_acl_rules">{{.t.DestAclRules}}</textarea><span class="help-block" langtag="info-destaclrules"></span></div>
+                    </div>
+                    <div class="form-group form-group--wide" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-black" data-i18n-zh="隧道黑名单（IP/CIDR）" data-i18n-en="Tunnel denylist (IP/CIDR)">隧道黑名单（IP/CIDR）</label><div class="form-group-wrapper"><textarea id="tunnel-acl-black" class="form-control" rows="2" name="blackiplist">{{.BlackIpList}}</textarea><span class="help-block" data-i18n-zh="每行一个 IP、CIDR 或 Geo 规则；命中的来源会按名单优先级拒绝或放行。留空表示本层不增加黑名单限制。" data-i18n-en="One IP, CIDR, or Geo rule per line; matches are handled by the list priority. Leave empty to add no denylist at this level.">每行一个 IP、CIDR 或 Geo 规则；命中的来源会按名单优先级拒绝或放行。留空表示本层不增加黑名单限制。</span></div></div>
+                    <div class="form-group form-group--wide" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-white" data-i18n-zh="隧道白名单（IP/CIDR）" data-i18n-en="Tunnel allowlist (IP/CIDR)">隧道白名单（IP/CIDR）</label><div class="form-group-wrapper"><textarea id="tunnel-acl-white" class="form-control" rows="2" name="whiteiplist">{{.WhiteIpList}}</textarea><span class="help-block" data-i18n-zh="每行一个 IP、CIDR 或 Geo 规则；配置后未命中的来源通常会被拒绝。留空表示本层不增加白名单限制。" data-i18n-en="One IP, CIDR, or Geo rule per line; once configured, non-matching sources are normally denied. Leave empty to add no allowlist at this level.">每行一个 IP、CIDR 或 Geo 规则；配置后未命中的来源通常会被拒绝。留空表示本层不增加白名单限制。</span></div></div>
+                    <div class="form-group" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-priority" data-i18n-zh="名单冲突策略" data-i18n-en="List conflict policy">名单冲突策略</label><div class="form-group-wrapper"><select id="tunnel-acl-priority" class="form-control" name="iplistpriority"><option value="0"{{if ne .t.IpListPriority 1}} selected{{end}}>黑名单优先</option><option value="1"{{if eq .t.IpListPriority 1}} selected{{end}}>白名单优先</option></select><span class="help-block" data-i18n-zh="同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。" data-i18n-en="Applies when both lists are configured: deny-first rejects denylisted addresses and allows only allowlisted others; allow-first allows allowlisted addresses and any others not on the denylist. With one list, both policies are equivalent.">同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。</span></div></div>
+
                     <div class="form-section-title" data-tunnel-section="rate" data-section-tier="advanced" data-section-summary-zh="按需限制带宽" data-section-summary-en="Optional bandwidth limits"><i class="fa fa-tachometer" aria-hidden="true"></i><span data-i18n-zh="资源限速" data-i18n-en="Resource limits">资源限速</span></div>
                     <div class="form-group tunnel-mode-field" id="upload_limit" data-tunnel-field="upload_limit"><label class="form-label font-bold" for="tunnel-upload-limit" data-i18n-zh="上行限速（KB/s）" data-i18n-en="Upload limit (KB/s)">上行限速（KB/s）</label><div class="form-group-wrapper"><input id="tunnel-upload-limit" class="form-control" type="number" min="0" step="1" name="upload_limit" value="{{.t.UploadLimit}}"><span class="help-block" data-i18n-zh="访问者到内网服务；0 表示不限速，同一隧道所有连接共享。" data-i18n-en="Visitor to private service; 0 means unlimited and is shared by all connections.">访问者到内网服务；0 表示不限速，同一隧道所有连接共享。</span></div></div>
                     <div class="form-group tunnel-mode-field" id="download_limit" data-tunnel-field="download_limit"><label class="form-label font-bold" for="tunnel-download-limit" data-i18n-zh="下行限速（KB/s）" data-i18n-en="Download limit (KB/s)">下行限速（KB/s）</label><div class="form-group-wrapper"><input id="tunnel-download-limit" class="form-control" type="number" min="0" step="1" name="download_limit" value="{{.t.DownloadLimit}}"><span class="help-block" data-i18n-zh="内网服务到访问者；0 表示不限速，同一隧道所有连接共享。" data-i18n-en="Private service to visitor; 0 means unlimited and is shared by all connections.">内网服务到访问者；0 表示不限速，同一隧道所有连接共享。</span></div></div>
@@ -234,16 +236,17 @@
 </section>
 <script>
     var fieldMap = {
-        tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "acl", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
-        udp: ["client_id", "server_ip", "port", "target", "local_proxy", "acl", "upload_limit", "download_limit"],
-        mixProxy: ["client_id", "server_ip", "port", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "upload_limit", "download_limit"],
-        secret: ["client_id", "server_ip", "target", "password", "acl", "upload_limit", "download_limit"],
-        p2p: ["client_id", "server_ip", "target", "password", "acl", "upload_limit", "download_limit"],
-        file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "acl", "upload_limit", "download_limit"]
+        tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
+        udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "upload_limit", "download_limit"],
+        mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "upload_limit", "download_limit"],
+        secret: ["client_id", "server_ip", "target", "password", "registered_only", "acl", "upload_limit", "download_limit"],
+        p2p: ["client_id", "server_ip", "target", "password", "registered_only", "acl", "upload_limit", "download_limit"],
+        file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "upload_limit", "download_limit"]
     };
     var tunnelTypeClasses = "tunnel-type-tcp tunnel-type-udp tunnel-type-httpProxy tunnel-type-socks5 tunnel-type-mixProxy tunnel-type-secret tunnel-type-p2p tunnel-type-file";
     var tunnelSectionFields = {
         target: ["target", "local_path", "strip_pre"],
+        access: ["registered_only", "dest_acl_mode", "dest_acl_rules", "acl"],
         rate: ["upload_limit", "download_limit"],
         security: ["password", "proto_version"],
         health: ["health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]
@@ -282,6 +285,19 @@
         });
         $("[data-tunnel-case]").removeClass("is-active");
         $("[data-tunnel-case='" + type + "']").addClass("is-active");
+        updateConditionalFields();
+    }
+
+    function updateConditionalFields() {
+        var type = $("#type").val() || "tcp";
+        var fields = fieldMap[type] || fieldMap.tcp;
+        if (fields.indexOf("dest_acl_rules") >= 0) {
+            var aclMode = String($("#tunnel-dest-acl-mode").val() || "0");
+            setTunnelFieldVisibility("dest_acl_rules", aclMode !== "0");
+        }
+        if (fields.indexOf("health_http_url") >= 0) {
+            setTunnelFieldVisibility("health_http_url", $("#health-check-type").val() === "http");
+        }
     }
 
     function loadTunnelClients() {
@@ -307,6 +323,8 @@
         $("#type").on("change", function () {
             resetForm();
         });
+        $("#tunnel-dest-acl-mode").on("change", updateConditionalFields);
+        $("#health-check-type").on("change", updateConditionalFields);
 
         $('.toggle-switch input[type="checkbox"]').on('change', function() {
             npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked);

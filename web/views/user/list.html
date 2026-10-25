@@ -38,12 +38,45 @@
         pageNumber: 1,
         pageList: [5, 10, 20, 50],
         storageKey: 'user',
+        detailView: true,
         smartDisplay: true,
         formatLoadingMessage: function () { return npsTableState('user', true); },
         formatNoMatches: function () { return npsTableState('user', false); },
+        onExpandRow: function () {
+            $('body').setLang('.detail-view');
+            npsDecorateDetailControls('#table');
+        },
+        onCollapseRow: function () { window.setTimeout(function () { npsDecorateDetailControls('#table'); }, 0); },
         onPostBody: function () {
             $('body').setLang('#table');
             npsApplyTableState(this, 'user');
+        },
+        detailFormatter: function (index, row) {
+            var english = npsIsEnglish();
+            var text = function (value, fallback) {
+                if (value == null || value === '') value = fallback == null ? '' : fallback;
+                return npsEscapeHtml(value);
+            };
+            var quota = function (used, limit) {
+                var limited = Number(limit) > 0;
+                return text(Number(used) || 0) + ' / ' + text(limited ? limit : (english ? 'Unlimited' : '不限'));
+            };
+            var statusBadge = row.Status
+                ? '<span class="badge badge-primary">' + (english ? 'Active' : '启用') + '</span>'
+                : '<span class="badge badge-danger">' + (english ? 'Disabled' : '停用') + '</span>';
+            var tokenBadge = row.APIKeyEnabled
+                ? '<span class="badge badge-primary">' + (english ? 'Enabled' : '已启用') + '</span>'
+                : '<span class="badge badge-default">' + (english ? 'Not set' : '未配置') + '</span>';
+            return '<div class="user-detail-summary">'
+                + '<div><b data-i18n-zh="用户名" data-i18n-en="Username"></b><span>' + text(row.UserName, '-') + '</span></div>'
+                + '<div><b data-i18n-zh="备注" data-i18n-en="Remark"></b><span>' + text(row.Remark, '-') + '</span></div>'
+                + '<div><b data-i18n-zh="创建时间" data-i18n-en="Created"></b><span>' + text(row.CreateTime, '-') + '</span></div>'
+                + '<div><b data-i18n-zh="有效期" data-i18n-en="Expiration"></b><span>' + text(row.ExpireTime, english ? 'Unlimited' : '永不过期') + '</span></div>'
+                + '<div><b data-i18n-zh="客户端配额（已用 / 上限）" data-i18n-en="Clients (used / limit)"></b><span>' + quota(row.ClientCount, row.MaxClientNum) + '</span></div>'
+                + '<div><b data-i18n-zh="隧道配额（已用 / 上限）" data-i18n-en="Tunnels (used / limit)"></b><span>' + quota(row.TunnelCount, row.MaxTunnelNum) + '</span></div>'
+                + '<div><b data-i18n-zh="状态" data-i18n-en="Status"></b><span>' + statusBadge + '</span></div>'
+                + '<div><b data-i18n-zh="API Token" data-i18n-en="API token"></b><span>' + tokenBadge + '</span></div>'
+                + '</div>';
         },
         columns: [
             { field: 'Id', title: 'ID', halign: 'center', class: 'user-list__id', width: '56px' },

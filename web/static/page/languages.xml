@@ -24,8 +24,8 @@
 	</lang>
 
 	<lang id="scheme-host">
-		<zh-CN>域名解析</zh-CN>
-		<en-US>Host</en-US>
+		<zh-CN>域名反代</zh-CN>
+		<en-US>Domain reverse proxy</en-US>
 	</lang>
 	<lang id="scheme-tcp">
 		<zh-CN>TCP 隧道</zh-CN>
@@ -127,6 +127,38 @@
 	<lang id="page-edit">
 		<zh-CN>编辑</zh-CN>
 		<en-US>Edit</en-US>
+	</lang>
+	<lang id="page-addtunnel">
+		<zh-CN>新增隧道</zh-CN>
+		<en-US>Add tunnel</en-US>
+	</lang>
+	<lang id="page-edittunnel">
+		<zh-CN>编辑隧道</zh-CN>
+		<en-US>Edit tunnel</en-US>
+	</lang>
+	<lang id="page-addhost">
+		<zh-CN>新增域名反代</zh-CN>
+		<en-US>Add domain reverse proxy</en-US>
+	</lang>
+	<lang id="page-edithost">
+		<zh-CN>编辑域名反代</zh-CN>
+		<en-US>Edit domain reverse proxy</en-US>
+	</lang>
+	<lang id="page-addclient">
+		<zh-CN>新增客户端</zh-CN>
+		<en-US>Add client</en-US>
+	</lang>
+	<lang id="page-editclient">
+		<zh-CN>编辑客户端</zh-CN>
+		<en-US>Edit client</en-US>
+	</lang>
+	<lang id="page-adduser">
+		<zh-CN>新增用户</zh-CN>
+		<en-US>Add user</en-US>
+	</lang>
+	<lang id="page-edituser">
+		<zh-CN>编辑用户</zh-CN>
+		<en-US>Edit user</en-US>
 	</lang>
 
 	<lang id="word-address">
@@ -836,6 +868,10 @@
 	<lang id="word-blackip">
 		<zh-CN>IP黑名单</zh-CN>
 		<en-US>IP Black List</en-US>
+	</lang>
+	<lang id="word-whiteip">
+		<zh-CN>IP白名单</zh-CN>
+		<en-US>IP Allow List</en-US>
 	</lang>
 
 	<lang id="word-createtime">

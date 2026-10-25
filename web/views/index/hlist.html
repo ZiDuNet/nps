@@ -2,7 +2,7 @@
     <header class="dashboard-page-header management-page-header">
         <div>
             <div class="dashboard-page-kicker" data-i18n-zh="域名代理" data-i18n-en="Domain proxy">域名代理</div>
-            <h1 id="host-list-title" data-i18n-zh="域名规则" data-i18n-en="Domain rules">域名规则</h1>
+            <h1 id="host-list-title" data-i18n-zh="域名反代" data-i18n-en="Domain reverse proxy">域名反代</h1>
             <p data-i18n-zh="集中查看访问入口、协议与内网目标；展开行可查看路由摘要。" data-i18n-en="Review public entry points, protocols, and internal targets. Expand a row for routing details.">集中查看访问入口、协议与内网目标；展开行可查看路由摘要。</p>
         </div>
         <div class="dashboard-page-actions">
@@ -93,9 +93,22 @@ $('#table').npsTable({
         var localProxy = (row.Target || {}).LocalProxy ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
         var proxyProtocol = Number((row.Target || {}).ProxyProtocol || 0) === 1 ? 'PROXY v1' : (Number((row.Target || {}).ProxyProtocol || 0) === 2 ? 'PROXY v2' : (npsIsEnglish() ? 'Disabled' : '关闭'));
         var basicAuth = row.BasicAuthSet ? (npsIsEnglish() ? 'Configured' : '已配置') : (npsIsEnglish() ? 'Not configured' : '未配置');
+        var backendProtocol = row.TargetIsHTTPS ? 'HTTPS' : 'HTTP';
+        var passthrough = row.HTTPSJustProxy ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
+        var tlsOffload = row.TLSOffload ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
+        var autoSSL = row.AutoSSL ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
+        var autoCORS = row.AutoCORS ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
+        var compatMode = row.CompatMode ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
+        var registeredOnly = row.RegisteredOnly ? (npsIsEnglish() ? 'Enabled' : '已开启') : (npsIsEnglish() ? 'Disabled' : '未开启');
         var client = row.Client || {}, clientName = client.Id ? String(client.Id) + ' · ' + String(client.Remark || '-') : '-';
         var clientState = client.IsConnect ? (npsIsEnglish() ? 'Online' : '在线') : (npsIsEnglish() ? 'Offline' : '离线');
         var ruleState = row.IsClose ? (npsIsEnglish() ? 'Disabled' : '已停用') : (npsIsEnglish() ? 'Active' : '运行中');
+        var healthSummary = '';
+        if (row.HealthCheckType || row.HealthCheckTarget) {
+            healthSummary = (row.HealthCheckType === 'http' ? 'HTTP' : 'TCP')
+                + (row.HealthCheckTarget ? ' · ' + String(row.HealthCheckTarget).replace(/\r?\n/g, ', ') : '')
+                + (row.HealthCheckInterval ? ' · ' + row.HealthCheckInterval + (npsIsEnglish() ? 's' : ' 秒') : '');
+        }
         return '<div class="host-detail-grid">'
             + '<div><span>' + (npsIsEnglish() ? 'Domain source' : '域名来源') + '</span><strong>' + npsEscapeHtml(source) + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'Rule status' : '规则状态') + '</span><strong>' + npsEscapeHtml(ruleState) + '</strong></div>'
@@ -107,9 +120,24 @@ $('#table').npsTable({
             + '<div><span>' + (npsIsEnglish() ? 'Local proxy' : '本地代理') + '</span><strong>' + npsEscapeHtml(localProxy) + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'Backend PROXY protocol' : '后端 PROXY Protocol') + '</span><strong>' + npsEscapeHtml(proxyProtocol) + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'Basic authentication' : 'Basic 认证') + '</span><strong>' + npsEscapeHtml(basicAuth) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Backend protocol' : '内网目标协议') + '</span><strong>' + npsEscapeHtml(backendProtocol) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'HTTPS passthrough' : 'HTTPS 原样透传') + '</span><strong>' + npsEscapeHtml(passthrough) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'TLS offload' : 'TLS 卸载后透传') + '</span><strong>' + npsEscapeHtml(tlsOffload) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Automatic certificate' : '自动申请证书') + '</span><strong>' + npsEscapeHtml(autoSSL) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Auto CORS' : '自动 CORS') + '</span><strong>' + npsEscapeHtml(autoCORS) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Compatibility mode' : '兼容模式') + '</span><strong>' + npsEscapeHtml(compatMode) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'Registered IPs only' : '仅允许已登记 IP') + '</span><strong>' + npsEscapeHtml(registeredOnly) + '</strong></div>'
+            + '<div><span>' + (npsIsEnglish() ? 'List policy' : '名单冲突策略') + '</span><strong>' + npsEscapeHtml(row.IpListPriority === 1 ? (npsIsEnglish() ? 'Allow first' : '白名单优先') : (npsIsEnglish() ? 'Deny first' : '黑名单优先')) + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'Upload limit / current' : '上行限速 / 当前') + '</span><strong>' + npsEscapeHtml(String(row.UploadLimit || 0) + ' KB/s / ' + changeunit(row.UploadRate || 0) + '/s') + '</strong></div>'
             + '<div><span>' + (npsIsEnglish() ? 'Download limit / current' : '下行限速 / 当前') + '</span><strong>' + npsEscapeHtml(String(row.DownloadLimit || 0) + ' KB/s / ' + changeunit(row.DownloadRate || 0) + '/s') + '</strong></div>'
             + '<div class="host-detail-grid__wide"><span>' + (npsIsEnglish() ? 'Internal target' : '内网目标') + '</span><code>' + npsEscapeHtml(target || '-') + '</code></div>'
+            + (healthSummary ? '<div class="host-detail-grid__wide"><span>' + (npsIsEnglish() ? 'Health check' : '健康检查') + '</span><strong>' + npsEscapeHtml(healthSummary) + '</strong></div>' : '')
+            + (((row.BlackIpList || []).length || (row.WhiteIpList || []).length) ? '<div class="host-detail-grid__wide"><span>' + (npsIsEnglish() ? 'Source lists' : '来源名单') + '</span><strong>' + npsEscapeHtml((npsIsEnglish() ? 'Deny: ' : '黑名单：') + ((row.BlackIpList || []).join(', ') || '-') + (npsIsEnglish() ? ' · Allow: ' : ' · 白名单：') + ((row.WhiteIpList || []).join(', ') || '-')) + '</strong></div>' : '')
+            + (row.HeaderChange ? '<div class="host-detail-grid__wide"><span>' + (npsIsEnglish() ? 'Additional headers' : '附加请求头') + '</span><code>' + npsEscapeHtml(row.HeaderChange) + '</code></div>' : '')
+            + (row.HostChange ? '<div class="host-detail-grid__wide"><span>' + (npsIsEnglish() ? 'Upstream Host' : '上游 Host') + '</span><code>' + npsEscapeHtml(row.HostChange) + '</code></div>' : '')
+            + (row.PathRewrite ? '<div class="host-detail-grid__wide"><span>' + (npsIsEnglish() ? 'Path rewrite' : '路径重写') + '</span><code>' + npsEscapeHtml(row.PathRewrite) + '</code></div>' : '')
+            + (row.ResponseHeaderChange ? '<div class="host-detail-grid__wide"><span>' + (npsIsEnglish() ? 'Response headers' : '响应头修改') + '</span><code>' + npsEscapeHtml(row.ResponseHeaderChange) + '</code></div>' : '')
+            + (row.RedirectURL ? '<div class="host-detail-grid__wide"><span>' + (npsIsEnglish() ? 'Redirect URL' : '重定向地址') + '</span><strong>' + npsEscapeHtml(row.RedirectURL) + '</strong></div>' : '')
             + '</div>';
     },
     columns: [

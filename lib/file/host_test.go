@@ -398,3 +398,29 @@ func TestIsHostExistSupportsEditValidationWithoutClient(t *testing.T) {
 		t.Fatal("host edit validation must not treat the current record as a duplicate")
 	}
 }
+
+func TestIsHostExistChecksSchemeSymmetricallyAndAllowsPathPartition(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	db.Hosts.Store(1, &Host{Id: 1, Host: "app.example.com", Location: "/", Scheme: "all", Client: &Client{Id: 1}})
+	utils := &DbUtils{JsonDb: db}
+
+	// An existing "all" rule conflicts with a later http or https rule on the
+	// same path, not just the other way around.
+	if !utils.IsHostExist(&Host{Id: 2, Host: "app.example.com", Location: "/", Scheme: "http", Client: &Client{Id: 1}}) {
+		t.Fatal("a later http rule must conflict with an existing all rule")
+	}
+	if !utils.IsHostExist(&Host{Id: 2, Host: "app.example.com", Location: "/", Scheme: "https", Client: &Client{Id: 1}}) {
+		t.Fatal("a later https rule must conflict with an existing all rule")
+	}
+	// Disjoint paths are separate routes and must remain available.
+	if utils.IsHostExist(&Host{Id: 2, Host: "app.example.com", Location: "/api", Scheme: "all", Client: &Client{Id: 1}}) {
+		t.Fatal("the same domain on a disjoint path must remain available")
+	}
+
+	// Distinct schemes are also separate routes.
+	schemeDB := NewJsonDb(t.TempDir())
+	schemeDB.Hosts.Store(2, &Host{Id: 2, Host: "app.example.com", Location: "/", Scheme: "http", Client: &Client{Id: 1}})
+	if (&DbUtils{JsonDb: schemeDB}).IsHostExist(&Host{Id: 3, Host: "app.example.com", Location: "/", Scheme: "https", Client: &Client{Id: 1}}) {
+		t.Fatal("an https rule must be able to coexist with an existing http rule")
+	}
+}
