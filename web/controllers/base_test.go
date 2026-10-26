@@ -312,6 +312,29 @@ func TestSameOriginRequestAcceptsBrowserSameOriginBehindHostRewritingProxy(t *te
 	}
 }
 
+func TestSameOriginRequestTrustsBrowserMetadataWithoutOriginHeader(t *testing.T) {
+	oldAllow := beego.AppConfig.String("allow_x_real_ip")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
+	})
+	// allow_x_real_ip is enabled by default and makes useForwardedAuthority
+	// true even for direct connections; the browser metadata fast path must
+	// still accept a same-origin request that omits the Origin header.
+	_ = beego.AppConfig.Set("allow_x_real_ip", "true")
+
+	request := httptest.NewRequest("POST", "http://127.0.0.1:30080/global/ipregister/list", nil)
+	request.Host = "127.0.0.1:30080"
+	request.Header.Set("Sec-Fetch-Site", "same-origin")
+	if !isSameOriginRequest(request) {
+		t.Fatal("same-origin browser metadata without Origin must be accepted")
+	}
+
+	request.Header.Set("Sec-Fetch-Site", "cross-site")
+	if isSameOriginRequest(request) {
+		t.Fatal("cross-site metadata must not bypass the origin check")
+	}
+}
+
 func TestAllowedClientIDsForUserUseCurrentMembership(t *testing.T) {
 	stale := map[int]struct{}{1: {}}
 	fresh := map[int]struct{}{2: {}, 3: {}}

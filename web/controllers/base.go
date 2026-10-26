@@ -454,21 +454,23 @@ func isSameOriginRequest(request *http.Request) bool {
 	if request == nil {
 		return false
 	}
+	// Fetch Metadata is set by the browser and cannot be forged by a
+	// cross-origin page. When the browser attests that a POST was initiated
+	// same-origin, accept it even if the Origin header is absent (some WebKit
+	// builds and reverse proxies omit it) or a proxy rewrote Host. Requests
+	// without this attestation still go through the authority comparison
+	// below; cross-site metadata never takes this fast path.
+	if strings.EqualFold(strings.TrimSpace(request.Header.Get("Sec-Fetch-Site")), "same-origin") {
+		return true
+	}
+
 	origin := strings.TrimSpace(request.Header.Get("Origin"))
 	if origin == "" {
 		return false
 	}
-
 	parsedOrigin, err := url.Parse(origin)
 	if err != nil || parsedOrigin.Host == "" || (parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https") {
 		return false
-	}
-	// When a proxy rewrites Host and does not forward X-Forwarded-Host, modern
-	// browsers still provide Fetch Metadata.  A same-origin request from the
-	// panel is safe to accept even though NPS only sees the upstream Host; a
-	// cross-site request keeps going through the strict authority comparison.
-	if !useForwardedAuthority(request) && strings.EqualFold(strings.TrimSpace(request.Header.Get("Sec-Fetch-Site")), "same-origin") {
-		return true
 	}
 
 	// A reverse proxy may terminate TLS and expose a public hostname while the
