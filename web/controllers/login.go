@@ -445,8 +445,8 @@ const ipRegisterStandaloneHTML = `<!doctype html>
 .card{width:min(100%,440px);padding:32px;border:1px solid #fff;border-radius:20px;background:#ffffffed;box-shadow:0 20px 60px #19345516}.eyebrow{margin:0 0 8px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}h1{margin:0;font-size:25px;letter-spacing:-.03em}.intro{margin:8px 0 24px;color:var(--muted)}label{display:block;margin:17px 0 7px;font-size:13px;font-weight:650}input{width:100%;height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit}input[readonly]{background:#f5f7fa;color:var(--muted)}button{width:100%;height:46px;margin-top:22px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.65;cursor:wait}.hint{margin:14px 0 0;color:var(--muted);font-size:12px}.result{min-height:24px;margin-top:14px;font-size:13px}.result.error{color:#b42318}.result.success{color:#147a45}
 .warn{margin:0 0 20px;padding:10px 12px;border:1px solid #f2c14e;border-radius:10px;background:#fff7e0;color:#8a5b00;font-size:12.5px;line-height:1.55}
 </style></head><body><main class="card"><p class="eyebrow">NPS · ACCESS</p><h1>登记访问 IP</h1><p class="intro">登记后，管理员启用“仅允许已登记 IP”的资源才会接受此地址的访问。</p>
-{{if .ProxyWarning}}<p class="warn">检测到的是代理或内网地址（{{.IP}}）。若此页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址，“仅允许已登记 IP”无法区分单个用户。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并在服务端开启 allow_x_real_ip 后重新打开本页。</p>{{end}}
-<form id="register-form"><label for="visitor-ip">当前访问地址</label><input id="visitor-ip" value="{{.IP}}" readonly><p class="hint">地址来源：{{.IPSource}}。仅在服务端明确配置可信反代并允许真实 IP 头时，才会显示反代传递的公网 IP。</p>
+{{if .ProxyWarning}}<p class="warn">检测到的是代理或内网地址（{{.IP}}）。若此页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址，“仅允许已登记 IP”无法区分单个用户。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并确认服务端已开启 allow_x_real_ip（默认开启）后重新打开本页。</p>{{end}}
+<form id="register-form"><label for="visitor-ip">当前访问地址</label><input id="visitor-ip" value="{{.IP}}" readonly><p class="hint">地址来源：{{.IPSource}}。仅当服务端允许真实 IP 头（allow_x_real_ip，默认开启）且前置代理覆盖传递时，才会显示反代传递的公网 IP。</p>
 <label for="register-key">登记密钥</label><input id="register-key" name="key" type="password" autocomplete="off" required placeholder="输入管理员或客户端提供的登记密钥">
 <label for="register-hours">有效时长（小时）</label><input id="register-hours" name="hours" type="number" min="1" max="{{.DefaultHours}}" value="{{.DefaultHours}}">
 <button id="register-submit" type="submit">登记此 IP</button><p class="hint">登记有效时长受服务端配置限制。此页不会保存密钥。</p><div id="register-result" class="result" role="status" aria-live="polite"></div></form></main>
@@ -555,10 +555,12 @@ func requestVisitorIP(ctx *beecontext.Context) string {
 }
 
 // requestVisitorIPFromRequest returns the address used by IP registration.
-// Forwarded headers are opt-in through allow_x_real_ip.  The setting is meant
-// for the common Nginx/Docker deployment and therefore does not require a
-// second trusted-proxy list; X-NPS-Http-Only remains an explicit per-request
-// override for deployments that cannot change the global setting.
+// Forwarded headers are enabled by default through allow_x_real_ip. The
+// setting targets the common Nginx/Docker deployment and therefore does not
+// require a second trusted-proxy list; set it to false when the panel can be
+// reached directly and clients must not be able to spoof these headers.
+// X-NPS-Http-Only remains an explicit per-request override for deployments
+// that cannot change the global setting.
 func requestVisitorIPFromRequest(request *http.Request) string {
 	ip, _ := requestVisitorIPDetails(request)
 	return ip
@@ -618,7 +620,7 @@ func requestMayUseForwardedIP(request *http.Request) bool {
 	if request == nil {
 		return false
 	}
-	if beego.AppConfig.DefaultBool("allow_x_real_ip", false) {
+	if beego.AppConfig.DefaultBool("allow_x_real_ip", true) {
 		return true
 	}
 	secret := strings.TrimSpace(beego.AppConfig.String("x_nps_http_only"))

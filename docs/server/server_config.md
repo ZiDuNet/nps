@@ -95,7 +95,7 @@ HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCK
 | web_open_ssl | web 管理是否启用 https；远程直连时应开启 | `false` |
 | web_cert_file | web 管理 https 证书路径 | `conf/server.pem` |
 | web_key_file | web 管理 https 私钥路径 | `conf/server.key` |
-| allow_x_real_ip | 是否读取前置反向代理覆盖后的 `X-Real-IP`/`X-Forwarded-For`；Docker + Nginx 场景只需开启此项并确保代理覆盖这些请求头 | `false` |
+| allow_x_real_ip | 是否读取前置反向代理覆盖后的 `X-Real-IP`/`X-Forwarded-For`；默认开启，Docker + Nginx 场景需确保代理覆盖而不是追加这些请求头 | `true` |
 | trusted_proxy_ips | 旧版可信代理列表兼容字段；当前 Web 登录和 HTTP/IP 登记来源识别不要求额外填写此列表 | `127.0.0.1` |
 | x_nps_http_only | 可选反代共享密钥；请求携带匹配的 `X-NPS-Http-Only` 时允许使用真实 IP 头并保持 HTTP 入口 | 空 |
 | open_captcha | 登录是否开启验证码校验 | `false` |
@@ -116,7 +116,7 @@ HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCK
 | ip_register_port | 独立 IP 登记监听端口；`0` 表示仅使用管理面板 `/ip/register` | `0` |
 | ip_register_cert_file / ip_register_key_file | 独立登记监听的 HTTPS 证书与私钥，需同时填写 | 空 |
 
-登记页面默认只相信 TCP 对端地址，因此在 Docker + Nginx 部署中会显示代理地址（例如 `127.0.0.1`）。要让页面显示访问者的真实公网 IP，需要同时满足两点：前置代理必须**覆盖**传递 `X-Real-IP`（或 `X-Forwarded-For`），且服务端开启 `allow_x_real_ip=true`。也可以不改全局开关，只让特定入口携带与服务端一致的 `X-NPS-Http-Only` 请求头密钥。开启后优先读取 `X-Real-IP`，无效时回退到 `X-Forwarded-For` 首地址；`trusted_proxy_ips` 仅是旧配置的兼容字段，不参与当前来源 IP 判断。页面检测到回环/内网地址时会主动提示代理链路问题，避免所有访问者被登记成同一地址。
+登记页面默认只相信 TCP 对端地址，因此在 Docker + Nginx 部署中会显示代理地址（例如 `127.0.0.1`）。要让页面显示访问者的真实公网 IP，需要同时满足两点：前置代理必须**覆盖**传递 `X-Real-IP`（或 `X-Forwarded-For`），且服务端保持 `allow_x_real_ip` 默认开启（`true`）。也可以显式关闭全局开关，只让特定入口携带与服务端一致的 `X-NPS-Http-Only` 请求头密钥。开启后优先读取 `X-Real-IP`，无效时回退到 `X-Forwarded-For` 首地址；`trusted_proxy_ips` 仅是旧配置的兼容字段，不参与当前来源 IP 判断。页面检测到回环/内网地址时会主动提示代理链路问题，避免所有访问者被登记成同一地址。该开关默认开启意味着直连公网且可被任意客户端访问的入口存在请求头伪造风险，此类部署应显式设为 `false`。
 
 ## API 鉴权
 

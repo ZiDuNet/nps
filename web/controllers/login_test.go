@@ -31,13 +31,18 @@ func TestStandaloneIPRegisterHandlerUsesPeerIPAndOnlyPublicRoutes(t *testing.T) 
 	oldMaxHours := beego.AppConfig.String("ip_register_max_hours")
 	oldPublicRegisterKey := beego.AppConfig.String("public_register_key")
 	oldPublicVKey := beego.AppConfig.String("public_vkey")
+	oldAllow := beego.AppConfig.String("allow_x_real_ip")
 	_ = beego.AppConfig.Set("ip_register_max_hours", "2")
 	_ = beego.AppConfig.Set("public_register_key", "")
 	_ = beego.AppConfig.Set("public_vkey", "")
+	// allow_x_real_ip defaults to true; this test verifies the standalone
+	// listener's peer-address path and must opt out of forwarded headers.
+	_ = beego.AppConfig.Set("allow_x_real_ip", "false")
 	t.Cleanup(func() {
 		_ = beego.AppConfig.Set("ip_register_max_hours", oldMaxHours)
 		_ = beego.AppConfig.Set("public_register_key", oldPublicRegisterKey)
 		_ = beego.AppConfig.Set("public_vkey", oldPublicVKey)
+		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
 		ipreg.Reset()
 	})
 	ipreg.Reset()

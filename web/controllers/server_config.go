@@ -188,7 +188,7 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"pow_bits":             {Label: "PoW 难度", Category: "运行与安全", Description: "SHA-256 前导零位数。"},
 	"tls_enable":           {Label: "Bridge TLS", Category: "运行与安全", Description: "是否启用 Bridge TLS 加密监听。"},
 	"tls_bridge_port":      {Label: "Bridge TLS 端口", Category: "运行与安全", Description: "Bridge TLS 加密监听端口；关闭 Bridge TLS 时可不写入。", Optional: true},
-	"allow_x_real_ip":      {Label: "使用代理真实 IP 头", Category: "运行与安全", Description: "启用后，Web/IP 登记/HTTP Host/WS 访问优先读取前置反向代理覆盖后的 X-Real-IP，其次读取 X-Forwarded-For 第一项。Docker + Nginx 场景无需额外填写可信代理 IP；请确保代理覆盖而不是追加这些请求头。", Type: "bool", Optional: true},
+	"allow_x_real_ip":      {Label: "使用代理真实 IP 头", Category: "运行与安全", Description: "默认开启。启用后 Web/IP 登记/HTTP Host/WS 访问优先读取前置反向代理覆盖后的 X-Real-IP，其次读取 X-Forwarded-For 第一项。Docker + Nginx 场景无需额外填写可信代理 IP；请确保代理覆盖而不是追加这些请求头，面板若可直接被任意客户端访问则应显式关闭。", Type: "bool", Optional: true},
 	"trusted_proxy_ips":    {Label: "旧版可信代理 IP（兼容）", Category: "运行与安全", Description: "为旧配置保留的兼容字段；当前 Web 登录和 HTTP 来源 IP 不再要求填写此列表。", Optional: true},
 	"ntp_server":           {Label: "NTP 校时服务器", Category: "运行与安全", Description: "留空关闭校时；失败时继续使用上次成功偏移。", Optional: true},
 	"ntp_interval":         {Label: "NTP 校时周期", Category: "运行与安全", Description: "校时周期，单位分钟；留空使用默认 5 分钟。", Type: "int", Optional: true},

@@ -1,12 +1,14 @@
 package controllers
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"html/template"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +20,34 @@ import (
 
 	"ehang.io/nps/lib/file"
 )
+
+func TestGlobalIndexRendersWithPlatformDomainsAndGeoData(t *testing.T) {
+	tpl := template.Must(template.ParseFiles("../views/global/index.html"))
+	data := map[string]interface{}{
+		"web_base_url":         "",
+		"serverUrl":            "nps.example.com",
+		"globalBlackIpList":    "",
+		"globalWhiteIpList":    "",
+		"globalIpListPriority": 0,
+		"globalMaxConn":        0,
+		"globalRateLimit":      0,
+		"platformDomains": []platformDomainStatus{{
+			ID:       "platform-example",
+			Wildcard: "*.example.com",
+			Status:   "未配置证书（仅 HTTP）",
+		}},
+		"geo": geoDataStatus{
+			Files: []geoFileStatus{{Name: "geoip.dat", Path: "/tmp/geoip.dat"}},
+		},
+	}
+	var rendered bytes.Buffer
+	if err := tpl.Execute(&rendered, data); err != nil {
+		t.Fatalf("execute global index template: %v", err)
+	}
+	if !strings.Contains(rendered.String(), "/global/checkcertificate") {
+		t.Fatal("global index must render the certificate validation URL inside platform domain rows")
+	}
+}
 
 func TestRequestedPlatformDomainsPreservesOmittedLegacyField(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/global/save", strings.NewReader("serverUrl=nps.example.com"))

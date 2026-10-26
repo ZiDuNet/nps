@@ -66,8 +66,8 @@
             {{if .ip_proxy_warning}}
             <div class="alert alert-warning nps-alert ip-register-warning" role="status">
                 <i class="fa fa-triangle-exclamation" aria-hidden="true"></i>
-                <span data-i18n-zh="检测到的是代理或内网地址（{{.ip}}）。若此页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址，“仅允许已登记 IP”无法区分单个用户。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并在服务端开启 allow_x_real_ip 后重新打开本页。"
-                      data-i18n-en="The detected address is a proxy or private address ({{.ip}}). When this page sits behind a reverse proxy, every visitor through that hop registers as the same address and &quot;registered IPs only&quot; cannot tell users apart. Make the proxy overwrite X-Real-IP / X-Forwarded-For, enable allow_x_real_ip on the server, and reload this page.">检测到的是代理或内网地址（{{.ip}}）。若此页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址，“仅允许已登记 IP”无法区分单个用户。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并在服务端开启 allow_x_real_ip 后重新打开本页。</span>
+                <span data-i18n-zh="检测到的是代理或内网地址（{{.ip}}）。若此页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址，“仅允许已登记 IP”无法区分单个用户。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并确认服务端已开启 allow_x_real_ip（默认开启）后重新打开本页。"
+                      data-i18n-en="The detected address is a proxy or private address ({{.ip}}). When this page sits behind a reverse proxy, every visitor through that hop registers as the same address and &quot;registered IPs only&quot; cannot tell users apart. Make the proxy overwrite X-Real-IP / X-Forwarded-For, confirm allow_x_real_ip is enabled on the server (it is on by default), and reload this page.">检测到的是代理或内网地址（{{.ip}}）。若此页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址，“仅允许已登记 IP”无法区分单个用户。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并确认服务端已开启 allow_x_real_ip（默认开启）后重新打开本页。</span>
             </div>
             {{end}}
             {{if eq false .ip_registration_configured}}

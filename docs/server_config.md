@@ -25,7 +25,7 @@ Linux/macOS 上可通过 `nps reload` 重新加载 `web_username`、`web_passwor
 | `web_open_ssl` | Web 面板是否启用 HTTPS | `false` |
 | `web_cert_file` | Web HTTPS 证书路径 | `conf/server.pem` |
 | `web_key_file` | Web HTTPS 私钥路径 | `conf/server.key` |
-| `allow_x_real_ip` | 是否读取前置反向代理覆盖后的 `X-Real-IP`/`X-Forwarded-For`；Docker + Nginx 场景只需开启此项并确保代理覆盖这些请求头 | `false` |
+| `allow_x_real_ip` | 是否读取前置反向代理覆盖后的 `X-Real-IP`/`X-Forwarded-For`；默认开启，Docker + Nginx 场景需确保代理覆盖而不是追加这些请求头 | `true` |
 | `trusted_proxy_ips` | 旧版可信代理列表兼容字段；当前 Web 登录和 HTTP/IP 登记来源识别不要求额外填写此列表 | `127.0.0.1` |
 | `x_nps_http_only` | 可选的反代共享密钥；请求携带匹配的 `X-NPS-Http-Only` 时允许使用真实 IP 头并保持 HTTP 入口 | 空 |
 | `open_captcha` | 登录验证码 | `false` |
@@ -37,7 +37,7 @@ Linux/macOS 上可通过 `nps reload` 重新加载 `web_username`、`web_passwor
 
 管理操作审计日志默认保存为 `audit.log`，记录登录、用户/客户端/隧道/Host/全局配置等控制面变更，不记录密码、验证密钥、API Token 原文或代理请求体。文件按 JSONL 追加写入，权限为仅服务账号可读写；管理员可在面板的「操作审计」页面查询。
 
-安全部署建议：保持 `web_ip=127.0.0.1`，通过 HTTPS 反向代理访问；若必须远程直连，只允许受控管理网段并启用 `web_open_ssl`。反代需要保留浏览器的 `Host`，或覆盖设置 `X-Forwarded-Host` 与 `X-Forwarded-Proto`；NPS 会按这些转发后的访问权威检查浏览器 Origin，不要求额外登记代理 IP/域名。启用 `allow_x_real_ip` 后，代理必须覆盖而不是追加真实 IP 头，避免客户端伪造。Docker 容器可用 `NPS_WEB_IP=0.0.0.0` 让容器内反向代理访问，但宿主机端口应只发布到回环或管理网卡。防火墙只开放实际使用的 Bridge、代理和管理端口。不要启用公共密钥 `public_vkey`，除非确实需要；配置和 JSON 数据文件应限制为服务账号可读。
+安全部署建议：保持 `web_ip=127.0.0.1`，通过 HTTPS 反向代理访问；若必须远程直连，只允许受控管理网段并启用 `web_open_ssl`。反代需要保留浏览器的 `Host`，或覆盖设置 `X-Forwarded-Host` 与 `X-Forwarded-Proto`；NPS 会按这些转发后的访问权威检查浏览器 Origin，不要求额外登记代理 IP/域名。`allow_x_real_ip` 默认开启，代理必须覆盖而不是追加真实 IP 头，避免客户端伪造；若面板必须直接暴露且允许任意客户端直达，应显式设为 `false`。Docker 容器可用 `NPS_WEB_IP=0.0.0.0` 让容器内反向代理访问，但宿主机端口应只发布到回环或管理网卡。防火墙只开放实际使用的 Bridge、代理和管理端口。不要启用公共密钥 `public_vkey`，除非确实需要；配置和 JSON 数据文件应限制为服务账号可读。
 
 ## Bridge 客户端连接
 

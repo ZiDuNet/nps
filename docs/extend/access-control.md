@@ -70,7 +70,7 @@ ip_register_port=0
 # ip_register_key_file=conf/register.key
 ```
 
-将 `ip_register_port` 设为非 0 才会启用；默认回环绑定。需要让其他机器访问时，应明确绑定受控网卡，优先启用 HTTPS。登记页默认只依据 TCP 对端地址登记；如果页面经过反向代理，开启 `allow_x_real_ip=true` 后读取代理覆盖的 `X-Real-IP`（无效时回退到 `X-Forwarded-For` 首地址），或使用匹配的 `X-NPS-Http-Only` 密钥只对特定入口启用。页面会明确显示当前使用的是反代传递的公网 IP 还是 NPS 看到的代理 IP；浏览器本身不能可靠地直接提供公网 IP。`trusted_proxy_ips` 仅为旧配置兼容字段，不是 Docker + Nginx 的额外必填项。
+将 `ip_register_port` 设为非 0 才会启用；默认回环绑定。需要让其他机器访问时，应明确绑定受控网卡，优先启用 HTTPS。登记页默认只依据 TCP 对端地址登记；如果页面经过反向代理，`allow_x_real_ip` 默认开启（`true`），会读取代理覆盖的 `X-Real-IP`（无效时回退到 `X-Forwarded-For` 首地址），也可以使用匹配的 `X-NPS-Http-Only` 密钥只对特定入口启用。页面会明确显示当前使用的是反代传递的公网 IP 还是 NPS 看到的代理 IP；浏览器本身不能可靠地直接提供公网 IP。`trusted_proxy_ips` 仅为旧配置兼容字段，不是 Docker + Nginx 的额外必填项。若登记页或管理面板直接暴露在公网且可被任意客户端直达，应显式关闭 `allow_x_real_ip`，防止伪造请求头绕过 IP 规则。
 
 严格 IP 策略依赖 NPS 实际看到的来源 IP。若 NPS 位于 CDN、反向代理或四层负载均衡之后，先确认源地址传递方式；不要把可由任意客户端伪造的 HTTP Header 当作网络访问控制依据。
 

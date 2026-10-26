@@ -17,7 +17,7 @@ func effectiveHTTPRemoteAddr(r *http.Request) string {
 	if r == nil {
 		return ""
 	}
-	allowForwarded := beego.AppConfig.DefaultBool("allow_x_real_ip", false)
+	allowForwarded := beego.AppConfig.DefaultBool("allow_x_real_ip", true)
 	if !allowForwarded {
 		secret := strings.TrimSpace(beego.AppConfig.String("x_nps_http_only"))
 		provided := strings.TrimSpace(r.Header.Get("X-NPS-Http-Only"))
