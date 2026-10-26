@@ -442,6 +442,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Validate release tag
         env:
           RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
@@ -465,12 +467,35 @@ jobs:
           find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.apk' -o -name '*.zip' \) -print0 \
             | sort -z | xargs -0 -r sha256sum > checksums.txt
           test -s checksums.txt
+      - name: Prepare release notes from changelog
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          release_tag="${RELEASE_TAG_INPUT:-$GITHUB_REF_NAME}"
+          version="${release_tag#v}"
+          start=$(grep -nF "## [$version]" CHANGELOG.md | head -n1 | cut -d: -f1)
+          if [ -z "$start" ]; then
+            echo "CHANGELOG.md has no section for $release_tag" >&2
+            exit 1
+          fi
+          next=$(awk -v start="$start" 'NR > start && /^## \[/ { print NR; exit }' CHANGELOG.md)
+          if [ -n "$next" ]; then
+            sed -n "${start},$((next - 1))p" CHANGELOG.md > release-notes.md
+          else
+            tail -n +"$start" CHANGELOG.md > release-notes.md
+          fi
+          previous_tag=$(git describe --tags --abbrev=0 "${release_tag}^" 2>/dev/null || true)
+          if [ -n "$previous_tag" ]; then
+            printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' \
+              "$GITHUB_REPOSITORY" "$previous_tag" "$release_tag" >> release-notes.md
+          fi
+          test -s release-notes.md
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag || github.ref_name }}
           target_commitish: ${{ github.sha }}
-          generate_release_notes: true
+          body_path: release-notes.md
           make_latest: true
           files: |
             release-assets/*.tar.gz
