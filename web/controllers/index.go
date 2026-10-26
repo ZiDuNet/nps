@@ -303,6 +303,22 @@ func newTunnelListRows(tunnels []*file.Tunnel, requestHost string) []*tunnelList
 	return rows
 }
 
+// tunnelCreatedResponse assembles the create/copy success payload with the
+// public access address metadata already present on list rows, so API callers
+// do not have to refetch the list to learn the assigned address.
+func tunnelCreatedResponse(task *file.Tunnel, requestHost string) map[string]interface{} {
+	payload := map[string]interface{}{"status": 1, "msg": "add success", "id": task.Id}
+	rows := newTunnelListRows([]*file.Tunnel{task}, requestHost)
+	if len(rows) == 1 {
+		row := rows[0]
+		payload["AccessHost"] = row.AccessHost
+		payload["AccessAddr"] = row.AccessAddr
+		payload["AccessAddress"] = row.AccessAddress
+		payload["AccessURL"] = row.AccessURL
+	}
+	return payload
+}
+
 func publicProxyPort(configuredPort, defaultPort string) string {
 	configuredPort = strings.TrimSpace(configuredPort)
 	if configuredPort == "" || configuredPort == defaultPort {
@@ -1215,7 +1231,9 @@ func (s *IndexController) Add() {
 			ownerID := t.Client.UserId
 			t.Client.RUnlock()
 			s.auditMutation("tunnel.create", "tunnel", id, ownerID, "", nil, map[string]string{"mode": t.Mode, "remark": t.Remark})
-			s.AjaxOkWithId("add success", id)
+			s.Data["json"] = s.withRequestMeta(tunnelCreatedResponse(t, s.Ctx.Request.Host))
+			s.ServeJSON()
+			s.StopRun()
 		}
 	}
 }
@@ -1317,27 +1335,32 @@ func (s *IndexController) Copy() {
 			ownerID := client.UserId
 			client.RUnlock()
 			s.auditMutation("tunnel.copy", "tunnel", id, ownerID, "", nil, map[string]string{"mode": newTask.Mode, "remark": newTask.Remark})
-			s.AjaxOkWithId("add success", id)
+			s.Data["json"] = s.withRequestMeta(tunnelCreatedResponse(newTask, s.Ctx.Request.Host))
+			s.ServeJSON()
+			s.StopRun()
 		}
 	}
 }
 
 func (s *IndexController) GetOneTunnel() {
 	id := s.GetIntNoErr("id")
-	data := make(map[string]interface{})
-	if t, err := s.authorizedTask(id); err != nil {
-		data["code"] = 0
-	} else {
-		data["code"] = 1
-		rows := newTunnelListRows([]*file.Tunnel{t}, s.Ctx.Request.Host)
-		if len(rows) == 1 {
-			data["data"] = rows[0]
-		} else {
-			data["code"] = 0
-		}
+	t, err := s.authorizedTask(id)
+	if err != nil {
+		s.Data["json"] = s.ajaxDetail(nil, err)
+		s.ServeJSON()
+		s.StopRun()
+		return
 	}
-	s.Data["json"] = data
+	rows := newTunnelListRows([]*file.Tunnel{t}, s.Ctx.Request.Host)
+	if len(rows) != 1 {
+		s.Data["json"] = s.ajaxDetail(nil, errors.New("tunnel ID not found"))
+		s.ServeJSON()
+		s.StopRun()
+		return
+	}
+	s.Data["json"] = s.ajaxDetail(rows[0], nil)
 	s.ServeJSON()
+	s.StopRun()
 }
 func (s *IndexController) Edit() {
 	id := s.GetIntNoErr("id")
@@ -1735,15 +1758,21 @@ func (s *IndexController) GetHost() {
 	if !s.RequirePost() {
 		return
 	}
-	data := make(map[string]interface{})
-	if host, err := s.authorizedHost(s.GetIntNoErr("id")); err != nil {
-		data["code"] = 0
-	} else {
-		rows := newHostListRows([]*file.Host{host})
-		data["data"] = rows[0]
-		data["code"] = 1
+	host, err := s.authorizedHost(s.GetIntNoErr("id"))
+	if err != nil {
+		s.Data["json"] = s.ajaxDetail(nil, err)
+		s.ServeJSON()
+		s.StopRun()
+		return
 	}
-	s.Data["json"] = data
+	rows := newHostListRows([]*file.Host{host})
+	if len(rows) != 1 {
+		s.Data["json"] = s.ajaxDetail(nil, errors.New("host ID not found"))
+		s.ServeJSON()
+		s.StopRun()
+		return
+	}
+	s.Data["json"] = s.ajaxDetail(rows[0], nil)
 	s.ServeJSON()
 	s.StopRun()
 }
@@ -1933,7 +1962,7 @@ func (s *IndexController) AddHost() {
 		}
 
 		if err := file.GetDb().NewHost(h); err != nil {
-			s.AjaxErr("add fail" + err.Error())
+			s.AjaxErr("add fail, " + err.Error())
 			return
 		}
 		refreshHealthConfig(h.Client.Id)

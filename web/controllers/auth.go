@@ -57,9 +57,81 @@ func (s *AuthController) GetTime() {
 	s.ServeJSON()
 }
 
+// V1Time returns the server timestamp with the standard status envelope. The
+// legacy /auth/gettime response remains available for upstream-compatible API
+// consumers.
+func (s *AuthController) V1Time() {
+	if s.Ctx != nil && s.Ctx.ResponseWriter != nil {
+		s.Ctx.ResponseWriter.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		s.Ctx.ResponseWriter.Header().Set("Pragma", "no-cache")
+		s.Ctx.ResponseWriter.Header().Set("Expires", "0")
+	}
+	s.Data["json"] = map[string]interface{}{
+		"status": 1,
+		"msg":    "ok",
+		"data":   map[string]interface{}{"time": time.Now().Unix()},
+	}
+	s.ServeJSON()
+}
+
+// V1AuthKey returns the encrypted auth_key with the standard envelope and an
+// explicit error message when auth_crypt_key is missing or misconfigured. The
+// legacy /auth/getauthkey shape stays untouched.
+func (s *AuthController) V1AuthKey() {
+	cryptKey := beego.AppConfig.String("auth_crypt_key")
+	if len(cryptKey) != 16 {
+		s.Data["json"] = map[string]interface{}{"status": 0, "msg": "auth_crypt_key 未配置或长度必须为 16 位"}
+		s.ServeJSON()
+		return
+	}
+	encrypted, err := crypt.AesEncrypt([]byte(beego.AppConfig.String("auth_key")), []byte(cryptKey))
+	if err != nil {
+		s.Data["json"] = map[string]interface{}{"status": 0, "msg": "加密 auth_key 失败"}
+		s.ServeJSON()
+		return
+	}
+	s.Data["json"] = map[string]interface{}{
+		"status": 1,
+		"msg":    "ok",
+		"data": map[string]interface{}{
+			"crypt_auth_key": hex.EncodeToString(encrypted),
+			"crypt_type":     "aes cbc",
+		},
+	}
+	s.ServeJSON()
+}
+
 func (s *AuthController) IpWhiteAuth() {
-	// The authorization page is same-origin. Do not grant every site access to
-	// this credential-bearing endpoint; echo an Origin only for the current host.
+	s.echoIPWhiteAuthCORS()
+	if s.Ctx.Request.Method == "OPTIONS" {
+		s.Ctx.ResponseWriter.WriteHeader(204)
+		return
+	}
+	s.handleIPWhiteAuth(s.respondIPWhiteAuth)
+}
+
+// V1IPWhiteAuth mirrors the legacy IP authorization flow with the standard
+// status/msg envelope and HTTP status codes.
+func (s *AuthController) V1IPWhiteAuth() {
+	s.echoIPWhiteAuthCORS()
+	if s.Ctx.Request.Method == "OPTIONS" {
+		s.Ctx.ResponseWriter.WriteHeader(204)
+		return
+	}
+	s.handleIPWhiteAuth(func(status int, success bool, message string) {
+		s.Ctx.Output.SetStatus(status)
+		code := 0
+		if success {
+			code = 1
+		}
+		s.Data["json"] = map[string]interface{}{"status": code, "msg": message}
+		s.ServeJSON()
+	})
+}
+
+// echoIPWhiteAuthCORS keeps the authorization page same-origin by echoing an
+// Origin only for the current host; it never rejects a request.
+func (s *AuthController) echoIPWhiteAuthCORS() {
 	if origin := strings.TrimSpace(s.Ctx.Input.Header("Origin")); origin != "" {
 		// Input.Host intentionally strips the port, while a browser Origin keeps
 		// non-default ports. Use Request.Host so the comparison is exact.
@@ -71,25 +143,24 @@ func (s *AuthController) IpWhiteAuth() {
 			s.Ctx.ResponseWriter.Header().Add("Vary", "Origin")
 		}
 	}
-	if s.Ctx.Request.Method == "OPTIONS" {
-		s.Ctx.ResponseWriter.WriteHeader(204)
-		return
-	}
+}
+
+func (s *AuthController) handleIPWhiteAuth(respond func(status int, success bool, message string)) {
 	if s.Ctx.Request.Method != http.MethodPost {
-		s.respondIPWhiteAuth(http.StatusMethodNotAllowed, false, "method not allowed")
+		respond(http.StatusMethodNotAllowed, false, "method not allowed")
 		return
 	}
 
 	vkey, ip, password, err := ipWhiteAuthPostForm(s.Ctx.Request)
 	if err != nil {
-		s.respondIPWhiteAuth(http.StatusBadRequest, false, "参数错误")
+		respond(http.StatusBadRequest, false, "参数错误")
 		return
 	}
 	vkey = strings.TrimSpace(vkey)
 	ip = strings.TrimSpace(ip)
 
 	if vkey == "" || password == "" {
-		s.respondIPWhiteAuth(http.StatusBadRequest, false, "参数错误")
+		respond(http.StatusBadRequest, false, "参数错误")
 		return
 	}
 
@@ -101,19 +172,19 @@ func (s *AuthController) IpWhiteAuth() {
 	}
 	ip = normalizeIPWhiteIP(ip)
 	if ip == "" {
-		s.respondIPWhiteAuth(http.StatusBadRequest, false, "IP 地址错误")
+		respond(http.StatusBadRequest, false, "IP 地址错误")
 		return
 	}
 
 	c, err := file.GetDb().GetClientByVkey(vkey)
 	if err != nil {
-		s.respondIPWhiteAuth(http.StatusUnauthorized, false, "客户端密钥错误")
+		respond(http.StatusUnauthorized, false, "客户端密钥错误")
 		logs.Error("客户端IP白名单认证失败,客户端密钥错误:ip [%s]", ip)
 		return
 	}
 
 	if !clientIPWhitePasswordMatches(c, password) {
-		s.respondIPWhiteAuth(http.StatusUnauthorized, false, "授权密码错误")
+		respond(http.StatusUnauthorized, false, "授权密码错误")
 		logs.Error("客户端IP白名单认证失败,授权密码错误:client_id [%d] ip [%s]", c.Id, ip)
 		return
 	}
@@ -122,10 +193,9 @@ func (s *AuthController) IpWhiteAuth() {
 		file.GetDb().JsonDb.StoreClientsToJsonFile()
 	}
 
-	s.respondIPWhiteAuth(http.StatusOK, true, "授权成功")
+	respond(http.StatusOK, true, "授权成功")
 
 	logs.Info("客户端IP白名单认证授权成功:client_id [%d] ip [%s]", c.Id, ip)
-
 }
 
 func (s *AuthController) respondIPWhiteAuth(status int, success bool, message string) {

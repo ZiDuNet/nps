@@ -11,7 +11,14 @@
 | 失败 | `{"status": 0, "msg": "error message"}` |
 | 列表 | `{"rows": [...], "total": 100}` |
 
-> 单个查询接口（`GetClient`、`GetOneTunnel`、`GetHost`）返回 `{"code": 1, "data": {...}}` 或 `{"code": 0}`。
+> 单个查询接口（`GetClient`、`GetOneTunnel`、`GetHost`）返回
+> `{"code": 1, "status": 1, "msg": "ok", "data": {...}}`，失败时返回
+> `{"code": 0, "status": 0, "msg": "错误说明"}`。旧的 `code`/`data` 字段
+> 继续保留，新增的 `status`/`msg` 与其他管理接口保持一致。
+
+公开认证接口的旧路径（`/auth/gettime`、`/auth/getauthkey`、`/auth/ipwhiteauth`）
+原样保留，供登录页面和既有集成使用；`/v1/auth/*` 提供标准
+`status`/`msg`/`data` 信封的新版本，见 [API 鉴权说明](api.html)。
 
 所有由管理控制器返回的写操作响应会额外包含 `code` 和 `request_id` 字段；原有的
 `status`、`msg`、`id` 字段继续保留，旧版调用方无需修改。`code` 当前为 `ok` 或

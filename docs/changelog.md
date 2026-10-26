@@ -2,6 +2,10 @@
 
 ## v1.1.31 (2026-10-26)
 
+- 移除管理面板的全局同源/Origin 校验：反代、混合 HTTP/HTTPS 和多端口部署不再出现「invalid request origin」误拦，POST 仅校验请求方法与登录/API 凭据。
+- 新增 `/v1/auth/time`、`/v1/auth/authkey`、`/v1/auth/ipwhiteauth` 标准信封接口，与旧 `/auth/*` 接口并存；旧路径和旧返回格式不变，登录页与既有集成无需调整。
+- `GetClient`、`GetOneTunnel`、`GetHost` 单个查询接口同时返回旧 `code`/`data` 与标准 `status`/`msg` 字段；新增/复制隧道成功响应直接携带 `AccessHost`、`AccessAddr`、`AccessURL` 等访问地址，无需再回查列表。
+- `addhost` 失败提示补齐标点，错误信息直接说明域名前缀冲突原因。
 - Secret/P2P 的 `target_type`（`tcp`、`udp`、`all`）升级为真实转发能力；UDP 使用数据报帧协议保留报文边界，旧记录与旧客户端继续按 TCP 兼容。
 - NPC 访客新增 `-fallback_secret`（默认开启），P2P 直连失败后自动回退 Secret 中继。
 - 普通隧道新增隧道级最大连接数和总流量配额，0 表示不限，支持 Web 表单与 API。

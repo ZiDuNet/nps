@@ -402,17 +402,14 @@ func clearAuthenticationSession(deleteSession func(interface{})) {
 	}
 }
 
-// RequirePost guards state-changing management actions. The browser console
-// uses same-origin POST requests, while signed API calls remain usable without
-// an Origin header. Requiring both properties for session-backed calls blocks
-// form-based CSRF as well as accidental GET mutations.
+// RequirePost guards state-changing management actions so accidental GET
+// requests cannot mutate state. Origin/same-origin validation is deliberately
+// absent: reverse proxies and mixed HTTP/HTTPS deployments produced too many
+// false rejections, and the panel relies on its session and API credentials
+// for authorization instead.
 func (s *BaseController) RequirePost() bool {
 	if s.Ctx.Request.Method != http.MethodPost {
 		s.rejectRequest(http.StatusMethodNotAllowed, "method not allowed")
-		return false
-	}
-	if !s.apiAuthorized && !s.userAPIAuthorized && !isSameOriginRequest(s.Ctx.Request) {
-		s.rejectRequest(http.StatusForbidden, "invalid request origin")
 		return false
 	}
 	return true
@@ -450,60 +447,6 @@ func (s *BaseController) rejectRequest(status int, message string) {
 	s.ServeJSON()
 }
 
-func isSameOriginRequest(request *http.Request) bool {
-	if request == nil {
-		return false
-	}
-	// Fetch Metadata is set by the browser and cannot be forged by a
-	// cross-origin page. When the browser attests that a POST was initiated
-	// same-origin, accept it even if the Origin header is absent (some WebKit
-	// builds and reverse proxies omit it) or a proxy rewrote Host. Requests
-	// without this attestation still go through the authority comparison
-	// below; cross-site metadata never takes this fast path.
-	if strings.EqualFold(strings.TrimSpace(request.Header.Get("Sec-Fetch-Site")), "same-origin") {
-		return true
-	}
-
-	origin := strings.TrimSpace(request.Header.Get("Origin"))
-	if origin == "" {
-		return false
-	}
-	parsedOrigin, err := url.Parse(origin)
-	if err != nil || parsedOrigin.Host == "" || (parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https") {
-		return false
-	}
-
-	// A reverse proxy may terminate TLS and expose a public hostname while the
-	// request that reaches NPS still has the proxy's private Host header.  The
-	// Web panel intentionally follows the deployment's forwarded authority
-	// headers without requiring a second proxy-IP/domain registration: Docker
-	// deployments commonly see an ephemeral bridge address here. Operators
-	// should configure Nginx to overwrite (not append) these headers.
-	forwardedAuthority := useForwardedAuthority(request)
-	expectedScheme := requestScheme(request, forwardedAuthority)
-	expectedHosts := []string{}
-	if request.Host != "" {
-		expectedHosts = append(expectedHosts, request.Host)
-	}
-	if forwardedAuthority {
-		if forwardedHost := firstForwardedHost(request); forwardedHost != "" {
-			expectedHosts = append(expectedHosts, forwardedHost)
-		}
-	}
-	// web_host is also a valid public authority for deployments that route the
-	// panel by a configured hostname but do not preserve the original Host in
-	// the proxy hop.  It is an explicit server setting, not request data.
-	if configuredHost := configuredWebHost(); configuredHost != "" {
-		expectedHosts = append(expectedHosts, configuredHost)
-	}
-	for _, host := range expectedHosts {
-		if sameOriginAuthority(parsedOrigin.Scheme, parsedOrigin.Host, expectedScheme, host) {
-			return true
-		}
-	}
-	return false
-}
-
 func useForwardedAuthority(request *http.Request) bool {
 	if request == nil {
 		return false
@@ -512,9 +455,8 @@ func useForwardedAuthority(request *http.Request) bool {
 		return true
 	}
 	// A reverse proxy can preserve the public authority even when the operator
-	// does not enable real-IP handling.  Accepting these headers is what keeps
-	// the browser Origin check working for a Docker-host Nginx deployment; the
-	// proxy must overwrite them with its own values.
+	// does not enable real-IP handling. The proxy must overwrite these headers
+	// with its own values.
 	return firstForwardedHost(request) != "" ||
 		strings.TrimSpace(request.Header.Get("X-Forwarded-Proto")) != "" ||
 		strings.TrimSpace(request.Header.Get("Forwarded")) != ""
@@ -562,76 +504,6 @@ func forwardedParameter(value, key string) string {
 		return strings.Trim(strings.TrimSpace(pieces[1]), "\"")
 	}
 	return ""
-}
-
-func sameOriginAuthority(originScheme, originHost, expectedScheme, expectedHost string) bool {
-	originScheme = strings.ToLower(strings.TrimSpace(originScheme))
-	expectedScheme = strings.ToLower(strings.TrimSpace(expectedScheme))
-	if originScheme == "" || originScheme != expectedScheme {
-		return false
-	}
-	originHost = normalizeOriginHost(originHost)
-	expectedHost = normalizeOriginHost(expectedHost)
-	return originHost != "" && originHost == expectedHost
-}
-
-func normalizeOriginHost(host string) string {
-	host = strings.TrimSpace(strings.TrimSuffix(host, "."))
-	if host == "" {
-		return ""
-	}
-	if strings.Contains(host, "://") {
-		if parsed, err := url.Parse(host); err == nil {
-			host = parsed.Host
-		}
-	}
-	return strings.ToLower(strings.TrimSuffix(host, "."))
-}
-
-func configuredWebHost() string {
-	host := strings.TrimSpace(beego.AppConfig.String("web_host"))
-	if host == "" {
-		return ""
-	}
-	if strings.Contains(host, "://") {
-		if parsed, err := url.Parse(host); err == nil {
-			host = parsed.Host
-		}
-	}
-	return normalizeOriginHost(host)
-}
-
-func isTrustedProxyPeer(request *http.Request) bool {
-	if request == nil {
-		return false
-	}
-	peer := strings.TrimSpace(request.RemoteAddr)
-	if host, _, err := net.SplitHostPort(peer); err == nil {
-		peer = host
-	}
-	peerIP := net.ParseIP(strings.Trim(peer, "[]"))
-	if peerIP == nil {
-		return false
-	}
-	raw := strings.TrimSpace(beego.AppConfig.String("trusted_proxy_ips"))
-	if raw == "" {
-		// Keep local reverse-proxy deployments working out of the box while
-		// requiring an explicit list for non-local proxy hops.
-		raw = "127.0.0.1,::1"
-	}
-	for _, token := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ';' || r == '\n' || r == '\r' || r == ' ' || r == '\t' }) {
-		token = strings.TrimSpace(token)
-		if token == "" {
-			continue
-		}
-		if ip := net.ParseIP(strings.Trim(token, "[]")); ip != nil && ip.Equal(peerIP) {
-			return true
-		}
-		if _, network, err := net.ParseCIDR(token); err == nil && network.Contains(peerIP) {
-			return true
-		}
-	}
-	return false
 }
 
 // sessionBool accepts the values produced by Beego's session backends. Some
@@ -828,6 +700,25 @@ func (s *BaseController) AjaxOkWithId(str string, id int) {
 	s.Data["json"] = s.withRequestMeta(ajaxWithId(str, 1, id))
 	s.ServeJSON()
 	s.StopRun()
+}
+
+// ajaxDetail serializes a single-resource response with both envelopes.
+// Legacy callers keep reading code/data while newer clients get the standard
+// status/msg/request_id fields used by every other management endpoint.
+func (s *BaseController) ajaxDetail(data interface{}, err error) map[string]interface{} {
+	if err != nil {
+		return s.withRequestMeta(map[string]interface{}{
+			"code":   0,
+			"status": 0,
+			"msg":    err.Error(),
+		})
+	}
+	return s.withRequestMeta(map[string]interface{}{
+		"code":   1,
+		"status": 1,
+		"msg":    "ok",
+		"data":   data,
+	})
 }
 
 // ajax错误返回

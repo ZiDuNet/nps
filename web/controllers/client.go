@@ -663,24 +663,30 @@ func (s *ClientController) GetClient() {
 		return
 	}
 	id := s.GetIntNoErr("id")
-	data := make(map[string]interface{})
-	if c, err := file.GetDb().GetClient(id); err != nil {
-		data["code"] = 0
-	} else {
-		data["code"] = 1
-		// Never serialize the mutable Client model directly here. It contains
-		// WebPassword, IpWhitePass and basic-auth credentials. The list DTO is
-		// deliberately limited to fields that are safe for an authenticated
-		// management response and is also consistent with /client/list.
-		rows := newClientListRows([]*file.Client{c})
-		if len(rows) == 1 {
-			data["data"] = rows[0]
-		} else {
-			data["code"] = 0
+	c, err := file.GetDb().GetClient(id)
+	if err != nil || c == nil {
+		if err == nil {
+			err = errors.New("客户端不存在")
 		}
+		s.Data["json"] = s.ajaxDetail(nil, err)
+		s.ServeJSON()
+		s.StopRun()
+		return
 	}
-	s.Data["json"] = data
+	// Never serialize the mutable Client model directly here. It contains
+	// WebPassword, IpWhitePass and basic-auth credentials. The list DTO is
+	// deliberately limited to fields that are safe for an authenticated
+	// management response and is also consistent with /client/list.
+	rows := newClientListRows([]*file.Client{c})
+	if len(rows) != 1 {
+		s.Data["json"] = s.ajaxDetail(nil, errors.New("客户端不存在"))
+		s.ServeJSON()
+		s.StopRun()
+		return
+	}
+	s.Data["json"] = s.ajaxDetail(rows[0], nil)
 	s.ServeJSON()
+	s.StopRun()
 }
 
 // 修改客户端

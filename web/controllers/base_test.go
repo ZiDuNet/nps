@@ -3,14 +3,36 @@ package controllers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"html/template"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"ehang.io/nps/lib/file"
 	"github.com/astaxie/beego"
 )
+
+func TestAjaxDetailKeepsLegacyAndStandardFields(t *testing.T) {
+	s := &BaseController{requestID: "test-request"}
+	ok := s.ajaxDetail(map[string]interface{}{"Id": 1}, nil)
+	if ok["code"] != 1 || ok["status"] != 1 || ok["msg"] != "ok" {
+		t.Fatalf("detail success envelope = %#v", ok)
+	}
+	if ok["data"] == nil {
+		t.Fatal("detail success envelope must include data")
+	}
+	if _, present := ok["request_id"]; !present {
+		t.Fatal("detail success envelope must include request_id")
+	}
+
+	fail := s.ajaxDetail(nil, errors.New("boom"))
+	if fail["code"] != 0 || fail["status"] != 0 || fail["msg"] != "boom" {
+		t.Fatalf("detail error envelope = %#v", fail)
+	}
+	if _, present := fail["data"]; present {
+		t.Fatal("detail error envelope must not include data")
+	}
+}
 
 func TestPublicAccessPortFallsBackToListenerAndHonorsReverseProxyPort(t *testing.T) {
 	oldAccess := beego.AppConfig.String("http_proxy_access_port")
@@ -207,131 +229,6 @@ func TestIsAdminAuthorizedKeepsAPICredentialsRequestScoped(t *testing.T) {
 	}
 	if !isAdminAuthorized(false, true) {
 		t.Fatal("an admin session should remain effective")
-	}
-}
-
-func TestSameOriginRequest(t *testing.T) {
-	oldTrustedProxyIPs := beego.AppConfig.String("trusted_proxy_ips")
-	oldWebHost := beego.AppConfig.String("web_host")
-	t.Cleanup(func() {
-		_ = beego.AppConfig.Set("trusted_proxy_ips", oldTrustedProxyIPs)
-		_ = beego.AppConfig.Set("web_host", oldWebHost)
-	})
-	_ = beego.AppConfig.Set("trusted_proxy_ips", "192.0.2.1")
-	_ = beego.AppConfig.Set("web_host", "")
-
-	request := httptest.NewRequest("POST", "http://nps.example:8081/index/add", nil)
-	request.Host = "nps.example:8081"
-	request.Header.Set("Origin", "http://nps.example:8081")
-	if !isSameOriginRequest(request) {
-		t.Fatal("matching origin and host should be allowed")
-	}
-
-	request.Header.Set("Origin", "http://nps.example")
-	if isSameOriginRequest(request) {
-		t.Fatal("origin with a different port must be rejected")
-	}
-
-	request.Header.Set("Origin", "https://nps.example:8081")
-	if isSameOriginRequest(request) {
-		t.Fatal("origin with a different scheme must be rejected")
-	}
-
-	request.Header.Set("Origin", "https://nps.example:8081")
-	request.Header.Set("X-Forwarded-Proto", "https")
-	if !isSameOriginRequest(request) {
-		t.Fatal("trusted proxy scheme should be used when checking origin")
-	}
-}
-
-func TestSameOriginRequestAcceptsTrustedForwardedAuthority(t *testing.T) {
-	oldTrustedProxyIPs := beego.AppConfig.String("trusted_proxy_ips")
-	oldWebHost := beego.AppConfig.String("web_host")
-	t.Cleanup(func() {
-		_ = beego.AppConfig.Set("trusted_proxy_ips", oldTrustedProxyIPs)
-		_ = beego.AppConfig.Set("web_host", oldWebHost)
-	})
-	_ = beego.AppConfig.Set("trusted_proxy_ips", "127.0.0.1")
-	_ = beego.AppConfig.Set("web_host", "")
-
-	request := httptest.NewRequest("POST", "http://127.0.0.1:30080/index/add", nil)
-	request.RemoteAddr = "127.0.0.1:41822"
-	request.Host = "127.0.0.1:30080"
-	request.Header.Set("Origin", "https://console.example.com")
-	request.Header.Set("X-Forwarded-Host", "console.example.com")
-	request.Header.Set("X-Forwarded-Proto", "https")
-	if !isSameOriginRequest(request) {
-		t.Fatal("forwarded host and proto should match the public origin")
-	}
-
-	request.RemoteAddr = "198.51.100.11:41822"
-	if !isSameOriginRequest(request) {
-		t.Fatal("Docker/Nginx bridge peers should not require a trusted-proxy list")
-	}
-}
-
-func TestSameOriginRequestAcceptsConfiguredWebHost(t *testing.T) {
-	oldTrustedProxyIPs := beego.AppConfig.String("trusted_proxy_ips")
-	oldWebHost := beego.AppConfig.String("web_host")
-	t.Cleanup(func() {
-		_ = beego.AppConfig.Set("trusted_proxy_ips", oldTrustedProxyIPs)
-		_ = beego.AppConfig.Set("web_host", oldWebHost)
-	})
-	_ = beego.AppConfig.Set("trusted_proxy_ips", "")
-	_ = beego.AppConfig.Set("web_host", "console.example.com")
-
-	request := httptest.NewRequest("POST", "http://127.0.0.1:30080/index/add", nil)
-	request.Host = "127.0.0.1:30080"
-	request.Header.Set("Origin", "http://console.example.com")
-	if !isSameOriginRequest(request) {
-		t.Fatal("configured web_host should be accepted as a panel origin")
-	}
-}
-
-func TestSameOriginRequestAcceptsBrowserSameOriginBehindHostRewritingProxy(t *testing.T) {
-	oldWebHost := beego.AppConfig.String("web_host")
-	oldAllow := beego.AppConfig.String("allow_x_real_ip")
-	t.Cleanup(func() {
-		_ = beego.AppConfig.Set("web_host", oldWebHost)
-		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
-	})
-	_ = beego.AppConfig.Set("web_host", "")
-	_ = beego.AppConfig.Set("allow_x_real_ip", "false")
-
-	request := httptest.NewRequest("POST", "http://127.0.0.1:30080/login/verify", nil)
-	request.Host = "127.0.0.1:30080"
-	request.Header.Set("Origin", "https://panel.example.com")
-	request.Header.Set("Sec-Fetch-Site", "same-origin")
-	if !isSameOriginRequest(request) {
-		t.Fatal("browser same-origin metadata should survive a proxy Host rewrite")
-	}
-
-	request.Header.Set("Sec-Fetch-Site", "cross-site")
-	if isSameOriginRequest(request) {
-		t.Fatal("cross-site metadata must not bypass the origin check")
-	}
-}
-
-func TestSameOriginRequestTrustsBrowserMetadataWithoutOriginHeader(t *testing.T) {
-	oldAllow := beego.AppConfig.String("allow_x_real_ip")
-	t.Cleanup(func() {
-		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
-	})
-	// allow_x_real_ip is enabled by default and makes useForwardedAuthority
-	// true even for direct connections; the browser metadata fast path must
-	// still accept a same-origin request that omits the Origin header.
-	_ = beego.AppConfig.Set("allow_x_real_ip", "true")
-
-	request := httptest.NewRequest("POST", "http://127.0.0.1:30080/global/ipregister/list", nil)
-	request.Host = "127.0.0.1:30080"
-	request.Header.Set("Sec-Fetch-Site", "same-origin")
-	if !isSameOriginRequest(request) {
-		t.Fatal("same-origin browser metadata without Origin must be accepted")
-	}
-
-	request.Header.Set("Sec-Fetch-Site", "cross-site")
-	if isSameOriginRequest(request) {
-		t.Fatal("cross-site metadata must not bypass the origin check")
 	}
 }
 

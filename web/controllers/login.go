@@ -1157,28 +1157,7 @@ func (self *LoginController) requirePost() bool {
 		self.ServeJSON()
 		return false
 	}
-	// A reverse proxy may rewrite Host and omit the forwarded authority headers.
-	// The login page still carries an encrypted nonce bound to the browser session.
-	// browser session. Accepting that valid envelope is safe for this endpoint
-	// and keeps login working through older proxies/browsers that do not send
-	// Fetch Metadata; all other state-changing management requests remain strict
-	// same-origin checks in BaseController.RequirePost.
-	if !isSameOriginRequest(self.Ctx.Request) && !self.hasValidLoginPayload() {
-		setNoStore(self.Ctx)
-		self.Ctx.Output.SetStatus(http.StatusForbidden)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "invalid request origin"}
-		self.ServeJSON()
-		return false
-	}
 	return true
-}
-
-func (self *LoginController) hasValidLoginPayload() bool {
-	if self == nil || self.Ctx == nil || self.Ctx.Request == nil {
-		return false
-	}
-	payload, err := crypt.ParseLoginPayload(self.GetString("password"))
-	return err == nil && self.verifyLoginPayload(payload)
 }
 
 // setNoStore marks authentication pages and responses as private, dynamic

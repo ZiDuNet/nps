@@ -26,6 +26,9 @@ func Init() {
 			beego.NSAutoRouter(&controllers.UserController{}),
 			beego.NSAutoRouter(&controllers.AuthController{}),
 			beego.NSRouter("/auth/ipwhiteauth", &controllers.AuthController{}, "*:IpWhiteAuth"),
+			beego.NSRouter("/v1/auth/time", &controllers.AuthController{}, "GET:V1Time"),
+			beego.NSRouter("/v1/auth/authkey", &controllers.AuthController{}, "GET:V1AuthKey"),
+			beego.NSRouter("/v1/auth/ipwhiteauth", &controllers.AuthController{}, "*:V1IPWhiteAuth"),
 			beego.NSRouter("/global/config", &controllers.GlobalController{}, "GET:Config"),
 			beego.NSRouter("/global/config/save", &controllers.GlobalController{}, "POST:SaveConfig"),
 			beego.NSRouter("/global/config/restart", &controllers.GlobalController{}, "POST:Restart"),
@@ -60,6 +63,9 @@ func Init() {
 		beego.AutoRouter(&controllers.UserController{})
 		beego.AutoRouter(&controllers.AuthController{})
 		beego.Router("/auth/ipwhiteauth", &controllers.AuthController{}, "*:IpWhiteAuth")
+		beego.Router("/v1/auth/time", &controllers.AuthController{}, "GET:V1Time")
+		beego.Router("/v1/auth/authkey", &controllers.AuthController{}, "GET:V1AuthKey")
+		beego.Router("/v1/auth/ipwhiteauth", &controllers.AuthController{}, "*:V1IPWhiteAuth")
 		beego.Router("/global/config", &controllers.GlobalController{}, "GET:Config")
 		beego.Router("/global/config/save", &controllers.GlobalController{}, "POST:SaveConfig")
 		beego.Router("/global/config/restart", &controllers.GlobalController{}, "POST:Restart")

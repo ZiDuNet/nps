@@ -1,12 +1,16 @@
 package controllers
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 
 	"ehang.io/nps/lib/file"
+	"github.com/astaxie/beego"
+	beecontext "github.com/astaxie/beego/context"
 )
 
 func TestIPWhiteAuthPostFormIgnoresQueryCredentials(t *testing.T) {
@@ -36,6 +40,87 @@ func TestIPWhiteAuthPostFormRejectsNonPOSTRequests(t *testing.T) {
 	}
 	if _, _, _, err := ipWhiteAuthPostForm(request); err != errIPWhiteAuthMethod {
 		t.Fatalf("GET request error = %v, want %v", err, errIPWhiteAuthMethod)
+	}
+}
+
+func newAuthTestController(method, url string) (*AuthController, *httptest.ResponseRecorder) {
+	request := httptest.NewRequest(method, url, nil)
+	recorder := httptest.NewRecorder()
+	ctx := beecontext.NewContext()
+	ctx.Reset(recorder, request)
+	controller := &AuthController{}
+	controller.Init(ctx, "AuthController", "Test", controller)
+	return controller, recorder
+}
+
+func readAuthJSON(t *testing.T, recorder *httptest.ResponseRecorder) map[string]interface{} {
+	t.Helper()
+	var payload map[string]interface{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response %q: %v", recorder.Body.String(), err)
+	}
+	return payload
+}
+
+func TestV1TimeUsesStandardEnvelope(t *testing.T) {
+	controller, recorder := newAuthTestController(http.MethodGet, "http://console.test/v1/auth/time")
+	controller.V1Time()
+	payload := readAuthJSON(t, recorder)
+	if payload["status"] != float64(1) || payload["msg"] != "ok" {
+		t.Fatalf("v1 time response = %#v, want status/msg envelope", payload)
+	}
+	data, ok := payload["data"].(map[string]interface{})
+	if !ok || data["time"] == nil {
+		t.Fatalf("v1 time response data = %#v, want time field", payload["data"])
+	}
+}
+
+func TestV1AuthKeyUsesStandardEnvelope(t *testing.T) {
+	oldCryptKey := beego.AppConfig.String("auth_crypt_key")
+	oldAuthKey := beego.AppConfig.String("auth_key")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("auth_crypt_key", oldCryptKey)
+		_ = beego.AppConfig.Set("auth_key", oldAuthKey)
+	})
+
+	_ = beego.AppConfig.Set("auth_crypt_key", "short")
+	_ = beego.AppConfig.Set("auth_key", "test-auth-key")
+	controller, recorder := newAuthTestController(http.MethodGet, "http://console.test/v1/auth/authkey")
+	controller.V1AuthKey()
+	if payload := readAuthJSON(t, recorder); payload["status"] != float64(0) || payload["msg"] == "" {
+		t.Fatalf("short auth_crypt_key response = %#v, want status 0 with message", payload)
+	}
+
+	_ = beego.AppConfig.Set("auth_crypt_key", "0123456789abcdef")
+	controller, recorder = newAuthTestController(http.MethodGet, "http://console.test/v1/auth/authkey")
+	controller.V1AuthKey()
+	payload := readAuthJSON(t, recorder)
+	if payload["status"] != float64(1) {
+		t.Fatalf("v1 authkey response = %#v, want status 1", payload)
+	}
+	data, ok := payload["data"].(map[string]interface{})
+	if !ok || data["crypt_auth_key"] == "" || data["crypt_type"] != "aes cbc" {
+		t.Fatalf("v1 authkey data = %#v, want crypt_auth_key and crypt_type", payload["data"])
+	}
+}
+
+func TestV1IPWhiteAuthUsesStandardEnvelope(t *testing.T) {
+	controller, recorder := newAuthTestController(http.MethodGet, "http://console.test/v1/auth/ipwhiteauth")
+	controller.V1IPWhiteAuth()
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET status = %d, want %d", recorder.Code, http.StatusMethodNotAllowed)
+	}
+	if payload := readAuthJSON(t, recorder); payload["status"] != float64(0) || payload["msg"] == "" {
+		t.Fatalf("method response = %#v, want status 0 with message", payload)
+	}
+
+	controller, recorder = newAuthTestController(http.MethodPost, "http://console.test/v1/auth/ipwhiteauth")
+	controller.V1IPWhiteAuth()
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("empty POST status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	if payload := readAuthJSON(t, recorder); payload["status"] != float64(0) || payload["msg"] == "" {
+		t.Fatalf("empty POST response = %#v, want status 0 with message", payload)
 	}
 }
 
