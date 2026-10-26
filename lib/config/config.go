@@ -196,7 +196,7 @@ func getTitleContent(s string) string {
 }
 
 func dealCommon(s string) *CommonConfig {
-	c := &CommonConfig{}
+	c := &CommonConfig{Tp: "tcp"}
 	for _, v := range splitStr(s) {
 		key, value, ok := splitKV(v)
 		if !ok {

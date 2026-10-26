@@ -64,6 +64,14 @@ vkey=123`
 	}
 }
 
+func TestDealCommonDefaultsMissingTransportToTCP(t *testing.T) {
+	c := dealCommon(`server=127.0.0.1:8284
+vkey=123`)
+	if c == nil || c.Tp != "tcp" {
+		t.Fatalf("missing conn_type/tp should default to tcp, got %#v", c)
+	}
+}
+
 func TestGetTitleContent(t *testing.T) {
 	s := "[common]"
 	if getTitleContent(s) != "common" {
