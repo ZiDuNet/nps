@@ -659,7 +659,12 @@ func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tls
 		rpcClient.Start()
 		if rpcClient.Kicked() {
 			clientLogger.Info("服务端已删除本客户端，停止重连")
-			cancel()
+			runningMu.Lock()
+			if cancelFn, ok := running[id]; ok {
+				cancelFn()
+				delete(running, id)
+			}
+			runningMu.Unlock()
 			statusMu.Lock()
 			delete(clientConnected, id)
 			delete(clientAttempted, id)
