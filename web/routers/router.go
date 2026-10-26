@@ -45,6 +45,7 @@ func Init() {
 			beego.NSRouter("/global/updategeo", &controllers.GlobalController{}, "POST:UpdateGeoData"),
 			beego.NSAutoRouter(&controllers.GlobalController{}),
 			beego.NSAutoRouter(&controllers.AuditController{}),
+			beego.NSNamespace("/api/v1", apiV1Routers()...),
 		)
 		beego.AddNamespace(ns)
 	} else {
@@ -82,6 +83,71 @@ func Init() {
 		beego.Router("/global/updategeo", &controllers.GlobalController{}, "POST:UpdateGeoData")
 		beego.AutoRouter(&controllers.GlobalController{})
 		beego.AutoRouter(&controllers.AuditController{})
+		beego.AddNamespace(beego.NewNamespace("/api/v1", apiV1Routers()...))
+	}
+}
 
+// apiV1Routers returns the versioned public API surface. The same route set is
+// mounted below web_base_url when one is configured and at the root otherwise.
+// Legacy /client, /index, /user, /global and /v1/auth routes stay untouched.
+func apiV1Routers() []beego.LinkNamespace {
+	return []beego.LinkNamespace{
+		// Public bootstrap endpoints (no credentials required).
+		beego.NSRouter("/", &controllers.ApiV1InfoController{}, "GET:Info"),
+		beego.NSRouter("/time", &controllers.ApiV1InfoController{}, "GET:Time"),
+		beego.NSRouter("/authkey", &controllers.ApiV1InfoController{}, "GET:AuthKey"),
+		beego.NSRouter("/ipwhiteauth", &controllers.ApiV1InfoController{}, "*:IPWhiteAuth"),
+
+		// Account-scoped dashboard snapshots.
+		beego.NSRouter("/status", &controllers.ApiV1Controller{}, "GET:Status"),
+		beego.NSRouter("/overview", &controllers.ApiV1Controller{}, "GET:Overview"),
+
+		// Clients.
+		beego.NSRouter("/clients", &controllers.ApiV1Controller{}, "GET:Clients;POST:ClientsCreate"),
+		beego.NSRouter("/clients/:id", &controllers.ApiV1Controller{}, "GET:ClientGet;PATCH:ClientUpdate;PUT:ClientUpdate;DELETE:ClientDelete"),
+		beego.NSRouter("/clients/:id/status", &controllers.ApiV1Controller{}, "POST:ClientStatus"),
+		beego.NSRouter("/clients/:id/upgrade", &controllers.ApiV1Controller{}, "POST:ClientUpgrade"),
+		beego.NSRouter("/clients/:id/update-check", &controllers.ApiV1Controller{}, "GET:ClientUpdateCheck"),
+
+		// Tunnels.
+		beego.NSRouter("/tunnels", &controllers.ApiV1Controller{}, "GET:Tunnels;POST:TunnelsCreate"),
+		beego.NSRouter("/tunnels/:id", &controllers.ApiV1Controller{}, "GET:TunnelGet;PATCH:TunnelUpdate;PUT:TunnelUpdate;DELETE:TunnelDelete"),
+		beego.NSRouter("/tunnels/:id/start", &controllers.ApiV1Controller{}, "POST:TunnelStart"),
+		beego.NSRouter("/tunnels/:id/stop", &controllers.ApiV1Controller{}, "POST:TunnelStop"),
+		beego.NSRouter("/tunnels/:id/copy", &controllers.ApiV1Controller{}, "POST:TunnelCopy"),
+
+		// Domain reverse proxy rules.
+		beego.NSRouter("/hosts", &controllers.ApiV1Controller{}, "GET:Hosts;POST:HostsCreate"),
+		beego.NSRouter("/hosts/:id", &controllers.ApiV1Controller{}, "GET:HostGet;PATCH:HostUpdate;PUT:HostUpdate;DELETE:HostDelete"),
+		beego.NSRouter("/hosts/:id/start", &controllers.ApiV1Controller{}, "POST:HostStart"),
+		beego.NSRouter("/hosts/:id/stop", &controllers.ApiV1Controller{}, "POST:HostStop"),
+		beego.NSRouter("/hosts/check", &controllers.ApiV1Controller{}, "POST:HostCheck"),
+		beego.NSRouter("/hosts/diagnose", &controllers.ApiV1Controller{}, "POST:HostDiagnose"),
+
+		// Dashboard users.
+		beego.NSRouter("/users", &controllers.ApiV1Controller{}, "GET:Users;POST:UsersCreate"),
+		beego.NSRouter("/users/:id", &controllers.ApiV1Controller{}, "GET:UserGet;PATCH:UserUpdate;PUT:UserUpdate;DELETE:UserDelete"),
+		beego.NSRouter("/users/:id/status", &controllers.ApiV1Controller{}, "POST:UserStatus"),
+		beego.NSRouter("/users/:id/password", &controllers.ApiV1Controller{}, "POST:UserPassword"),
+		beego.NSRouter("/users/:id/token", &controllers.ApiV1Controller{}, "POST:UserToken"),
+		beego.NSRouter("/users/:id/token/revoke", &controllers.ApiV1Controller{}, "POST:UserTokenRevoke"),
+		beego.NSRouter("/users/:id/token/status", &controllers.ApiV1Controller{}, "GET:UserTokenStatus"),
+
+		// Global configuration and operational endpoints.
+		beego.NSRouter("/global/config", &controllers.ApiV1Controller{}, "GET:GlobalConfig;POST:GlobalConfigSave"),
+		beego.NSRouter("/global/config/restart", &controllers.ApiV1Controller{}, "POST:GlobalRestart"),
+		beego.NSRouter("/global/geo", &controllers.ApiV1Controller{}, "GET:GeoStatus"),
+		beego.NSRouter("/global/geo/update", &controllers.ApiV1Controller{}, "POST:GeoUpdate"),
+		beego.NSRouter("/global/banlist", &controllers.ApiV1Controller{}, "GET,POST:BanList"),
+		beego.NSRouter("/global/unban", &controllers.ApiV1Controller{}, "POST:BanUnban"),
+		beego.NSRouter("/global/unbanall", &controllers.ApiV1Controller{}, "POST:BanUnbanAll"),
+		beego.NSRouter("/global/banclean", &controllers.ApiV1Controller{}, "POST:BanClean"),
+		beego.NSRouter("/global/ip-register", &controllers.ApiV1Controller{}, "GET,POST:IPRegisterList"),
+		beego.NSRouter("/global/ip-register/revoke", &controllers.ApiV1Controller{}, "POST:IPRegisterRevoke"),
+		beego.NSRouter("/global/ip-register/clean", &controllers.ApiV1Controller{}, "POST:IPRegisterClean"),
+		beego.NSRouter("/global/ip-register/clear", &controllers.ApiV1Controller{}, "POST:IPRegisterClear"),
+
+		// Control-plane audit journal.
+		beego.NSRouter("/audit", &controllers.ApiV1Controller{}, "GET,POST:Audit"),
 	}
 }

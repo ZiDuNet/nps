@@ -1,5 +1,13 @@
 # 更新日志
 
+## 未发布
+
+- 新增统一对外 API `/api/v1`：覆盖客户端、隧道、域名反代、用户、全局参数、Geo、登录保护、IP 登记、审计、状态与拓扑，全部返回 `status`/`code`/`msg`/`error_code`/`request_id` 信封。
+- `/api/v1` 只接受 API 凭据（管理员 `auth_key+timestamp` 或普通用户 `Bearer npsu_...`），不依赖浏览器 Session；普通用户资源继续按授权客户端过滤。
+- 新增公开的 `/api/v1/time`、`/api/v1/authkey`、`/api/v1/ipwhiteauth` 与发现接口 `/api/v1`。
+- 对外 API 支持 `application/json` 请求体，默认分页 `limit=20`、最大 `500`，支持 `page`/`page_size`。
+- 旧 `/client/*`、`/index/*`、`/user/*`、`/global/*`、`/v1/auth/*` 路径和返回格式保持不变，现有 NPC 与页面无需调整。
+
 ## v1.1.31 (2026-10-26)
 
 - 移除管理面板的全局同源/Origin 校验：反代、混合 HTTP/HTTPS 和多端口部署不再出现「invalid request origin」误拦，POST 仅校验请求方法与登录/API 凭据。

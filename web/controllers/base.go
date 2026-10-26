@@ -55,7 +55,11 @@ type accountQuotaSummary struct {
 // 初始化参数
 func (s *BaseController) Prepare() {
 	s.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
-	s.requestID = uuid.NewString()
+	// API layers may allocate the request ID before delegating to this
+	// controller; reuse it so the header and response envelope always agree.
+	if strings.TrimSpace(s.requestID) == "" {
+		s.requestID = uuid.NewString()
+	}
 	if s.Ctx != nil && s.Ctx.ResponseWriter != nil {
 		s.Ctx.ResponseWriter.Header().Set("X-Request-ID", s.requestID)
 	}

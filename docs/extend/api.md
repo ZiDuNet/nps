@@ -13,6 +13,25 @@
 
 时间戳有效范围为 **20 秒**，每次请求须重新生成。
 
+## 对外 API v1
+
+`/api/v1` 使用同一套管理员签名和普通用户 Bearer Token，但有两处刻意收紧：
+
+- 不接受浏览器登录 Cookie，必须携带 API 凭据；
+- 管理员签名与普通用户 Token 都在请求进入业务控制器前完成校验，失败返回
+  JSON 401/403，不会跳转登录页。
+
+普通用户调用客户端、隧道、Host 和统计接口时，服务端按用户授权的客户端
+范围过滤；用户管理、全局参数、Geo、登录保护和审计只允许管理员。
+
+```bash
+ts=$(date +%s)
+sign=$(printf '%s' "your_auth_key${ts}" | md5sum | awk '{print $1}')
+curl -s "http://127.0.0.1:8081/api/v1/clients?auth_key=${sign}&timestamp=${ts}"
+```
+
+完整端点、返回信封和分页规则见 [Web API](../api.html)。
+
 ## 普通用户 API Token
 
 管理员可以为每个普通用户生成独立的 Bearer Token。Token 只在生成接口的响应中显示一次，服务端仅保存 SHA-256 哈希；重新生成会立即使旧 Token 失效。普通用户 Token 不具备管理员权限，只能访问该用户拥有的客户端、隧道和 Host 规则。

@@ -2,6 +2,12 @@
 
 > 除 `AuthController` 和 `LoginController` 外，所有接口均需通过鉴权，详见 [API 鉴权说明](api.html)。管理员使用时间戳签名；普通用户可以使用自己的 Bearer Token，服务端会按用户自动过滤资源。
 
+> **对外集成请优先使用 `/api/v1`**：统一 `status`/`code`/`msg`/`error_code`
+> 信封、`request_id`、JSON 请求体和 `page`/`page_size` 分页。它只接受 API
+> 凭据，不使用浏览器 Session；旧 `/client/*`、`/index/*`、`/user/*`、
+> `/global/*` 与 `/v1/auth/*` 保持原样。完整清单和示例见
+> [API 鉴权说明](api.html)。
+
 ## 通用响应格式
 
 | 响应类型 | 格式 |

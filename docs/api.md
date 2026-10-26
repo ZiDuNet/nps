@@ -64,6 +64,114 @@ curl -X POST 'http://127.0.0.1:8081/client/list' \
 
 Token 与管理员签名不同，不携带 `timestamp`。Token 在「API 接入」页面生成后可以再次查看；使用查询参数传递 Token 时应仅走 HTTPS，避免 URL 进入访问日志。
 
+## 对外 API v1（`/api/v1`）
+
+`/api/v1` 是面向外部系统集成的新接口层。它与旧 `/client/*`、`/index/*`、
+`/user/*`、`/global/*`、`/v1/auth/*` 并行运行，旧路径、旧参数和旧返回格式
+完全不变，现有 NPC 与页面无需调整。
+
+与旧接口相比，`/api/v1` 有三点固定约定：
+
+1. 只接受 API 凭据，不使用浏览器登录 Session。管理员使用
+   `auth_key + timestamp` 签名，普通用户使用
+   `Authorization: Bearer npsu_...`；
+2. 成功与失败统一返回 `status`、`code`、`msg`，失败额外返回
+   `error_code`，每个响应都带 `request_id`；
+3. 请求体支持 `application/json`，也继续兼容表单与查询参数。
+
+公开接口不需要凭据：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/v1` | 版本、能力与资源发现 |
+| `GET` | `/api/v1/time` | 服务端 Unix 时间戳，用于签名对时 |
+| `GET` | `/api/v1/authkey` | AES-CBC 加密后的 `auth_key` |
+| `POST` | `/api/v1/ipwhiteauth` | 使用客户端 vkey 与登记口令登记访问 IP |
+
+其余接口都需要凭据：
+
+| 资源 | 路径 | 方法 |
+| --- | --- | --- |
+| 概览 | `/api/v1/status`、`/api/v1/overview` | `GET` |
+| 客户端 | `/api/v1/clients` | `GET`、`POST` |
+| 客户端 | `/api/v1/clients/{id}` | `GET`、`PATCH`、`PUT`、`DELETE` |
+| 客户端 | `/api/v1/clients/{id}/status`、`/upgrade` | `POST` |
+| 客户端 | `/api/v1/clients/{id}/update-check` | `GET` |
+| 隧道 | `/api/v1/tunnels` | `GET`、`POST` |
+| 隧道 | `/api/v1/tunnels/{id}` | `GET`、`PATCH`、`PUT`、`DELETE` |
+| 隧道 | `/api/v1/tunnels/{id}/start`、`/stop`、`/copy` | `POST` |
+| 域名反代 | `/api/v1/hosts` | `GET`、`POST` |
+| 域名反代 | `/api/v1/hosts/{id}` | `GET`、`PATCH`、`PUT`、`DELETE` |
+| 域名反代 | `/api/v1/hosts/{id}/start`、`/stop` | `POST` |
+| 域名反代 | `/api/v1/hosts/check`、`/diagnose` | `POST` |
+| 用户 | `/api/v1/users` | `GET`、`POST`（管理员） |
+| 用户 | `/api/v1/users/{id}` | `GET`、`PATCH`、`PUT`、`DELETE`（管理员） |
+| 用户 | `/api/v1/users/{id}/status`、`/password` | `POST` |
+| 用户 Token | `/api/v1/users/{id}/token`、`/token/revoke` | `POST` |
+| 用户 Token | `/api/v1/users/{id}/token/status` | `GET` |
+| 全局参数 | `/api/v1/global/config` | `GET`、`POST`（管理员） |
+| 全局参数 | `/api/v1/global/config/restart` | `POST`（管理员） |
+| Geo 数据 | `/api/v1/global/geo`、`/geo/update` | `GET`、`POST`（管理员） |
+| 登录保护 | `/api/v1/global/banlist`、`/unban`、`/unbanall`、`/banclean` | `GET`、`POST`（管理员） |
+| IP 登记 | `/api/v1/global/ip-register`、`/revoke`、`/clean`、`/clear` | `GET`、`POST`（管理员） |
+| 审计 | `/api/v1/audit` | `GET`、`POST`（管理员） |
+
+统一成功信封：
+
+```json
+{
+  "status": 1,
+  "code": "ok",
+  "msg": "ok",
+  "data": {},
+  "request_id": "..."
+}
+```
+
+统一失败信封：
+
+```json
+{
+  "status": 0,
+  "code": "error",
+  "error_code": "operation_failed",
+  "msg": "错误说明",
+  "request_id": "..."
+}
+```
+
+列表接口的 `rows`、`total`、`meta` 位于顶层，`meta` 与旧接口一致，包含
+`offset`、`limit`、`page`、`page_size`、`has_more`。未传分页参数时默认
+`limit=20`，最大 `500`；也可以使用 `page` 与 `page_size`。
+
+管理员签名示例：
+
+```bash
+ts=$(date +%s)
+sign=$(printf '%s' "your_auth_key${ts}" | md5sum | awk '{print $1}')
+curl -s "http://127.0.0.1:8081/api/v1/clients?auth_key=${sign}&timestamp=${ts}&limit=20"
+```
+
+普通用户 Token 示例：
+
+```bash
+curl -s "http://127.0.0.1:8081/api/v1/clients?limit=20" \
+  -H "Authorization: Bearer npsu_REPLACE_WITH_TOKEN"
+```
+
+JSON 请求示例：
+
+```bash
+curl -s -X POST "http://127.0.0.1:8081/api/v1/clients?auth_key=${sign}&timestamp=${ts}" \
+  -H "Content-Type: application/json" \
+  -d '{"remark":"office","flow_limit":1024,"compress":true}'
+```
+
+普通用户调用 `/api/v1` 时，客户端、隧道、Host 与统计仍由服务端按
+`UserId` 授权范围过滤；用户、全局参数、审计等管理资源只允许管理员
+凭据访问。API 密钥与登录 Session 相互独立，浏览器 Cookie 不能替代本接口
+要求的凭据。
+
 ## 通用返回
 
 普通操作返回：

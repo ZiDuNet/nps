@@ -15,6 +15,7 @@ import (
 
 	"ehang.io/nps/lib/crypt"
 	"github.com/astaxie/beego"
+	beecontext "github.com/astaxie/beego/context"
 )
 
 type AuthController struct {
@@ -102,23 +103,23 @@ func (s *AuthController) V1AuthKey() {
 }
 
 func (s *AuthController) IpWhiteAuth() {
-	s.echoIPWhiteAuthCORS()
+	echoIPWhiteAuthCORS(s.Ctx)
 	if s.Ctx.Request.Method == "OPTIONS" {
 		s.Ctx.ResponseWriter.WriteHeader(204)
 		return
 	}
-	s.handleIPWhiteAuth(s.respondIPWhiteAuth)
+	handleIPWhiteAuth(s.Ctx, s.respondIPWhiteAuth)
 }
 
 // V1IPWhiteAuth mirrors the legacy IP authorization flow with the standard
 // status/msg envelope and HTTP status codes.
 func (s *AuthController) V1IPWhiteAuth() {
-	s.echoIPWhiteAuthCORS()
+	echoIPWhiteAuthCORS(s.Ctx)
 	if s.Ctx.Request.Method == "OPTIONS" {
 		s.Ctx.ResponseWriter.WriteHeader(204)
 		return
 	}
-	s.handleIPWhiteAuth(func(status int, success bool, message string) {
+	handleIPWhiteAuth(s.Ctx, func(status int, success bool, message string) {
 		s.Ctx.Output.SetStatus(status)
 		code := 0
 		if success {
@@ -131,27 +132,27 @@ func (s *AuthController) V1IPWhiteAuth() {
 
 // echoIPWhiteAuthCORS keeps the authorization page same-origin by echoing an
 // Origin only for the current host; it never rejects a request.
-func (s *AuthController) echoIPWhiteAuthCORS() {
-	if origin := strings.TrimSpace(s.Ctx.Input.Header("Origin")); origin != "" {
+func echoIPWhiteAuthCORS(ctx *beecontext.Context) {
+	if origin := strings.TrimSpace(ctx.Input.Header("Origin")); origin != "" {
 		// Input.Host intentionally strips the port, while a browser Origin keeps
 		// non-default ports. Use Request.Host so the comparison is exact.
-		expected := s.Ctx.Input.Scheme() + "://" + s.Ctx.Request.Host
+		expected := ctx.Input.Scheme() + "://" + ctx.Request.Host
 		if origin == expected {
-			s.Ctx.ResponseWriter.Header().Set("Access-Control-Allow-Origin", origin)
-			s.Ctx.ResponseWriter.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-			s.Ctx.ResponseWriter.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			s.Ctx.ResponseWriter.Header().Add("Vary", "Origin")
+			ctx.ResponseWriter.Header().Set("Access-Control-Allow-Origin", origin)
+			ctx.ResponseWriter.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+			ctx.ResponseWriter.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			ctx.ResponseWriter.Header().Add("Vary", "Origin")
 		}
 	}
 }
 
-func (s *AuthController) handleIPWhiteAuth(respond func(status int, success bool, message string)) {
-	if s.Ctx.Request.Method != http.MethodPost {
+func handleIPWhiteAuth(ctx *beecontext.Context, respond func(status int, success bool, message string)) {
+	if ctx.Request.Method != http.MethodPost {
 		respond(http.StatusMethodNotAllowed, false, "method not allowed")
 		return
 	}
 
-	vkey, ip, password, err := ipWhiteAuthPostForm(s.Ctx.Request)
+	vkey, ip, password, err := ipWhiteAuthPostForm(ctx.Request)
 	if err != nil {
 		respond(http.StatusBadRequest, false, "参数错误")
 		return
@@ -168,7 +169,7 @@ func (s *AuthController) handleIPWhiteAuth(respond func(status int, success bool
 	// behavior. Explicit values and forwarded values are both normalized before
 	// they reach the persisted whitelist.
 	if ip == "" {
-		ip = strings.TrimSpace(s.Ctx.Input.IP())
+		ip = strings.TrimSpace(ctx.Input.IP())
 	}
 	ip = normalizeIPWhiteIP(ip)
 	if ip == "" {
