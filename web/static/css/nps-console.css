@@ -787,7 +787,8 @@ body.nps-bootstrap .platform-domain-row { padding: 15px; background: var(--nps-s
 body.nps-bootstrap .platform-domain-row__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
 body.nps-bootstrap .platform-domain-row__header strong { color: var(--nps-ink); font-size: 14px; overflow-wrap: anywhere; }
 body.nps-bootstrap .platform-domain-reference { display: inline-flex; align-items: center; gap: 5px; margin-left: 9px; color: var(--nps-muted); font-size: 11px; }
-body.nps-bootstrap .platform-domain-row__fields { display: grid; grid-template-columns: 1fr 1.25fr 1.25fr; gap: 10px; }
+body.nps-bootstrap .platform-domain-row__fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+body.nps-bootstrap .platform-domain-wildcard { min-width: 0; max-width: 560px; }
 body.nps-bootstrap .platform-domain-row__fields label { display: grid; gap: 5px; min-width: 0; margin: 0; color: var(--nps-muted); font-size: 11px; font-weight: 650; }
 body.nps-bootstrap .platform-domain-health { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 13px 0 0; padding-top: 12px; border-top: 1px solid var(--nps-line); }
 body.nps-bootstrap .platform-domain-health div { min-width: 0; }
@@ -804,15 +805,16 @@ body.nps-bootstrap .management-page--host { max-width: 1800px; margin: 0 auto; }
     body.nps-bootstrap .management-page--host .nps-table__container .table th,
     body.nps-bootstrap .management-page--host .nps-table__container .table td { padding: 11px 9px !important; overflow: hidden; }
     body.nps-bootstrap .management-page--host .nps-table__container .table td { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
-    body.nps-bootstrap .management-page--host .host-list__entry { width: 27% !important; }
-    body.nps-bootstrap .management-page--host .host-list__remark { width: 11% !important; }
+    body.nps-bootstrap .management-page--host .host-list__entry { width: 30% !important; }
+    body.nps-bootstrap .management-page--host .host-list__remark { width: 10% !important; }
     body.nps-bootstrap .management-page--host .host-list__client { width: 13% !important; }
-    body.nps-bootstrap .management-page--host .host-list__target { width: 16% !important; }
+    body.nps-bootstrap .management-page--host .host-list__target { width: 17% !important; }
     body.nps-bootstrap .management-page--host .host-list__status { width: 80px !important; min-width: 80px !important; max-width: 80px !important; white-space: nowrap; text-align: center !important; }
     body.nps-bootstrap .management-page--host .host-list__actions { width: 148px !important; overflow: visible !important; }
 }
 body.nps-bootstrap .host-entry { display: grid; gap: 7px; min-width: 0; }
 body.nps-bootstrap .host-entry__name { display: flex; align-items: center; gap: 6px; color: var(--nps-ink); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+body.nps-bootstrap .host-entry__lock { flex: 0 0 auto; width: 14px; color: var(--nps-warning); font-size: 12px; text-align: center; }
 body.nps-bootstrap .host-entry__links { display: flex; flex-wrap: wrap; gap: 6px; }
 body.nps-bootstrap .host-endpoint { display: inline-flex; align-items: center; gap: 5px; min-height: 23px; padding: 3px 6px; color: var(--nps-primary) !important; background: var(--nps-primary-soft); border-radius: 4px; font-size: 10px; font-weight: 700; }
 body.nps-bootstrap .host-endpoint:hover { background: var(--nps-surface-hover); }
@@ -826,13 +828,6 @@ body.nps-bootstrap .host-client .is-offline { color: var(--nps-faint); }
 body.nps-bootstrap .host-target-cell { display: block; min-width: 0; padding: 0; color: var(--nps-muted); background: transparent; border: 0; font-size: 11px; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
 body.nps-bootstrap .host-actions { display: inline-flex; flex-wrap: nowrap; justify-content: center; gap: 4px; }
 body.nps-bootstrap .host-actions > .btn { width: 34px; min-width: 34px; height: 34px; padding: 0 !important; }
-body.nps-bootstrap .host-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; padding: 10px 4px; }
-body.nps-bootstrap .host-detail-grid > div { display: grid; gap: 4px; min-width: 0; }
-body.nps-bootstrap .host-detail-grid span { color: var(--nps-faint); font-size: 11px; font-weight: 650; }
-body.nps-bootstrap .host-detail-grid strong { color: var(--nps-ink); font-size: 12px; overflow-wrap: anywhere; }
-body.nps-bootstrap .host-detail-grid code { padding: 7px 9px; color: var(--nps-ink); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
-body.nps-bootstrap .host-detail-grid__wide { grid-column: 1 / -1; }
-
 body.nps-bootstrap .diagnostic-page { max-width: 1180px; margin: 0 auto; }
 body.nps-bootstrap .diagnostic-layout { display: grid; grid-template-columns: minmax(300px, .84fr) minmax(0, 1.16fr); gap: 18px; align-items: start; }
 body.nps-bootstrap .diagnostic-form-card .ibox-content,
@@ -877,34 +872,62 @@ body.nps-bootstrap .diagnostic-rule-details__wide { grid-column: 1 / -1; }
     body.nps-bootstrap .host-platform-domain-fields,
     body.nps-bootstrap .host-certificate-fields,
     body.nps-bootstrap .platform-domain-row__fields,
-    body.nps-bootstrap .platform-domain-health,
-    body.nps-bootstrap .host-detail-grid { grid-template-columns: minmax(0, 1fr); }
+    body.nps-bootstrap .platform-domain-health { grid-template-columns: minmax(0, 1fr); }
     body.nps-bootstrap .diagnostic-layout,
     body.nps-bootstrap .diagnostic-rule-details { grid-template-columns: minmax(0, 1fr); }
     body.nps-bootstrap .platform-domain-reference { display: flex; margin: 5px 0 0; }
     body.nps-bootstrap .platform-domain-row__header { align-items: flex-start; }
-    body.nps-bootstrap .host-detail-grid__wide { grid-column: auto; }
     body.nps-bootstrap .diagnostic-rule-details__wide { grid-column: auto; }
 }
 
 /* Details, helper pages, footer, and error state. */
-body.nps-bootstrap .client-detail__section-title { color: var(--nps-primary); border-bottom-color: var(--nps-line); }
-body.nps-bootstrap .client-detail__label, body.nps-bootstrap .client-detail__command-label { color: var(--nps-muted); }
-body.nps-bootstrap .client-detail__value, body.nps-bootstrap .client-detail__line span:last-child { color: var(--nps-ink); }
+body.nps-bootstrap .client-detail__section-title,
+body.nps-bootstrap .host-detail__section-title,
+body.nps-bootstrap .tunnel-detail__section-title { color: var(--nps-primary); border-bottom-color: var(--nps-line); }
+body.nps-bootstrap .client-detail__label,
+body.nps-bootstrap .client-detail__command-label,
+body.nps-bootstrap .host-detail__label,
+body.nps-bootstrap .host-detail__command-label,
+body.nps-bootstrap .tunnel-detail__label,
+body.nps-bootstrap .tunnel-detail__command-label { color: var(--nps-muted); }
+body.nps-bootstrap .client-detail__value,
+body.nps-bootstrap .client-detail__line span:last-child,
+body.nps-bootstrap .host-detail__value,
+body.nps-bootstrap .tunnel-detail__value { color: var(--nps-ink); }
 body.nps-bootstrap .client-detail__history-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: center; gap: 8px 16px; padding: 9px 0; border-bottom: 1px solid var(--nps-line); color: var(--nps-ink); font-size: 12px; }
 body.nps-bootstrap .client-detail__history-row:last-child { border-bottom: 0; }
 body.nps-bootstrap .client-detail__history-state { justify-self: end; color: var(--nps-muted); }
 body.nps-bootstrap .client-detail__history-state--online { color: var(--nps-success, #218838); font-weight: 650; }
 body.nps-bootstrap .client-detail__history-empty { color: var(--nps-muted); font-size: 12px; }
-body.nps-bootstrap .client-detail__command code, body.nps-bootstrap .help-command { color: var(--nps-ink); background: var(--nps-surface-subtle); border-color: var(--nps-line); }
-body.nps-bootstrap .client-detail__cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-body.nps-bootstrap .client-detail__card { min-width: 0; padding: 12px 14px 14px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 7px; }
-body.nps-bootstrap .client-detail__card .client-detail__section-title { margin: 0 0 10px; padding-bottom: 7px; border-bottom: 1px solid var(--nps-line); }
-body.nps-bootstrap .client-detail__card .client-detail__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-body.nps-bootstrap .client-detail__chips { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; min-width: 0; }
-body.nps-bootstrap .client-detail__chip-list { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
-body.nps-bootstrap .client-detail__chip { display: inline-flex; max-width: 100%; padding: 3px 9px; color: var(--nps-muted); background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 999px; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
-body.nps-bootstrap .client-detail__chip--empty { color: var(--nps-faint); border-style: dashed; }
+body.nps-bootstrap .client-detail__command code,
+body.nps-bootstrap .tunnel-detail__command code,
+body.nps-bootstrap .help-command { color: var(--nps-ink); background: var(--nps-surface-subtle); border-color: var(--nps-line); }
+body.nps-bootstrap .host-detail__code,
+body.nps-bootstrap .tunnel-detail__code { color: var(--nps-ink); background: var(--nps-surface-subtle); border-color: var(--nps-line); }
+body.nps-bootstrap .client-detail__cards,
+body.nps-bootstrap .host-detail__cards,
+body.nps-bootstrap .tunnel-detail__cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+body.nps-bootstrap .client-detail__card,
+body.nps-bootstrap .host-detail__card,
+body.nps-bootstrap .tunnel-detail__card { min-width: 0; padding: 12px 14px 14px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 7px; }
+body.nps-bootstrap .client-detail__card .client-detail__section-title,
+body.nps-bootstrap .host-detail__card .host-detail__section-title,
+body.nps-bootstrap .tunnel-detail__card .tunnel-detail__section-title { margin: 0 0 10px; padding-bottom: 7px; border-bottom: 1px solid var(--nps-line); }
+body.nps-bootstrap .client-detail__card .client-detail__grid,
+body.nps-bootstrap .host-detail__card .host-detail__grid,
+body.nps-bootstrap .tunnel-detail__card .tunnel-detail__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+body.nps-bootstrap .client-detail__chips,
+body.nps-bootstrap .host-detail__chips,
+body.nps-bootstrap .tunnel-detail__chips { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; min-width: 0; }
+body.nps-bootstrap .client-detail__chip-list,
+body.nps-bootstrap .host-detail__chip-list,
+body.nps-bootstrap .tunnel-detail__chip-list { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+body.nps-bootstrap .client-detail__chip,
+body.nps-bootstrap .host-detail__chip,
+body.nps-bootstrap .tunnel-detail__chip { display: inline-flex; max-width: 100%; padding: 3px 9px; color: var(--nps-muted); background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 999px; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+body.nps-bootstrap .client-detail__chip--empty,
+body.nps-bootstrap .host-detail__chip--empty,
+body.nps-bootstrap .tunnel-detail__chip--empty { color: var(--nps-faint); border-style: dashed; }
 body.nps-bootstrap .client-version-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; color: var(--nps-primary); background: var(--nps-primary-soft); border: 1px solid transparent; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 650; line-height: 1.45; cursor: pointer; }
 body.nps-bootstrap .client-version-pill:hover,
 body.nps-bootstrap .client-version-pill:focus-visible { background: var(--nps-primary); color: #fff; outline: 0; }
@@ -1106,18 +1129,21 @@ body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__bars .management
 }
 body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__columns { margin-left: auto !important; }
 
-/* Long client commands reserve a fixed action column and wrap inside their own track. */
-body.nps-bootstrap .client-detail__command {
+/* Long commands reserve a fixed action column and wrap inside their own track. */
+body.nps-bootstrap .client-detail__command,
+body.nps-bootstrap .tunnel-detail__command {
     grid-template-columns: minmax(94px, 124px) minmax(0, 1fr) 36px;
     align-items: start;
     gap: 10px;
 }
-body.nps-bootstrap .client-detail__command-label {
+body.nps-bootstrap .client-detail__command-label,
+body.nps-bootstrap .tunnel-detail__command-label {
     min-width: 0;
     padding-top: 7px;
     overflow-wrap: anywhere;
 }
-body.nps-bootstrap .client-detail__command code {
+body.nps-bootstrap .client-detail__command code,
+body.nps-bootstrap .tunnel-detail__command code {
     display: block;
     width: 100%;
     min-width: 0;
@@ -1127,7 +1153,8 @@ body.nps-bootstrap .client-detail__command code {
     overflow-wrap: anywhere;
     word-break: break-word;
 }
-body.nps-bootstrap .client-detail__copy {
+body.nps-bootstrap .client-detail__copy,
+body.nps-bootstrap .tunnel-detail__copy {
     display: inline-flex;
     width: 36px;
     min-width: 36px;
@@ -1269,13 +1296,13 @@ body.nps-bootstrap .form-page .form-workflow-form > .form-section-content-collap
     body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(5),
     body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(5),
     body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(6),
-    body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(6),
-    body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(7),
-    body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(7) { display: none; }
+    body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(6) { display: none; }
     body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(1),
     body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(1) { width: 36px !important; padding-right: 5px !important; padding-left: 5px !important; }
     body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(2),
     body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(2) { width: 40px !important; padding-right: 5px !important; padding-left: 5px !important; }
+    body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(7),
+    body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(7) { width: 80px !important; padding-right: 5px !important; padding-left: 5px !important; }
     body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table th:nth-child(8),
     body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .table td:nth-child(8) { width: 104px !important; padding-right: 5px !important; padding-left: 5px !important; }
     body.nps-bootstrap .management-page--host .nps-table__container:not(.has-card-view) .host-entry__name { font-size: 11px; }
@@ -1288,8 +1315,10 @@ body.nps-bootstrap .form-page .form-workflow-form > .form-section-content-collap
     body.nps-bootstrap .management-page--host .nps-table__container.has-card-view .card-view .card-view-value { min-width: 0; color: var(--nps-ink); overflow-wrap: anywhere; }
     body.nps-bootstrap .management-page--host .nps-table__container.has-card-view .host-entry__name { font-size: 12px; }
     body.nps-bootstrap .management-page--host .nps-table__container.has-card-view .host-actions { justify-content: flex-start; }
-    body.nps-bootstrap .client-detail__command { grid-template-columns: minmax(0, 1fr) 36px; gap: 6px 8px; }
-    body.nps-bootstrap .client-detail__command-label { grid-column: 1 / -1; padding-top: 0; }
+    body.nps-bootstrap .client-detail__command,
+    body.nps-bootstrap .tunnel-detail__command { grid-template-columns: minmax(0, 1fr) 36px; gap: 6px 8px; }
+    body.nps-bootstrap .client-detail__command-label,
+    body.nps-bootstrap .tunnel-detail__command-label { grid-column: 1 / -1; padding-top: 0; }
     body.nps-bootstrap .table-responsive { border: 0; }
 }
 
@@ -1655,7 +1684,7 @@ body.nps-bootstrap .form-page .platform-domain-row {
     border-radius: 8px;
 }
 body.nps-bootstrap .form-page .platform-domain-row__fields {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.45fr) minmax(0, 1.45fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
 }
 body.nps-bootstrap .form-page .platform-domain-row__fields input {
@@ -2835,9 +2864,8 @@ body.nps-bootstrap .nps-table__columns-menu input[type="checkbox"] {
     accent-color: var(--nps-primary);
 }
 
-/* Expanded tunnel rows carry secondary fields in a calm, scannable grid
-   rather than an inline string that collides with command controls. */
-body.nps-bootstrap .tunnel-detail-summary,
+/* Expanded user rows carry secondary fields in a calm, scannable grid
+   rather than an inline string. */
 body.nps-bootstrap .user-detail-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2846,7 +2874,6 @@ body.nps-bootstrap .user-detail-summary {
     padding: 0 0 14px;
     border-bottom: 1px solid var(--nps-line);
 }
-body.nps-bootstrap .tunnel-detail-summary > div,
 body.nps-bootstrap .user-detail-summary > div {
     display: flex;
     min-width: 0;
@@ -2854,7 +2881,6 @@ body.nps-bootstrap .user-detail-summary > div {
     gap: 6px;
     line-height: 1.45;
 }
-body.nps-bootstrap .tunnel-detail-summary b,
 body.nps-bootstrap .user-detail-summary b {
     flex: 0 0 auto;
     color: var(--nps-muted);
@@ -2862,39 +2888,31 @@ body.nps-bootstrap .user-detail-summary b {
     font-weight: 700;
     white-space: nowrap;
 }
-body.nps-bootstrap .tunnel-detail-summary > div > span,
 body.nps-bootstrap .user-detail-summary > div > span {
     min-width: 0;
     color: var(--nps-ink);
     font-size: 12px;
     overflow-wrap: anywhere;
 }
-body.nps-bootstrap .tunnel-detail-summary .badge,
 body.nps-bootstrap .user-detail-summary .badge {
     font-size: 11px;
     line-height: 1.35;
 }
-body.nps-bootstrap .tunnel-detail-summary .tunnel-detail-wide {
-    grid-column: 1 / -1;
-    padding-top: 2px;
-    border-top: 1px dashed var(--nps-line);
-}
 @media (max-width: 1199px) and (min-width: 992px) {
-    body.nps-bootstrap .tunnel-detail-summary,
     body.nps-bootstrap .user-detail-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
     body.nps-bootstrap .client-detail__history-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
     body.nps-bootstrap .client-detail__history-state { justify-self: start; }
-    body.nps-bootstrap .client-detail__cards { grid-template-columns: minmax(0, 1fr); }
+    body.nps-bootstrap .client-detail__cards,
+    body.nps-bootstrap .host-detail__cards,
+    body.nps-bootstrap .tunnel-detail__cards { grid-template-columns: minmax(0, 1fr); }
     body.nps-bootstrap .client-update-fields { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 991px) {
-    body.nps-bootstrap .tunnel-detail-summary,
     body.nps-bootstrap .user-detail-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
-    body.nps-bootstrap .tunnel-detail-summary,
     body.nps-bootstrap .user-detail-summary { grid-template-columns: minmax(0, 1fr); }
 }
 

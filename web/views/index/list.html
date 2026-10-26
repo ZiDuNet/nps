@@ -170,74 +170,114 @@
             npsApplyTableState(this, 'tunnel');
         },
         detailFormatter: function (index, row, element) {
+            var english = npsIsEnglish();
             var flow = row.Flow || {};
             var client = row.Client || {};
             var config = client.Cnf || {};
             var target = row.Target || {};
+            var text = function (value, fallback) {
+                if (value == null || value === '') value = fallback == null ? '' : fallback;
+                return npsEscapeHtml(value);
+            };
+            var label = function (zh, en) {
+                return '<span data-i18n-zh="' + zh + '" data-i18n-en="' + en + '">' + (english ? en : zh) + '</span>';
+            };
+            var kv = function (labelText, value) {
+                return '<div class="tunnel-detail__item"><span class="tunnel-detail__label">' + labelText + '</span><span class="tunnel-detail__value">' + value + '</span></div>';
+            };
+            var codeValue = function (labelText, value) {
+                return '<div class="tunnel-detail__item tunnel-detail__item--wide"><span class="tunnel-detail__label">' + labelText + '</span><code class="tunnel-detail__code">' + text(value || '-') + '</code></div>';
+            };
+            var chips = function (labelText, value) {
+                var items = Array.isArray(value) ? value : [];
+                var content = items.length
+                    ? items.map(function (item) { return '<span class="tunnel-detail__chip">' + text(item) + '</span>'; }).join('')
+                    : '<span class="tunnel-detail__chip tunnel-detail__chip--empty">-</span>';
+                return '<div class="tunnel-detail__chips"><span class="tunnel-detail__label">' + labelText + '</span><div class="tunnel-detail__chip-list">' + content + '</div></div>';
+            };
+            var card = function (icon, title, content) {
+                return '<section class="tunnel-detail__card"><h6 class="tunnel-detail__section-title"><i class="fa fa-' + icon + '" aria-hidden="true"></i>' + title + '</h6><div class="tunnel-detail__grid">' + content + '</div></section>';
+            };
+            var section = function (icon, title, content) {
+                return '<section class="tunnel-detail__section"><h6 class="tunnel-detail__section-title"><i class="fa fa-' + icon + '" aria-hidden="true"></i>' + title + '</h6><div class="tunnel-detail__grid">' + content + '</div></section>';
+            };
+            var cmdRow = function (labelText, code) {
+                return '<div class="tunnel-detail__command">'
+                    + '<span class="tunnel-detail__command-label">' + labelText + '</span>'
+                    + '<code>' + text(code) + '</code>'
+                    + '<button type="button" class="copy btn btn-outline btn-primary btn-xs tunnel-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button></div>';
+            };
             // The identification key is only part of secret/p2p tunnel
             // credentials. Keep it out of the expanded detail for modes that
             // never consume it (tcp, udp, http proxy, socks5, and file).
             var identificationMarkup = (row.Mode === 'secret' || row.Mode === 'p2p')
-                    ? '<div><b langtag="word-identificationkey"></b><span>' + tunnelText(row.Password || '-') + '</span></div>'
-                    : '';
-            var tmp = '<div class="tunnel-detail-summary">'
-                    + '<div><b langtag="word-remark"></b><span>' + tunnelText(row.Remark || '-') + '</span></div>'
-                    + '<div><b langtag="word-verifykey"></b><span>' + tunnelText(client.VerifyKey || '-') + '</span></div>'
-                    + identificationMarkup
-                    + '<div><b langtag="word-exportflow"></b><span>' + tunnelText(changeunit(flow.ExportFlow)) + '</span></div>'
-                    + '<div><b langtag="word-inletflow"></b><span>' + tunnelText(changeunit(flow.InletFlow)) + '</span></div>'
-                    + '<div><b data-i18n-zh="上行限速 / 当前" data-i18n-en="Upload limit / current"></b><span>' + tunnelText((row.UploadLimit || 0) + ' KB/s / ' + changeunit(row.UploadRate || 0) + '/s') + '</span></div>'
-                    + '<div><b data-i18n-zh="下行限速 / 当前" data-i18n-en="Download limit / current"></b><span>' + tunnelText((row.DownloadLimit || 0) + ' KB/s / ' + changeunit(row.DownloadRate || 0) + '/s') + '</span></div>'
-                    + '<div><b langtag="word-crypt"></b><span>' + tunnelBoolean(config.Crypt) + '</span></div>'
-                    + '<div><b langtag="word-compress"></b><span>' + tunnelBoolean(config.Compress) + '</span></div>'
-                    + '<div><b langtag="word-basicusername"></b><span>' + tunnelText(config.U || '-') + '</span></div>'
-                    + '<div><b langtag="word-basicpassword"></b><span>' + tunnelText(config.P || '-') + '</span></div>'
-                    + '<div><b langtag="word-protoversion"></b><span>' + tunnelText(row.ProtoVersion || '-') + '</span></div>'
-                    + '<div><b langtag="word-runstatus"></b><span>' + tunnelBoolean(row.RunStatus) + '</span></div>'
-                    + ((row.Mode === 'mixProxy' || row.Mode === 'httpProxy' || row.Mode === 'socks5') ? '<div><b data-i18n-zh="HTTP 代理" data-i18n-en="HTTP proxy"></b><span>' + tunnelBoolean(row.Mode === 'httpProxy' || row.HttpProxy) + '</span></div><div><b data-i18n-zh="SOCKS5 代理" data-i18n-en="SOCKS5 proxy"></b><span>' + tunnelBoolean(row.Mode === 'socks5' || row.Socks5Proxy) + '</span></div><div><b langtag="word-destacl"></b><span>' + tunnelText(row.DestAclMode === 1 ? '白名单' : row.DestAclMode === 2 ? '黑名单' : '关闭') + '</span></div><div><b langtag="word-destaclrules"></b><span>' + tunnelText(row.DestAclRules || '-') + '</span></div>' : '')
-                    + '<div><b data-i18n-zh="监听地址" data-i18n-en="Listen address"></b><span>' + tunnelText(row.ServerIp || '0.0.0.0') + '</span></div>'
-                    + ((row.Mode === 'tcp' || row.Mode === 'udp') ? '<div><b data-i18n-zh="本地代理" data-i18n-en="Local proxy"></b><span>' + tunnelBoolean(!!((row.Target || {}).LocalProxy)) + '</span></div>' : '')
-                    + '<div><b data-i18n-zh="隧道最大连接" data-i18n-en="Tunnel max connections"></b><span>' + tunnelText((row.MaxConn || 0) > 0 ? row.MaxConn : (npsIsEnglish() ? 'Unlimited' : '不限')) + '</span></div>'
-                    + '<div><b data-i18n-zh="客户端连接限额" data-i18n-en="Client connection limit"></b><span>' + tunnelText(client.MaxConn > 0 ? client.MaxConn : (npsIsEnglish() ? 'Unlimited' : '不限')) + '</span></div>'
-                    + '<div><b data-i18n-zh="流量限额" data-i18n-en="Flow limit"></b><span>' + tunnelText((flow.FlowLimit || 0) > 0 ? changeunit(flow.FlowLimit) : (npsIsEnglish() ? 'Unlimited' : '不限')) + '</span></div>'
-                    + '<div><b data-i18n-zh="仅允许已登记 IP" data-i18n-en="Registered IPs only"></b><span>' + tunnelBoolean(row.RegisteredOnly) + '</span></div>'
-                    + '<div><b data-i18n-zh="名单冲突策略" data-i18n-en="List policy"></b><span>' + tunnelText(row.IpListPriority === 1 ? '白名单优先' : '黑名单优先') + '</span></div>'
-                    + (((row.BlackIpList || []).length || (row.WhiteIpList || []).length) ? '<div class="tunnel-detail-wide"><b data-i18n-zh="来源名单" data-i18n-en="Source lists"></b><span>' + tunnelText((npsIsEnglish() ? 'Deny: ' : '黑名单：') + ((row.BlackIpList || []).join(', ') || '-') + (npsIsEnglish() ? ' · Allow: ' : ' · 白名单：') + ((row.WhiteIpList || []).join(', ') || '-')) + '</span></div>' : '')
-                    + (row.Mode === 'tcp' ? '<div><b langtag="word-currentconnections"></b><span>' + tunnelText(row.CurrentConnections || 0) + '</span></div>' : '')
-                    + (row.Mode === 'tcp' && (row.HealthCheckType || row.HealthCheckTarget) ? '<div class="tunnel-detail-wide"><b data-i18n-zh="健康检查" data-i18n-en="Health check"></b><span>' + tunnelText((row.HealthCheckType === 'http' ? 'HTTP' : 'TCP') + (row.HealthCheckTarget ? ' · ' + String(row.HealthCheckTarget).replace(/\r?\n/g, ', ') : '') + (row.HealthCheckInterval ? ' · ' + row.HealthCheckInterval + (npsIsEnglish() ? 's' : ' 秒') : '')) + '</span></div>' : '')
-                    + (row.RunError ? '<div class="tunnel-detail-error"><b langtag="word-runerror"></b><span>' + tunnelText(row.RunError) + '</span></div>' : '')
-                    + '<div><b langtag="word-clientstatus"></b><span>' + tunnelBoolean(client.IsConnect) + '</span></div>'
-                    + '</div>';
-            var copyBtn = '<button type="button" class="copy btn btn-info btn-xs" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button>'
-            if (row.Mode == "p2p") {
-                var p2pCmd = tmp + "<br/><br>"
-                        + '<b langtag="word-commandaccessp2p"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + tunnelText(client.VerifyKey)
-                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -target=" + tunnelText(target.TargetStr) + "</code>" + copyBtn + "<br/><br>"
-                        + '<b langtag="word-commandaccessp2ps"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + tunnelText(client.VerifyKey)
-                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=p2ps" + "</code>" + copyBtn + "<br/><br>"
-                        + '<b langtag="word-commandaccessp2pt"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + tunnelText(client.VerifyKey)
-                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=p2pt" + "</code>" + copyBtn
-                {{if .tls_enable}}
-                p2pCmd += "<br/><br>"
-                        + '<b langtag="word-commandaccessp2p-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + tunnelText(client.VerifyKey)
-                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -target=" + tunnelText(target.TargetStr) + " -tls_enable=true</code>" + copyBtn + "<br/><br>"
-                        + '<b langtag="word-commandaccessp2ps-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + tunnelText(client.VerifyKey)
-                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=p2ps -tls_enable=true</code>" + copyBtn + "<br/><br>"
-                        + '<b langtag="word-commandaccessp2pt-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + tunnelText(client.VerifyKey)
-                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=p2pt -tls_enable=true</code>" + copyBtn
-                {{end}}
-                return p2pCmd
+                ? kv(label('识别密钥', 'Identification key'), text(row.Password || '-'))
+                : '';
+            var isProxyMode = row.Mode === 'mixProxy' || row.Mode === 'httpProxy' || row.Mode === 'socks5';
+            var destAclMode = row.DestAclMode === 1 ? (english ? 'Allowlist' : '白名单') : (row.DestAclMode === 2 ? (english ? 'Denylist' : '黑名单') : (english ? 'Disabled' : '关闭'));
+            var healthSummary = '';
+            if (row.Mode === 'tcp' && (row.HealthCheckType || row.HealthCheckTarget)) {
+                healthSummary = (row.HealthCheckType === 'http' ? 'HTTP' : 'TCP')
+                    + (row.HealthCheckTarget ? ' · ' + String(row.HealthCheckTarget).replace(/\r?\n/g, ', ') : '')
+                    + (row.HealthCheckInterval ? ' · ' + row.HealthCheckInterval + (english ? 's' : ' 秒') : '');
             }
-            if (row.Mode == "secret") {
-                var secretCmd = tmp + "<br/><br>" + '<b langtag="word-commandaccess"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.p}} -vkey=" + tunnelText(client.VerifyKey)
-                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=secret" + "</code>" + copyBtn
-                {{if .tls_enable}}
-                secretCmd += "<br/><br>" + '<b langtag="word-commandaccess-tls"></b>: ' + "<code>{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=" + tunnelText(client.VerifyKey)
-                        + " -type={{.bridgeType}} -password=" + tunnelText(row.Password) + " -local_type=secret -tls_enable=true</code>" + copyBtn
-                {{end}}
-                return secretCmd
+            var basicCard = card('info-circle', label('基本信息', 'Basic information'),
+                kv(label('备注', 'Remark'), text(row.Remark || '-'))
+                + kv(label('验证密钥', 'Verify key'), text(client.VerifyKey || '-'))
+                + identificationMarkup
+                + kv(label('协议版本', 'Protocol version'), text(row.ProtoVersion || '-'))
+                + kv(label('运行状态', 'Run status'), npsBooleanMarkup(!!row.RunStatus))
+                + kv(label('客户端状态', 'Client status'), text(client.IsConnect ? (english ? 'Online' : '在线') : (english ? 'Offline' : '离线'))));
+            var trafficCard = card('tachometer-alt', label('连接与流量', 'Connections & traffic'),
+                kv(label('出口流量', 'Export flow'), text(changeunit(flow.ExportFlow)))
+                + kv(label('入口流量', 'Inlet flow'), text(changeunit(flow.InletFlow)))
+                + kv(label('上行限速 / 当前', 'Upload limit / current'), text(String(row.UploadLimit || 0) + ' KB/s / ' + changeunit(row.UploadRate || 0) + '/s'))
+                + kv(label('下行限速 / 当前', 'Download limit / current'), text(String(row.DownloadLimit || 0) + ' KB/s / ' + changeunit(row.DownloadRate || 0) + '/s'))
+                + (row.Mode === 'tcp' ? kv(label('当前连接', 'Current connections'), text(row.CurrentConnections || 0)) : '')
+                + kv(label('隧道最大连接', 'Tunnel max connections'), text((row.MaxConn || 0) > 0 ? row.MaxConn : (english ? 'Unlimited' : '不限')))
+                + kv(label('客户端连接限额', 'Client connection limit'), text(client.MaxConn > 0 ? client.MaxConn : (english ? 'Unlimited' : '不限')))
+                + kv(label('流量限额', 'Flow limit'), text((flow.FlowLimit || 0) > 0 ? changeunit(flow.FlowLimit) : (english ? 'Unlimited' : '不限'))));
+            var authCard = card('shield-alt', label('认证与安全', 'Authentication & security'),
+                kv(label('加密', 'Encryption'), npsBooleanMarkup(!!config.Crypt))
+                + kv(label('压缩', 'Compression'), npsBooleanMarkup(!!config.Compress))
+                + kv(label('Basic 认证用户名', 'Basic username'), text(config.U || '-'))
+                + kv(label('Basic 认证密码', 'Basic password'), text(config.P ? (english ? 'Set' : '已设置') : (english ? 'Not set' : '未设置')))
+                + kv(label('仅允许已登记 IP', 'Registered IPs only'), npsBooleanMarkup(!!row.RegisteredOnly))
+                + kv(label('名单冲突策略', 'List policy'), text(row.IpListPriority === 1 ? (english ? 'Allow first' : '白名单优先') : (english ? 'Deny first' : '黑名单优先')))
+                + (((row.BlackIpList || []).length || (row.WhiteIpList || []).length) ? chips(label('来源名单', 'Source lists'), (row.BlackIpList || []).concat(row.WhiteIpList || [])) : ''));
+            var modeCard = card('sliders-h', label('模式与监听', 'Mode & listener'),
+                kv(label('监听地址', 'Listen address'), text(row.ServerIp || '0.0.0.0'))
+                + ((row.Mode === 'tcp' || row.Mode === 'udp') ? kv(label('本地代理', 'Local proxy'), npsBooleanMarkup(!!target.LocalProxy)) : '')
+                + codeValue(label('内网目标', 'Internal target'), target.TargetStr || '-')
+                + (isProxyMode ? kv(label('HTTP 代理', 'HTTP proxy'), npsBooleanMarkup(row.Mode === 'httpProxy' || !!row.HttpProxy)) : '')
+                + (isProxyMode ? kv(label('SOCKS5 代理', 'SOCKS5 proxy'), npsBooleanMarkup(row.Mode === 'socks5' || !!row.Socks5Proxy)) : '')
+                + (isProxyMode ? kv(label('目标访问控制', 'Destination ACL'), text(destAclMode)) : '')
+                + (isProxyMode && row.DestAclRules ? codeValue(label('目标访问控制规则', 'Destination ACL rules'), row.DestAclRules) : '')
+                + (healthSummary ? codeValue(label('健康检查', 'Health check'), healthSummary) : ''));
+            var commands = '';
+            if (row.Mode === 'p2p') {
+                commands = section('terminal', label('访问命令', 'Access commands'),
+                    cmdRow(label('P2P 目标访问', 'P2P target access'), '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + (client.VerifyKey || '') + ' -type={{.bridgeType}} -password=' + (row.Password || '') + ' -target=' + (target.TargetStr || ''))
+                    + cmdRow(label('P2P 服务端', 'P2P server'), '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + (client.VerifyKey || '') + ' -type={{.bridgeType}} -password=' + (row.Password || '') + ' -local_type=p2ps')
+                    + cmdRow(label('P2P 客户端', 'P2P client'), '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + (client.VerifyKey || '') + ' -type={{.bridgeType}} -password=' + (row.Password || '') + ' -local_type=p2pt')
+                    {{if .tls_enable}}
+                    + cmdRow(label('P2P 目标访问 (TLS)', 'P2P target access (TLS)'), '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + (client.VerifyKey || '') + ' -type={{.bridgeType}} -password=' + (row.Password || '') + ' -target=' + (target.TargetStr || '') + ' -tls_enable=true')
+                    + cmdRow(label('P2P 服务端 (TLS)', 'P2P server (TLS)'), '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + (client.VerifyKey || '') + ' -type={{.bridgeType}} -password=' + (row.Password || '') + ' -local_type=p2ps -tls_enable=true')
+                    + cmdRow(label('P2P 客户端 (TLS)', 'P2P client (TLS)'), '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + (client.VerifyKey || '') + ' -type={{.bridgeType}} -password=' + (row.Password || '') + ' -local_type=p2pt -tls_enable=true')
+                    {{end}}
+                );
+            } else if (row.Mode === 'secret') {
+                commands = section('terminal', label('访问命令', 'Access commands'),
+                    cmdRow(label('私密访问', 'Secret access'), '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + (client.VerifyKey || '') + ' -type={{.bridgeType}} -password=' + (row.Password || '') + ' -local_type=secret')
+                    {{if .tls_enable}}
+                    + cmdRow(label('私密访问 (TLS)', 'Secret access (TLS)'), '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + (client.VerifyKey || '') + ' -type={{.bridgeType}} -password=' + (row.Password || '') + ' -local_type=secret -tls_enable=true')
+                    {{end}}
+                );
             }
-            return tmp
+            var errorSection = row.RunError ? section('exclamation-triangle', label('运行错误', 'Run error'), kv(label('错误信息', 'Error'), text(row.RunError))) : '';
+            return commands
+                + '<div class="tunnel-detail__cards">' + basicCard + trafficCard + authCard + modeCard + '</div>'
+                + errorSection;
         },
         //表格的列
         columns: [

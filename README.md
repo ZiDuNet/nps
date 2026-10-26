@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.33</sub>
+﻿# NPS <sub>v1.1.34</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -179,6 +179,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.34** (2026-10-26) - Reworked list details and form layout: the host list drops the authentication column in favor of a lock icon beside the public entry, the expanded host and TCP tunnel details use compact grouped cards, and the platform wildcard input in global settings is single-column with a bounded width. Fixed the host add/edit form being blocked by browser validation when no health-check target was configured.
 
 - **v1.1.33** (2026-10-26) - Deleting a client in the web console now sends a "registration removed" notice to online NPCs; new NPCs close that connection and stop reconnecting while older NPCs keep their previous behavior. Service-mode NPCs only stop the affected connection, and only stop the local NPC service (keeping its registration, without uninstalling) when the last connection in the process is removed. Fixed the MUX shutdown blocking/file-descriptor leak, missing CA certificates in Docker images, and unified the browser favicon.
 

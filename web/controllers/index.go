@@ -135,9 +135,10 @@ type hostListRow struct {
 }
 
 type hostListClient struct {
-	Id        int
-	Remark    string
-	IsConnect bool
+	Id           int
+	Remark       string
+	IsConnect    bool
+	BasicAuthSet bool
 }
 
 type hostListTarget struct {
@@ -242,7 +243,12 @@ func newHostListRows(hosts []*file.Host) []*hostListRow {
 
 		if client != nil {
 			client.RLock()
-			row.Client = hostListClient{Id: client.Id, Remark: client.Remark, IsConnect: client.IsConnect}
+			row.Client = hostListClient{
+				Id:           client.Id,
+				Remark:       client.Remark,
+				IsConnect:    client.IsConnect,
+				BasicAuthSet: client.Cnf != nil && client.Cnf.U != "" && client.Cnf.P != "",
+			}
 			client.RUnlock()
 		}
 		if target != nil {

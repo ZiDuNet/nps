@@ -19,12 +19,12 @@ NPC 是主动连接 NPS 的客户端容器。普通 TCP、KCP、TLS Bridge 隧�
 先在 NPS Web 面板创建客户端，复制该客户端的 `VerifyKey`，然后启动容器：
 
 ```bash
-docker pull wushuo98/npc:1.1.33
+docker pull wushuo98/npc:1.1.34
 
 docker run -d \
   --name npc \
   --restart unless-stopped \
-  wushuo98/npc:1.1.33 \
+  wushuo98/npc:1.1.34 \
   -server=<NPS地址>:8024 \
   -vkey=<VerifyKey>
 ```
@@ -35,7 +35,7 @@ docker run -d \
 docker run -d \
   --name npc \
   --restart unless-stopped \
-  wushuo98/npc:1.1.33 \
+  wushuo98/npc:1.1.34 \
   -server=<NPS地址>:8025 \
   -vkey=<VerifyKey> \
   -tls_enable=true
@@ -47,7 +47,7 @@ docker run -d \
 docker run -d \
   --name npc \
   --restart unless-stopped \
-  wushuo98/npc:1.1.33 \
+  wushuo98/npc:1.1.34 \
   -server=<NPS地址>:8024 \
   -vkey=<VerifyKey1>,<VerifyKey2>
 ```
@@ -84,7 +84,7 @@ docker run -d \
   --name npc \
   --restart unless-stopped \
   -v /opt/npc/conf:/conf:ro \
-  wushuo98/npc:1.1.33 \
+  wushuo98/npc:1.1.34 \
   -config=/conf/npc.conf
 ```
 
@@ -106,7 +106,7 @@ server_port=10022
 ```yaml
 services:
   npc:
-    image: wushuo98/npc:1.1.33
+    image: wushuo98/npc:1.1.34
     container_name: npc
     restart: unless-stopped
     volumes:
@@ -136,7 +136,7 @@ docker run -d \
   --restart unless-stopped \
   --network host \
   -v /opt/npc/conf:/conf:ro \
-  wushuo98/npc:1.1.33 \
+  wushuo98/npc:1.1.34 \
   -config=/conf/npc.conf
 ```
 
@@ -145,7 +145,7 @@ Compose 写法：
 ```yaml
 services:
   npc:
-    image: wushuo98/npc:1.1.33
+    image: wushuo98/npc:1.1.34
     container_name: npc
     restart: unless-stopped
     network_mode: host
@@ -171,7 +171,7 @@ services:
 ```yaml
 services:
   npc:
-    image: wushuo98/npc:1.1.33
+    image: wushuo98/npc:1.1.34
     restart: unless-stopped
     volumes:
       - ./conf:/conf:ro

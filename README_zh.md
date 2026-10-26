@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.33</sub>
+﻿# NPS <sub>v1.1.34</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -194,6 +194,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.34** (2026-10-26) - 调整列表与表单排版：域名反代列表移除「认证」列，改为在访问入口前显示 Basic 认证锁图标；域名反代与 TCP 隧道的展开详情统一为紧凑卡片布局；全局参数「平台泛域名」输入区改为单列并限制输入宽度。修复域名反代新增/编辑页在健康检查目标为空时保存被浏览器校验拦截的问题。
 
 - **v1.1.33** (2026-10-26) - Web 删除客户端时向在线 NPC 下发「注册已删除」指令，新版 NPC 关闭该连接并停止重连，旧版 NPC 保持原行为；系统服务模式下仅当进程内最后一条连接被删除时才自动停止本机 NPC 服务，保留注册、不卸载。修复 NPC 数据通道关闭时的阻塞与文件描述符泄漏、Docker 镜像缺少 CA 证书的问题，并统一浏览器标签页图标。
 

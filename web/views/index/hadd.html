@@ -242,6 +242,18 @@ $(function () {
             select.textContent = ''; (data && Array.isArray(data.rows) ? data.rows : []).forEach(function (client) { var id = Number(client.Id); if (!isFinite(id) || id <= 0) return; var option = document.createElement('option'); option.value = String(id); option.textContent = id + ' · ' + (client.Remark || localized('未命名客户端', 'Unnamed client')); option.selected = id === selectedID; select.appendChild(option); });
         });
     }
+    function syncHostHealthCheckFields() {
+        var enabled = $.trim($('#host-health-check-target').val() || '').length > 0;
+        $('#host-health-check-type, #host-health-timeout, #host-health-max-failed, #host-health-interval, #host-health-url').prop('disabled', !enabled);
+        if (!$('#host-health-check-type').val()) $('#host-health-check-type').val('http');
+        var defaults = { 'host-health-timeout': '2', 'host-health-max-failed': '3', 'host-health-interval': '10' };
+        $.each(defaults, function (id, fallback) {
+            var input = document.getElementById(id);
+            if (!input) return;
+            var value = parseInt(input.value, 10);
+            if (!isFinite(value) || value < 1) input.value = fallback;
+        });
+    }
     form.on('submit', function (event) {
         event.preventDefault();
         var targetError = npsApplyTargetNormalization(document.getElementById('host-target'), { requireHost: true });
@@ -267,6 +279,8 @@ $(function () {
     $('#host-location').on('input blur', checkPlatformAvailability);
     form.find('.toggle-switch input[type="checkbox"]').on('change', function () { npsSetToggleLabel($(this).closest('.toggle-field').find('.toggle-label'), this.checked); });
     npsCertificatePair.attachAll(form[0]);
+    $('#host-health-check-target').on('input change', syncHostHealthCheckFields);
+    syncHostHealthCheckFields();
     updateDomainMode(); updateCertificateFields(); getClientList();
 });
 </script>
