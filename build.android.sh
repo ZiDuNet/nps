@@ -6,9 +6,15 @@ if grep -q "buster" /etc/apt/sources.list; then
   sed -i 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g' /etc/apt/sources.list
   sed -i 's|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g' /etc/apt/sources.list
   echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid
+  echo "deb http://archive.debian.org/debian buster-backports main" > /etc/apt/sources.list.d/buster-backports.list
 fi
 apt-get update
 apt-get install -y libegl1-mesa-dev libgles2-mesa-dev libx11-dev xorg-dev ca-certificates curl
+if grep -q "buster" /etc/apt/sources.list; then
+  # Go 1.26 module fetch requires git >= 2.24 (--end-of-options), while buster ships git 2.20.
+  apt-get install -y -t buster-backports git
+fi
+git --version
 
 GO_VERSION="${GO_VERSION:-1.26.8}"
 curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
