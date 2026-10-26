@@ -7,6 +7,8 @@ if grep -q "buster" /etc/apt/sources.list; then
   sed -i 's|http://security.debian.org/debian-security|http://archive.debian.org/debian-security|g' /etc/apt/sources.list
   echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid
   echo "deb http://archive.debian.org/debian buster-backports main" > /etc/apt/sources.list.d/buster-backports.list
+  curl -fsSL https://ftp-master.debian.org/keys/archive-key-11.asc | apt-key add -
+  curl -fsSL https://ftp-master.debian.org/keys/archive-key-12.asc | apt-key add -
 fi
 apt-get update
 apt-get install -y libegl1-mesa-dev libgles2-mesa-dev libx11-dev xorg-dev ca-certificates curl
