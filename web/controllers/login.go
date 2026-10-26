@@ -374,6 +374,7 @@ func (self *LoginController) IPRegister() {
 		self.Data["version"] = version.VERSION
 		self.Data["ip"] = visitorIP
 		self.Data["ip_source"] = visitorSource
+		self.Data["ip_proxy_warning"] = isProxyVisibleIP(visitorIP)
 		self.Data["default_hours"] = registrationDefaultHours()
 		self.Data["ip_registration_configured"] = ipRegistrationConfigured()
 		self.Data["login_url"] = webBaseURL + "/login/index"
@@ -408,8 +409,9 @@ func IPRegisterStandaloneHandler() http.Handler {
 			if err := page.Execute(w, struct {
 				IP           string
 				IPSource     string
+				ProxyWarning bool
 				DefaultHours int
-			}{IP: remoteIP, IPSource: remoteSource, DefaultHours: registrationDefaultHours()}); err != nil {
+			}{IP: remoteIP, IPSource: remoteSource, ProxyWarning: isProxyVisibleIP(remoteIP), DefaultHours: registrationDefaultHours()}); err != nil {
 				http.Error(w, "页面暂时无法显示", http.StatusInternalServerError)
 			}
 			return
@@ -441,7 +443,9 @@ const ipRegisterStandaloneHTML = `<!doctype html>
 :root{color-scheme:light;--ink:#182230;--muted:#687386;--line:#dce3ec;--accent:#1769e0;--bg:#f3f6fb}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 15% 5%,#e1edff,transparent 42%),var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
 .card{width:min(100%,440px);padding:32px;border:1px solid #fff;border-radius:20px;background:#ffffffed;box-shadow:0 20px 60px #19345516}.eyebrow{margin:0 0 8px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}h1{margin:0;font-size:25px;letter-spacing:-.03em}.intro{margin:8px 0 24px;color:var(--muted)}label{display:block;margin:17px 0 7px;font-size:13px;font-weight:650}input{width:100%;height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit}input[readonly]{background:#f5f7fa;color:var(--muted)}button{width:100%;height:46px;margin-top:22px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.65;cursor:wait}.hint{margin:14px 0 0;color:var(--muted);font-size:12px}.result{min-height:24px;margin-top:14px;font-size:13px}.result.error{color:#b42318}.result.success{color:#147a45}
+.warn{margin:0 0 20px;padding:10px 12px;border:1px solid #f2c14e;border-radius:10px;background:#fff7e0;color:#8a5b00;font-size:12.5px;line-height:1.55}
 </style></head><body><main class="card"><p class="eyebrow">NPS · ACCESS</p><h1>登记访问 IP</h1><p class="intro">登记后，管理员启用“仅允许已登记 IP”的资源才会接受此地址的访问。</p>
+{{if .ProxyWarning}}<p class="warn">检测到的是代理或内网地址（{{.IP}}）。若此页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址，“仅允许已登记 IP”无法区分单个用户。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并在服务端开启 allow_x_real_ip 后重新打开本页。</p>{{end}}
 <form id="register-form"><label for="visitor-ip">当前访问地址</label><input id="visitor-ip" value="{{.IP}}" readonly><p class="hint">地址来源：{{.IPSource}}。仅在服务端明确配置可信反代并允许真实 IP 头时，才会显示反代传递的公网 IP。</p>
 <label for="register-key">登记密钥</label><input id="register-key" name="key" type="password" autocomplete="off" required placeholder="输入管理员或客户端提供的登记密钥">
 <label for="register-hours">有效时长（小时）</label><input id="register-hours" name="hours" type="number" min="1" max="{{.DefaultHours}}" value="{{.DefaultHours}}">
@@ -594,6 +598,20 @@ func requestVisitorIPDetails(request *http.Request) (string, string) {
 		}
 	}
 	return peer, "可信反代未提供有效真实 IP，回退到 TCP 对端地址"
+}
+
+// isProxyVisibleIP reports whether the address shown on the registration page
+// is a loopback, private or otherwise non-public address.  Such an address
+// almost always means the page sits behind a reverse proxy or NAT: every
+// visitor routed through that hop is indistinguishable, so registering it
+// cannot provide per-visitor access control and the page must say so.
+func isProxyVisibleIP(value string) bool {
+	addr, ok := ipreg.ParseIP(strings.TrimSpace(value))
+	if !ok || !addr.IsValid() {
+		return false
+	}
+	return addr.IsUnspecified() || addr.IsLoopback() || addr.IsPrivate() ||
+		addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast()
 }
 
 func requestMayUseForwardedIP(request *http.Request) bool {

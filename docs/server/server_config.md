@@ -116,7 +116,7 @@ HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCK
 | ip_register_port | 独立 IP 登记监听端口；`0` 表示仅使用管理面板 `/ip/register` | `0` |
 | ip_register_cert_file / ip_register_key_file | 独立登记监听的 HTTPS 证书与私钥，需同时填写 | 空 |
 
-登记页面默认只相信 TCP 对端地址。若页面经过反向代理，只有在 `allow_x_real_ip=true` 且代理出口命中 `trusted_proxy_ips`，或请求携带匹配的 `X-NPS-Http-Only` 密钥时，才读取 `X-Real-IP`（无效时回退到 `X-Forwarded-For` 首地址）；未知代理不能伪造登记 IP。
+登记页面默认只相信 TCP 对端地址，因此在 Docker + Nginx 部署中会显示代理地址（例如 `127.0.0.1`）。要让页面显示访问者的真实公网 IP，需要同时满足两点：前置代理必须**覆盖**传递 `X-Real-IP`（或 `X-Forwarded-For`），且服务端开启 `allow_x_real_ip=true`。也可以不改全局开关，只让特定入口携带与服务端一致的 `X-NPS-Http-Only` 请求头密钥。开启后优先读取 `X-Real-IP`，无效时回退到 `X-Forwarded-For` 首地址；`trusted_proxy_ips` 仅是旧配置的兼容字段，不参与当前来源 IP 判断。页面检测到回环/内网地址时会主动提示代理链路问题，避免所有访问者被登记成同一地址。
 
 ## API 鉴权
 

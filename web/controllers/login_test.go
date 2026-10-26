@@ -80,6 +80,30 @@ func TestStandaloneIPRegisterHandlerUsesPeerIPAndOnlyPublicRoutes(t *testing.T) 
 	}
 }
 
+func TestStandaloneIPRegisterPageWarnsOnProxyAddress(t *testing.T) {
+	oldAllow := beego.AppConfig.String("allow_x_real_ip")
+	oldHTTPOnly := beego.AppConfig.String("x_nps_http_only")
+	_ = beego.AppConfig.Set("allow_x_real_ip", "false")
+	_ = beego.AppConfig.Set("x_nps_http_only", "")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
+		_ = beego.AppConfig.Set("x_nps_http_only", oldHTTPOnly)
+	})
+
+	handler := IPRegisterStandaloneHandler()
+	get := httptest.NewRequest(http.MethodGet, "http://register.test/", nil)
+	get.RemoteAddr = "127.0.0.1:43210"
+	getResponse := httptest.NewRecorder()
+	handler.ServeHTTP(getResponse, get)
+	if getResponse.Code != http.StatusOK {
+		t.Fatalf("registration page response = %d", getResponse.Code)
+	}
+	body := getResponse.Body.String()
+	if !strings.Contains(body, "代理或内网地址") || !strings.Contains(body, "allow_x_real_ip") {
+		t.Fatalf("registration page did not warn about the proxy address: %q", body)
+	}
+}
+
 func TestRequestVisitorIPDoesNotTrustForwardedHeaders(t *testing.T) {
 	oldAllow := beego.AppConfig.String("allow_x_real_ip")
 	oldTrusted := beego.AppConfig.String("trusted_proxy_ips")
@@ -101,6 +125,31 @@ func TestRequestVisitorIPDoesNotTrustForwardedHeaders(t *testing.T) {
 
 	if got := requestVisitorIP(ctx); got != "198.51.100.23" {
 		t.Fatalf("requestVisitorIP() = %q, want TCP peer IP; forwarded header must be ignored", got)
+	}
+}
+
+func TestIsProxyVisibleIP(t *testing.T) {
+	cases := []struct {
+		value string
+		want  bool
+	}{
+		{value: "127.0.0.1", want: true},
+		{value: "127.0.0.1:30080", want: true},
+		{value: "::1", want: true},
+		{value: "10.10.0.2", want: true},
+		{value: "172.16.8.9", want: true},
+		{value: "192.168.1.20", want: true},
+		{value: "169.254.3.4", want: true},
+		{value: "0.0.0.0", want: true},
+		{value: "203.0.113.90", want: false},
+		{value: "114.249.238.228", want: false},
+		{value: "not-an-ip", want: false},
+		{value: "", want: false},
+	}
+	for _, tc := range cases {
+		if got := isProxyVisibleIP(tc.value); got != tc.want {
+			t.Errorf("isProxyVisibleIP(%q) = %v, want %v", tc.value, got, tc.want)
+		}
 	}
 }
 
