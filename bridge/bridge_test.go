@@ -543,6 +543,35 @@ func TestDelClientClosesAllDuplicateSignals(t *testing.T) {
 	}
 }
 
+func TestKickClientWritesFlagThenClosesSignals(t *testing.T) {
+	rootServer, rootPeer := net.Pipe()
+	defer rootPeer.Close()
+	root := NewClient(nil, nil, conn.NewConn(rootServer), "1.1.32")
+	root.sessions = []*Client{root}
+	b := &Bridge{CloseClient: make(chan int, 1)}
+	b.Client.Store(12, root)
+	readDone := make(chan error, 1)
+	go func() {
+		buf := make([]byte, len(common.CLIENT_CLOSE))
+		_, err := io.ReadFull(rootPeer, buf)
+		if err == nil && string(buf) != common.CLIENT_CLOSE {
+			err = fmt.Errorf("kick flag = %q, want %q", buf, common.CLIENT_CLOSE)
+		}
+		readDone <- err
+	}()
+	b.KickClient(12)
+	if _, ok := b.Client.Load(12); ok {
+		t.Fatal("client entry survived KickClient")
+	}
+	if err := <-readDone; err != nil {
+		t.Fatalf("kick flag not delivered: %v", err)
+	}
+	var one [1]byte
+	if _, err := rootPeer.Read(one[:]); err == nil {
+		t.Fatal("signal remained open after KickClient")
+	}
+}
+
 func TestSessionForLockedPairsDataWithNewestSignalWithoutData(t *testing.T) {
 	if err := SetClientSelectMode("roundrobin"); err != nil {
 		t.Fatal(err)

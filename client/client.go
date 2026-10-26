@@ -111,6 +111,7 @@ type TRPClient struct {
 	stateMu        sync.RWMutex
 	loggerMu       sync.RWMutex
 	closed         atomic.Bool
+	kicked         atomic.Bool
 	closeCh        chan struct{} // closed when client is shutting down; stops ping
 	logger         ClientLogger  // 每个客户端独立的 logger
 	healthMu       sync.Mutex
@@ -161,6 +162,13 @@ func (s *TRPClient) SetLogger(logger ClientLogger) {
 	s.loggerMu.Lock()
 	s.logger = logger
 	s.loggerMu.Unlock()
+}
+
+// Kicked reports whether the server has explicitly removed this client
+// registration. Reconnect loops should stop permanently when it becomes true
+// instead of dialing the server again.
+func (s *TRPClient) Kicked() bool {
+	return s != nil && s.kicked.Load()
 }
 
 // SetP2PManager injects the local forwarding manager created from the same
@@ -314,6 +322,9 @@ func (s *TRPClient) Start() {
 		return
 	}
 retry:
+	if s.kicked.Load() {
+		return
+	}
 	// The lifecycle belongs to this client instance. CloseClient is kept as a
 	// legacy SDK status flag, but must not let one GUI client stop another.
 	if s.closed.Load() {
@@ -362,11 +373,19 @@ retry:
 	NowStatus.Store(1)
 	//msg connection, eg udp
 	s.handleMain()
+	if s.kicked.Load() {
+		// A removed registration must release the signal and data channel
+		// immediately instead of leaving half-open sockets behind.
+		s.Close()
+	}
 }
 
 // waitReconnect makes shutdown responsive while preserving the reconnect
 // backoff used by the command-line client.
 func (s *TRPClient) waitReconnect() bool {
+	if s.kicked.Load() {
+		return false
+	}
 	timer := time.NewTimer(5 * time.Second)
 	defer timer.Stop()
 	select {
@@ -391,6 +410,12 @@ mainLoop:
 			break
 		}
 		switch flags {
+		case common.CLIENT_CLOSE:
+			// The server deleted this client registration. Stop permanently
+			// rather than treating the close as a transient network failure.
+			s.logInfo("[通知] 服务端已删除本客户端，停止运行")
+			s.kicked.Store(true)
+			break mainLoop
 		case common.CLIENT_UPDATE:
 			// Update asynchronously so a slow GitHub download never blocks the
 			// main control reader or tunnel traffic. The process is restarted only

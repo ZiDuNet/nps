@@ -10,6 +10,20 @@
 - 检查 vkey 是否正确
 - 检查客户端与服务端版本是否兼容
 
+## 服务端日志反复出现「拒绝客户端连接 … not found」
+
+这是某个 NPC 仍在用已不存在的 vkey 连接服务端。常见原因：
+
+- 客户端在 Web 面板被删除、重新创建或换过 vkey，但旧 NPC 仍在运行；
+- NPC 配置了错误的 vkey，或 `-server` 指向了 Web/非 Bridge 端口；
+- NPC 挂载了错误的数据卷（Docker 场景）。
+
+新版 NPC 在「被服务端删除」后会自动停止重连；旧版 NPC 会每 5 秒重试一次。找到并停止对应 NPC 服务，或修正其 vkey 后即可消除日志。
+
+## Geo 更新或版本检测报「certificate signed by unknown authority」
+
+Docker 镜像中缺少系统 CA 证书时，访问 `api.github.com` 会校验失败。升级到补齐 CA 证书的新版镜像即可；裸机部署请确认系统已安装 `ca-certificates` 包，否则同样无法完成 HTTPS 校验。
+
 ## 服务端配置文件修改无效
 
 使用 `install` 安装后：

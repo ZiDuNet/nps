@@ -6,7 +6,6 @@ import (
 	"log"
 	"math"
 	"net"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,7 +31,6 @@ type Mux struct {
 	latency uint64 // we store latency in bits, but it's float64
 	net.Listener
 	conn               net.Conn
-	fd                 *os.File
 	connMap            *connMap
 	newConnCh          chan *conn
 	id                 int32
@@ -58,10 +56,6 @@ func (s *Mux) IsClose() bool {
 func NewMux(c net.Conn, connType string, pingCheckThreshold int) *Mux {
 	//c.(*net.TCPConn).SetReadBuffer(0)
 	//c.(*net.TCPConn).SetWriteBuffer(0)
-	fd, err := getConnFd(c)
-	if err != nil {
-		log.Println(err)
-	}
 	var checkThreshold uint32
 	if pingCheckThreshold <= 0 {
 		if connType == "kcp" {
@@ -74,12 +68,11 @@ func NewMux(c net.Conn, connType string, pingCheckThreshold int) *Mux {
 	}
 	m := &Mux{
 		conn:               c,
-		fd:                 fd,
 		connMap:            NewConnMap(),
 		id:                 0,
 		closeChan:          make(chan struct{}, 1),
 		newConnCh:          make(chan *conn),
-		bw:                 NewBandwidth(fd),
+		bw:                 NewBandwidth(socketBufferSizeFunc(c)),
 		connType:           connType,
 		pingCh:             make(chan []byte),
 		pingCheckThreshold: checkThreshold,
@@ -473,10 +466,6 @@ func (s *Mux) Close() (err error) {
 		_ = s.conn.SetDeadline(time.Now().Add(time.Second * 5))
 		go s.conn.Close()
 	}
-	if s.fd != nil {
-		_ = s.fd.Close()
-		s.fd = nil
-	}
 	return
 }
 
@@ -523,12 +512,12 @@ type bandwidth struct {
 	readStart     time.Time
 	lastReadStart time.Time
 	bufLength     uint32
-	fd            *os.File
+	rcvbuf        func() (int, error)
 	calcThreshold uint32
 }
 
-func NewBandwidth(fd *os.File) *bandwidth {
-	return &bandwidth{fd: fd}
+func NewBandwidth(rcvbuf func() (int, error)) *bandwidth {
+	return &bandwidth{rcvbuf: rcvbuf}
 }
 
 func (Self *bandwidth) StartRead() {
@@ -547,7 +536,11 @@ func (Self *bandwidth) SetCopySize(n uint16) {
 
 func (Self *bandwidth) calcBandWidth() {
 	t := Self.readStart.Sub(Self.lastReadStart)
-	bufferSize, err := sysGetSock(Self.fd)
+	bufferSize := 0
+	var err error
+	if Self.rcvbuf != nil {
+		bufferSize, err = Self.rcvbuf()
+	}
 	if err != nil {
 		log.Println(err)
 		Self.bufLength = 0

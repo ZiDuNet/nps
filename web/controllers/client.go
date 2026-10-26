@@ -1002,7 +1002,7 @@ func (s *ClientController) Del() {
 		return
 	}
 	server.DelTunnelAndHostByClientId(id, false)
-	server.DelClientConnect(id)
+	server.KickClientConnect(id)
 	s.auditMutation("client.delete", "client", id, ownerID, "", nil, nil)
 	s.AjaxOk("delete success")
 }

@@ -3,35 +3,15 @@
 
 package nps_mux
 
-import (
-	"net"
-	"os"
-)
+import "net"
 
-func sysGetSock(fd *os.File) (bufferSize int, err error) {
+// socketBufferSizeFunc returns a fixed buffer size on Windows. syscall does
+// not expose GetsockoptInt here, and the read-side bandwidth estimate only
+// needs a sane upper bound.
+func socketBufferSizeFunc(c net.Conn) func() (int, error) {
 	// https://github.com/golang/sys/blob/master/windows/syscall_windows.go#L1184
 	// not support, WTF???
 	// Todo
 	// return syscall.GetsockoptInt((syscall.Handle)(unsafe.Pointer(fd.Fd())), syscall.SOL_SOCKET, syscall.SO_RCVBUF)
-	bufferSize = 15 * 1024 * 1024
-	return
-}
-
-func getConnFd(c net.Conn) (fd *os.File, err error) {
-	switch c.(type) {
-	case *net.TCPConn:
-		//fd, err = c.(*net.TCPConn).File()
-		//if err != nil {
-		//	return
-		//}
-		return
-	case *net.UDPConn:
-		//fd, err = c.(*net.UDPConn).File()
-		//if err != nil {
-		//	return
-		//}
-		return
-	default:
-		return
-	}
+	return func() (int, error) { return 15 * 1024 * 1024, nil }
 }

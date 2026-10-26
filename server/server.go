@@ -960,6 +960,16 @@ func DelClientConnect(clientId int) {
 	}
 }
 
+// KickClientConnect asks the connected NPC to stop permanently before its
+// sessions are closed. It is used only when the registration itself is
+// deleted; disable, expiry and user revocation keep the plain disconnect so
+// the NPC can reconnect after the state changes again.
+func KickClientConnect(clientId int) {
+	if Bridge != nil {
+		Bridge.KickClient(clientId)
+	}
+}
+
 // RevokeUserClients disconnects every client owned by a disabled/expired user
 // and removes its active proxy records. Existing TCP/UDP sessions therefore
 // cannot continue operating after the account is suspended.

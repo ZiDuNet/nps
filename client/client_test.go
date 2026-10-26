@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
 	"github.com/pires/go-proxyproto"
 )
@@ -53,6 +54,28 @@ func (s *trackedSession) SetWriteDeadline(time.Time) error { return nil }
 func (s *trackedSession) Close() error {
 	s.closed = true
 	return nil
+}
+
+func TestHandleMainKickStopsClient(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	cl := NewRPClientWithTLS("127.0.0.1:8024", "test", "tcp", "", nil, 60, false)
+	if !cl.installSignal(conn.NewConn(clientConn)) {
+		t.Fatal("failed to install main signal")
+	}
+	writeErr := make(chan error, 1)
+	go func() {
+		_, err := serverConn.Write([]byte(common.CLIENT_CLOSE))
+		writeErr <- err
+	}()
+	cl.handleMain()
+	if !cl.Kicked() {
+		t.Fatal("expected Kicked() after receiving CLIENT_CLOSE")
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatalf("write kick flag: %v", err)
+	}
+	_ = serverConn.Close()
+	_ = clientConn.Close()
 }
 
 func TestMatchesP2PRemoteClosesUnexpectedSession(t *testing.T) {

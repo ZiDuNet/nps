@@ -1177,6 +1177,71 @@ func (s *Bridge) DelClient(id int) {
 	s.delClient(id, nil)
 }
 
+// KickClient tells a connected NPC that its registration has been removed
+// and then tears down every live session. Delivering the flag is best-effort:
+// NPCs predating this feature simply observe the close and keep their
+// historical reconnect behaviour.
+func (s *Bridge) KickClient(id int) {
+	if s == nil {
+		return
+	}
+	s.writeKickFlag(id)
+	s.delClient(id, nil)
+}
+
+// writeKickFlag serializes one CLIENT_CLOSE frame per active MAIN signal so
+// it cannot interleave with other Bridge-initiated control frames.
+func (s *Bridge) writeKickFlag(id int) {
+	s.clientsMu.Lock()
+	v, ok := s.Client.Load(id)
+	if !ok {
+		s.clientsMu.Unlock()
+		return
+	}
+	root, valid := bridgeClient(v)
+	if !valid {
+		s.clientsMu.Unlock()
+		return
+	}
+	ensureClientSessions(root)
+	type target struct {
+		cl     *Client
+		signal *conn.Conn
+	}
+	targets := make([]target, 0, len(root.sessions))
+	for _, cl := range append([]*Client(nil), root.sessions...) {
+		if cl == nil {
+			continue
+		}
+		cl.mu.Lock()
+		if cl.signal != nil {
+			targets = append(targets, target{cl: cl, signal: cl.signal})
+		}
+		cl.mu.Unlock()
+	}
+	s.clientsMu.Unlock()
+
+	// Web deletion must stay fast: cap the whole best-effort flush at one
+	// second across every signal instead of allowing a stale control
+	// connection to consume the budget per signal.
+	deadline := time.Now().Add(time.Second)
+	for _, tgt := range targets {
+		if time.Now().After(deadline) {
+			break
+		}
+		if tgt.signal == nil || tgt.signal.Conn == nil {
+			continue
+		}
+		// The frame is best-effort and must never stall Bridge-wide cleanup
+		// on an unresponsive control connection.
+		tgt.cl.sendMu.Lock()
+		_ = tgt.signal.Conn.SetWriteDeadline(deadline)
+		_, _ = tgt.signal.Write([]byte(common.CLIENT_CLOSE))
+		_ = tgt.signal.Conn.SetWriteDeadline(time.Time{})
+		tgt.cl.sendMu.Unlock()
+	}
+}
+
 func (s *Bridge) delClientIfCurrentSignal(id int, signal *conn.Conn) {
 	s.delClient(id, signal)
 }

@@ -5,33 +5,36 @@ package nps_mux
 
 import (
 	"net"
-	"os"
 	"syscall"
 )
 
-func sysGetSock(fd *os.File) (bufferSize int, err error) {
-	if fd != nil {
-		return syscall.GetsockoptInt(int(fd.Fd()), syscall.SOL_SOCKET, syscall.SO_RCVBUF)
-	} else {
-		return 5 * 1024 * 1024, nil
-	}
-}
-
-func getConnFd(c net.Conn) (fd *os.File, err error) {
-	switch c.(type) {
+// socketBufferSizeFunc returns a callback that reads SO_RCVBUF without
+// duplicating the descriptor. TCPConn.File switches the socket into blocking
+// mode, which makes a concurrent read immune to deadlines and can therefore
+// stall Mux.Close indefinitely; SyscallConn avoids both the duplicate and the
+// blocking-mode switch.
+func socketBufferSizeFunc(c net.Conn) func() (int, error) {
+	var raw syscall.RawConn
+	var err error
+	switch conn := c.(type) {
 	case *net.TCPConn:
-		fd, err = c.(*net.TCPConn).File()
-		if err != nil {
-			return
-		}
-		return
+		raw, err = conn.SyscallConn()
 	case *net.UDPConn:
-		fd, err = c.(*net.UDPConn).File()
-		if err != nil {
-			return
-		}
-		return
+		raw, err = conn.SyscallConn()
 	default:
-		return
+		return func() (int, error) { return 5 * 1024 * 1024, nil }
+	}
+	if err != nil {
+		return func() (int, error) { return 5 * 1024 * 1024, nil }
+	}
+	return func() (int, error) {
+		var size int
+		controlErr := raw.Control(func(fd uintptr) {
+			size, err = syscall.GetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF)
+		})
+		if controlErr != nil {
+			return 0, controlErr
+		}
+		return size, err
 	}
 }

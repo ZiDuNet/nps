@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.32</sub>
+﻿# NPS <sub>v1.1.33</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -179,6 +179,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.33** (2026-10-26) - Deleting a client in the web console now sends a "registration removed" notice to online NPCs; new NPCs close that connection and stop reconnecting while older NPCs keep their previous behavior. Service-mode NPCs only stop the affected connection, and only stop the local NPC service (keeping its registration, without uninstalling) when the last connection in the process is removed. Fixed the MUX shutdown blocking/file-descriptor leak, missing CA certificates in Docker images, and unified the browser favicon.
 
 - **v1.1.32** (2026-10-26) - Added the unified `/api/v1` external API covering clients, tunnels, hosts, users, global configuration, Geo data, IP registration, audit, status and topology; it uses administrator signatures or scoped user Bearer tokens, a uniform response envelope, JSON request bodies and bounded pagination. The never-released `/v1/auth/*` aliases were removed; legacy `/auth/*` and all existing management endpoints remain unchanged.
 

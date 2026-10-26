@@ -7,10 +7,80 @@ import (
 	"errors"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/kardianos/service"
 )
+
+func TestNpcConnectionGuardCountsLoopsIndependently(t *testing.T) {
+	serviceConnGuard.Lock()
+	serviceConnGuard.conns = 0
+	serviceConnGuard.Unlock()
+	t.Cleanup(func() {
+		serviceConnGuard.Lock()
+		serviceConnGuard.conns = 0
+		serviceConnGuard.Unlock()
+	})
+
+	registerNpcConn()
+	registerNpcConn()
+	registerNpcConn()
+
+	// A kicked loop must not uninstall while other loops are still alive.
+	if popNpcConn() {
+		t.Fatal("a middle loop reported itself as the last connection")
+	}
+	if popNpcConn() {
+		t.Fatal("a middle loop reported itself as the last connection")
+	}
+	if !popNpcConn() {
+		t.Fatal("the final loop did not report itself as the last connection")
+	}
+}
+
+func TestNpcConnectionGuardIsSafeUnderConcurrentRegistration(t *testing.T) {
+	serviceConnGuard.Lock()
+	serviceConnGuard.conns = 0
+	serviceConnGuard.Unlock()
+	t.Cleanup(func() {
+		serviceConnGuard.Lock()
+		serviceConnGuard.conns = 0
+		serviceConnGuard.Unlock()
+	})
+
+	const loops = 32
+	var wg sync.WaitGroup
+	for i := 0; i < loops; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			registerNpcConn()
+		}()
+	}
+	wg.Wait()
+
+	lastObserved := make(chan bool, loops)
+	for i := 0; i < loops; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			lastObserved <- popNpcConn()
+		}()
+	}
+	wg.Wait()
+	close(lastObserved)
+
+	lastCount := 0
+	for last := range lastObserved {
+		if last {
+			lastCount++
+		}
+	}
+	if lastCount != 1 {
+		t.Fatalf("exactly one loop must be reported as last, got %d", lastCount)
+	}
+}
 
 func TestExpandNpcConnectionsAlignsMultiServerArguments(t *testing.T) {
 	oldTLS := *tlsEnable

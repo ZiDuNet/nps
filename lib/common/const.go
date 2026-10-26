@@ -28,6 +28,11 @@ const (
 	CLIENT_UPDATE     = "updt" //server asks the client to run its built-in updater
 	P2P_PUNCH_START   = "p2st" //server asks the provider NPC to join a P2P session
 	CONN_ACK          = "ACK"  //optional Secret/P2P metadata acknowledgement
+	// CLIENT_CLOSE is sent on the WORK_MAIN channel right before the server
+	// removes a client registration. New NPCs stop their reconnect loop when
+	// they see it; older NPCs ignore the flag and rely on the subsequent
+	// connection close, preserving their historical reconnect behaviour.
+	CLIENT_CLOSE = "kick"
 	// HEALTH_CONFIG carries the effective health-check profiles for a client.
 	// It is sent only to NPC versions that explicitly understand this flag so
 	// older clients keep the historical control-stream protocol unchanged.

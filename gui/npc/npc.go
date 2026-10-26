@@ -121,6 +121,13 @@ func onclick(s, v, c string) {
 				status = "Stop!"
 				refreshCh <- struct{}{}
 				cl.Start()
+				if cl.Kicked() {
+					logs.Info("client removed by server, stopped")
+					closing = true
+					status = "Start!"
+					refreshCh <- struct{}{}
+					return
+				}
 				logs.Warn("client closed, reconnecting in 5 seconds...")
 				if closing {
 					return

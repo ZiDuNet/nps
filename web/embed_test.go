@@ -89,6 +89,20 @@ func TestLoginAndRegistrationTemplatesFailClosedWithoutPasswordEncryption(t *tes
 	}
 }
 
+func TestAdminAPIKeyGenerateViewUsesRegisteredAction(t *testing.T) {
+	content, err := ViewsFS.ReadFile("views/user/api.html")
+	if err != nil {
+		t.Fatalf("read embedded API access template: %v", err)
+	}
+	view := string(content)
+	if !strings.Contains(view, `post('/user/adminapikeygenerate')`) {
+		t.Fatal("API access template must call the registered admin key generation action")
+	}
+	if strings.Contains(view, `post('/user/adminapikey')`) {
+		t.Fatal("API access template references an unregistered admin key generation route")
+	}
+}
+
 func TestJSEncryptEmbeddedAssetIncludesLicense(t *testing.T) {
 	if _, err := ReadStaticFile("js/jsencrypt.min.js"); err != nil {
 		t.Fatalf("read embedded JSEncrypt bundle: %v", err)

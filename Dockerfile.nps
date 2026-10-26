@@ -25,5 +25,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM scratch
 COPY --from=builder /out/nps /nps
+# Go's net/http verifies TLS against the system CA bundle; the scratch image
+# ships none, which breaks the Geo update and version check HTTPS calls.
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 VOLUME ["/conf"]
 CMD ["/nps"]

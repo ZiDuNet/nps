@@ -106,7 +106,11 @@ func GetTaskStatus(path string) {
 
 var errAdd = errors.New("The server returned an error, which port or host may have been occupied or not allowed to open.")
 
-func StartFromFile(path string) {
+// StartFromFile runs one NPC configuration file. When the server deletes the
+// client registration, each supplied onKick callback is invoked once with the
+// affected vkey before this function returns; callers use it to coordinate
+// service-level cleanup without tearing down other live connections.
+func StartFromFile(path string, onKick ...func(vKey string)) {
 	first := true
 	cnf, err := config.NewConfig(path)
 	if err != nil || cnf.CommonConfig == nil {
@@ -228,6 +232,19 @@ re:
 		client.SetP2PManager(modernLocalManager)
 	}
 	client.Start()
+	if client.Kicked() {
+		for _, fn := range onKick {
+			if fn != nil {
+				fn(vkey)
+			}
+		}
+		logs.Info("[通知] 服务端已删除本客户端，停止运行")
+		if modernLocalManager != nil {
+			modernLocalManager.Close()
+		}
+		CloseLocalServer()
+		return
+	}
 	if modernLocalManager != nil {
 		modernLocalManager.Close()
 	}

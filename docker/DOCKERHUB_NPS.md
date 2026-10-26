@@ -2,7 +2,7 @@
 
 NPS 是一款轻量级、高性能的内网穿透代理服务器，支持 TCP、UDP、HTTP(S) 反向代理、HTTP 正向代理、SOCKS5、P2P、Secret 和文件访问。
 
-`latest` 始终指向最近一次正式 Release；正式 Release 同时推送版本号标签（例如 `1.1.32`）和 `latest`，普通 `master` 提交不会更新 Docker 标签。服务端软件更新提示以 GitHub Releases 正式版本为准，与 Docker 标签无关。
+`latest` 始终指向最近一次正式 Release；正式 Release 同时推送版本号标签（例如 `1.1.33`）和 `latest`，普通 `master` 提交不会更新 Docker 标签。服务端软件更新提示以 GitHub Releases 正式版本为准，与 Docker 标签无关。
 
 ## 主要特性
 

@@ -89,7 +89,7 @@
             <p data-i18n-zh="管理用于调用 NPS 管理接口的凭证。Token 生成后可再次查看，重新生成会立即使旧凭证失效。" data-i18n-en="Manage credentials used to call the NPS management API. A token can be viewed again after generation; rotating it immediately revokes the old credential.">管理用于调用 NPS 管理接口的凭证。Token 生成后可再次查看，重新生成会立即使旧凭证失效。</p>
         </div>
         <div class="dashboard-page-actions">
-            <a class="btn btn-outline btn-primary" href="https://github.com/{{.github_repository}}" target="_blank" rel="noopener noreferrer">
+            <a class="btn btn-outline btn-primary" href="https://zidunet.github.io/nps/api.html" target="_blank" rel="noopener noreferrer">
                 <i class="fa fa-book" aria-hidden="true"></i><span data-i18n-zh="API 文档" data-i18n-en="API documentation">API 文档</span>
             </a>
         </div>
@@ -270,7 +270,7 @@ $(function () {
     }
     $('#admin-api-generate').on('click', function () {
         var button = this; button.disabled = true;
-        post('/user/adminapikey').done(function (response) {
+        post('/user/adminapikeygenerate').done(function (response) {
             if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('生成失败', 'Generation failed'));
             $('#admin-api-value').val(response.token || '');
             $('#admin-api-result').prop('hidden', false);

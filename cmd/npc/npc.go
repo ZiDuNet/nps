@@ -178,6 +178,7 @@ func main() {
 		wg.Wait()
 		return
 	}
+	serviceStopper = npcServiceStopper{svc: s, prg: prg}
 	registerRemoteUpdateHandler(s)
 	if command != "" {
 		switch command {
@@ -442,7 +443,76 @@ func waitForWindowsProcessExit(pid int) {
 }
 
 type npc struct {
-	exit chan struct{}
+	exit     chan struct{}
+	stopOnce sync.Once
+}
+
+type npcServiceStopper struct {
+	once sync.Once
+	svc  service.Service
+	prg  *npc
+}
+
+var serviceStopper npcServiceStopper
+
+var serviceConnGuard struct {
+	sync.Mutex
+	conns int
+}
+
+func registerNpcConn() {
+	serviceConnGuard.Lock()
+	serviceConnGuard.conns++
+	serviceConnGuard.Unlock()
+}
+
+// popNpcConn decrements the live connection count and reports whether the
+// terminating loop was the last one owned by this process.
+func popNpcConn() bool {
+	serviceConnGuard.Lock()
+	serviceConnGuard.conns--
+	last := serviceConnGuard.conns <= 0
+	serviceConnGuard.Unlock()
+	return last
+}
+
+// endNpcConn is called when one connection loop terminates. The process stops
+// its own system service only when the last loop ended because the server
+// deleted its registration, so deleting one client never tears down other
+// tunnels served by the same process.
+func endNpcConn(vKey string, kicked bool) {
+	if !popNpcConn() || !kicked {
+		return
+	}
+	stopNpcService(vKey)
+}
+
+// stopNpcService stops the system service owned by this process while leaving
+// it installed so the operator can still manage it with the npc commands. It
+// is intentionally best-effort and runs only once: a failed self-stop must
+// never block or fail the server-side deletion.
+func stopNpcService(vKey string) {
+	serviceStopper.once.Do(func() {
+		if service.Interactive() {
+			logs.Info("[通知] 服务端已删除客户端（vkey:%s），客户端已停止", vKey)
+			return
+		}
+		if serviceStopper.svc == nil || serviceStopper.prg == nil {
+			logs.Info("[通知] 服务端已删除客户端（vkey:%s），当前进程未注册系统服务，客户端已停止", vKey)
+			return
+		}
+		logs.Info("[通知] 服务端已删除客户端（vkey:%s），正在停止本机 NPC 系统服务", vKey)
+		// systemctl/launchctl 等 stop 命令会等待本进程退出，因此异步发起；
+		// 服务保持安装状态，之后仍可用 npc 命令手动启动或停止。
+		go func() {
+			if err := service.Control(serviceStopper.svc, "stop"); err != nil {
+				logs.Error("[通知] 停止系统服务失败：%v", err)
+			}
+		}()
+		if err := serviceStopper.prg.Stop(serviceStopper.svc); err != nil {
+			logs.Error("[通知] 停止系统服务失败：%v", err)
+		}
+	})
 }
 
 func (p *npc) Start(s service.Service) error {
@@ -450,7 +520,9 @@ func (p *npc) Start(s service.Service) error {
 	return nil
 }
 func (p *npc) Stop(s service.Service) error {
-	close(p.exit)
+	p.stopOnce.Do(func() {
+		close(p.exit)
+	})
 	if service.Interactive() {
 		os.Exit(0)
 	}
@@ -538,14 +610,23 @@ func run() {
 		for _, connection := range connections {
 			connection := connection
 			go func() {
+				registerNpcConn()
+				kicked := false
 				for {
 					logs.Info("[连接] start server:%s vkey:%s type:%s local_ip:%s tls:%t", connection.server, connection.vkey, connection.transport, connection.localIP, connection.tls)
 					options := currentTLSOptions()
 					options.LocalIP = connection.localIP
-					client.NewRPClientWithTLS(connection.server, connection.vkey, connection.transport, *proxyUrl, nil, *disconnectTime, connection.tls, options).Start()
+					c := client.NewRPClientWithTLS(connection.server, connection.vkey, connection.transport, *proxyUrl, nil, *disconnectTime, connection.tls, options)
+					c.Start()
+					if c.Kicked() {
+						kicked = true
+						logs.Info("[通知] 服务端已删除客户端（server:%s vkey:%s），停止重连", connection.server, connection.vkey)
+						break
+					}
 					logs.Info("[重连] 客户端连接已关闭，5 秒后重连")
 					time.Sleep(time.Second * 5)
 				}
+				endNpcConn(connection.vkey, kicked)
 			}()
 		}
 
@@ -565,7 +646,16 @@ func run() {
 			if common.FileExists(path) {
 				started = true
 				logs.Info("配置文件模式启动：%s", path)
-				go client.StartFromFile(path)
+				go func() {
+					registerNpcConn()
+					var kickedVKey string
+					kicked := false
+					client.StartFromFile(path, func(vKey string) {
+						kickedVKey = vKey
+						kicked = true
+					})
+					endNpcConn(kickedVKey, kicked)
+				}()
 			} else if len(configPaths) > 1 {
 				logs.Warn("配置文件不存在，跳过：%s", path)
 			}
@@ -761,6 +851,11 @@ func startNpcServer(startCmd string) {
 	tlsEnable := len(array) > 2 && (array[2] == "-tls_enable=true" || array[2] == "true")
 
 	go func() {
+		registerNpcConn()
+		kicked := false
+		defer func() {
+			endNpcConn(vkey, kicked)
+		}()
 		for {
 			if tlsEnable {
 				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey + " -tls_enable=true")
@@ -769,7 +864,13 @@ func startNpcServer(startCmd string) {
 			}
 			logs.Info("版本: %s, 核心版本: %s, TLS: %t", version.VERSION, version.GetVersion(), tlsEnable)
 			options := currentTLSOptions()
-			client.NewRPClientWithTLS(serAddr, vkey, *connType, *proxyUrl, nil, *disconnectTime, tlsEnable, options).Start()
+			c := client.NewRPClientWithTLS(serAddr, vkey, *connType, *proxyUrl, nil, *disconnectTime, tlsEnable, options)
+			c.Start()
+			if c.Kicked() {
+				kicked = true
+				logs.Info("[通知] 服务端已删除本客户端，停止重连")
+				return
+			}
 			logs.Info("[重连] 连接断开，5 秒后重连")
 			time.Sleep(time.Second * 5)
 		}

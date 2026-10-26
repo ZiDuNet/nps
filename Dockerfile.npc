@@ -25,5 +25,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM scratch
 COPY --from=builder /out/npc /npc
+# NPC update/version checks also need the system CA bundle inside scratch.
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 VOLUME ["/conf"]
 ENTRYPOINT ["/npc"]
