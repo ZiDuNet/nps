@@ -78,6 +78,15 @@ func (s *BaseController) Prepare() {
 	apiAuthorized := configKey != "" && md5Key != "" &&
 		(math.Abs(float64(timeNowUnix-int64(timestamp))) <= 20) &&
 		subtle.ConstantTimeCompare([]byte(expectedKey), []byte(md5Key)) == 1
+	// The web-managed administrator key is equivalent to auth_key: the same
+	// signed timestamp protocol accepts either secret, so API clients written
+	// for the configuration file key keep working after an online rotation.
+	if !apiAuthorized && md5Key != "" && math.Abs(float64(timeNowUnix-int64(timestamp))) <= 20 {
+		if managedKey, ok := managedAdminAPIKey(); ok {
+			managedExpected := crypt.Md5(managedKey + strconv.Itoa(timestamp))
+			apiAuthorized = subtle.ConstantTimeCompare([]byte(managedExpected), []byte(md5Key)) == 1
+		}
+	}
 	// API credentials authorize this request only. Persisting this flag in a
 	// browser session turns a short-lived signed API call into a lasting admin
 	// login, which is both surprising and unsafe.

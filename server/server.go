@@ -15,6 +15,7 @@ import (
 	"ehang.io/nps/bridge"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/ipreg"
 	"ehang.io/nps/lib/rate"
 	"ehang.io/nps/server/proxy"
 	"ehang.io/nps/server/tool"
@@ -1185,13 +1186,27 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 		return data
 	}
 	data["bridgeType"] = beego.AppConfig.String("bridge_type")
+	data["bridgeTCPPort"] = beego.AppConfig.String("bridge_port")
+	data["bridgeKCPPort"] = beego.AppConfig.String("bridge_kcp_port")
+	data["bridgeTLSPort"] = beego.AppConfig.String("tls_bridge_port")
+	data["bridgeWSPort"] = beego.AppConfig.String("bridge_ws_port")
+	data["bridgeWSSPort"] = beego.AppConfig.String("bridge_wss_port")
+	data["bridgeQUICPort"] = beego.AppConfig.String("bridge_quic_port")
+	data["bridgeWSPath"] = beego.AppConfig.String("bridge_path")
 	data["httpProxyPort"] = beego.AppConfig.String("http_proxy_port")
 	data["httpsProxyPort"] = beego.AppConfig.String("https_proxy_port")
 	data["ipLimit"] = beego.AppConfig.String("ip_limit")
+	data["registeredIps"] = ipreg.Count()
 	data["flowStoreInterval"] = beego.AppConfig.String("flow_store_interval")
-	data["serverIp"] = beego.AppConfig.String("p2p_ip")
+	p2pIp := strings.TrimSpace(beego.AppConfig.String("p2p_ip"))
+	data["p2pIp"] = strings.Trim(p2pIp, "[]")
+	data["serverIp"] = common.GetServerIp(p2pIp)
+	data["serverIpv4"] = common.GetOutboundIPv4().String()
+	data["serverIpv6"] = common.GetOutboundIPv6().String()
 	data["p2pPort"] = beego.AppConfig.String("p2p_port")
+	data["p2pAddr"] = common.BuildAddress(common.GetServerIp(p2pIp), beego.AppConfig.String("p2p_port"))
 	data["logLevel"] = beego.AppConfig.String("log_level")
+	data["minVersion"] = version.SecureHandshakeMinVersion
 	for key, value := range tool.GetSystemStatus() {
 		data[key] = value
 	}

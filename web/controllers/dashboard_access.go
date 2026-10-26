@@ -170,9 +170,25 @@ func dashboardAccessKeyFromRequest(request *http.Request) string {
 	return ""
 }
 
-func dashboardAccessURL(key string) string {
-	base := strings.TrimRight(beego.AppConfig.String("web_base_url"), "/")
-	return base + "/overview#access_key=" + key
+func dashboardAccessURL(request *http.Request, key string) string {
+	configured := strings.TrimRight(strings.TrimSpace(beego.AppConfig.String("web_base_url")), "/")
+	// web_base_url may be configured either as a full public URL (legacy
+	// deployments use it for tests and absolute links) or as a reverse-proxy
+	// path prefix such as /nps.  A full URL is authoritative; a path prefix or
+	// an empty value is combined with the request's forwarded authority so the
+	// generated shortcut always contains a reachable host.
+	if strings.HasPrefix(configured, "http://") || strings.HasPrefix(configured, "https://") {
+		return configured + "/overview#access_key=" + key
+	}
+	scheme := requestScheme(request, useForwardedAuthority(request))
+	host := ""
+	if useForwardedAuthority(request) {
+		host = firstForwardedHost(request)
+	}
+	if host == "" && request != nil {
+		host = request.Host
+	}
+	return scheme + "://" + host + configured + "/overview#access_key=" + key
 }
 
 type DashboardAccessController struct {
@@ -215,7 +231,7 @@ func (s *DashboardAccessController) Status() {
 	if enabled {
 		if key, decryptErr := decryptDashboardAccessKey(ciphertext); decryptErr == nil && validDashboardAccessKey(fileDashboardKeyHash(isAdmin, userID), key) {
 			response["key"] = key
-			response["url"] = dashboardAccessURL(key)
+			response["url"] = dashboardAccessURL(s.Ctx.Request, key)
 		}
 	}
 	s.Data["json"] = response
@@ -292,7 +308,7 @@ func (s *DashboardAccessController) Generate() {
 		"status": 1,
 		"msg":    "大屏密钥已生成，请立即保存",
 		"key":    key,
-		"url":    dashboardAccessURL(key),
+		"url":    dashboardAccessURL(s.Ctx.Request, key),
 	}
 	s.ServeJSON()
 	s.StopRun()

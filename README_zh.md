@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.30</sub>
+﻿# NPS <sub>v1.1.31</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -193,6 +193,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.31** (2026-10-26) - Secret/P2P 目标类型真正支持 TCP/UDP 转发并保留数据报边界，P2P 访客支持 Secret 回退；隧道新增连接数与流量配额；证书支持路径、上传、粘贴与校验；新增可复用 Token 的 API 接入页、Geo 数据在线更新和更完整的仪表盘；管理面板全面迁移 Bootstrap 5 并现代化。修复配置文件模式公共 vkey 注册卡死与 P2P 直连 QUIC 握手崩溃。
 
 - **v1.1.30** (2026-10-25) - 完善 NPC 的自定义 DNS、出站代理（HTTP/HTTPS、SOCKS4/4a/5、环境代理）、本地出口 IP 绑定与远程目标转发；补齐 QUIC/KCP 的本地地址绑定和配置文件说明，并继续兼容旧客户端与旧配置。
 

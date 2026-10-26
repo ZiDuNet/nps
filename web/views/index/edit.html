@@ -163,6 +163,17 @@
                     {{end}}
 
                     {{if or (not .dedicated) (eq $mode "secret") (eq $mode "p2p")}}
+                    <div class="form-group tunnel-mode-field" id="target_type" data-tunnel-field="target_type">
+                        <label class="form-label font-bold" for="tunnel-target-type" data-i18n-zh="目标类型" data-i18n-en="Target type">目标类型</label>
+                        <div class="form-group-wrapper">
+                            <select id="tunnel-target-type" class="form-control" name="target_type">
+                                <option value="tcp"{{if ne .t.TargetType "udp"}}{{if ne .t.TargetType "all"}} selected{{end}}{{end}}>TCP</option>
+                                <option value="udp"{{if eq .t.TargetType "udp"}} selected{{end}}>UDP</option>
+                                <option value="all"{{if eq .t.TargetType "all"}} selected{{end}}>TCP + UDP</option>
+                            </select>
+                            <span class="help-block" data-i18n-zh="secret / P2P 访问内网目标时使用的协议。当前转发引擎按 TCP 流处理 secret / P2P 隧道；UDP 与 TCP+UDP 选项保留 nps2 配置兼容，完整的 UDP 数据报转发将在后续版本启用。" data-i18n-en="Protocol used when secret/P2P traffic reaches the internal target. The current engine relays secret/P2P tunnels as TCP streams; the UDP and TCP+UDP options keep nps2 configuration compatibility while full UDP datagram forwarding arrives in a later release.">secret / P2P 访问内网目标时使用的协议。当前转发引擎按 TCP 流处理 secret / P2P 隧道；UDP 与 TCP+UDP 选项保留 nps2 配置兼容，完整的 UDP 数据报转发将在后续版本启用。</span>
+                        </div>
+                    </div>
                     <div class="form-group tunnel-mode-field" id="password" data-tunnel-field="password">
                         <label class="form-label font-bold" for="tunnel-password" langtag="word-identificationkey"></label>
                         <div class="form-group-wrapper">
@@ -188,7 +199,9 @@
                     <div class="form-group form-group--wide" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-white" data-i18n-zh="隧道白名单（IP/CIDR）" data-i18n-en="Tunnel allowlist (IP/CIDR)">隧道白名单（IP/CIDR）</label><div class="form-group-wrapper"><textarea id="tunnel-acl-white" class="form-control" rows="3" name="whiteiplist" placeholder="" langtag="info-suchasaclrules">{{.WhiteIpList}}</textarea><span class="help-block" data-i18n-zh="每行一条：IP、CIDR（如 10.0.0.0/8）、IPv4 前缀通配（如 192.168.*）、geoip:cn、geoip:!cn（取反）、geoip:private，# 开头为注释。配置后未命中的来源通常会被拒绝。留空表示本层不增加白名单限制。" data-i18n-en="One per line: IP, CIDR (e.g. 10.0.0.0/8), IPv4 prefix wildcard (e.g. 192.168.*), geoip:cn, geoip:!cn (negated), geoip:private. Lines starting with # are comments. Once configured, non-matching sources are normally denied. Leave empty to add no allowlist at this level.">每行一条：IP、CIDR（如 10.0.0.0/8）、IPv4 前缀通配（如 192.168.*）、geoip:cn、geoip:!cn（取反）、geoip:private，# 开头为注释。配置后未命中的来源通常会被拒绝。留空表示本层不增加白名单限制。</span></div></div>
                     <div class="form-group" data-tunnel-field="acl"><label class="form-label font-bold" for="tunnel-acl-priority" data-i18n-zh="名单冲突策略" data-i18n-en="List conflict policy">名单冲突策略</label><div class="form-group-wrapper"><select id="tunnel-acl-priority" class="form-control" name="iplistpriority"><option value="0"{{if ne .t.IpListPriority 1}} selected{{end}}>黑名单优先</option><option value="1"{{if eq .t.IpListPriority 1}} selected{{end}}>白名单优先</option></select><span class="help-block" data-i18n-zh="同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。" data-i18n-en="Applies when both lists are configured: deny-first rejects denylisted addresses and allows only allowlisted others; allow-first allows allowlisted addresses and any others not on the denylist. With one list, both policies are equivalent.">同时配置两张名单时生效：黑名单优先会拒绝黑名单地址，其余地址只有在白名单中才放行；白名单优先会放行白名单地址，其余地址只要不在黑名单中即可。只配置一张名单时两种策略相同。</span></div></div>
 
-                    <div class="form-section-title" data-tunnel-section="limits" data-section-tier="advanced" data-section-summary-zh="带宽限制与故障目标自动摘除" data-section-summary-en="Bandwidth limits and automatic removal of failed targets"><i class="fa fa-heartbeat" aria-hidden="true"></i><span data-i18n-zh="流量与健康检查" data-i18n-en="Traffic and health check">流量与健康检查</span></div>
+                    <div class="form-section-title" data-tunnel-section="limits" data-section-tier="advanced" data-section-summary-zh="连接数、流量上限、带宽限制与故障目标自动摘除" data-section-summary-en="Connection, traffic and bandwidth limits plus automatic removal of failed targets"><i class="fa fa-heartbeat" aria-hidden="true"></i><span data-i18n-zh="流量与健康检查" data-i18n-en="Traffic and health check">流量与健康检查</span></div>
+                    <div class="form-group tunnel-mode-field" id="max_conn" data-tunnel-field="max_conn"><label class="form-label font-bold" for="tunnel-max-conn" data-i18n-zh="最大连接数" data-i18n-en="Max connections">最大连接数</label><div class="form-group-wrapper"><input id="tunnel-max-conn" class="form-control" type="number" min="0" step="1" name="max_conn" value="{{.t.MaxConn}}"><span class="help-block" data-i18n-zh="同时允许建立的连接数上限；0 表示不限。达到上限后新的连接会被拒绝。当前仅 TCP 隧道按此上限执行。" data-i18n-en="Maximum concurrent connections; 0 means unlimited. New connections are refused once reached. Currently enforced for TCP tunnels.">同时允许建立的连接数上限；0 表示不限。达到上限后新的连接会被拒绝。当前仅 TCP 隧道按此上限执行。</span></div></div>
+                    <div class="form-group tunnel-mode-field" id="flow_limit" data-tunnel-field="flow_limit"><label class="form-label font-bold" for="tunnel-flow-limit" data-i18n-zh="流量限制（MB）" data-i18n-en="Traffic limit (MB)">流量限制（MB）</label><div class="form-group-wrapper"><input id="tunnel-flow-limit" class="form-control" type="number" min="0" step="1" name="flow_limit" value="{{if .t.Flow}}{{.t.Flow.FlowLimit}}{{else}}0{{end}}"><span class="help-block" data-i18n-zh="本隧道累计可通过的总流量上限；0 表示不限。入口与出口流量合计计算，达到上限后连接会被切断。" data-i18n-en="Total traffic quota for this tunnel; 0 means unlimited. Inbound and outbound traffic count together; connections are cut once the quota is reached.">本隧道累计可通过的总流量上限；0 表示不限。入口与出口流量合计计算，达到上限后连接会被切断。</span></div></div>
                     <div class="form-group tunnel-mode-field" id="upload_limit" data-tunnel-field="upload_limit"><label class="form-label font-bold" for="tunnel-upload-limit" data-i18n-zh="上行限速（KB/s）" data-i18n-en="Upload limit (KB/s)">上行限速（KB/s）</label><div class="form-group-wrapper"><input id="tunnel-upload-limit" class="form-control" type="number" min="0" step="1" name="upload_limit" value="{{.t.UploadLimit}}"><span class="help-block" data-i18n-zh="访问者到内网服务；0 表示不限速，同一隧道所有连接共享。" data-i18n-en="Visitor to private service; 0 means unlimited and is shared by all connections.">访问者到内网服务；0 表示不限速，同一隧道所有连接共享。</span></div></div>
                     <div class="form-group tunnel-mode-field" id="download_limit" data-tunnel-field="download_limit"><label class="form-label font-bold" for="tunnel-download-limit" data-i18n-zh="下行限速（KB/s）" data-i18n-en="Download limit (KB/s)">下行限速（KB/s）</label><div class="form-group-wrapper"><input id="tunnel-download-limit" class="form-control" type="number" min="0" step="1" name="download_limit" value="{{.t.DownloadLimit}}"><span class="help-block" data-i18n-zh="内网服务到访问者；0 表示不限速，同一隧道所有连接共享。" data-i18n-en="Private service to visitor; 0 means unlimited and is shared by all connections.">内网服务到访问者；0 表示不限速，同一隧道所有连接共享。</span></div></div>
 
@@ -233,18 +246,18 @@
 </section>
 <script>
     var fieldMap = {
-        tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
-        udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "upload_limit", "download_limit"],
-        mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "upload_limit", "download_limit"],
-        secret: ["client_id", "server_ip", "target", "password", "registered_only", "acl", "upload_limit", "download_limit"],
-        p2p: ["client_id", "server_ip", "target", "password", "registered_only", "acl", "upload_limit", "download_limit"],
-        file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "upload_limit", "download_limit"]
+        tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
+        udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"],
+        mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"],
+        secret: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"],
+        p2p: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"],
+        file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]
     };
     var tunnelTypeClasses = "tunnel-type-tcp tunnel-type-udp tunnel-type-httpProxy tunnel-type-socks5 tunnel-type-mixProxy tunnel-type-secret tunnel-type-p2p tunnel-type-file";
     var tunnelSectionFields = {
         listen: ["mix_proxy", "server_ip", "port", "local_proxy", "target", "local_path", "strip_pre", "password"],
         access: ["registered_only", "dest_acl_mode", "dest_acl_rules", "acl"],
-        limits: ["upload_limit", "download_limit", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
+        limits: ["max_conn", "flow_limit", "upload_limit", "download_limit", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
         transport: ["proto_version"]
     };
 

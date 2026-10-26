@@ -12,8 +12,6 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 // en
@@ -90,13 +88,10 @@ func GetRandomString(l int) string {
 }
 
 func GetVkey() string {
-	// 生成UUID
-	u, _ := uuid.NewRandom()
-	// 将UUID转换为字符串
-	uuidStr := u.String()
-	uuidStr = strings.ReplaceAll(uuidStr, "-", "")
-	// 截取前10位
-	return uuidStr[:10]
+	// NPC 配置文件模式在公共 vkey 注册流程中会按固定 16 字节读取服务端
+	// 分配的新验证密钥，因此这里必须始终生成 16 个字符。历史上使用 UUID
+	// 前 10 位会导致客户端和服务端在该流程上永远对齐不上。
+	return GetRandomString(16)
 }
 
 func Base64Decoding(encodedString string) (string, error) {

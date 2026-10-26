@@ -164,16 +164,12 @@ $(function () {
             npsNotify('success', response.msg || '配置已保存');
             if (!response.restart_required) return;
             $('#server-config-restart, #server-config-restart-note').prop('hidden', false);
-            var confirmRequest = typeof npsConfirmDialog === 'function'
-                ? npsConfirmDialog(npsIsEnglish() ? 'Configuration saved. Restart NPS now? The console may disconnect briefly.' : '配置已保存。现在重启 NPS 使配置生效吗？管理面板可能会短暂断开。', { danger: true, confirmLabel: npsIsEnglish() ? 'Restart' : '立即重启' })
-                : Promise.resolve(window.confirm(npsIsEnglish() ? 'Configuration saved. Restart NPS now? The console may disconnect briefly.' : '配置已保存。现在重启 NPS 使配置生效吗？管理面板可能会短暂断开。'));
+            var confirmRequest = npsConfirmDialog(npsIsEnglish() ? 'Configuration saved. Restart NPS now? The console may disconnect briefly.' : '配置已保存。现在重启 NPS 使配置生效吗？管理面板可能会短暂断开。', { danger: true, confirmLabel: npsIsEnglish() ? 'Restart' : '立即重启' });
             confirmRequest.then(function (confirmed) { if (confirmed) postRestart(); });
         }).fail(function (xhr) { npsNotify('error', (xhr.responseJSON && xhr.responseJSON.msg) || npsRequestErrorMessage()); }).always(function () { save.prop('disabled', false); });
     });
     $('#server-config-restart').on('click', function () {
-        var confirmRequest = typeof npsConfirmDialog === 'function'
-            ? npsConfirmDialog(npsIsEnglish() ? 'Restart NPS now?' : '现在重启 NPS 吗？', { danger: true, confirmLabel: npsIsEnglish() ? 'Restart' : '立即重启' })
-            : Promise.resolve(window.confirm(npsIsEnglish() ? 'Restart NPS now?' : '现在重启 NPS 吗？'));
+        var confirmRequest = npsConfirmDialog(npsIsEnglish() ? 'Restart NPS now?' : '现在重启 NPS 吗？', { danger: true, confirmLabel: npsIsEnglish() ? 'Restart' : '立即重启' });
         confirmRequest.then(function (confirmed) { if (confirmed) postRestart(); });
     });
 });

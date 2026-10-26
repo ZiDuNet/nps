@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.30</sub>
+﻿# NPS <sub>v1.1.31</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -178,6 +178,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.31** (2026-10-26) - Enabled real TCP/UDP forwarding for Secret and P2P target types with datagram framing, added Secret fallback for P2P visitors, tunnel-level connection and traffic quotas, certificate upload/paste/validation, the API access page with reusable tokens, online GeoIP/Geosite updates, an expanded dashboard, and a modernized Bootstrap 5 web console; fixed config-file public-vkey registration and the P2P direct QUIC handshake panic.
 
 - **v1.1.30** (2026-10-25) - Completed NPC custom DNS, outbound proxies (HTTP/HTTPS, SOCKS4/4a/5, and environment proxy settings), local source-IP binding, and remote-target forwarding; documented QUIC/KCP source binding while preserving compatibility with older clients and configuration files.
 

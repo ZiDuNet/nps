@@ -78,6 +78,9 @@ func (s *JsonDb) LoadTaskFromJsonFile() {
 		if post.Flow == nil {
 			post.Flow = NewFlow()
 		}
+		if post.MaxConn < 0 {
+			post.MaxConn = 0
+		}
 		// Resource limit buckets are runtime-only and are created lazily on the
 		// first connection. Keep the persisted KB/s values untouched.
 		post.Flow.NormalizeLegacyAccounting()
@@ -307,6 +310,8 @@ func cloneGlobal(global *Glob) *Glob {
 		PlatformDomains:        append([]PlatformDomain(nil), global.PlatformDomains...),
 		DashboardKeyHash:       global.DashboardKeyHash,
 		DashboardKeyCiphertext: global.DashboardKeyCiphertext,
+		AdminAPIKeyHash:        global.AdminAPIKeyHash,
+		AdminAPIKeyCiphertext:  global.AdminAPIKeyCiphertext,
 	}
 	global.RUnlock()
 	return copy

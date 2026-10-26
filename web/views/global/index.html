@@ -48,8 +48,30 @@
                         <div class="platform-domain-row__header"><div><strong>{{.Wildcard}}</strong><span class="platform-domain-reference"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="被 {{.ReferenceCount}} 个主机引用" data-i18n-en="Used by {{.ReferenceCount}} host(s)">被 {{.ReferenceCount}} 个主机引用</span></span></div><button type="button" class="btn btn-outline btn-danger platform-domain-remove"{{if gt .ReferenceCount 0}} disabled title="使用中的平台域名不能删除" data-title-zh="使用中的平台域名不能删除" data-title-en="A referenced platform domain cannot be deleted"{{end}} aria-label="删除平台域名" data-aria-label-zh="删除平台域名" data-aria-label-en="Delete platform domain"><i class="fa fa-trash" aria-hidden="true"></i></button></div>
                         <div class="platform-domain-row__fields">
                             <label><span data-i18n-zh="泛域名" data-i18n-en="Wildcard">泛域名</span><input class="form-control" type="text" data-field="wildcard" value="{{.Wildcard}}" placeholder="*.example.com"{{if gt .ReferenceCount 0}} readonly{{end}}><small class="help-block" data-i18n-zh="用户创建平台域名时使用此后缀；必须以 *. 开头且只能包含一个泛域名层级。" data-i18n-en="Users use this suffix for platform domains; it must start with *. and contain one wildcard level.">用户创建平台域名时使用此后缀；必须以 *. 开头且只能包含一个泛域名层级。</small></label>
-                            <label><span data-i18n-zh="证书路径 (.pem，可选)" data-i18n-en="Certificate path (.pem, optional)">证书路径 (.pem，可选)</span><input class="form-control" type="text" data-field="cert" value="{{.CertFilePath}}" placeholder="conf/webssl/fullchain.pem"><small class="help-block" data-i18n-zh="PEM 证书文件路径；与私钥成对填写后平台域名可启用 HTTPS。相对路径以 NPS 运行目录（conf_path）为基准解析。" data-i18n-en="Path to the PEM certificate; provide it with the key to enable HTTPS for platform domains. Relative paths resolve against the NPS run directory (conf_path).">PEM 证书文件路径；与私钥成对填写后平台域名可启用 HTTPS。相对路径以 NPS 运行目录（conf_path）为基准解析。</small></label>
-                            <label><span data-i18n-zh="私钥路径 (.key，可选)" data-i18n-en="Key path (.key, optional)">私钥路径 (.key，可选)</span><input class="form-control" type="text" data-field="key" value="{{.KeyFilePath}}" placeholder="/certs/example.com.key"><small class="help-block" data-i18n-zh="与证书对应的私钥文件路径；敏感路径不会展示给普通用户。" data-i18n-en="Path to the private key matching the certificate; sensitive paths are hidden from regular users.">与证书对应的私钥文件路径；敏感路径不会展示给普通用户。</small></label>
+                            <div class="platform-certificate-pair certificate-pair" data-certificate-pair data-validate-url="{{.web_base_url}}/global/checkcertificate" data-wildcard="true" data-hostname-row-selector="[data-field='wildcard']">
+                                <div class="certificate-mode-row">
+                                    <span class="certificate-mode-label" data-i18n-zh="证书填写方式" data-i18n-en="Certificate input">证书填写方式</span>
+                                    <select class="form-control certificate-mode-select" data-cert-mode aria-label="证书填写方式" data-aria-label-zh="证书填写方式" data-aria-label-en="Certificate input method">
+                                        <option value="path" data-i18n-zh="路径" data-i18n-en="Path">路径</option>
+                                        <option value="upload" data-i18n-zh="上传" data-i18n-en="Upload">上传</option>
+                                        <option value="paste" data-i18n-zh="粘贴" data-i18n-en="Paste">粘贴</option>
+                                    </select>
+                                    <button type="button" class="btn btn-outline btn-primary certificate-validate" data-i18n-zh="校验证书" data-i18n-en="Validate">校验证书</button>
+                                </div>
+                                <div class="certificate-mode-pane certificate-mode-pane--path certificate-mode-pane--compact">
+                                    <label><span data-i18n-zh="证书路径 (.pem，可选)" data-i18n-en="Certificate path (.pem, optional)">证书路径 (.pem，可选)</span><input class="form-control" type="text" data-field="cert" data-cert-path value="{{.CertFilePath}}" placeholder="conf/webssl/fullchain.pem"><small class="help-block" data-i18n-zh="PEM 证书文件路径；与私钥成对填写后平台域名可启用 HTTPS。相对路径以 NPS 运行目录（conf_path）为基准解析。" data-i18n-en="Path to the PEM certificate; provide it with the key to enable HTTPS for platform domains. Relative paths resolve against the NPS run directory (conf_path).">PEM 证书文件路径；与私钥成对填写后平台域名可启用 HTTPS。相对路径以 NPS 运行目录（conf_path）为基准解析。</small></label>
+                                    <label><span data-i18n-zh="私钥路径 (.key，可选)" data-i18n-en="Key path (.key, optional)">私钥路径 (.key，可选)</span><input class="form-control" type="text" data-field="key" data-key-path value="{{.KeyFilePath}}" placeholder="/certs/example.com.key"><small class="help-block" data-i18n-zh="与证书对应的私钥文件路径；敏感路径不会展示给普通用户。" data-i18n-en="Path to the private key matching the certificate; sensitive paths are hidden from regular users.">与证书对应的私钥文件路径；敏感路径不会展示给普通用户。</small></label>
+                                </div>
+                                <div class="certificate-mode-pane certificate-mode-pane--upload certificate-mode-pane--compact" hidden>
+                                    <label><span data-i18n-zh="证书文件" data-i18n-en="Certificate file">证书文件</span><input class="form-control" type="file" accept=".pem,.crt,.cer" data-cert-upload><small class="help-block" data-i18n-zh="选择 PEM 格式的证书/公钥链文件，保存时校验。" data-i18n-en="Choose the PEM certificate/chain file; it is validated on save.">选择 PEM 格式的证书/公钥链文件，保存时校验。</small></label>
+                                    <label><span data-i18n-zh="私钥文件" data-i18n-en="Private key file">私钥文件</span><input class="form-control" type="file" accept=".pem,.key" data-key-upload><small class="help-block" data-i18n-zh="选择与证书匹配的私钥文件。" data-i18n-en="Choose the private key matching the certificate.">选择与证书匹配的私钥文件。</small></label>
+                                </div>
+                                <div class="certificate-mode-pane certificate-mode-pane--paste" hidden>
+                                    <label><span data-i18n-zh="证书内容" data-i18n-en="Certificate content">证书内容</span><textarea class="form-control" rows="5" data-cert-paste placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+                                    <label><span data-i18n-zh="私钥内容" data-i18n-en="Private key content">私钥内容</span><textarea class="form-control" rows="5" data-key-paste placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label>
+                                </div>
+                                <div class="certificate-validation-result" role="status" hidden></div>
+                            </div>
                         </div>
                         <dl class="platform-domain-health"><div><dt data-i18n-zh="证书状态" data-i18n-en="Certificate status">证书状态</dt><dd class="platform-cert-status"{{if .Detail}} title="{{.Detail}}" data-detail="{{.Detail}}"{{end}}>{{.Status}}</dd></div><div><dt data-i18n-zh="到期时间" data-i18n-en="Expires at">到期时间</dt><dd>{{if .ExpiresAt}}{{.ExpiresAt}}{{else}}-{{end}}</dd></div><div><dt data-i18n-zh="剩余天数" data-i18n-en="Days remaining">剩余天数</dt><dd>{{if .Readable}}{{.DaysRemaining}} <span data-i18n-zh="天" data-i18n-en="days">天</span>{{else}}-{{end}}</dd></div></dl>
                         {{if .Detail}}<p class="platform-domain-error">{{.Detail}}</p>{{end}}
@@ -63,6 +85,37 @@
             <div class="hr-line-dashed form-workflow-divider"></div>
             <div class="form-group form-workflow-actions"><div class="form-actions"><button class="btn btn-success" type="submit"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存设置" data-i18n-en="Save settings">保存设置</span></button></div></div>
         </form>
+    </div></section>
+    <section class="panel ibox float-e-margins form-workflow-card nps-panel"><div class="ibox-content form-workflow-content">
+        <div class="form-section-title" data-section-tier="primary"><i class="fa fa-globe" aria-hidden="true"></i><span data-i18n-zh="Geo 数据" data-i18n-en="Geo data">Geo 数据</span></div>
+        <p class="form-field-hint" data-i18n-zh="用于 geoip:/geosite: 访问规则。文件来自上游 v2ray-rules-dat 发布，在线更新会按 SHA-256 校验后原子替换，不会中断正在运行的转发；文件更新后访问规则自动热加载。geoip_path / geosite_path 留空时默认使用运行目录 conf 下的 geoip.dat 与 geosite.dat。" data-i18n-en="Used by geoip:/geosite: access rules. Files come from the upstream v2ray-rules-dat release; online updates verify SHA-256 and replace files atomically without interrupting forwarding, and access rules hot-reload afterwards. Empty geoip_path / geosite_path defaults to conf/geoip.dat and conf/geosite.dat under the run directory.">用于 geoip:/geosite: 访问规则。文件来自上游 v2ray-rules-dat 发布，在线更新会按 SHA-256 校验后原子替换，不会中断正在运行的转发；文件更新后访问规则自动热加载。geoip_path / geosite_path 留空时默认使用运行目录 conf 下的 geoip.dat 与 geosite.dat。</p>
+        <div id="geo-data-card">
+            <div class="geo-data-summary">
+                <div class="geo-data-metric">
+                    <span class="geo-data-metric__label" data-i18n-zh="数据状态" data-i18n-en="Data status">数据状态</span>
+                    <span id="geo-data-loaded" class="geo-data-metric__value {{if .geo.Loaded}}text-success{{else}}text-danger{{end}}" data-i18n-zh="{{if .geo.Loaded}}已加载{{else}}未加载{{end}}" data-i18n-en="{{if .geo.Loaded}}Loaded{{else}}Not loaded{{end}}">{{if .geo.Loaded}}已加载{{else}}未加载{{end}}</span>
+                </div>
+                <div class="geo-data-metric">
+                    <span class="geo-data-metric__label" data-i18n-zh="当前版本" data-i18n-en="Current version">当前版本</span>
+                    <span id="geo-data-version" class="geo-data-metric__value">{{if .geo.Version}}{{.geo.Version}}{{else}}-{{end}}</span>
+                </div>
+            </div>
+            <ul id="geo-data-files" class="geo-data-files">
+                {{range .geo.Files}}
+                <li class="geo-data-file">
+                    <div class="geo-data-file__head">
+                        <strong>{{.Name}}</strong>
+                        <span class="geo-data-file__status {{if .Exists}}text-success{{else}}text-danger{{end}}" data-i18n-zh="{{if .Exists}}正常{{else}}文件缺失{{end}}" data-i18n-en="{{if .Exists}}OK{{else}}Missing{{end}}">{{if .Exists}}正常{{else}}文件缺失{{end}}</span>
+                    </div>
+                    <div class="geo-data-file__meta">
+                        <span class="text-muted">{{.Path}}</span>
+                        {{if .Exists}}<span class="text-muted">{{.ModTime}} · {{.Size}} B</span>{{end}}
+                    </div>
+                </li>
+                {{end}}
+            </ul>
+        </div>
+        <div class="form-group form-workflow-actions"><div class="form-actions"><button id="update-geo-data" class="btn btn-primary" type="button"><i class="fa fa-cloud-download" aria-hidden="true"></i><span data-i18n-zh="在线更新 Geo 数据" data-i18n-en="Update Geo data">在线更新 Geo 数据</span></button></div></div>
     </div></section></div></div>
 </section>
 
@@ -70,7 +123,33 @@
     <article class="platform-domain-row" data-reference-count="0">
         <input type="hidden" data-field="id" value="">
         <div class="platform-domain-row__header"><div><strong data-i18n-zh="新平台泛域名" data-i18n-en="New platform wildcard">新平台泛域名</strong><span class="platform-domain-reference"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="尚未被主机引用" data-i18n-en="Not referenced by any host">尚未被主机引用</span></span></div><button type="button" class="btn btn-outline btn-danger platform-domain-remove" aria-label="删除平台域名" data-aria-label-zh="删除平台域名" data-aria-label-en="Delete platform domain"><i class="fa fa-trash" aria-hidden="true"></i></button></div>
-        <div class="platform-domain-row__fields"><label><span data-i18n-zh="泛域名" data-i18n-en="Wildcard">泛域名</span><input class="form-control" type="text" data-field="wildcard" placeholder="*.example.com"><small class="help-block" data-i18n-zh="必须以 *. 开头；例如 *.example.com。" data-i18n-en="Must start with *.; for example, *.example.com.">必须以 *. 开头；例如 *.example.com。</small></label><label><span data-i18n-zh="证书路径 (.pem，可选)" data-i18n-en="Certificate path (.pem, optional)">证书路径 (.pem，可选)</span><input class="form-control" type="text" data-field="cert" placeholder="conf/webssl/fullchain.pem"><small class="help-block" data-i18n-zh="与私钥一起填写以启用 HTTPS；相对路径以 conf_path 为基准。" data-i18n-en="Provide with the key to enable HTTPS; relative paths resolve against conf_path.">与私钥一起填写以启用 HTTPS；相对路径以 conf_path 为基准。</small></label><label><span data-i18n-zh="私钥路径 (.key，可选)" data-i18n-en="Key path (.key, optional)">私钥路径 (.key，可选)</span><input class="form-control" type="text" data-field="key" placeholder="conf/webssl/privkey.pem"><small class="help-block" data-i18n-zh="填写与证书匹配的私钥路径。" data-i18n-en="Path to the private key matching the certificate.">填写与证书匹配的私钥路径。</small></label></div>
+        <div class="platform-domain-row__fields">
+            <label><span data-i18n-zh="泛域名" data-i18n-en="Wildcard">泛域名</span><input class="form-control" type="text" data-field="wildcard" placeholder="*.example.com"><small class="help-block" data-i18n-zh="必须以 *. 开头；例如 *.example.com。" data-i18n-en="Must start with *.; for example, *.example.com.">必须以 *. 开头；例如 *.example.com。</small></label>
+            <div class="platform-certificate-pair certificate-pair" data-certificate-pair data-validate-url="{{.web_base_url}}/global/checkcertificate" data-wildcard="true" data-hostname-row-selector="[data-field='wildcard']">
+                <div class="certificate-mode-row">
+                    <span class="certificate-mode-label" data-i18n-zh="证书填写方式" data-i18n-en="Certificate input">证书填写方式</span>
+                    <select class="form-control certificate-mode-select" data-cert-mode aria-label="证书填写方式" data-aria-label-zh="证书填写方式" data-aria-label-en="Certificate input method">
+                        <option value="path" data-i18n-zh="路径" data-i18n-en="Path">路径</option>
+                        <option value="upload" data-i18n-zh="上传" data-i18n-en="Upload">上传</option>
+                        <option value="paste" data-i18n-zh="粘贴" data-i18n-en="Paste">粘贴</option>
+                    </select>
+                    <button type="button" class="btn btn-outline btn-primary certificate-validate" data-i18n-zh="校验证书" data-i18n-en="Validate">校验证书</button>
+                </div>
+                <div class="certificate-mode-pane certificate-mode-pane--path certificate-mode-pane--compact">
+                    <label><span data-i18n-zh="证书路径 (.pem，可选)" data-i18n-en="Certificate path (.pem, optional)">证书路径 (.pem，可选)</span><input class="form-control" type="text" data-field="cert" data-cert-path placeholder="conf/webssl/fullchain.pem"><small class="help-block" data-i18n-zh="与私钥一起填写以启用 HTTPS；相对路径以 conf_path 为基准。" data-i18n-en="Provide with the key to enable HTTPS; relative paths resolve against conf_path.">与私钥一起填写以启用 HTTPS；相对路径以 conf_path 为基准。</small></label>
+                    <label><span data-i18n-zh="私钥路径 (.key，可选)" data-i18n-en="Key path (.key, optional)">私钥路径 (.key，可选)</span><input class="form-control" type="text" data-field="key" data-key-path placeholder="conf/webssl/privkey.pem"><small class="help-block" data-i18n-zh="填写与证书匹配的私钥路径。" data-i18n-en="Path to the private key matching the certificate.">填写与证书匹配的私钥路径。</small></label>
+                </div>
+                <div class="certificate-mode-pane certificate-mode-pane--upload certificate-mode-pane--compact" hidden>
+                    <label><span data-i18n-zh="证书文件" data-i18n-en="Certificate file">证书文件</span><input class="form-control" type="file" accept=".pem,.crt,.cer" data-cert-upload></label>
+                    <label><span data-i18n-zh="私钥文件" data-i18n-en="Private key file">私钥文件</span><input class="form-control" type="file" accept=".pem,.key" data-key-upload></label>
+                </div>
+                <div class="certificate-mode-pane certificate-mode-pane--paste" hidden>
+                    <label><span data-i18n-zh="证书内容" data-i18n-en="Certificate content">证书内容</span><textarea class="form-control" rows="5" data-cert-paste placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+                    <label><span data-i18n-zh="私钥内容" data-i18n-en="Private key content">私钥内容</span><textarea class="form-control" rows="5" data-key-paste placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label>
+                </div>
+                <div class="certificate-validation-result" role="status" hidden></div>
+            </div>
+        </div>
         <dl class="platform-domain-health"><div><dt data-i18n-zh="证书状态" data-i18n-en="Certificate status">证书状态</dt><dd data-i18n-zh="保存后检查" data-i18n-en="Checked after saving">保存后检查</dd></div><div><dt data-i18n-zh="到期时间" data-i18n-en="Expires at">到期时间</dt><dd>-</dd></div><div><dt data-i18n-zh="剩余天数" data-i18n-en="Days remaining">剩余天数</dt><dd>-</dd></div></dl>
     </article>
 </template>
@@ -79,20 +158,108 @@
 $(function () {
     var form = $('#global-form'), list = document.getElementById('platform-domain-list'), template = document.getElementById('platform-domain-template');
     function removeRow(button) { var row = button.closest('.platform-domain-row'); if (row && Number(row.getAttribute('data-reference-count') || '0') === 0) row.remove(); }
-    function attachRow(row) { var remove = row.querySelector('.platform-domain-remove'); if (remove) remove.addEventListener('click', function () { removeRow(remove); }); }
+    function attachRow(row) { var remove = row.querySelector('.platform-domain-remove'); if (remove) remove.addEventListener('click', function () { removeRow(remove); }); var widget = row.querySelector('[data-certificate-pair]'); if (widget && window.npsCertificatePair) npsCertificatePair.attach(widget); }
     Array.prototype.forEach.call(list.querySelectorAll('.platform-domain-row'), attachRow);
     document.getElementById('add-platform-domain').addEventListener('click', function () { var fragment = template.content.cloneNode(true); list.appendChild(fragment); attachRow(list.lastElementChild); if (typeof $('body').setLang === 'function') $('body').setLang('#platform-domain-list'); });
     form.on('submit', function (event) {
         event.preventDefault();
-        var domains = [];
-        Array.prototype.forEach.call(list.querySelectorAll('.platform-domain-row'), function (row) {
-            function value(field) { var input = row.querySelector('[data-field="' + field + '"]'); return input ? $.trim(input.value) : ''; }
-            var wildcard = value('wildcard'), cert = value('cert'), key = value('key');
-            if (!wildcard && !cert && !key) return;
-            domains.push({ID: value('id'), Wildcard: wildcard, CertFilePath: cert, KeyFilePath: key});
+        npsCertificatePair.prepareIn(list).then(function () {
+            var domains = [];
+            Array.prototype.forEach.call(list.querySelectorAll('.platform-domain-row'), function (row) {
+                function value(field) { var input = row.querySelector('[data-field="' + field + '"]'); return input ? $.trim(input.value) : ''; }
+                var widget = row.querySelector('[data-certificate-pair]');
+                var material = widget ? widget.__npsCertificateMaterial : null;
+                var mode = material ? material.mode : 'path';
+                var wildcard = value('wildcard'), cert = value('cert'), key = value('key');
+                if (!wildcard && !cert && !key && !(material && (material.cert || material.key))) return;
+                domains.push({ID: value('id'), Wildcard: wildcard, CertFilePath: cert, KeyFilePath: key, CertMode: mode, CertData: mode === 'path' ? '' : material.cert, KeyData: mode === 'path' ? '' : material.key});
+            });
+            $('#platform-domains-input').val(JSON.stringify(domains));
+            submitform('global', '{{.web_base_url}}/global/save', form.serializeArray());
+        }).catch(function (error) {
+            npsNotify('error', (error && error.message) || '读取证书文件失败');
         });
-        $('#platform-domains-input').val(JSON.stringify(domains));
-        submitform('global', '{{.web_base_url}}/global/save', form.serializeArray());
+    });
+    function renderGeoData(data) {
+        if (!data) return;
+        var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
+        var loaded = document.getElementById('geo-data-loaded');
+        if (loaded) {
+            loaded.textContent = data.loaded ? (english ? 'Loaded' : '已加载') : (english ? 'Not loaded' : '未加载');
+            loaded.className = 'geo-data-metric__value ' + (data.loaded ? 'text-success' : 'text-danger');
+        }
+        var version = document.getElementById('geo-data-version');
+        if (version) version.textContent = data.version || '-';
+        var fileList = document.getElementById('geo-data-files');
+        if (fileList) {
+            fileList.innerHTML = '';
+            (data.files || []).forEach(function (file) {
+                var item = document.createElement('li');
+                item.className = 'geo-data-file';
+                var head = document.createElement('div');
+                head.className = 'geo-data-file__head';
+                var name = document.createElement('strong');
+                name.textContent = file.name;
+                var status = document.createElement('span');
+                status.className = 'geo-data-file__status ' + (file.exists ? 'text-success' : 'text-danger');
+                status.textContent = file.exists ? (english ? 'OK' : '正常') : (english ? 'Missing' : '文件缺失');
+                head.appendChild(name);
+                head.appendChild(status);
+                var meta = document.createElement('div');
+                meta.className = 'geo-data-file__meta';
+                var path = document.createElement('span');
+                path.className = 'text-muted';
+                path.textContent = file.path;
+                meta.appendChild(path);
+                if (file.exists) {
+                    var detail = document.createElement('span');
+                    detail.className = 'text-muted';
+                    detail.textContent = file.mod_time + ' · ' + file.size + ' B';
+                    meta.appendChild(detail);
+                }
+                item.appendChild(head);
+                item.appendChild(meta);
+                fileList.appendChild(item);
+            });
+        }
+    }
+    var geoUpdateButton = document.getElementById('update-geo-data');
+    if (geoUpdateButton) geoUpdateButton.addEventListener('click', function () {
+        var button = this;
+        if (button.disabled) return;
+        var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
+        npsConfirmDialog(english ? 'Download and verify the latest Geo data from the upstream release?' : '将从上游发布下载并校验最新的 Geo 数据，是否继续？', {
+            title: english ? 'Update Geo data' : '更新 Geo 数据',
+            icon: 'fa-globe',
+            confirmLabel: english ? 'Update' : '更新'
+        }).then(function (ok) {
+            if (!ok) return;
+            button.disabled = true;
+            var icon = button.querySelector('i'), label = button.querySelector('span');
+            var oldIconClass = icon ? icon.className : '';
+            var oldLabel = label ? label.textContent : '';
+            if (icon) icon.className = 'fa fa-circle-notch fa-spin';
+            if (label) label.textContent = english ? 'Updating...' : '更新中...';
+            $.post('{{.web_base_url}}/global/updategeo', function (res) {
+                if (res && res.status) {
+                    renderGeoData(res.data);
+                    npsNotify('success', langreply(res.msg || 'ok'));
+                } else {
+                    npsNotify('error', langreply((res && res.msg) || '更新失败'));
+                }
+            }).fail(function (xhr) {
+                var message = npsRequestErrorMessage();
+                try {
+                    var body = $.parseJSON(xhr.responseText);
+                    if (body && body.msg) message = langreply(body.msg);
+                } catch (ignored) {}
+                npsNotify('error', message);
+            }).always(function () {
+                button.disabled = false;
+                if (icon) icon.className = oldIconClass;
+                if (label) label.textContent = oldLabel;
+            });
+        });
     });
 });
 </script>

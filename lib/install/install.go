@@ -195,6 +195,13 @@ func fetchLatestVersion() (string, error) {
 	return rl.TagName, nil
 }
 
+// LatestVersion returns the latest stable GitHub release tag without
+// downloading any artifacts. It is used by the Web console to compare a
+// connected client's version before sending a remote-update signal.
+func LatestVersion() (string, error) {
+	return fetchLatestVersion()
+}
+
 func updateAvailable(latest string) (bool, error) {
 	comparison, err := version.Compare(version.VERSION, latest)
 	if err != nil {

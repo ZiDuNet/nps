@@ -127,15 +127,20 @@ func main() {
 	}
 	geoIPPath := strings.TrimSpace(beego.AppConfig.String("geoip_path"))
 	geoSitePath := strings.TrimSpace(beego.AppConfig.String("geosite_path"))
-	if geoIPPath != "" || geoSitePath != "" {
-		if geoIPPath != "" && !filepath.IsAbs(geoIPPath) {
-			geoIPPath = filepath.Join(common.GetRunPath(), geoIPPath)
-		}
-		if geoSitePath != "" && !filepath.IsAbs(geoSitePath) {
-			geoSitePath = filepath.Join(common.GetRunPath(), geoSitePath)
-		}
-		acl.SetGeoData(geoIPPath, geoSitePath)
+	// GEO 数据默认放在运行目录的 conf 下；空配置按上游默认路径处理，
+	// 保证“在线更新 GEO 数据”功能开箱即用，只有文件存在后才会参与匹配。
+	if geoIPPath == "" {
+		geoIPPath = filepath.Join(common.GetRunPath(), "conf", "geoip.dat")
+	} else if !filepath.IsAbs(geoIPPath) {
+		geoIPPath = filepath.Join(common.GetRunPath(), geoIPPath)
 	}
+	if geoSitePath == "" {
+		geoSitePath = filepath.Join(common.GetRunPath(), "conf", "geosite.dat")
+	} else if !filepath.IsAbs(geoSitePath) {
+		geoSitePath = filepath.Join(common.GetRunPath(), geoSitePath)
+	}
+	acl.SetGeoData(geoIPPath, geoSitePath)
+	install.SetGeoDataPaths(geoIPPath, geoSitePath)
 	acl.SetMaxRules(beego.AppConfig.DefaultInt("acl_max_rules", acl.DefaultMaxRules))
 
 	common.InitPProfFromFile()

@@ -52,6 +52,8 @@ var (
 	password             = flag.String("password", "", "p2p password flag")
 	target               = flag.String("target", "", "p2p target")
 	localType            = flag.String("local_type", "p2p", "p2p target")
+	targetType           = flag.String("target_type", "all", "P2P target connection type (all|tcp|udp)")
+	fallbackSecret       = flag.Bool("fallback_secret", true, "P2P fallback secret (true or false)")
 	logPath              = flag.String("log_path", "", "npc log path")
 	debug                = flag.Bool("debug", true, "npc debug")
 	pprofAddr            = flag.String("pprof", "", "PProf debug addr (ip:port)")
@@ -499,6 +501,8 @@ func run() {
 		localServer.Password = *password
 		localServer.Target = *target
 		localServer.Port = *localPort
+		localServer.TargetType = strings.ToLower(*targetType)
+		localServer.Fallback = *fallbackSecret
 		commonConfig.Client = new(file.Client)
 		commonConfig.Client.Cnf = new(file.Config)
 		if version.SupportsModernP2P(version.VERSION) && (localServer.Type == "p2p" || localServer.Type == "secret") {

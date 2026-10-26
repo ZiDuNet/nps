@@ -258,6 +258,8 @@ docker run -d --name npc wushuo98/npc \
 | `-target` | P2P 目标地址 | 空 |
 | `-local_type` | 本地模式，`p2p` 或 `secret` | `p2p` |
 | `-local_port` | 本地监听端口 | `2000` |
+| `-target_type` | 目标协议，`tcp`、`udp` 或 `all` | `all` |
+| `-fallback_secret` | P2P 直连失败后是否回退 Secret 中继 | `true` |
 
 Secret 示例：
 
@@ -279,4 +281,4 @@ NAT 类型检测：
 ./npc nat -stun_addr=stun.stunprotocol.org:3478
 ```
 
-P2P 依赖双方 NAT 类型，不保证所有网络都能直连。失败时会回落或需要改用普通 TCP/Secret 方式。
+P2P 依赖双方 NAT 类型，不保证所有网络都能直连。`-fallback_secret=true`（默认）时直连失败会自动回退同任务 Secret 中继；关闭后直连失败直接报错，需要改用普通 TCP 或其他隧道方式。`-target_type=udp` 或 `all` 时，访问端本地端口同时提供 UDP 服务，UDP 数据报在转发链路上保持边界。

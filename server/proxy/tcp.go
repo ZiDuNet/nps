@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"ehang.io/nps/bridge"
@@ -502,8 +501,11 @@ func ProcessTunnel(c *conn.Conn, s *TunnelModeServer) error {
 	}
 	defer client.AddConn()
 	if taskMode == "tcp" {
-		atomic.AddInt32(&s.task.CurrentConnections, 1)
-		defer atomic.AddInt32(&s.task.CurrentConnections, -1)
+		if err := s.task.TryAcquireConn(); err != nil {
+			_ = c.Close()
+			return err
+		}
+		defer s.task.ReleaseConn()
 	}
 	targetAddr, err := target.GetRandomTarget()
 	if err != nil {

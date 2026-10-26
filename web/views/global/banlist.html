@@ -43,10 +43,8 @@
     }
     window.cleanLoginBans = function () { $.post('{{.web_base_url}}/global/banclean', {}, refresh); };
     window.clearLoginBans = function () {
-        var request = typeof npsConfirmDialog === 'function'
-            ? npsConfirmDialog('确认清空所有登录封禁记录？此操作不可撤销。', { danger: true, confirmLabel: '清空' })
-            : Promise.resolve(confirm('确认清空所有登录封禁记录？'));
-        request.then(function (confirmed) { if (confirmed) $.post('{{.web_base_url}}/global/unbanall', {}, refresh); });
+        npsConfirmDialog('确认清空所有登录封禁记录？此操作不可撤销。', { danger: true, confirmLabel: '清空' })
+            .then(function (confirmed) { if (confirmed) $.post('{{.web_base_url}}/global/unbanall', {}, refresh); });
     };
     $('#login-ban-table').on('click', '.js-unban', function () { var key = $(this).data('key'); $.post('{{.web_base_url}}/global/unban', {key: key}, refresh); });
     refresh();

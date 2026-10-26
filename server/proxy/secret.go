@@ -45,7 +45,7 @@ func (s *SecretServer) HandleSecret(src net.Conn) error {
 		return errors.New("secret task is nil")
 	}
 	task.RLock()
-	client, target, flow := task.Client, task.Target, task.Flow
+	client, target, flow, targetType := task.Client, task.Target, task.Flow, task.TargetType
 	task.RUnlock()
 	if client == nil || target == nil {
 		_ = src.Close()
@@ -60,8 +60,9 @@ func (s *SecretServer) HandleSecret(src net.Conn) error {
 	var replay []byte
 	// Legacy Secret clients send application bytes immediately after the
 	// password. Only probe for the optional Link metadata when the feature is
-	// explicitly enabled; the default path remains a zero-delay raw stream.
-	if s.allowSecretLink {
+	// explicitly enabled or the task's target type needs it; the default path
+	// remains a zero-delay raw stream.
+	if s.allowSecretLink || secretTaskNeedsLink(targetType) {
 		link, replay = conn.ProbeSecretLink(src)
 	}
 	targetAddr := ""
@@ -73,12 +74,11 @@ func (s *SecretServer) HandleSecret(src net.Conn) error {
 	needAck := false
 	if link != nil {
 		needAck = link.Option.NeedAck
+		// The task's target_type is authoritative. Legacy tasks (empty value)
+		// keep TCP; "all" lets the visitor's Link select TCP or UDP per
+		// connection, and a specific type forces that protocol.
+		connType = secretTargetConnType(targetType, link.ConnType)
 		if s.allowSecretLink {
-			if requestedType := strings.ToLower(strings.TrimSpace(link.ConnType)); requestedType != "" && requestedType != common.CONN_TCP {
-				client.AddConn()
-				_ = src.Close()
-				return errors.New("Secret Link currently supports TCP targets only")
-			}
 			if strings.TrimSpace(link.Host) != "" {
 				targetAddr = strings.TrimSpace(link.Host)
 			}
@@ -99,11 +99,6 @@ func (s *SecretServer) HandleSecret(src net.Conn) error {
 		target.RUnlock()
 		localProxy = storedLocalProxy && s.allowLocalProxy && s.allowSecretLocal
 	}
-	if !localProxy && !s.allowSecretLink {
-		// The target selected above is already the stored target when Link access
-		// is disabled. Keep this branch explicit for future protocol extensions.
-		connType = common.CONN_TCP
-	}
 	if link != nil && needAck {
 		if err := conn.WriteACK(src, link.Option.Timeout); err != nil {
 			client.AddConn()
@@ -115,11 +110,48 @@ func (s *SecretServer) HandleSecret(src net.Conn) error {
 	go func() {
 		defer client.AddConn()
 		wrapped := conn.NewConn(src)
-		if err := proxy.DealClient(wrapped, client, targetAddr, replay, connType, nil, flow, localProxy, task, nil); err != nil {
+		var err error
+		if connType == common.CONN_UDP {
+			// The visitor stream carries length-framed datagrams; the provider
+			// receives the same stream and unframes it, so the server only has
+			// to relay the bytes between the two sides.
+			err = proxy.DealClientDatagram(wrapped, client, targetAddr, replay, connType, nil, flow, localProxy, task, nil)
+		} else {
+			err = proxy.DealClient(wrapped, client, targetAddr, replay, connType, nil, flow, localProxy, task, nil)
+		}
+		if err != nil {
 			logs.Debug("secret connection failed: %v", err)
 		}
 	}()
 	return nil
+}
+
+// secretTargetConnType resolves the protocol used for one Secret/P2P visitor
+// connection. An empty task target type is the historical default of TCP.
+func secretTargetConnType(taskType, linkType string) string {
+	switch strings.ToLower(strings.TrimSpace(taskType)) {
+	case common.CONN_UDP:
+		return common.CONN_UDP
+	case common.CONN_ALL:
+		if strings.ToLower(strings.TrimSpace(linkType)) == common.CONN_UDP {
+			return common.CONN_UDP
+		}
+		return common.CONN_TCP
+	default:
+		return common.CONN_TCP
+	}
+}
+
+// secretTaskNeedsLink reports whether the task protocol requires the optional
+// Secret Link metadata: UDP and mixed visitors must identify their datagram
+// streams, while legacy TCP-only records keep the zero-delay raw path.
+func secretTaskNeedsLink(taskType string) bool {
+	switch strings.ToLower(strings.TrimSpace(taskType)) {
+	case common.CONN_UDP, common.CONN_ALL:
+		return true
+	default:
+		return false
+	}
 }
 
 // SecretConfig centralizes the defaults used by runtime task startup.

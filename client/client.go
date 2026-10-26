@@ -666,6 +666,14 @@ func (s *TRPClient) handleChan(src net.Conn) {
 	} else {
 		s.logTrace("new %s connection with the goal of %s, remote address:%s", lk.ConnType, lk.Host, lk.RemoteAddr)
 
+		// Secret and modern P2P UDP visitors carry one datagram per framed
+		// record on the stream. Tunnel-mode UDP links keep the historical raw
+		// copy, so the framing flag is what selects the datagram relay.
+		if lk.ConnType == "udp" && lk.DatagramFramed {
+			conn.CopyDatagrams(src, targetConn, lk.Crypt, lk.Compress, nil, false, nil, nil, lk.TLSFingerprint)
+			return
+		}
+
 		if lk.ProtoVersion == "V1" || lk.ProtoVersion == "V2" {
 			if err := writeProxyProtocolHeader(targetConn, lk.RemoteAddr, lk.ProtoVersion); err != nil {
 				s.logError("write PROXY protocol header for backend %s: %v", lk.Host, err)

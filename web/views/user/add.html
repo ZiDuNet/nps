@@ -60,7 +60,7 @@
 
                     <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="用户到期后停止访问资源" data-section-summary-en="Stop access after user expiry"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
                     <div class="form-group">
-                        <label class="form-label font-bold" for="date-picker-user-expire-picker" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</label>
+                        <label class="form-label font-bold" for="user-expire-picker" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</label>
                         <div class="form-group-wrapper">
                             <div id="user-expire-time-picker" class="nps-datetime-picker" aria-describedby="user-expire-time-hint"></div>
                             <span id="user-expire-time-hint" class="help-block" data-i18n-zh="留空表示长期有效。" data-i18n-en="Leave blank for no expiration.">留空表示长期有效。</span>
@@ -95,7 +95,10 @@ $(document).ready(function() {
     function initUserExpirePicker() {
         var host = document.getElementById('user-expire-time-picker');
         if (!host) return;
-        if (host.querySelector('#user-expire-picker')) return;
+        if (host.querySelector('.nps-datetime-picker__control')) return;
+        var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
+        var control = document.createElement('div');
+        control.className = 'nps-datetime-picker__control';
         var input = document.createElement('input');
         input.id = 'user-expire-picker';
         input.className = 'form-control';
@@ -103,9 +106,28 @@ $(document).ready(function() {
         input.name = 'expire_time';
         input.autocomplete = 'off';
         input.placeholder = 'YYYY-MM-DD HH:MM';
-        host.appendChild(input);
+        input.setAttribute('data-input', '');
+        var toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'btn btn-outline nps-datetime-picker__toggle';
+        toggle.setAttribute('data-toggle', '');
+        toggle.setAttribute('aria-label', english ? 'Pick a date' : '选择日期');
+        toggle.setAttribute('title', english ? 'Pick a date' : '选择日期');
+        toggle.innerHTML = '<i class="fa fa-calendar-alt" aria-hidden="true"></i>';
+        var clear = document.createElement('button');
+        clear.type = 'button';
+        clear.className = 'btn btn-outline nps-datetime-picker__clear';
+        clear.setAttribute('data-clear', '');
+        clear.setAttribute('aria-label', english ? 'Clear date' : '清除日期');
+        clear.setAttribute('title', english ? 'Clear date' : '清除日期');
+        clear.innerHTML = '<i class="fa fa-times" aria-hidden="true"></i>';
+        control.appendChild(input);
+        control.appendChild(toggle);
+        control.appendChild(clear);
+        host.appendChild(control);
         if (window.flatpickr) {
-            window.flatpickr(input, {
+            window.flatpickr(control, {
+                wrap: true,
                 enableTime: true,
                 dateFormat: 'Y-m-d H:i',
                 time_24hr: true,

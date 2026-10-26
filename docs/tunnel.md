@@ -100,7 +100,7 @@ keyword:internal
 - 路径路由，例如 `/api`
 - 自定义请求 Header
 - Host 重写
-- 自定义证书路径
+- 自定义证书：路径、上传、粘贴三种输入方式，保存前可在线校验证书与私钥是否匹配
 - 自动 HTTPS
 
 ### 域名、DNS 与非标准端口
@@ -165,8 +165,16 @@ Secret 不固定占用公网端口。服务端保存一个唯一密钥，访问�
 
 ```bash
 ./npc -server=1.1.1.1:8024 -vkey=<VerifyKey> \
-  -password=secret-ssh -local_type=secret -local_port=2000
+  -password=secret-ssh -local_type=secret -target_type=tcp -local_port=2000
 ```
+
+`target_type` 可选 `tcp`、`udp` 或 `all`（TCP+UDP），用于声明访问内网目标时使用的协议。Web 面板的 Secret / P2P 表单同样提供「目标类型」字段。
+
+- `tcp`：只建立 TCP 连接，与旧版本行为一致。
+- `udp`：只转发 UDP 数据报。现代 NPC 使用带长度前缀的数据报帧协议，在 Bridge、Secret 中继和 P2P 直连上都保留报文边界。
+- `all`：同一任务同时支持 TCP 与 UDP，访问端本地端口按需同时监听两种协议。
+
+没有 `target_type` 的旧记录默认按 `tcp` 处理；NPC 1.1.28 及以下的旧客户端不发送现代数据报帧，仍按原始流兼容。Secret 访问端需要在 `npc.conf` 或命令行开启 `secret_link`（或使用 UDP 目标类型）时，才会在 TCP 链路上携带 Link 元数据，否则服务端按任务保存的目标地址直接转发。
 
 访问：
 
@@ -189,8 +197,11 @@ p2p_port=6000
 
 ```bash
 ./npc -server=1.1.1.1:8024 -vkey=<VerifyKey> \
-  -password=p2p-ssh -target=10.0.0.2:22 -local_port=2000
+  -password=p2p-ssh -target_type=tcp -target=10.0.0.2:22 -local_port=2000 \
+  -fallback_secret=true
 ```
+
+`-fallback_secret` 默认开启：直连打洞失败时自动回退到同任务的 Secret 中继，保证访问端端口始终可用；显式设为 `false` 后，直连失败将直接报错。`-local_type=secret` 的访问端本身就走中继，不受该开关影响。
 
 NAT 检测：
 

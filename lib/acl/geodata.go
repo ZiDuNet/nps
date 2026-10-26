@@ -139,6 +139,22 @@ func GeoDataConfigured() bool {
 	return configured
 }
 
+// GeoFiles returns the configured GeoIP and GeoSite file paths. Both may be
+// empty when geodata is disabled.
+func GeoFiles() (ipPath, sitePath string) {
+	geoData.RLock()
+	path := geoData.path
+	geoData.RUnlock()
+	if path == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(path, "\x00", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
 func geoCategoryExists(kind, category string) bool {
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	category = strings.ToLower(strings.TrimSpace(category))

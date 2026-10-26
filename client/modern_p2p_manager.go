@@ -3,10 +3,12 @@ package client
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ehang.io/nps/lib/common"
@@ -44,6 +46,7 @@ type P2PManager struct {
 	mapper    *portmapper.Mapper
 	server    serverInfo
 	listeners []net.Listener
+	udpConns  []*net.UDPConn
 	uuid      string
 }
 
@@ -190,7 +193,10 @@ func (m *P2PManager) sendViaSecret(password string, link conn.Link) (net.Conn, e
 	if _, err = sc.Write([]byte(crypt.Md5(password))); err != nil {
 		return nil, err
 	}
-	if m.cfg.SecretLink {
+	// UDP datagrams always need the Link record so the server can select the
+	// datagram path; TCP links keep the historical gate so legacy servers
+	// receive raw bytes exactly as before.
+	if m.cfg.SecretLink || link.ConnType == common.CONN_UDP {
 		if _, err = conn.NewConn(sc).SendInfo(&link, ""); err != nil {
 			return nil, err
 		}
@@ -212,6 +218,8 @@ func (m *P2PManager) Close() {
 	m.mu.Lock()
 	listeners := append([]net.Listener(nil), m.listeners...)
 	m.listeners = nil
+	udpConns := append([]*net.UDPConn(nil), m.udpConns...)
+	m.udpConns = nil
 	peers := make([]*modernP2PPeer, 0, len(m.peers))
 	for _, peer := range m.peers {
 		peers = append(peers, peer)
@@ -220,6 +228,9 @@ func (m *P2PManager) Close() {
 	m.mu.Unlock()
 	for _, listener := range listeners {
 		_ = listener.Close()
+	}
+	for _, conn := range udpConns {
+		_ = conn.Close()
 	}
 	for _, peer := range peers {
 		if transport := peer.active(); transport != nil {
@@ -246,10 +257,11 @@ func modernSleepWithContext(ctx context.Context, delay time.Duration) bool {
 	}
 }
 
-// StartLocalServer starts one local TCP ingress backed by a P2P task. The
-// local listener remains available while direct connectivity is negotiated;
-// when configured, Secret relay handles requests until a direct QUIC path is
-// ready or whenever that path fails.
+// StartLocalServer starts the local ingress listeners backed by a P2P task.
+// The target type selects TCP, UDP, or both listeners on the same local port.
+// Listeners remain available while direct connectivity is negotiated; when
+// configured, Secret relay handles requests until a direct QUIC path is ready
+// or whenever that path fails.
 func (m *P2PManager) StartLocalServer(local *config.LocalServer) error {
 	if m == nil || local == nil || m.ctx.Err() != nil {
 		return errors.New("P2P 本地服务配置无效或已关闭")
@@ -263,6 +275,27 @@ func (m *P2PManager) StartLocalServer(local *config.LocalServer) error {
 	if ip == "" {
 		ip = "0.0.0.0"
 	}
+	fallback := local.Fallback || m.cfg.FallbackSecret || local.Type == "secret"
+	compress := m.cfg.Client != nil && m.cfg.Client.Cnf != nil && m.cfg.Client.Cnf.Compress
+	if local.Type == "p2p" {
+		m.peer(local.Password, "P2P 本地端口 "+strconv.Itoa(local.Port), fallback)
+	}
+	targetType := normalizeP2PTargetType(local.TargetType)
+	var errs []error
+	if targetType == common.CONN_TCP || targetType == common.CONN_ALL {
+		if err := m.startLocalTCP(local, ip, port, fallback, compress); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if targetType == common.CONN_UDP || targetType == common.CONN_ALL {
+		if err := m.startLocalUDP(local, ip, port, fallback, compress); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (m *P2PManager) startLocalTCP(local *config.LocalServer, ip string, port int, fallback, compress bool) error {
 	listener, err := net.Listen("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
 		return err
@@ -275,46 +308,296 @@ func (m *P2PManager) StartLocalServer(local *config.LocalServer) error {
 	}
 	m.listeners = append(m.listeners, listener)
 	m.mu.Unlock()
-	fallback := local.Fallback || m.cfg.FallbackSecret || local.Type == "secret"
-	if local.Type == "p2p" {
-		m.peer(local.Password, "P2P 本地端口 "+strconv.Itoa(local.Port), fallback)
-	}
-	logs.Info("P2P/Secret 本地监听已启动：%s", listener.Addr())
+	logs.Info("P2P/Secret 本地 TCP 监听已启动：%s", listener.Addr())
 	go func() {
 		for {
 			c, acceptErr := listener.Accept()
 			if acceptErr != nil {
 				return
 			}
-			go m.handleLocal(local, fallback, c)
+			go m.handleLocal(local, fallback, compress, c)
 		}
 	}()
 	return nil
 }
 
-func (m *P2PManager) handleLocal(local *config.LocalServer, fallback bool, source net.Conn) {
-	defer source.Close()
-	compress := m.cfg.Client != nil && m.cfg.Client.Cnf != nil && m.cfg.Client.Cnf.Compress
-	link := conn.NewLink(common.CONN_TCP, local.Target, false, compress, source.RemoteAddr().String(), local.LocalProxy, "")
-	var remote net.Conn
-	var err error
+// normalizeP2PTargetType maps the stored target type to one of tcp, udp, or
+// all. Empty and unknown values keep the historical TCP-only behavior.
+func normalizeP2PTargetType(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case common.CONN_UDP, common.CONN_ALL:
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return common.CONN_TCP
+	}
+}
+
+// openLocalLink builds and opens one visitor-to-provider stream for a local
+// listener. UDP links carry the framing flag so the provider preserves
+// datagram boundaries.
+func (m *P2PManager) openLocalLink(local *config.LocalServer, fallback bool, connType, remoteAddr string, compress bool) (net.Conn, error) {
+	if m == nil || local == nil || strings.TrimSpace(local.Target) == "" {
+		return nil, errors.New("P2P 本地目标为空")
+	}
+	link := conn.NewLink(common.CONN_TCP, local.Target, false, compress, remoteAddr, local.LocalProxy, "")
+	link.ConnType = connType
+	if connType == common.CONN_UDP {
+		link.DatagramFramed = true
+	}
+	link.Option.NeedAck = m.cfg.SecretLink
 	if local.Type == "secret" {
 		// A Secret listener is a relay by definition; it must not negotiate a
 		// P2P session for a task that may not even be a P2P task.
-		link.Option.NeedAck = m.cfg.SecretLink
-		remote, err = m.sendViaSecret(local.Password, *link)
-	} else {
-		// NeedAck is only meaningful on Secret Link metadata. A direct P2P
-		// transport decides independently whether it needs a liveness ACK.
-		link.Option.NeedAck = m.cfg.SecretLink
-		remote, err = m.SendLinkInfo(local.Password, *link, fallback)
+		return m.sendViaSecret(local.Password, *link)
 	}
+	// NeedAck is only meaningful on Secret Link metadata. A direct P2P
+	// transport decides independently whether it needs a liveness ACK.
+	return m.SendLinkInfo(local.Password, *link, fallback)
+}
+
+func (m *P2PManager) handleLocal(local *config.LocalServer, fallback, compress bool, source net.Conn) {
+	defer source.Close()
+	remote, err := m.openLocalLink(local, fallback, common.CONN_TCP, source.RemoteAddr().String(), compress)
 	if err != nil {
 		logs.Warn("P2P/Secret 转发连接建立失败：%v", err)
 		return
 	}
 	defer remote.Close()
 	conn.CopyWaitGroup(remote, source, false, compress, nil, nil, false, nil, nil, nil)
+}
+
+const (
+	p2pUDPIdleTimeout    = 120 * time.Second
+	p2pUDPSweepInterval  = 30 * time.Second
+	p2pUDPBuildTimeout   = 10 * time.Second
+	p2pUDPDatagramBuffer = 64 << 10
+)
+
+// p2pUDPListener is one local UDP ingress of a P2P/Secret visitor. It keeps
+// one framed provider stream per visitor source address, mirroring the
+// server-side UDP mode server but routing the links through the P2P manager.
+type p2pUDPListener struct {
+	mgr      *P2PManager
+	local    *config.LocalServer
+	fallback bool
+	compress bool
+	conn     *net.UDPConn
+	sessions sync.Map
+	done     chan struct{}
+}
+
+type p2pUDPSession struct {
+	mu       sync.Mutex
+	ready    chan struct{}
+	buildErr error
+	framed   *conn.FramedConn
+	raw      net.Conn
+	closed   bool
+	last     atomic.Int64
+}
+
+func (s *p2pUDPSession) touch() {
+	s.last.Store(time.Now().UnixNano())
+}
+
+func (s *p2pUDPSession) waitReady() error {
+	if s.ready == nil {
+		return nil
+	}
+	select {
+	case <-s.ready:
+		s.mu.Lock()
+		err := s.buildErr
+		s.mu.Unlock()
+		return err
+	case <-time.After(p2pUDPBuildTimeout):
+		return errors.New("P2P UDP 会话建立超时")
+	}
+}
+
+func (s *p2pUDPSession) write(data []byte) error {
+	if err := s.waitReady(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if s.closed || s.framed == nil {
+		s.mu.Unlock()
+		return io.ErrClosedPipe
+	}
+	_, err := s.framed.Write(data)
+	s.mu.Unlock()
+	return err
+}
+
+func (s *p2pUDPSession) close() {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.closed = true
+	raw := s.raw
+	s.mu.Unlock()
+	if raw != nil {
+		_ = raw.Close()
+	}
+}
+
+func (m *P2PManager) startLocalUDP(local *config.LocalServer, ip string, port int, fallback, compress bool) error {
+	udpAddr := &net.UDPAddr{IP: net.ParseIP(ip), Port: port}
+	pc, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	if m.ctx.Err() != nil {
+		m.mu.Unlock()
+		_ = pc.Close()
+		return errors.New("P2P 服务在监听启动前已关闭")
+	}
+	m.udpConns = append(m.udpConns, pc)
+	m.mu.Unlock()
+	listener := &p2pUDPListener{
+		mgr:      m,
+		local:    local,
+		fallback: fallback,
+		compress: compress,
+		conn:     pc,
+		done:     make(chan struct{}),
+	}
+	logs.Info("P2P/Secret 本地 UDP 监听已启动：%s", pc.LocalAddr())
+	go listener.run()
+	go listener.sweep()
+	return nil
+}
+
+func (l *p2pUDPListener) run() {
+	defer func() {
+		close(l.done)
+		l.sessions.Range(func(key, value any) bool {
+			l.remove(key.(string), value.(*p2pUDPSession))
+			return true
+		})
+	}()
+	buf := make([]byte, p2pUDPDatagramBuffer)
+	for {
+		n, addr, err := l.conn.ReadFromUDP(buf)
+		if err != nil {
+			return
+		}
+		if n == 0 {
+			continue
+		}
+		data := make([]byte, n)
+		copy(data, buf[:n])
+		l.dispatch(addr, data)
+	}
+}
+
+func (l *p2pUDPListener) dispatch(addr *net.UDPAddr, data []byte) {
+	key := addr.String()
+	if existing, ok := l.sessions.Load(key); ok {
+		sess := existing.(*p2pUDPSession)
+		if err := sess.write(data); err != nil {
+			l.remove(key, sess)
+		} else {
+			sess.touch()
+		}
+		return
+	}
+	sess := &p2pUDPSession{ready: make(chan struct{})}
+	sess.touch()
+	if existing, loaded := l.sessions.LoadOrStore(key, sess); loaded {
+		winner := existing.(*p2pUDPSession)
+		if err := winner.write(data); err != nil {
+			l.remove(key, winner)
+		} else {
+			winner.touch()
+		}
+		return
+	}
+	go l.build(addr, key, sess, data)
+}
+
+func (l *p2pUDPListener) build(addr *net.UDPAddr, key string, sess *p2pUDPSession, first []byte) {
+	fail := func(err error) {
+		sess.mu.Lock()
+		sess.buildErr = err
+		sess.mu.Unlock()
+		close(sess.ready)
+		l.remove(key, sess)
+	}
+	remote, err := l.mgr.openLocalLink(l.local, l.fallback, common.CONN_UDP, addr.String(), l.compress)
+	if err != nil {
+		fail(err)
+		return
+	}
+	rwc := conn.GetConnWithLimits(remote, false, l.compress, nil, false, nil, nil)
+	sess.mu.Lock()
+	if sess.closed {
+		sess.mu.Unlock()
+		_ = remote.Close()
+		fail(errors.New("P2P UDP 会话在建立前已关闭"))
+		return
+	}
+	sess.framed = conn.NewFramedConn(rwc)
+	sess.raw = remote
+	sess.mu.Unlock()
+	close(sess.ready)
+	sess.touch()
+	go l.readLoop(addr, key, sess)
+	if err := sess.write(first); err != nil {
+		l.remove(key, sess)
+	}
+}
+
+func (l *p2pUDPListener) readLoop(addr *net.UDPAddr, key string, sess *p2pUDPSession) {
+	defer l.remove(key, sess)
+	buf := make([]byte, p2pUDPDatagramBuffer)
+	for {
+		sess.mu.Lock()
+		framed := sess.framed
+		sess.mu.Unlock()
+		if framed == nil {
+			return
+		}
+		n, err := framed.Read(buf)
+		if n > 0 {
+			if _, werr := l.conn.WriteToUDP(buf[:n], addr); werr != nil {
+				return
+			}
+			sess.touch()
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (l *p2pUDPListener) remove(key string, sess *p2pUDPSession) {
+	l.sessions.CompareAndDelete(key, sess)
+	sess.close()
+}
+
+func (l *p2pUDPListener) sweep() {
+	ticker := time.NewTicker(p2pUDPSweepInterval)
+	defer ticker.Stop()
+	idleNs := int64(p2pUDPIdleTimeout)
+	for {
+		select {
+		case <-l.done:
+			return
+		case <-ticker.C:
+			now := time.Now().UnixNano()
+			l.sessions.Range(func(key, value any) bool {
+				sess := value.(*p2pUDPSession)
+				if now-sess.last.Load() > idleNs {
+					l.remove(key.(string), sess)
+				}
+				return true
+			})
+		}
+	}
 }
 
 // p2pBridgeAdapter is used by the existing local listener code. It keeps the

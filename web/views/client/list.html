@@ -45,6 +45,36 @@
             </section>
         </div>
     </div>
+
+    <div id="client-update-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="client-update-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content nps-password-modal">
+                <div class="modal-header">
+                    <div><div class="nps-modal-kicker" data-i18n-zh="客户端维护" data-i18n-en="Client maintenance">客户端维护</div><h2 id="client-update-title" class="modal-title" data-i18n-zh="检查客户端更新" data-i18n-en="Check client update">检查客户端更新</h2></div>
+                    <button type="button" class="nps-modal-close" data-bs-dismiss="modal" aria-label="关闭"><i class="fa fa-times" aria-hidden="true"></i></button>
+                </div>
+                <div class="modal-body">
+                    <div class="client-update-fields">
+                        <div class="client-update-field">
+                            <span class="client-update-field__label" data-i18n-zh="当前版本" data-i18n-en="Current version">当前版本</span>
+                            <strong id="client-update-current">-</strong>
+                        </div>
+                        <div class="client-update-field">
+                            <span class="client-update-field__label" data-i18n-zh="最新版本" data-i18n-en="Latest version">最新版本</span>
+                            <strong id="client-update-latest"><span class="client-update-loading"><i class="fa fa-spinner fa-spin" aria-hidden="true"></i><span data-i18n-zh="检测中…" data-i18n-en="Checking…">检测中…</span></span></strong>
+                        </div>
+                    </div>
+                    <p id="client-update-summary" class="client-update-summary" hidden></p>
+                    <p id="client-update-hint" class="help-block client-update-hint" data-i18n-zh="远程升级依赖 GitHub Release；客户端会下载、校验并自动重启，隧道可能短暂中断。" data-i18n-en="Remote update uses the GitHub Release; the client downloads, verifies, and restarts itself, so tunnels may briefly disconnect.">远程升级依赖 GitHub Release；客户端会下载、校验并自动重启，隧道可能短暂中断。</p>
+                    <p id="client-update-error" class="client-update-error" hidden></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline btn-secondary" data-bs-dismiss="modal" data-i18n-zh="关闭" data-i18n-en="Close">关闭</button>
+                    <button type="button" class="btn btn-primary" id="client-update-send" hidden data-i18n-zh="下发升级" data-i18n-en="Send update">下发升级</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </section>
 
 <script>
@@ -114,6 +144,13 @@
                     + '<span class="client-detail__label">' + label + '</span>'
                     + '<span class="client-detail__value">' + value + '</span></div>';
             };
+            var chips = function(label, value) {
+                var items = Array.isArray(value) ? value : [];
+                var content = items.length
+                    ? items.map(function (item) { return '<span class="client-detail__chip">' + text(item) + '</span>'; }).join('')
+                    : '<span class="client-detail__chip client-detail__chip--empty">-</span>';
+                return '<div class="client-detail__chips"><span class="client-detail__label">' + label + '</span><div class="client-detail__chip-list">' + content + '</div></div>';
+            };
             var section = function(icon, title, content) {
                 return '<section class="client-detail__section">'
                     + '<h6 class="client-detail__section-title"><i class="fa fa-' + icon + '" aria-hidden="true"></i>' + title + '</h6>'
@@ -125,87 +162,63 @@
                     + '<code>' + text(code) + '</code>'
                     + '<button type="button" class="copy btn btn-outline btn-primary btn-xs client-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button></div>';
             };
-            var updateAction = '';
-            {{if eq true .isAdmin}}
-            {{if .allow_remote_update}}
-            (function () {
-                var clientId = Number(row.Id);
-                var supported = row.CanRemoteUpdate === true;
-                var online = row.IsConnect === true && row.Status === true && row.NoStore !== true;
-                var disabled = !supported || !online;
-                var titleZh = !supported
-                    ? '请先手动升级到 v{{.client_update_min_version}}，之后可远程升级'
-                    : (!online ? '客户端启用并在线后才能升级' : '下发客户端升级');
-                var titleEn = !supported
-                    ? 'Manually update once to v{{.client_update_min_version}} to enable remote updates'
-                    : (!online ? 'Client must be enabled and online' : 'Send client update');
-                var title = npsIsEnglish() ? titleEn : titleZh;
-                updateAction = '<div class="client-detail__update">'
-                    + '<button type="button" class="btn btn-outline btn-primary btn-xs client-version-update"'
-                    + (disabled ? ' disabled' : '')
-                    + ' onclick="requestClientUpgrade(this,' + clientId + ')"'
-                    + ' title="' + npsEscapeHtml(title) + '" data-title-zh="' + npsEscapeHtml(titleZh) + '"'
-                    + ' aria-label="' + npsEscapeHtml(title) + '" data-aria-label-zh="' + npsEscapeHtml(titleZh) + '"'
-                    + ' data-title-en="' + npsEscapeHtml(titleEn) + '"'
-                    + ' data-aria-label-en="' + npsEscapeHtml(titleEn) + '">'
-                    + '<i class="fa fa-cloud-download" aria-hidden="true"></i>'
-                    + '<span>' + (english ? 'Update client' : '更新客户端') + '</span></button>'
-                    + '<span class="client-detail__update-note">' + npsEscapeHtml(title) + '</span></div>';
-            })();
-            {{end}}
-            {{end}}
             return '<div class="client-detail">'
                 + section('terminal', english ? 'Connection commands' : '连接命令',
                     cmdRow('<span langtag="word-quicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.p}}|' + (row.VerifyKey || '') + '|false'))
                     + cmdRow('<span langtag="word-tlsquicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.tls_p}}|' + (row.VerifyKey || '') + '|true'))
                     + cmdRow('<span langtag="word-commandclient"></span>', '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + (row.VerifyKey || '') + ' -type={{.bridgeType}}')
                     + cmdRow('<span langtag="word-commandclient-tls"></span>', '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + (row.VerifyKey || '') + ' -tls_enable=true'))
-                + updateAction
-                + section('sliders-h', english ? 'Connection' : '基础配置',
-                    kv('<span langtag="word-maxconnections"></span>', text(row.MaxConn))
-                    + kv('<span langtag="word-curconnections"></span>', text(row.NowConn))
-                    + kv(english ? 'Current rate' : '当前速率', changeunit((row.Rate && row.Rate.NowRate) ? row.Rate.NowRate : 0) + '/S')
-                    + kv('<span langtag="word-flowlimit"></span>', text(flow.FlowLimit, 0) + ' M')
-                    + kv('<span langtag="word-ratelimit"></span>', text(row.RateLimit, 0) + ' KB/s')
-                    + kv('<span langtag="word-maxtunnels"></span>', text(row.MaxTunnelNum, 0))
-                    + kv('<span langtag="word-connectbyconfig"></span>', npsBooleanMarkup(!!row.ConfigConnAllow)))
-                + section('info-circle', english ? 'Client details' : '客户端信息',
-                    kv(english ? 'Owner' : '所属用户', row.UserId > 0 ? (text(row.UserName, '-') + '（ID ' + text(row.UserId) + '）') : (english ? 'Unassigned' : '未分配'))
-                    + kv(english ? 'Status' : '运行状态', row.Status === true ? (english ? 'Enabled' : '已启用') : (english ? 'Disabled' : '已停用'))
-                    + kv(english ? 'Online' : '在线状态', row.IsConnect === true ? (english ? 'Online' : '在线') : (english ? 'Offline' : '离线'))
-                    + kv('<span langtag="word-version"></span>', text(row.Version, '-'))
-                    + kv('<span langtag="word-verifykey"></span>', text(row.VerifyKey, '-'))
-                    + kv('<span langtag="word-address"></span>', text(row.Addr, '-'))
-                    + kv('<span langtag="word-localaddr"></span>', text(row.LocalAddr, '-'))
-                    + kv(english ? 'Public verify key' : '公开验证密钥模式', npsBooleanMarkup(!!row.NoStore))
-                    + kv('<span langtag="word-inletflow"></span>', text(inletFlow))
-                    + kv('<span langtag="word-exportflow"></span>', text(exportFlow)))
-                + '<div class="client-detail__columns">'
-                + '<div class="client-detail__column">'
-                + section('key', english ? 'Authentication' : '认证信息',
-                    kv('<span langtag="word-webusername"></span>', text(row.WebUserName, '-'))
-                    + kv('<span langtag="word-webpassword"></span>', credentialStatus(!!row.WebPasswordSet))
-                    + kv('<span langtag="word-basicusername"></span>', text(row.BasicUserName, '-'))
-                    + kv('<span langtag="word-basicpassword"></span>', credentialStatus(!!row.BasicPasswordSet)))
+                + '<div class="client-detail__cards">'
+                + '<section class="client-detail__card">'
+                + '<h6 class="client-detail__section-title"><i class="fa fa-sliders-h" aria-hidden="true"></i>' + (english ? 'Connection' : '基础配置') + '</h6>'
+                + '<div class="client-detail__grid">'
+                + kv('<span langtag="word-maxconnections"></span>', text(row.MaxConn))
+                + kv('<span langtag="word-curconnections"></span>', text(row.NowConn))
+                + kv(english ? 'Current rate' : '当前速率', changeunit((row.Rate && row.Rate.NowRate) ? row.Rate.NowRate : 0) + '/S')
+                + kv('<span langtag="word-flowlimit"></span>', text(flow.FlowLimit, 0) + ' M')
+                + kv('<span langtag="word-ratelimit"></span>', text(row.RateLimit, 0) + ' KB/s')
+                + kv('<span langtag="word-maxtunnels"></span>', text(row.MaxTunnelNum, 0))
+                + kv('<span langtag="word-connectbyconfig"></span>', npsBooleanMarkup(!!row.ConfigConnAllow))
+                + '</div></section>'
+                + '<section class="client-detail__card">'
+                + '<h6 class="client-detail__section-title"><i class="fa fa-info-circle" aria-hidden="true"></i>' + (english ? 'Client details' : '客户端信息') + '</h6>'
+                + '<div class="client-detail__grid">'
+                + kv(english ? 'Owner' : '所属用户', row.UserId > 0 ? (text(row.UserName, '-') + '（ID ' + text(row.UserId) + '）') : (english ? 'Unassigned' : '未分配'))
+                + kv(english ? 'Status' : '运行状态', row.Status === true ? (english ? 'Enabled' : '已启用') : (english ? 'Disabled' : '已停用'))
+                + kv(english ? 'Online' : '在线状态', row.IsConnect === true ? (english ? 'Online' : '在线') : (english ? 'Offline' : '离线'))
+                + kv('<span langtag="word-version"></span>', text(row.Version, '-'))
+                + kv('<span langtag="word-verifykey"></span>', text(row.VerifyKey, '-'))
+                + kv('<span langtag="word-address"></span>', text(row.Addr, '-'))
+                + kv('<span langtag="word-localaddr"></span>', text(row.LocalAddr, '-'))
+                + kv(english ? 'Public verify key' : '公开验证密钥模式', npsBooleanMarkup(!!row.NoStore))
+                + kv('<span langtag="word-inletflow"></span>', text(inletFlow))
+                + kv('<span langtag="word-exportflow"></span>', text(exportFlow))
+                + '</div></section>'
+                + '<section class="client-detail__card">'
+                + '<h6 class="client-detail__section-title"><i class="fa fa-shield-alt" aria-hidden="true"></i>' + (english ? 'Authentication & access' : '认证与访问') + '</h6>'
+                + '<div class="client-detail__grid">'
+                + kv(english ? 'List policy' : '名单冲突策略', text(row.IpListPriority === 1 ? (english ? 'Allow first' : '白名单优先') : (english ? 'Deny first' : '黑名单优先'), '-'))
+                + kv(english ? 'Registered IPs only' : '仅允许已登记 IP', npsBooleanMarkup(!!row.RegisteredOnly))
+                + kv(english ? 'Registration key' : 'IP 登记密钥', credentialStatus(!!row.RegisterKeySet))
+                + kv(english ? 'Registration hours' : '登记有效时长', text(row.RegisterMaxHours, 0) + (english ? ' h' : ' 小时'))
+                + kv(english ? 'Legacy Web login' : '旧版 Web 登录', text(row.WebUserName, '-') + ' / ' + credentialStatus(!!row.WebPasswordSet))
+                + kv(english ? 'Basic auth' : 'Basic 认证', text(row.BasicUserName, '-') + ' / ' + credentialStatus(!!row.BasicPasswordSet))
                 + '</div>'
-                + '<div class="client-detail__column">'
-                + section('shield-alt', english ? 'Access control' : '访问控制',
-                    kv('<span langtag="word-ipwhite"></span>', npsBooleanMarkup(!!row.IpWhite))
-                    + kv(english ? 'List policy' : '名单冲突策略', text(row.IpListPriority === 1 ? (english ? 'Allow first' : '白名单优先') : (english ? 'Deny first' : '黑名单优先'), '-'))
-                    + kv(english ? 'Registered IPs only' : '仅允许已登记 IP', npsBooleanMarkup(!!row.RegisteredOnly))
-                    + kv(english ? 'Registration key' : 'IP 登记密钥', credentialStatus(!!row.RegisterKeySet))
-                    + kv(english ? 'Registration hours' : '登记有效时长', text(row.RegisterMaxHours, 0) + (english ? ' h' : ' 小时')))
-                + '<p class="client-detail__line"><span langtag="word-ipwhitelist"></span>: <span>' + listText(row.IpWhiteList) + '</span></p>'
-                + '<p class="client-detail__line"><span langtag="word-blackip"></span>: <span>' + listText(row.BlackIpList) + '</span></p>'
-                + '<p class="client-detail__line"><span langtag="word-whiteip"></span>: <span>' + listText(row.WhiteIpList) + '</span></p>'
-                + '</div></div>'
-                + section('clock', english ? 'Timestamps' : '时间信息',
-                    kv('<span langtag="word-createtime"></span>', text(row.CreateTime, '-'))
-                    + kv('<span langtag="word-lastonlinetime"></span>', text(row.LastOnlineTime, '-'))
-                    + kv(english ? 'Client expiry' : '客户端有效期', configuredExpiry)
-                    + kv(english ? 'Effective expiry' : '实际有效期', effectiveExpiry))
+                + chips('<span langtag="word-ipwhitelist"></span>', row.IpWhiteList)
+                + chips('<span langtag="word-blackip"></span>', row.BlackIpList)
+                + chips('<span langtag="word-whiteip"></span>', row.WhiteIpList)
+                + '</section>'
+                + '<section class="client-detail__card">'
+                + '<h6 class="client-detail__section-title"><i class="fa fa-clock" aria-hidden="true"></i>' + (english ? 'Timestamps' : '时间信息') + '</h6>'
+                + '<div class="client-detail__grid">'
+                + kv('<span langtag="word-createtime"></span>', text(row.CreateTime, '-'))
+                + kv('<span langtag="word-lastonlinetime"></span>', text(row.LastOnlineTime, '-'))
+                + kv(english ? 'Client expiry' : '客户端有效期', configuredExpiry)
+                + kv(english ? 'Effective expiry' : '实际有效期', effectiveExpiry)
+                + '</div></section>'
+                + '</div>'
                 + section('history', english ? 'Recent connections' : '最近连接记录', (row.ConnectionHistory || []).length
-                    ? row.ConnectionHistory.slice().reverse().map(function (event) {
+                    ? row.ConnectionHistory.slice().reverse().slice(0, 3).map(function (event) {
                         var state = event.OfflineTime
                             ? '<span class="client-detail__history-state">' + (english ? 'Offline' : '已断开') + '</span>'
                             : '<span class="client-detail__history-state client-detail__history-state--online">' + (english ? 'Online' : '当前在线') + '</span>';
@@ -248,9 +261,19 @@
                 title: '<span langtag="word-version"></span>',//标题
                 halign: 'center',
                 class: 'client-list__version',
-                visible: !clientListCompact,//较窄桌面中在详情行保留，避免表头拥挤
+                visible: true,
                 formatter: function (value, row) {
-                    return npsEscapeHtml(value || '-');
+                    var display = npsEscapeHtml(value || '-');
+                    {{if eq true .isAdmin}}
+                    return '<button type="button" class="client-version-pill" data-client-id="' + Number(row.Id)
+                        + '" data-client-version="' + npsEscapeHtml(value || '') + '"'
+                        + ' title="' + (npsIsEnglish() ? 'Check for updates' : '检查更新') + '"'
+                        + ' data-title-zh="检查更新" data-title-en="Check for updates"'
+                        + ' aria-label="' + (npsIsEnglish() ? 'Check for updates' : '检查更新') + '"'
+                        + ' data-aria-label-zh="检查更新" data-aria-label-en="Check for updates">'
+                        + display + '<i class="fa fa-chevron-down" aria-hidden="true"></i></button>';
+                    {{end}}
+                    return display;
                 }
             },
             {
@@ -403,47 +426,92 @@
         return btoa(utf8Str);
     }
 
-    function copyCommand(data) {
-        data.setAttribute("data-clipboard-text", data.previousElementSibling ? data.previousElementSibling.textContent : '')
+    var clientUpdateState = null;
+
+    function resetClientUpdateModal() {
+        var english = npsIsEnglish();
+        $('#client-update-current').text('-');
+        $('#client-update-latest').html('<span class="client-update-loading"><i class="fa fa-spinner fa-spin" aria-hidden="true"></i><span>' + (english ? 'Checking…' : '检测中…') + '</span></span>');
+        $('#client-update-summary').text('').prop('hidden', true);
+        $('#client-update-error').text('').prop('hidden', true);
+        $('#client-update-send').prop('hidden', true).prop('disabled', false).html(english ? 'Send update' : '下发升级');
     }
 
-    function requestClientUpgrade(button, clientId) {
+    function openClientUpdateModal(clientId, version) {
         var english = npsIsEnglish();
-        var question = english
-            ? 'Send an update request? The client will download and verify the latest GitHub release, then restart. Tunnels may briefly disconnect.'
-            : '确定下发升级指令吗？客户端会下载并校验 GitHub 最新版本，随后自动重启，隧道可能短暂中断。';
-        if (!button || !clientId) return;
-        var confirmRequest = typeof npsConfirmDialog === 'function'
-            ? npsConfirmDialog(question, { danger: true, confirmLabel: english ? 'Send' : '下发升级' })
-            : Promise.resolve(window.confirm(question));
-        confirmRequest.then(function (confirmed) {
-            if (!confirmed) return;
-            var $button = $(button);
-            var originalMarkup = $button.html();
-            $button.prop('disabled', true).attr('aria-busy', 'true');
-            $button.html('<i class="fa fa-spinner fa-spin" aria-hidden="true"></i>');
-            $.ajax({
-                type: 'POST',
-                url: '{{.web_base_url}}/client/upgrade',
-                data: { id: clientId }
-            }).done(function (response) {
-                if (response && response.status === 1) {
-                    var sentLabel = english ? 'Update request sent' : '升级指令已下发';
-                    $button.html('<i class="fa fa-check" aria-hidden="true"></i>')
-                        .attr('title', sentLabel).attr('aria-label', sentLabel).removeAttr('aria-busy');
-                    npsNotify('success', english
-                        ? 'Update request sent. The client restarts after downloading and verifying the release.'
-                        : '升级指令已下发，客户端将在下载并校验完成后自动重启。');
+        clientUpdateState = { id: clientId, version: version };
+        resetClientUpdateModal();
+        $('#client-update-current').text(version || '-');
+        $('#client-update-modal').modal('show');
+        $.get('{{.web_base_url}}/client/updatecheck', { id: clientId }).done(function (response) {
+            if (!response) return;
+            if (response.check_error) {
+                $('#client-update-latest').html('<span>' + (english ? 'Unavailable' : '不可用') + '</span>');
+                $('#client-update-error').text(english
+                    ? 'Version check failed: ' + response.check_error
+                    : '版本检测失败：' + response.check_error).prop('hidden', false);
+                return;
+            }
+            $('#client-update-latest').text(response.latest || '-');
+            if (response.update_available) {
+                $('#client-update-summary').html(npsEscapeHtml(english
+                    ? 'A newer version is available.'
+                    : '检测到新版本。')).prop('hidden', false);
+                if (response.can_remote_update && response.enabled && response.online) {
+                    $('#client-update-send').prop('hidden', false);
                 } else {
-                    $button.html(originalMarkup).prop('disabled', false).removeAttr('aria-busy');
-                    npsNotify('error', response && response.msg ? response.msg : npsRequestErrorMessage());
+                    var reason = !response.can_remote_update
+                        ? (english ? 'This client must be updated manually once before remote updates are available.' : '该客户端需先手动升级一次，之后才能远程升级。')
+                        : (!response.enabled ? (english ? 'The client is disabled.' : '客户端已停用，请先启用。') : (english ? 'The client is offline.' : '客户端当前离线。'));
+                    $('#client-update-error').text(reason).prop('hidden', false);
                 }
-            }).fail(function (xhr) {
-                $button.html(originalMarkup).prop('disabled', false).removeAttr('aria-busy');
-                var message = xhr && xhr.responseJSON && xhr.responseJSON.msg;
-                npsNotify('error', message || npsRequestErrorMessage());
-            });
+            } else {
+                $('#client-update-summary').html('<span class="client-update-up-to-date"><i class="fa fa-check-circle" aria-hidden="true"></i>' + npsEscapeHtml(english ? 'Already up to date.' : '已是最新版本。') + '</span>').prop('hidden', false);
+            }
+        }).fail(function (xhr) {
+            var message = xhr && xhr.responseJSON && xhr.responseJSON.msg;
+            $('#client-update-latest').html('<span>' + (english ? 'Unavailable' : '不可用') + '</span>');
+            $('#client-update-error').text(message || npsRequestErrorMessage()).prop('hidden', false);
         });
+    }
+
+    $(document).on('click', '.client-version-pill', function () {
+        var clientId = Number($(this).attr('data-client-id'));
+        var version = $(this).attr('data-client-version') || '';
+        openClientUpdateModal(clientId, version);
+    });
+
+    $('#client-update-send').on('click', function () {
+        if (!clientUpdateState || !clientUpdateState.id) return;
+        var english = npsIsEnglish();
+        var $button = $(this);
+        $button.prop('disabled', true).attr('aria-busy', 'true').html('<i class="fa fa-spinner fa-spin" aria-hidden="true"></i>');
+        $.ajax({
+            type: 'POST',
+            url: '{{.web_base_url}}/client/upgrade',
+            data: { id: clientUpdateState.id }
+        }).done(function (response) {
+            if (response && response.status === 1) {
+                $('#client-update-modal').modal('hide');
+                npsNotify('success', english
+                    ? 'Update request sent. The client restarts after downloading and verifying the release.'
+                    : '升级指令已下发，客户端将在下载并校验完成后自动重启。');
+                resetClientUpdateModal();
+                var $table = $('#table');
+                if ($table.data('npsTable')) $table.npsTable('refresh');
+            } else {
+                $button.prop('disabled', false).removeAttr('aria-busy').html(english ? 'Send update' : '下发升级');
+                npsNotify('error', response && response.msg ? response.msg : npsRequestErrorMessage());
+            }
+        }).fail(function (xhr) {
+            $button.prop('disabled', false).removeAttr('aria-busy').html(english ? 'Send update' : '下发升级');
+            var message = xhr && xhr.responseJSON && xhr.responseJSON.msg;
+            npsNotify('error', message || npsRequestErrorMessage());
+        });
+    });
+
+    function copyCommand(data) {
+        data.setAttribute("data-clipboard-text", data.previousElementSibling ? data.previousElementSibling.textContent : '')
     }
 
     var clipboard = new ClipboardJS('.copy');

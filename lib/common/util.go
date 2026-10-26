@@ -411,6 +411,71 @@ func GetLocalUdpAddr() (net.Conn, error) {
 	return tmpConn, tmpConn.Close()
 }
 
+// GetOutboundIPv4 returns the local IPv4 source address that would be used to
+// reach the public Internet.  When the host has no usable IPv4 route, the
+// loopback address is returned so callers can render a stable placeholder
+// instead of an empty value.
+func GetOutboundIPv4() net.IP {
+	conn, err := net.Dial("udp4", "114.114.114.114:53")
+	if err != nil {
+		return net.ParseIP("127.0.0.1")
+	}
+	defer func() { _ = conn.Close() }()
+	if udp, ok := conn.LocalAddr().(*net.UDPAddr); ok && udp != nil && udp.IP != nil {
+		return udp.IP
+	}
+	return net.ParseIP("127.0.0.1")
+}
+
+// GetOutboundIPv6 returns the local IPv6 source address that would be used to
+// reach the public IPv6 Internet.  When the host has no usable IPv6 route, the
+// unspecified IPv6 loopback address is returned as a placeholder.
+func GetOutboundIPv6() net.IP {
+	conn, err := net.Dial("udp6", "[2400:3200::1]:53")
+	if err != nil {
+		return net.ParseIP("::1")
+	}
+	defer func() { _ = conn.Close() }()
+	if udp, ok := conn.LocalAddr().(*net.UDPAddr); ok && udp != nil && udp.IP != nil {
+		return udp.IP
+	}
+	return net.ParseIP("::1")
+}
+
+// GetServerIp resolves the effective public address for a configured P2P
+// listener address.  Explicit IPs and host names are kept as-is, while
+// wildcard addresses fall back to the outbound probe address so the dashboard
+// can show an address a client can actually reach.
+func GetServerIp(ip string) string {
+	ip = strings.TrimSpace(ip)
+	if ip != "" && ip != "0.0.0.0" && ip != "::" && ip != "[::]" {
+		return strings.Trim(ip, "[]")
+	}
+	if ip == "::" || ip == "[::]" {
+		if v6 := GetOutboundIPv6(); v6 != nil && !v6.IsUnspecified() {
+			return v6.String()
+		}
+	}
+	if v4 := GetOutboundIPv4(); v4 != nil && !v4.IsUnspecified() {
+		return v4.String()
+	}
+	return "127.0.0.1"
+}
+
+// BuildAddress joins a host and port into one address.  Bare IPv6 literals are
+// bracket-quoted so the result stays usable as an authority component.
+func BuildAddress(host, port string) string {
+	host = strings.TrimSpace(host)
+	port = strings.TrimSpace(port)
+	if host == "" || port == "" {
+		return host
+	}
+	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") && !strings.HasSuffix(host, "]") {
+		host = "[" + host + "]"
+	}
+	return host + ":" + port
+}
+
 // parse template
 func ParseStr(str string) (string, error) {
 	tmp := template.New("npc")

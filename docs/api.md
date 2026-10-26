@@ -4,11 +4,22 @@ Web API 与 Web 管理面板共用控制器。API 请求需要携带 `auth_key` 
 
 ## 鉴权
 
-`auth_key` 的计算方式：
+管理面板的「系统 → API 接入」页面提供令牌管理入口：管理员可以查看并管理两套等价的管理员密钥，普通用户可以生成、再次查看和撤销自己的 API Token。
+
+### 管理员签名（auth_key + timestamp）
+
+服务端支持两套完全等价的管理员密钥：
+
+1. `nps.conf` 中的 `auth_key`；
+2. 在「API 接入」页面生成的网页管理密钥（`npsa_` 前缀）。
+
+两套密钥都使用同一签名协议，API 客户端无需感知当前使用的是哪一套。签名计算方式：
 
 ```text
 md5(nps.conf 中的 auth_key + timestamp)
 ```
+
+使用网页管理密钥时，把上面的 `auth_key` 换成网页密钥原文即可。
 
 `timestamp` 为当前 Unix 时间戳，服务端允许约 20 秒误差。
 
@@ -35,6 +46,23 @@ POST /auth/getauthkey
 ```
 
 要求 `auth_crypt_key` 长度为 16 位，返回 AES-CBC 加密结果。
+
+### 用户 API Token
+
+普通用户使用 `npsu_` 开头的 Token，权限范围自动限定为该用户获授权的客户端资源。请求方式二选一：
+
+```http
+Authorization: Bearer npsu_<token>
+```
+
+```bash
+curl -X POST 'http://127.0.0.1:8081/client/list' \
+  -d 'api_token=npsu_<token>' \
+  -d 'offset=0' \
+  -d 'limit=10'
+```
+
+Token 与管理员签名不同，不携带 `timestamp`。Token 在「API 接入」页面生成后可以再次查看；使用查询参数传递 Token 时应仅走 HTTPS，避免 URL 进入访问日志。
 
 ## 通用返回
 

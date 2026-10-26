@@ -42,6 +42,7 @@ type LocalServer struct {
 	Ip         string
 	Password   string
 	Target     string
+	TargetType string
 	Fallback   bool
 	LocalProxy bool
 }
@@ -414,6 +415,8 @@ func dealTunnel(s string) *file.Tunnel {
 			t.HttpProxy = common.GetBoolByStr(value)
 		case "socks5_proxy":
 			t.Socks5Proxy = common.GetBoolByStr(value)
+		case "target_type":
+			t.TargetType = strings.ToLower(strings.TrimSpace(value))
 		case "dest_acl_mode":
 			t.DestAclMode = common.GetIntNoErrByStr(value)
 		case "dest_acl_rules":
@@ -471,6 +474,8 @@ func delLocalService(s string) *LocalServer {
 			l.Password = value
 		case "target_addr":
 			l.Target = value
+		case "target_type":
+			l.TargetType = value
 		case "fallback_secret":
 			l.Fallback = common.GetBoolByStr(value)
 		case "local_proxy":

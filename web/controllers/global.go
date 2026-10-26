@@ -7,13 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/ipreg"
 )
 
@@ -209,6 +212,104 @@ func (s *GlobalController) Banclean() {
 	s.AjaxOk("已清理过期登录记录")
 }
 
+// geoFileStatus is the administrator-facing state of one geodata file.
+type geoFileStatus struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Exists  bool   `json:"exists"`
+	Size    int64  `json:"size"`
+	ModTime string `json:"mod_time"`
+}
+
+// geoDataStatus is the aggregate geodata state shown on the global settings
+// page and returned by the update endpoint.
+type geoDataStatus struct {
+	Version    string          `json:"version"`
+	Configured bool            `json:"configured"`
+	Loaded     bool            `json:"loaded"`
+	Files      []geoFileStatus `json:"files"`
+}
+
+// geoUpdating keeps only one online geodata update running at a time.
+var geoUpdating atomic.Bool
+
+func geoStatusSnapshot() geoDataStatus {
+	ipPath, sitePath := acl.GeoFiles()
+	status := geoDataStatus{
+		Configured: ipPath != "" || sitePath != "",
+		Loaded:     acl.GeoDataConfigured(),
+	}
+	if ipPath != "" {
+		status.Version = install.GeoDataVersion(ipPath)
+	}
+	for _, geoFile := range install.GeoFiles(ipPath, sitePath) {
+		row := geoFileStatus{Name: geoFile.Name, Path: geoFile.Path}
+		if info, err := os.Stat(geoFile.Path); err == nil {
+			row.Exists = true
+			row.Size = info.Size()
+			row.ModTime = info.ModTime().Local().Format("2006-01-02 15:04:05")
+		}
+		status.Files = append(status.Files, row)
+	}
+	return status
+}
+
+// GeoStatus returns the current geodata state without performing any network
+// request. The page uses it to refresh the card after an update.
+func (s *GlobalController) GeoStatus() {
+	if !s.RequireAdmin() {
+		return
+	}
+	s.Data["json"] = s.withRequestMeta(map[string]interface{}{
+		"status": 1,
+		"msg":    "ok",
+		"data":   geoStatusSnapshot(),
+	})
+	s.ServeJSON()
+	s.StopRun()
+}
+
+// UpdateGeoData downloads the latest geoip.dat and geosite.dat and applies
+// them to the configured paths. A single update may run at a time; the files
+// are verified against the upstream SHA-256 digests and replaced atomically.
+func (s *GlobalController) UpdateGeoData() {
+	if !s.RequirePost() || !s.RequireAdmin() {
+		return
+	}
+	if !geoUpdating.CompareAndSwap(false, true) {
+		s.AjaxErr("Geo 数据更新正在进行中，请稍候")
+		return
+	}
+	defer geoUpdating.Store(false)
+
+	ipPath, sitePath := acl.GeoFiles()
+	if ipPath == "" && sitePath == "" {
+		s.AjaxErr("未配置 Geo 数据路径，无法在线更新")
+		return
+	}
+	result, err := install.UpdateGeoData(ipPath, sitePath)
+	if err != nil {
+		s.AjaxErr("Geo 数据更新失败: " + err.Error())
+		return
+	}
+	if len(result.Updated) > 0 {
+		acl.ReloadGeoData()
+		file.GetDb().RefreshAccessLists()
+	}
+	s.auditMutation("global.geodata.update", "global", 0, 0, "", nil, map[string]string{"version": result.Version, "updated": fmt.Sprintf("%d", len(result.Updated))})
+	message := "Geo 数据已是最新"
+	if len(result.Updated) > 0 {
+		message = "Geo 数据更新成功，已更新 " + strconv.Itoa(len(result.Updated)) + " 个文件"
+	}
+	s.Data["json"] = s.withRequestMeta(map[string]interface{}{
+		"status": 1,
+		"msg":    message,
+		"data":   geoStatusSnapshot(),
+	})
+	s.ServeJSON()
+	s.StopRun()
+}
+
 // platformDomainStatus is rendered only on the administrator-only global
 // settings page. The paths stay server-side and are never included in the
 // public platform-domain options served to ordinary users.
@@ -285,11 +386,21 @@ func firstLine(message string) string {
 	return message
 }
 
+// requestedPlatformDomain is the wire format for the platform-domain pool.
+// CertMode/CertData/KeyData let the administrator paste or upload a
+// certificate pair; path mode keeps the legacy path fields unchanged.
+type requestedPlatformDomain struct {
+	file.PlatformDomain
+	CertMode string `json:"cert_mode"`
+	CertData string `json:"cert_data"`
+	KeyData  string `json:"key_data"`
+}
+
 // requestedPlatformDomains distinguishes an omitted field from an explicit
 // empty JSON array. Older scripts only knew about the original global fields;
 // preserving the domain pool for those requests prevents a stale page from
 // deleting otherwise valid platform settings.
-func requestedPlatformDomains(request *http.Request) ([]file.PlatformDomain, bool, error) {
+func requestedPlatformDomains(request *http.Request) ([]requestedPlatformDomain, bool, error) {
 	if request == nil {
 		return nil, false, errors.New("请求无效")
 	}
@@ -303,7 +414,7 @@ func requestedPlatformDomains(request *http.Request) ([]file.PlatformDomain, boo
 	if len(values) != 1 || strings.TrimSpace(values[0]) == "" {
 		return nil, true, errors.New("平台域名配置不能为空；清空请提交 []")
 	}
-	var platformDomains []file.PlatformDomain
+	var platformDomains []requestedPlatformDomain
 	if err := json.Unmarshal([]byte(values[0]), &platformDomains); err != nil {
 		return nil, true, fmt.Errorf("平台域名配置格式无效: %w", err)
 	}
@@ -349,6 +460,7 @@ func (s *GlobalController) Index() {
 		s.Data["serverUrl"] = global.ServerUrl
 	}
 	s.Data["platformDomains"] = platformDomainStatuses()
+	s.Data["geo"] = geoStatusSnapshot()
 	s.display("global/index")
 }
 
@@ -361,13 +473,44 @@ func (s *GlobalController) Save() {
 		return
 	}
 
-	platformDomains, submitted, err := requestedPlatformDomains(s.Ctx.Request)
+	requestedDomains, submitted, err := requestedPlatformDomains(s.Ctx.Request)
 	if err != nil {
 		s.AjaxErr(err.Error())
 		return
 	}
+	var platformDomains []file.PlatformDomain
 	if !submitted {
 		platformDomains = file.GetDb().GetPlatformDomains()
+	} else {
+		platformDomains = make([]file.PlatformDomain, 0, len(requestedDomains))
+		for _, domain := range requestedDomains {
+			certData := strings.TrimSpace(domain.CertData)
+			keyData := strings.TrimSpace(domain.KeyData)
+			if certData != "" || keyData != "" {
+				certPEM, certErr := decodeCertificateData(certData)
+				if certErr != nil {
+					s.AjaxErr("平台域名证书无效: " + certErr.Error())
+					return
+				}
+				keyPEM, keyErr := decodeCertificateData(keyData)
+				if keyErr != nil {
+					s.AjaxErr("平台域名私钥无效: " + keyErr.Error())
+					return
+				}
+				if _, inspectErr := inspectCertificatePair(certPEM, keyPEM, domain.Wildcard, true); inspectErr != nil {
+					s.AjaxErr("平台域名证书无效: " + inspectErr.Error())
+					return
+				}
+				certPath, keyPath, persistErr := persistCertificatePair("platform", domain.ID, certPEM, keyPEM)
+				if persistErr != nil {
+					s.AjaxErr("平台域名证书保存失败: " + persistErr.Error())
+					return
+				}
+				domain.CertFilePath = certPath
+				domain.KeyFilePath = keyPath
+			}
+			platformDomains = append(platformDomains, domain.PlatformDomain)
+		}
 	}
 
 	maxConn := s.GetIntNoErr("globalMaxConn")
@@ -403,6 +546,8 @@ func (s *GlobalController) Save() {
 		current.RLock()
 		t.DashboardKeyHash = current.DashboardKeyHash
 		t.DashboardKeyCiphertext = current.DashboardKeyCiphertext
+		t.AdminAPIKeyHash = current.AdminAPIKeyHash
+		t.AdminAPIKeyCiphertext = current.AdminAPIKeyCiphertext
 		current.RUnlock()
 	}
 

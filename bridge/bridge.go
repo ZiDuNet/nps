@@ -2372,6 +2372,7 @@ loop:
 					tl.NoStore = true
 					tl.Client = client
 					tl.Password = t.Password
+					tl.TargetType = t.TargetType
 					tl.LocalPath = t.LocalPath
 					tl.StripPre = t.StripPre
 					tl.MultiAccount = t.MultiAccount

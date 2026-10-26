@@ -206,20 +206,20 @@ func TestGenericTunnelAddBackLinkTracksSelectedMode(t *testing.T) {
 
 func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 	addExpected := map[string]string{
-		"tcp":      `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
-		"udp":      `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "upload_limit", "download_limit"]`,
-		"mixProxy": `mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "upload_limit", "download_limit"]`,
-		"secret":   `secret: ["client_id", "server_ip", "target", "password", "registered_only", "acl", "upload_limit", "download_limit"]`,
-		"p2p":      `p2p: ["client_id", "server_ip", "target", "password", "registered_only", "acl", "upload_limit", "download_limit"]`,
-		"file":     `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "upload_limit", "download_limit"]`,
+		"tcp":      `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
+		"udp":      `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
+		"mixProxy": `mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
+		"secret":   `secret: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
+		"p2p":      `p2p: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
+		"file":     `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
 	}
 	editExpected := map[string]string{
-		"tcp":      `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
-		"udp":      `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "upload_limit", "download_limit"]`,
-		"mixProxy": `mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "upload_limit", "download_limit"]`,
-		"secret":   `secret: ["client_id", "server_ip", "target", "password", "registered_only", "acl", "upload_limit", "download_limit"]`,
-		"p2p":      `p2p: ["client_id", "server_ip", "target", "password", "registered_only", "acl", "upload_limit", "download_limit"]`,
-		"file":     `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "upload_limit", "download_limit"]`,
+		"tcp":      `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
+		"udp":      `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
+		"mixProxy": `mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
+		"secret":   `secret: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
+		"p2p":      `p2p: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
+		"file":     `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
 	}
 
 	tests := []struct {

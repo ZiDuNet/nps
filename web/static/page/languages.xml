@@ -368,6 +368,10 @@
 		<zh-CN>HTTP 端口</zh-CN>
 		<en-US>HTTP port</en-US>
 	</lang>
+	<lang id="word-httpports">
+		<zh-CN>HTTP / HTTPS 端口</zh-CN>
+		<en-US>HTTP / HTTPS ports</en-US>
+	</lang>
 	<lang id="word-httpscert">
 		<zh-CN>HTTPS 证书（或证书路径）</zh-CN>
 		<en-US>HTTPS cert</en-US>
@@ -395,6 +399,10 @@
 	<lang id="word-inletflow">
 		<zh-CN>入口流量（公网→内网）</zh-CN>
 		<en-US>Inbound flow (public to LAN)</en-US>
+	</lang>
+	<lang id="word-registeredips">
+		<zh-CN>已登记 IP</zh-CN>
+		<en-US>Registered IPs</en-US>
 	</lang>
 	<lang id="word-iprestriction">
 		<zh-CN>IP 限制</zh-CN>
@@ -467,6 +475,10 @@
 	<lang id="word-p2pport">
 		<zh-CN>P2P 端口</zh-CN>
 		<en-US>P2P port</en-US>
+	</lang>
+	<lang id="word-p2paddr">
+		<zh-CN>P2P 地址</zh-CN>
+		<en-US>P2P address</en-US>
 	</lang>
 	<lang id="word-password">
 		<zh-CN>密码</zh-CN>

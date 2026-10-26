@@ -163,8 +163,11 @@ func TestDashboardUserClientAddIgnoresAdministrativeFields(t *testing.T) {
 	if created.RateLimit != 0 || created.MaxConn != 0 || created.MaxTunnelNum != 0 || created.Flow == nil || created.Flow.FlowLimit != 0 {
 		t.Fatalf("ordinary add applied administrative limits: %#v", created)
 	}
-	if created.ExpireTime != "" || created.WebUserName != "" || created.WebPassword != "" {
-		t.Fatalf("ordinary add applied protected expiry or legacy login: %#v", created)
+	if created.ExpireTime != "2040-01-01 00:00:00" {
+		t.Fatalf("ordinary add did not apply the user's client expiry: %#v", created.ExpireTime)
+	}
+	if created.WebUserName != "" || created.WebPassword != "" {
+		t.Fatalf("ordinary add applied protected legacy login: %#v", created)
 	}
 	if !created.ConfigConnAllow {
 		t.Fatal("ordinary add did not retain the server default config connection policy")
@@ -268,8 +271,11 @@ func TestDashboardUserClientEditPreservesAdministrativeFields(t *testing.T) {
 	if client.UserId != 7 || client.VerifyKey != "server-vkey" || client.RateLimit != 120 || client.MaxConn != 12 || client.MaxTunnelNum != 4 || client.Flow.FlowLimit != 256 {
 		t.Fatalf("ordinary edit changed administrative client fields: %#v", client)
 	}
-	if client.ExpireTime != "2030-01-01 00:00:00" || client.WebUserName != "legacy-user" || client.WebPassword != "legacy-password" || client.ConfigConnAllow {
-		t.Fatalf("ordinary edit changed protected expiry, legacy login, or config policy: %#v", client)
+	if client.ExpireTime != "2040-01-01 00:00:00" {
+		t.Fatalf("ordinary edit did not apply the user's client expiry: %q", client.ExpireTime)
+	}
+	if client.WebUserName != "legacy-user" || client.WebPassword != "legacy-password" || client.ConfigConnAllow {
+		t.Fatalf("ordinary edit changed protected legacy login or config policy: %#v", client)
 	}
 	if client.Remark != "after" || client.Cnf == nil || client.Cnf.U != "new-user" || client.Cnf.P != "new-password" || !client.Cnf.Compress || !client.Cnf.Crypt {
 		t.Fatalf("ordinary edit did not apply permitted fields: %#v", client)
@@ -351,5 +357,61 @@ func TestLegacyClientPrincipalCannotDeleteClient(t *testing.T) {
 	}
 	if _, err := utils.GetClient(5); err != nil {
 		t.Fatalf("legacy client delete removed client: %v", err)
+	}
+}
+
+func TestDashboardUserClientExpiryCannotExceedUserExpiry(t *testing.T) {
+	utils := useClientPermissionTestDb(t)
+	utils.JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Status: true, ExpireTime: "2030-01-01 00:00:00"})
+
+	form := url.Values{
+		"remark":      {"late client"},
+		"expire_time": {"2040-01-01 00:00:00"},
+	}
+	controller, recorder := newClientPermissionController(t, "Add", form, testUserSession(7))
+	runClientPermissionAction(t, controller.Add)
+
+	response := readClientPermissionResponse(t, recorder)
+	if response["status"] != float64(0) {
+		t.Fatalf("client expiry beyond the user's expiry must be rejected: %#v", response)
+	}
+	count := 0
+	utils.JsonDb.Clients.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
+	if count != 0 {
+		t.Fatalf("rejected add persisted %d clients", count)
+	}
+}
+
+func TestDashboardUserClientEditKeepsExpiryWhenNotSubmitted(t *testing.T) {
+	utils := useClientPermissionTestDb(t)
+	utils.JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Status: true})
+	client := &file.Client{
+		Id:         3,
+		UserId:     7,
+		VerifyKey:  "server-vkey",
+		Status:     true,
+		Remark:     "before",
+		ExpireTime: "2029-05-05 08:00:00",
+		Cnf:        &file.Config{},
+		Flow:       &file.Flow{},
+	}
+	utils.JsonDb.Clients.Store(client.Id, client)
+
+	form := url.Values{"id": {"3"}, "remark": {"after"}}
+	controller, recorder := newClientPermissionController(t, "Edit", form, testUserSession(7))
+	runClientPermissionAction(t, controller.Edit)
+
+	response := readClientPermissionResponse(t, recorder)
+	if response["status"] != float64(1) {
+		t.Fatalf("ordinary edit response = %#v", response)
+	}
+	client.RLock()
+	expire := client.ExpireTime
+	client.RUnlock()
+	if expire != "2029-05-05 08:00:00" {
+		t.Fatalf("omitted expiry changed from %q to %q", "2029-05-05 08:00:00", expire)
 	}
 }

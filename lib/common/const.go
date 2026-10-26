@@ -34,12 +34,15 @@ const (
 	HEALTH_CONFIG = "hlth"
 	// REPORT_LOCAL_IP: server requests client local/private IPs on WORK_MAIN.
 	// New clients reply with WriteLenContent; old clients ignore the flag (server times out).
-	REPORT_LOCAL_IP   = "rlip"
-	NEW_TASK          = "task"
-	NEW_CONF          = "conf"
-	NEW_HOST          = "host"
-	CONN_TCP          = "tcp"
-	CONN_UDP          = "udp"
+	REPORT_LOCAL_IP = "rlip"
+	NEW_TASK        = "task"
+	NEW_CONF        = "conf"
+	NEW_HOST        = "host"
+	CONN_TCP        = "tcp"
+	CONN_UDP        = "udp"
+	// CONN_ALL is the stored target_type that lets a Secret/P2P visitor send
+	// both TCP streams and UDP datagrams over the same task.
+	CONN_ALL          = "all"
 	CONN_TEST         = "TST"
 	UnauthorizedBytes = `HTTP/1.1 401 Unauthorized
 Content-Type: text/plain; charset=utf-8

@@ -271,6 +271,19 @@ func snapshotHostProxyParts(host *file.Host) (client *file.Client, target *file.
 // create a new connection and start bytes copying
 func (s *BaseServer) DealClient(c *conn.Conn, client *file.Client, addr string,
 	rb []byte, tp string, f func(), flow *file.Flow, localProxy bool, task *file.Tunnel, host *file.Host) error {
+	return s.dealClient(c, client, addr, rb, tp, f, flow, localProxy, task, host, false)
+}
+
+// DealClientDatagram is DealClient for a UDP link whose payload is a stream
+// of length-framed datagrams. The flag travels with the Link so the provider
+// knows to preserve datagram boundaries instead of copying a raw byte stream.
+func (s *BaseServer) DealClientDatagram(c *conn.Conn, client *file.Client, addr string,
+	rb []byte, tp string, f func(), flow *file.Flow, localProxy bool, task *file.Tunnel, host *file.Host) error {
+	return s.dealClient(c, client, addr, rb, tp, f, flow, localProxy, task, host, true)
+}
+
+func (s *BaseServer) dealClient(c *conn.Conn, client *file.Client, addr string,
+	rb []byte, tp string, f func(), flow *file.Flow, localProxy bool, task *file.Tunnel, host *file.Host, datagramFramed bool) error {
 	if c == nil || c.Conn == nil {
 		return errors.New("proxy connection is nil")
 	}
@@ -340,6 +353,7 @@ func (s *BaseServer) DealClient(c *conn.Conn, client *file.Client, addr string,
 	}
 
 	link := conn.NewLink(tp, addr, clientConfig.Crypt, clientConfig.Compress, c.Conn.RemoteAddr().String(), localProxy, protoVersion)
+	link.DatagramFramed = datagramFramed
 	if s.bridge == nil {
 		_ = c.Close()
 		return errors.New("proxy bridge is nil")

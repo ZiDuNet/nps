@@ -38,6 +38,8 @@ func Init() {
 			beego.NSRouter("/global/ipregister/revoke", &controllers.GlobalController{}, "POST:IPRegisterRevoke"),
 			beego.NSRouter("/global/ipregister/clean", &controllers.GlobalController{}, "POST:IPRegisterClean"),
 			beego.NSRouter("/global/ipregister/clear", &controllers.GlobalController{}, "POST:IPRegisterClear"),
+			beego.NSRouter("/global/geo", &controllers.GlobalController{}, "GET:GeoStatus"),
+			beego.NSRouter("/global/updategeo", &controllers.GlobalController{}, "POST:UpdateGeoData"),
 			beego.NSAutoRouter(&controllers.GlobalController{}),
 			beego.NSAutoRouter(&controllers.AuditController{}),
 		)
@@ -70,6 +72,8 @@ func Init() {
 		beego.Router("/global/ipregister/revoke", &controllers.GlobalController{}, "POST:IPRegisterRevoke")
 		beego.Router("/global/ipregister/clean", &controllers.GlobalController{}, "POST:IPRegisterClean")
 		beego.Router("/global/ipregister/clear", &controllers.GlobalController{}, "POST:IPRegisterClear")
+		beego.Router("/global/geo", &controllers.GlobalController{}, "GET:GeoStatus")
+		beego.Router("/global/updategeo", &controllers.GlobalController{}, "POST:UpdateGeoData")
 		beego.AutoRouter(&controllers.GlobalController{})
 		beego.AutoRouter(&controllers.AuditController{})
 

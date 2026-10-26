@@ -1,0 +1,310 @@
+<style>
+    .api-access-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+        gap: 1.25rem;
+    }
+    .api-access-card {
+        margin-bottom: 0;
+    }
+    .api-access-card__header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        border-bottom: 1px solid var(--nps-border, #e2e8f0);
+    }
+    .api-access-card__icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.75rem;
+        background: rgba(34, 112, 240, 0.1);
+        color: #2270f0;
+        flex: 0 0 auto;
+    }
+    .api-access-card__eyebrow {
+        display: block;
+        color: #64748b;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .api-access-card__body {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .api-access-facts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem 2rem;
+        margin: 0;
+    }
+    .api-access-facts dt {
+        color: #64748b;
+        font-size: 0.8125rem;
+        font-weight: normal;
+    }
+    .api-access-facts dd {
+        margin: 0;
+        font-weight: 600;
+    }
+    .api-access-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .api-access-code {
+        background: #0f172a;
+        color: #e2e8f0;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin: 0;
+        font-size: 0.8125rem;
+        overflow-x: auto;
+    }
+    .api-access-code code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+    }
+    .api-access-docs-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    [data-theme="dark"] .api-access-card__icon {
+        background: rgba(96, 165, 250, 0.14);
+        color: #93c5fd;
+    }
+</style>
+
+<main class="wrapper wrapper-content dashboard-page api-access-page" aria-label="API 接入" data-aria-label-zh="API 接入" data-aria-label-en="API access">
+    <header class="dashboard-page-header">
+        <div>
+            <div class="dashboard-page-kicker" data-i18n-zh="系统接入" data-i18n-en="System integration">系统接入</div>
+            <h1 data-i18n-zh="API 接入" data-i18n-en="API access">API 接入</h1>
+            <p data-i18n-zh="管理用于调用 NPS 管理接口的凭证。Token 生成后可再次查看，重新生成会立即使旧凭证失效。" data-i18n-en="Manage credentials used to call the NPS management API. A token can be viewed again after generation; rotating it immediately revokes the old credential.">管理用于调用 NPS 管理接口的凭证。Token 生成后可再次查看，重新生成会立即使旧凭证失效。</p>
+        </div>
+        <div class="dashboard-page-actions">
+            <a class="btn btn-outline btn-primary" href="https://github.com/{{.github_repository}}" target="_blank" rel="noopener noreferrer">
+                <i class="fa fa-book" aria-hidden="true"></i><span data-i18n-zh="API 文档" data-i18n-en="API documentation">API 文档</span>
+            </a>
+        </div>
+    </header>
+
+    <section class="api-access-grid">
+        {{if eq false .isAdmin}}
+        <article class="panel ibox float-e-margins nps-panel api-access-card">
+            <div class="ibox-title api-access-card__header">
+                <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-key"></i></span>
+                <div>
+                    <span class="api-access-card__eyebrow" data-i18n-zh="个人凭证" data-i18n-en="Personal credential">个人凭证</span>
+                    <h2 class="h5" data-i18n-zh="用户 API Token" data-i18n-en="User API token">用户 API Token</h2>
+                </div>
+            </div>
+            <div class="ibox-content api-access-card__body">
+                <dl class="api-access-facts">
+                    <div><dt data-i18n-zh="状态" data-i18n-en="Status">状态</dt><dd id="user-api-status">读取中…</dd></div>
+                </dl>
+                <div id="user-api-result" class="credential-result" hidden>
+                    <label class="form-label" for="user-api-value" data-i18n-zh="Token" data-i18n-en="Token">Token</label>
+                    <div class="input-group">
+                        <input id="user-api-value" class="form-control" type="text" readonly>
+                        <button id="user-api-copy" type="button" class="btn btn-outline btn-primary" title="复制 Token" data-title-zh="复制 Token" data-title-en="Copy token" aria-label="复制 Token" data-aria-label-zh="复制 Token" data-aria-label-en="Copy token"><i class="fa fa-copy" aria-hidden="true"></i></button>
+                    </div>
+                    <small class="help-block" data-i18n-zh="请妥善保存。当前账号登录后可再次查看；重新生成会立即使旧 Token 失效。" data-i18n-en="Store it safely. You can view it again while signed in; rotating it immediately revokes the old token.">请妥善保存。当前账号登录后可再次查看；重新生成会立即使旧 Token 失效。</small>
+                </div>
+                <div class="api-access-actions">
+                    <button type="button" class="btn btn-primary" id="user-api-generate" data-i18n-zh="生成 / 重新生成" data-i18n-en="Generate / rotate">生成 / 重新生成</button>
+                    <button type="button" class="btn btn-outline btn-danger" id="user-api-revoke" data-i18n-zh="撤销 Token" data-i18n-en="Revoke token">撤销 Token</button>
+                </div>
+            </div>
+        </article>
+        {{else}}
+        <article class="panel ibox float-e-margins nps-panel api-access-card">
+            <div class="ibox-title api-access-card__header">
+                <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-cog"></i></span>
+                <div>
+                    <span class="api-access-card__eyebrow" data-i18n-zh="配置文件凭证" data-i18n-en="Configuration credential">配置文件凭证</span>
+                    <h2 class="h5" data-i18n-zh="API Key（nps.conf）" data-i18n-en="API key (nps.conf)">API Key（nps.conf）</h2>
+                </div>
+            </div>
+            <div class="ibox-content api-access-card__body">
+                <dl class="api-access-facts">
+                    <div><dt data-i18n-zh="当前值" data-i18n-en="Current value">当前值</dt><dd><code>{{.configAPIKeyMasked}}</code></dd></div>
+                </dl>
+                <p class="help-block" data-i18n-zh="来自服务端 nps.conf 的 auth_key。密钥不在页面明文显示，查看需要再次验证管理员登录密码；修改它需要编辑配置文件并重启 NPS。" data-i18n-en="The auth_key from the server's nps.conf. The key is never shown on the page; viewing it requires the administrator login password again, and changing it requires editing the configuration file and restarting NPS.">来自服务端 nps.conf 的 auth_key。密钥不在页面明文显示，查看需要再次验证管理员登录密码；修改它需要编辑配置文件并重启 NPS。</p>
+                <div class="api-access-actions">
+                    <button type="button" class="btn btn-outline btn-primary" id="config-api-view" data-i18n-zh="查看完整 Key" data-i18n-en="View full key">查看完整 Key</button>
+                </div>
+            </div>
+        </article>
+        <article class="panel ibox float-e-margins nps-panel api-access-card">
+            <div class="ibox-title api-access-card__header">
+                <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-shield-alt"></i></span>
+                <div>
+                    <span class="api-access-card__eyebrow" data-i18n-zh="Web 托管凭证" data-i18n-en="Web-managed credential">Web 托管凭证</span>
+                    <h2 class="h5" data-i18n-zh="管理员 API 密钥" data-i18n-en="Administrator API key">管理员 API 密钥</h2>
+                </div>
+            </div>
+            <div class="ibox-content api-access-card__body">
+                <dl class="api-access-facts">
+                    <div><dt data-i18n-zh="状态" data-i18n-en="Status">状态</dt><dd id="admin-api-status">读取中…</dd></div>
+                </dl>
+                <div id="admin-api-result" class="credential-result" hidden>
+                    <label class="form-label" for="admin-api-value" data-i18n-zh="密钥" data-i18n-en="Key">密钥</label>
+                    <div class="input-group">
+                        <input id="admin-api-value" class="form-control" type="text" readonly>
+                        <button id="admin-api-copy" type="button" class="btn btn-outline btn-primary" title="复制密钥" data-title-zh="复制密钥" data-title-en="Copy key" aria-label="复制密钥" data-aria-label-zh="复制密钥" data-aria-label-en="Copy key"><i class="fa fa-copy" aria-hidden="true"></i></button>
+                    </div>
+                    <small class="help-block" data-i18n-zh="与 nps.conf 的 auth_key 权限相同，可用于全部管理接口。密钥加密保存在服务端，可再次查看；重新生成会立即使旧密钥失效。" data-i18n-en="It has the same privileges as auth_key in nps.conf and works for every management API. The key is encrypted at rest and can be viewed again; rotating it immediately revokes the old value.">与 nps.conf 的 auth_key 权限相同，可用于全部管理接口。密钥加密保存在服务端，可再次查看；重新生成会立即使旧密钥失效。</small>
+                </div>
+                <div class="api-access-actions">
+                    <button type="button" class="btn btn-primary" id="admin-api-generate" data-i18n-zh="生成 / 重新生成" data-i18n-en="Generate / rotate">生成 / 重新生成</button>
+                    <button type="button" class="btn btn-outline btn-danger" id="admin-api-revoke" data-i18n-zh="撤销密钥" data-i18n-en="Revoke key">撤销密钥</button>
+                </div>
+            </div>
+        </article>
+        {{end}}
+
+        <article class="panel ibox float-e-margins nps-panel api-access-card api-access-card--docs">
+            <div class="ibox-title api-access-card__header">
+                <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-code"></i></span>
+                <div>
+                    <span class="api-access-card__eyebrow" data-i18n-zh="调用说明" data-i18n-en="Usage">调用说明</span>
+                    <h2 class="h5" data-i18n-zh="接口鉴权方式" data-i18n-en="API authentication">接口鉴权方式</h2>
+                </div>
+            </div>
+            <div class="ibox-content api-access-card__body">
+                <p class="help-block" data-i18n-zh="管理员密钥使用时间戳签名：auth_key = MD5(密钥 + timestamp)，并把 timestamp 一并提交，时间差需在 20 秒内。用户 Token 使用 Bearer 头或 api_token 参数。" data-i18n-en="Administrator keys use a timestamp signature: auth_key = MD5(key + timestamp), submitted together with timestamp, within 20 seconds. User tokens use the Bearer header or the api_token parameter.">管理员密钥使用时间戳签名：auth_key = MD5(密钥 + timestamp)，并把 timestamp 一并提交，时间差需在 20 秒内。用户 Token 使用 Bearer 头或 api_token 参数。</p>
+                <pre class="api-access-code"><code>auth_key = md5(key + timestamp)
+GET/POST /index/clientlist?auth_key=&lt;签名&gt;&amp;timestamp=&lt;unix 秒&gt;
+
+用户 Token:
+Authorization: Bearer npsu_xxx</code></pre>
+                <a class="api-access-docs-link" href="https://github.com/{{.github_repository}}" target="_blank" rel="noopener noreferrer"><i class="fa fa-external-link" aria-hidden="true"></i><span data-i18n-zh="在 GitHub 查看完整接口说明" data-i18n-en="See the full API documentation on GitHub">在 GitHub 查看完整接口说明</span></a>
+            </div>
+        </article>
+    </section>
+</main>
+
+<div id="config-key-password-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="config-key-password-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm" role="document">
+        <div class="modal-content nps-password-modal">
+            <div class="modal-header">
+                <div><div class="nps-modal-kicker" data-i18n-zh="身份验证" data-i18n-en="Verification">身份验证</div><h2 id="config-key-password-title" class="modal-title" data-i18n-zh="查看完整 Key" data-i18n-en="View full key">查看完整 Key</h2></div>
+                <button type="button" class="nps-modal-close" data-bs-dismiss="modal" aria-label="关闭" data-aria-label-zh="关闭" data-aria-label-en="Close"><i class="fa fa-times" aria-hidden="true"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="config-key-password-form" class="form form-vertical nps-form" autocomplete="off" novalidate>
+                    <div class="form-group">
+                        <label class="form-label" for="config-key-password" data-i18n-zh="管理员登录密码" data-i18n-en="Administrator password">管理员登录密码</label>
+                        <input id="config-key-password" class="form-control" type="password" name="password" autocomplete="current-password" required>
+                        <span class="help-block" data-i18n-zh="查看敏感凭证前需要再次确认管理员身份。" data-i18n-en="Re-enter the administrator password to view the sensitive credential.">查看敏感凭证前需要再次确认管理员身份。</span>
+                    </div>
+                </form>
+                <div id="config-key-view-result" class="credential-result mt-3" hidden>
+                    <label class="form-label" for="config-key-view-value" data-i18n-zh="API Key" data-i18n-en="API key">API Key</label>
+                    <div class="input-group">
+                        <input id="config-key-view-value" class="form-control" type="text" readonly>
+                        <button id="config-key-view-copy" type="button" class="btn btn-outline btn-primary" title="复制 Key" data-title-zh="复制 Key" data-title-en="Copy key" aria-label="复制 Key" data-aria-label-zh="复制 Key" data-aria-label-en="Copy key"><i class="fa fa-copy" aria-hidden="true"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" data-bs-dismiss="modal" data-i18n-zh="取消" data-i18n-en="Cancel">取消</button>
+                <button type="submit" form="config-key-password-form" class="btn btn-primary" data-i18n-zh="验证并查看" data-i18n-en="Verify and view">验证并查看</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(function () {
+    var base = window.nps && window.nps.web_base_url ? window.nps.web_base_url : '';
+    function post(path, data) { return $.ajax({ type: 'POST', url: base + path, data: data || {}, dataType: 'json' }); }
+    function localized(zh, en) { return typeof npsIsEnglish === 'function' && npsIsEnglish() ? en : zh; }
+
+    function refreshUserAPIKey() {
+        $.get(base + '/user/apikeystatus', function (response) {
+            var enabled = Boolean(response && response.enabled);
+            $('#user-api-status').text(enabled ? localized('已启用', 'Enabled') : localized('未生成', 'Not generated'));
+            var token = enabled && response.token ? response.token : '';
+            $('#user-api-value').val(token);
+            $('#user-api-result').prop('hidden', !token);
+        }, 'json');
+    }
+    $('#user-api-generate').on('click', function () {
+        var button = this; button.disabled = true;
+        post('/user/regenerateapikey').done(function (response) {
+            if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('生成失败', 'Generation failed'));
+            $('#user-api-value').val(response.token || '');
+            $('#user-api-result').prop('hidden', false);
+            $('#user-api-status').text(localized('已启用', 'Enabled'));
+            npsNotify('success', response.msg || localized('Token 已生成', 'Token generated'));
+        }).always(function () { button.disabled = false; });
+    });
+    $('#user-api-revoke').on('click', function () {
+        var button = this; button.disabled = true;
+        post('/user/revokeapikey').done(function (response) {
+            if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('撤销失败', 'Revocation failed'));
+            $('#user-api-value').val('');
+            $('#user-api-result').prop('hidden', true);
+            $('#user-api-status').text(localized('未生成', 'Not generated'));
+            npsNotify('success', response.msg || localized('Token 已撤销', 'Token revoked'));
+        }).always(function () { button.disabled = false; });
+    });
+    $('#user-api-copy').on('click', function () { npsCopyText($('#user-api-value').val(), localized('Token 已复制', 'Token copied')); });
+
+    function refreshAdminAPIKey() {
+        $.get(base + '/user/adminapikeystatus', function (response) {
+            var enabled = Boolean(response && response.enabled);
+            $('#admin-api-status').text(enabled ? localized('已启用', 'Enabled') : localized('未生成', 'Not generated'));
+            var token = enabled && response.token ? response.token : '';
+            $('#admin-api-value').val(token);
+            $('#admin-api-result').prop('hidden', !token);
+        }, 'json');
+    }
+    $('#admin-api-generate').on('click', function () {
+        var button = this; button.disabled = true;
+        post('/user/adminapikey').done(function (response) {
+            if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('生成失败', 'Generation failed'));
+            $('#admin-api-value').val(response.token || '');
+            $('#admin-api-result').prop('hidden', false);
+            $('#admin-api-status').text(localized('已启用', 'Enabled'));
+            npsNotify('success', response.msg || localized('管理员 API 密钥已生成', 'Administrator API key generated'));
+        }).always(function () { button.disabled = false; });
+    });
+    $('#admin-api-revoke').on('click', function () {
+        var button = this; button.disabled = true;
+        post('/user/adminapikeyrevoke').done(function (response) {
+            if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('撤销失败', 'Revocation failed'));
+            $('#admin-api-value').val('');
+            $('#admin-api-result').prop('hidden', true);
+            $('#admin-api-status').text(localized('未生成', 'Not generated'));
+            npsNotify('success', response.msg || localized('管理员 API 密钥已撤销', 'Administrator API key revoked'));
+        }).always(function () { button.disabled = false; });
+    });
+    $('#admin-api-copy').on('click', function () { npsCopyText($('#admin-api-value').val(), localized('密钥已复制', 'Key copied')); });
+
+    $('#config-key-password-form').on('submit', function (event) {
+        event.preventDefault();
+        var button = $(this).find('button[type="submit"]');
+        button.prop('disabled', true);
+        $('#config-key-view-result').prop('hidden', true);
+        post('/user/configapikeyview', { password: $('#config-key-password').val() }).done(function (response) {
+            if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('密码验证失败', 'Password verification failed'));
+            $('#config-key-view-value').val(response.key || '');
+            $('#config-key-view-result').prop('hidden', false);
+            $('#config-key-password').val('');
+        }).always(function () { button.prop('disabled', false); });
+    });
+    $('#config-key-view-copy').on('click', function () { npsCopyText($('#config-key-view-value').val(), localized('Key 已复制', 'Key copied')); });
+
+    if ($('#user-api-status').length) refreshUserAPIKey();
+    if ($('#admin-api-status').length) refreshAdminAPIKey();
+});
+</script>

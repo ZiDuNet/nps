@@ -76,7 +76,7 @@
     var endpoint = '{{.web_base_url}}/global/ipregister';
     var $table = $('#ip-registration-table');
     function escape(value) { return $('<div>').text(value == null ? '' : String(value)).html(); }
-    function notify(type, message) { if (typeof npsNotify === 'function') npsNotify(type, message); else window.alert(message); }
+    function notify(type, message) { npsNotify(type, message); }
     function refresh() {
         var search = $('#ip-register-search').val() || '';
         $.post(endpoint + '/list', {search: search, offset: 0, limit: 1000}, function (response) {
@@ -98,9 +98,7 @@
         }, 'json').fail(function () { notify('error', '请求失败，请刷新后重试'); });
     }
     function confirmAction(message, danger, confirmLabel) {
-        return typeof npsConfirmDialog === 'function'
-            ? npsConfirmDialog(message, { danger: danger, confirmLabel: confirmLabel || (npsIsEnglish() ? 'Confirm' : '确认') })
-            : Promise.resolve(window.confirm(message));
+        return npsConfirmDialog(message, { danger: danger, confirmLabel: confirmLabel || (npsIsEnglish() ? 'Confirm' : '确认') });
     }
     $('#ip-register-search').on('input', function () { window.clearTimeout(this._npsTimer); this._npsTimer = window.setTimeout(refresh, 220); });
     $table.on('click', '.js-ip-register-revoke', function () {

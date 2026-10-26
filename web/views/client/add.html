@@ -255,17 +255,15 @@
                         </div>
                     </details>
 
-                    {{if eq true .isAdmin}}
                     <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="客户端到期后自动停止连接" data-section-summary-en="Stop connections after client expiry"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
                     <div class="form-group" id="expire_time">
-                        <label class="form-label font-bold" for="date-picker-client-expire-picker" data-i18n-zh="客户端独立到期时间" data-i18n-en="Client-specific expiration">客户端独立到期时间</label>
+                        <label class="form-label font-bold" for="client-expire-picker" data-i18n-zh="客户端独立到期时间" data-i18n-en="Client-specific expiration">客户端独立到期时间</label>
                         <div class="form-group-wrapper">
-                            <div id="client-expire-time-picker" class="nps-datetime-picker" aria-describedby="client-expire-time-hint"></div>
+                            <div id="client-expire-time-picker" class="nps-datetime-picker" data-owner-expire-time="{{.ownerExpireTime}}" aria-describedby="client-expire-time-hint"></div>
                             <div id="client-expire-policy" class="client-expire-policy" role="status"></div>
                             <span id="client-expire-time-hint" class="help-block m-b-none" data-i18n-zh="留空表示跟随所属用户；如果所属用户设置了有效期，独立到期时间不得晚于它。" data-i18n-en="Leave blank to follow the assigned user. A client-specific expiry cannot be later than the user's expiry.">留空表示跟随所属用户；如果所属用户设置了有效期，独立到期时间不得晚于它。</span>
                         </div>
                     </div>
-                    {{end}}
 
                     <div class="hr-line-dashed"></div>
                     <div class="form-group form-workflow-actions">
@@ -314,7 +312,10 @@ $(document).ready(function() {
     function initClientExpirePicker() {
         var host = document.getElementById('client-expire-time-picker');
         if (!host) return;
-        if (host.querySelector('#client-expire-picker')) return;
+        if (host.querySelector('.nps-datetime-picker__control')) return;
+        var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
+        var control = document.createElement('div');
+        control.className = 'nps-datetime-picker__control';
         var input = document.createElement('input');
         input.id = 'client-expire-picker';
         input.className = 'form-control';
@@ -322,9 +323,28 @@ $(document).ready(function() {
         input.name = 'expire_time';
         input.autocomplete = 'off';
         input.placeholder = 'YYYY-MM-DD HH:MM';
-        host.appendChild(input);
+        input.setAttribute('data-input', '');
+        var toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'btn btn-outline nps-datetime-picker__toggle';
+        toggle.setAttribute('data-toggle', '');
+        toggle.setAttribute('aria-label', english ? 'Pick a date' : '选择日期');
+        toggle.setAttribute('title', english ? 'Pick a date' : '选择日期');
+        toggle.innerHTML = '<i class="fa fa-calendar-alt" aria-hidden="true"></i>';
+        var clear = document.createElement('button');
+        clear.type = 'button';
+        clear.className = 'btn btn-outline nps-datetime-picker__clear';
+        clear.setAttribute('data-clear', '');
+        clear.setAttribute('aria-label', english ? 'Clear date' : '清除日期');
+        clear.setAttribute('title', english ? 'Clear date' : '清除日期');
+        clear.innerHTML = '<i class="fa fa-times" aria-hidden="true"></i>';
+        control.appendChild(input);
+        control.appendChild(toggle);
+        control.appendChild(clear);
+        host.appendChild(control);
         if (window.flatpickr) {
-            window.flatpickr(input, {
+            window.flatpickr(control, {
+                wrap: true,
                 enableTime: true,
                 dateFormat: 'Y-m-d H:i',
                 time_24hr: true,
@@ -345,7 +365,9 @@ $(document).ready(function() {
 
     function selectedClientOwnerExpiry() {
         var option = $('#client-user-id option:selected');
-        return option.length ? (option.attr('data-expire-time') || '') : '';
+        if (option.length) return option.attr('data-expire-time') || '';
+        var host = document.getElementById('client-expire-time-picker');
+        return host ? (host.getAttribute('data-owner-expire-time') || '') : '';
     }
 
     function clientExpiryInput() {

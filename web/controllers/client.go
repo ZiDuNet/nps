@@ -12,6 +12,7 @@ import (
 	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/install"
 	npsversion "ehang.io/nps/lib/version"
 	"ehang.io/nps/server"
 	"github.com/astaxie/beego"
@@ -283,9 +284,14 @@ type userClientSettings struct {
 	RegisterKey      string
 	RegisterMaxHours int
 	RegisteredOnly   bool
+	ExpireTime       string
 }
 
-func userClientSettingsFromRequest(s *ClientController) userClientSettings {
+func userClientSettingsFromRequest(s *ClientController) (userClientSettings, error) {
+	expireTime, err := normalizeUserExpireTime(s.GetString("expire_time"))
+	if err != nil {
+		return userClientSettings{}, errors.New("到期时间格式无效")
+	}
 	return userClientSettings{
 		Remark:           s.getEscapeString("remark"),
 		BasicUser:        s.getEscapeString("u"),
@@ -301,7 +307,8 @@ func userClientSettingsFromRequest(s *ClientController) userClientSettings {
 		RegisterKey:      strings.TrimSpace(s.getEscapeString("register_key")),
 		RegisterMaxHours: max(s.GetIntNoErr("register_max_hours"), 0),
 		RegisteredOnly:   s.GetBoolNoErr("registered_only"),
-	}
+		ExpireTime:       expireTime,
+	}, nil
 }
 
 // newUserOwnedClient applies only the ordinary user's explicitly supported
@@ -326,6 +333,7 @@ func newUserOwnedClient(userID int, settings userClientSettings, createdAt time.
 	client.RegisterKey = settings.RegisterKey
 	client.RegisterMaxHours = settings.RegisterMaxHours
 	client.RegisteredOnly = settings.RegisteredOnly
+	client.ExpireTime = settings.ExpireTime
 	client.SetSourceLists(settings.IpListPriority, settings.BlackIPList, settings.WhiteIPList, acl.ScopeUser, "client")
 	client.CreateTime = createdAt.Format("2006-01-02 15:04:05")
 	return client
@@ -496,6 +504,50 @@ func (s *ClientController) Upgrade() {
 	s.AjaxOk("升级指令已下发；客户端下载并校验新版本后将自动重启")
 }
 
+// UpdateCheck compares a connected client's version with the latest stable
+// GitHub release without mutating anything. Administrators use it to decide
+// whether to send the remote-update signal from the version cell.
+func (s *ClientController) UpdateCheck() {
+	if !s.RequireAdmin() {
+		return
+	}
+	id := s.GetIntNoErr("id")
+	if id <= 0 {
+		s.AjaxErr("客户端编号无效")
+		return
+	}
+	client, err := file.GetDb().GetClient(id)
+	if err != nil || client == nil {
+		s.AjaxErr("客户端不存在")
+		return
+	}
+	client.RLock()
+	currentVersion := client.Version
+	enabled, noStore, isConnect := client.Status, client.NoStore, client.IsConnect
+	client.RUnlock()
+
+	result := map[string]interface{}{
+		"status":            1,
+		"current":           currentVersion,
+		"latest":            "",
+		"update_available":  false,
+		"can_remote_update": supportsRemoteClientUpdate(currentVersion),
+		"online":            isConnect,
+		"enabled":           enabled && !noStore,
+	}
+	if latest, latestErr := install.LatestVersion(); latestErr != nil {
+		result["check_error"] = latestErr.Error()
+	} else if comparison, compareErr := npsversion.Compare(currentVersion, latest); compareErr != nil {
+		result["check_error"] = "客户端版本号无法识别：" + compareErr.Error()
+	} else {
+		result["latest"] = latest
+		result["update_available"] = comparison < 0
+	}
+	s.Data["json"] = result
+	s.ServeJSON()
+	s.StopRun()
+}
+
 // 添加客户端
 func (s *ClientController) Add() {
 	if s.Ctx.Request.Method == "GET" {
@@ -505,6 +557,12 @@ func (s *ClientController) Add() {
 		// always bound to their own account by the POST handler.
 		if s.IsAdmin() {
 			s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
+		} else {
+			if userID, err := s.currentUserClientOwner(); err == nil {
+				if user, getErr := file.GetDb().GetUser(userID); getErr == nil && user != nil {
+					s.Data["ownerExpireTime"] = user.ExpireTime
+				}
+			}
 		}
 		s.display()
 	} else {
@@ -577,7 +635,12 @@ func (s *ClientController) Add() {
 				s.AjaxErr(err.Error())
 				return
 			}
-			t = newUserOwnedClient(userID, userClientSettingsFromRequest(s), time.Now())
+			settings, settingsErr := userClientSettingsFromRequest(s)
+			if settingsErr != nil {
+				s.AjaxErr(settingsErr.Error())
+				return
+			}
+			t = newUserOwnedClient(userID, settings, time.Now())
 		}
 		if err := validateSourceAccessLists(acl.ScopeUser, t.IpListPriority, t.BlackIpList, t.WhiteIpList); err != nil {
 			s.AjaxErr("客户端 IP 名单无效: " + err.Error())
@@ -632,6 +695,10 @@ func (s *ClientController) Edit() {
 			s.Data["c"] = c
 			if s.IsAdmin() {
 				s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
+			} else if c != nil {
+				if user, getErr := file.GetDb().GetUser(c.UserId); getErr == nil && user != nil {
+					s.Data["ownerExpireTime"] = user.ExpireTime
+				}
 			}
 			s.Data["BlackIpList"] = strings.Join(c.BlackIpList, "\r\n")
 			s.Data["WhiteIpList"] = strings.Join(c.WhiteIpList, "\r\n")
@@ -716,6 +783,19 @@ func (s *ClientController) Edit() {
 				s.AjaxErr("到期时间格式无效")
 				return
 			}
+		} else {
+			// 普通用户同样可以给“自己的客户端”设置独立到期时间；
+			// 未提交该字段时保留原值，边界由 ValidateClientAssignment 校验。
+			_ = s.Ctx.Request.ParseForm()
+			if _, submitted := s.Ctx.Request.Form["expire_time"]; submitted {
+				expireTime, err = normalizeUserExpireTime(s.GetString("expire_time"))
+				if err != nil {
+					s.AjaxErr("到期时间格式无效")
+					return
+				}
+			}
+		}
+		if isAdmin {
 			legacyUsername, legacyPassword, err = mergeLegacyClientLogin(
 				before.webUserName,
 				before.webPassword,
@@ -772,9 +852,9 @@ func (s *ClientController) Edit() {
 			c.MaxTunnelNum = s.GetIntNoErr("max_tunnel")
 			c.WebUserName = legacyUsername
 			c.WebPassword = legacyPassword
-			c.ExpireTime = expireTime
 			c.ConfigConnAllow = s.GetBoolNoErr("config_conn_allow")
 		}
+		c.ExpireTime = expireTime
 		c.Remark = remark
 		c.Cnf.U = cnfUser
 		c.Cnf.P = cnfPassword

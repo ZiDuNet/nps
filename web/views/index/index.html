@@ -83,26 +83,28 @@
             </div>
         </div>
         <div class="ibox-content">
-            <div class="dashboard-runtime-grid">
-                <section class="dashboard-runtime-item" aria-labelledby="dashboard-client-status-label">
+            <div class="dashboard-runtime-cards">
+                <section class="dashboard-runtime-card" aria-labelledby="dashboard-client-status-label">
                     <div id="dashboard-client-status-label" class="dashboard-runtime-label" data-i18n-zh="客户端状态" data-i18n-en="Client status">客户端状态</div>
                     <div id="dashboard-client-status" class="dashboard-runtime-value">--</div>
                     <div class="dashboard-runtime-detail"><span data-i18n-zh="在线 / 离线 / 已停用 / 即将到期" data-i18n-en="Online / offline / disabled / expiring">在线 / 离线 / 已停用 / 即将到期</span></div>
                 </section>
-                <section class="dashboard-runtime-item" aria-labelledby="dashboard-tunnel-status-label">
+                <section class="dashboard-runtime-card" aria-labelledby="dashboard-tunnel-status-label">
                     <div id="dashboard-tunnel-status-label" class="dashboard-runtime-label" data-i18n-zh="隧道状态" data-i18n-en="Tunnel status">隧道状态</div>
                     <div id="dashboard-tunnel-status" class="dashboard-runtime-value">--</div>
                     <div class="dashboard-runtime-detail"><span data-i18n-zh="运行中 / 已停止 / 等待连接" data-i18n-en="Running / stopped / waiting">运行中 / 已停止 / 等待连接</span></div>
                 </section>
-                <section class="dashboard-runtime-item" aria-labelledby="dashboard-proxy-rate-label">
-                    <div id="dashboard-proxy-rate-label" class="dashboard-runtime-label" data-i18n-zh="当前代理速率" data-i18n-en="Current proxy rate">当前代理速率</div>
-                    <div id="dashboard-proxy-rate" class="dashboard-runtime-value">--</div>
-                    <div class="dashboard-runtime-detail"><span data-i18n-zh="入站 / 出站" data-i18n-en="Inbound / outbound">入站 / 出站</span></div>
-                </section>
-                <section class="dashboard-runtime-item" aria-labelledby="dashboard-proxy-connection-label">
-                    <div id="dashboard-proxy-connection-label" class="dashboard-runtime-label" data-i18n-zh="当前代理连接" data-i18n-en="Active proxy connections">当前代理连接</div>
-                    <div id="dashboard-proxy-connections" class="dashboard-runtime-value">--</div>
-                    <div class="dashboard-runtime-detail"><span data-i18n-zh="由 NPS 转发的活动连接" data-i18n-en="Active connections forwarded by NPS">由 NPS 转发的活动连接</span></div>
+                <section class="dashboard-runtime-card dashboard-runtime-card--metrics" aria-labelledby="dashboard-proxy-rate-label">
+                    <div class="dashboard-runtime-mini">
+                        <div id="dashboard-proxy-rate-label" class="dashboard-runtime-label" data-i18n-zh="当前代理速率" data-i18n-en="Current proxy rate">当前代理速率</div>
+                        <div id="dashboard-proxy-rate" class="dashboard-runtime-value">--</div>
+                        <div class="dashboard-runtime-detail"><span data-i18n-zh="入站 / 出站" data-i18n-en="Inbound / outbound">入站 / 出站</span></div>
+                    </div>
+                    <div class="dashboard-runtime-mini">
+                        <div id="dashboard-proxy-connection-label" class="dashboard-runtime-label" data-i18n-zh="当前代理连接" data-i18n-en="Active proxy connections">当前代理连接</div>
+                        <div id="dashboard-proxy-connections" class="dashboard-runtime-value">--</div>
+                        <div class="dashboard-runtime-detail"><span data-i18n-zh="由 NPS 转发的活动连接" data-i18n-en="Active connections forwarded by NPS">由 NPS 转发的活动连接</span></div>
+                    </div>
                 </section>
             </div>
             <div class="dashboard-pending" aria-labelledby="dashboard-pending-label">
@@ -131,31 +133,28 @@
                 <div class="ibox-content no-padding">
                     <ul class="list-group list-group-sm dashboard-data-list">
                         <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-bridgingmode"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.bridgeType}}</strong></div></div>
+                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-bridgingmode"></strong></div><div class="dashboard-data-value text-right"><strong>TCP {{or .data.bridgeTCPPort "0"}}{{if and .data.bridgeKCPPort (ne .data.bridgeKCPPort "0")}} · KCP {{.data.bridgeKCPPort}}{{end}}{{if and .data.bridgeTLSPort (ne .data.bridgeTLSPort "0")}} · TLS {{.data.bridgeTLSPort}}{{end}}{{if and .data.bridgeWSPort (ne .data.bridgeWSPort "0")}} · WS {{.data.bridgeWSPort}}{{end}}{{if and .data.bridgeWSSPort (ne .data.bridgeWSSPort "0")}} · WSS {{.data.bridgeWSSPort}}{{end}}{{if and .data.bridgeQUICPort (ne .data.bridgeQUICPort "0")}} · QUIC {{.data.bridgeQUICPort}}{{end}}{{if .data.bridgeWSPath}} · Path {{.data.bridgeWSPath}}{{end}}</strong></div></div>
                         </li>
                         <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-httpport"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.httpProxyPort}}</strong></div></div>
+                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-httpports"></strong></div><div class="dashboard-data-value text-right"><strong>{{or .data.httpProxyPort "0"}} / {{or .data.httpsProxyPort "0"}}</strong></div></div>
                         </li>
                         <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-httpsport"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.httpsProxyPort}}</strong></div></div>
+                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-registeredips"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.registeredIps}}</strong></div></div>
                         </li>
                         <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-iprestriction"></strong></div><div class="dashboard-data-value text-right"><strong langtag="word-{{.data.ipLimit}}"></strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-trafficdatapersistence"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.flowStoreInterval}}</strong></div></div>
+                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-trafficdatapersistence"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.flowStoreInterval}} 分钟</strong></div></div>
                         </li>
                         <li class="list-group-item dashboard-data-item">
                             <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-loglevel"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.logLevel}}</strong></div></div>
                         </li>
                         <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-p2pport"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.p2pPort}}</strong></div></div>
+                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-p2paddr"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.p2pAddr}}</strong></div></div>
                         </li>
                         <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-serveriP"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.serverIp}}</strong></div></div>
+                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-serveriP"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.p2pIp}} | {{.data.serverIpv4}} | {{.data.serverIpv6}}</strong></div></div>
                         </li>
                         <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-serverversion"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.version}}</strong></div></div>
+                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-serverversion"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.version}} <span class="dashboard-data-sub">(安全握手 ≥ {{.data.minVersion}})</span></strong></div></div>
                         </li>
                     </ul>
                 </div>
@@ -525,8 +524,13 @@
 					type: 'pie',
 					radius: '52%',
 					center: ['50%', '43%'],
-					label: { show: false },
-					labelLine: { show: false },
+					label: {
+						show: true,
+						formatter: function (p) { return p.name + '\n' + changeunit(p.value); },
+						color: 'inherit',
+						fontSize: 11
+					},
+					labelLine: { show: true, length: 12, length2: 8, smooth: true },
 					data: [
 						{
 							name: '',
@@ -569,8 +573,13 @@
 					type: 'pie',
 					radius: '48%',
 					center: ['50%', '40%'],
-					label: { show: false },
-					labelLine: { show: false },
+					label: {
+						show: true,
+						formatter: '{b}: {c} ({d}%)',
+						color: 'inherit',
+						fontSize: 11
+					},
+					labelLine: { show: true, length: 12, length2: 8, smooth: true },
 					data: [
 						{
 							name: '',

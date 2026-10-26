@@ -1,6 +1,15 @@
 # 更新日志
 
-## v1.1.30（当前版本）
+## v1.1.31（当前版本）
+
+- Secret/P2P 的 `target_type` 真正支持 `tcp`、`udp`、`all`，UDP 数据报边界完整保留；P2P 访客默认支持 Secret 回退。
+- 隧道新增最大连接数与总流量配额；域名反代证书支持路径、上传、粘贴与校验。
+- 新增可复用 Token 的「API 接入」页、Geo 数据在线更新、更完整的仪表盘配置信息。
+- 普通用户可设置自己名下客户端的独立到期时间；客户端版本号点击后可直接检测并下发升级。
+- 管理面板移除 ZUI、全面迁移 Bootstrap 5.3.3，表单分组联动、列表详情紧凑化，工具栏与操作交互统一。
+- 修复公共 vkey 配置文件模式注册卡死，升级 `quic-go` 修复 P2P 直连 QUIC 握手 panic。
+
+## v1.1.30
 
 - NPC 自定义 DNS、HTTP/HTTPS 与 SOCKS4/4a/5 出站代理、`ALL_PROXY`/`NO_PROXY` 环境代理现在实际生效。
 - `local_ip`/`local_ip_forward` 覆盖 TCP、UDP、SOCKS5 UDP、KCP 和 QUIC 的出站绑定，并保持私网目标的默认路由。

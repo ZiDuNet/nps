@@ -38,6 +38,18 @@ func normalizedTunnelMode(mode string) string {
 	}
 }
 
+// normalizeTargetType maps nps2 target_type values to the stored form. Any
+// unknown or empty value falls back to tcp, which matches every record created
+// before this field existed.
+func normalizeTargetType(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "udp", "all":
+		return strings.ToLower(strings.TrimSpace(raw))
+	default:
+		return "tcp"
+	}
+}
+
 // supportedTunnelMode validates the mode received from a form before any
 // task state is generated or persisted. Unknown modes cannot be handed to
 // server.NewMode because that would leave an unusable task in the database.
@@ -558,6 +570,43 @@ func parseResourceRateLimits(s *IndexController, upload, download int) (int, int
 	return upload, download, nil
 }
 
+// parseTunnelCapacity reads optional tunnel-level capacity controls.
+// max_conn is the concurrent connection limit (0 = unlimited) and flow_limit
+// is the total traffic quota in MB (0 = unlimited). Both are additive fields:
+// when the request does not submit them, the current values are preserved.
+func parseTunnelCapacity(s *IndexController, currentMaxConn int, currentFlowLimitMB int64) (int, int64, error) {
+	if s == nil || s.Ctx == nil || s.Ctx.Request == nil {
+		return currentMaxConn, currentFlowLimitMB, nil
+	}
+	if err := s.Ctx.Request.ParseForm(); err != nil {
+		return currentMaxConn, currentFlowLimitMB, errors.New("读取隧道容量设置失败")
+	}
+	parseInt := func(key string, current int64) (int64, error) {
+		values, submitted := s.Ctx.Request.Form[key]
+		if !submitted || len(values) == 0 {
+			return current, nil
+		}
+		value := strings.TrimSpace(values[len(values)-1])
+		if value == "" {
+			return 0, nil
+		}
+		parsed, parseErr := strconv.ParseInt(value, 10, 64)
+		if parseErr != nil || parsed < 0 {
+			return 0, fmt.Errorf("%s 必须是大于或等于 0 的整数", key)
+		}
+		return parsed, nil
+	}
+	maxConn, err := parseInt("max_conn", int64(currentMaxConn))
+	if err != nil {
+		return currentMaxConn, currentFlowLimitMB, err
+	}
+	flowLimit, err := parseInt("flow_limit", currentFlowLimitMB)
+	if err != nil {
+		return currentMaxConn, currentFlowLimitMB, err
+	}
+	return int(maxConn), flowLimit, nil
+}
+
 func parseHostProxyProtocol(s *IndexController, current int) (int, error) {
 	if s == nil || s.Ctx == nil || s.Ctx.Request == nil {
 		return current, nil
@@ -1069,6 +1118,11 @@ func (s *IndexController) Add() {
 			s.AjaxErr(limitErr.Error())
 			return
 		}
+		maxConn, flowLimitMB, capacityErr := parseTunnelCapacity(s, 0, 0)
+		if capacityErr != nil {
+			s.AjaxErr(capacityErr.Error())
+			return
+		}
 		aclPriority, aclBlack, aclWhite, _, aclErr := parseSourceListsFromRequest(s, nil)
 		if aclErr != nil {
 			s.AjaxErr("隧道 IP 名单无效: " + aclErr.Error())
@@ -1106,10 +1160,12 @@ func (s *IndexController) Add() {
 			Status:         true,
 			Remark:         s.getEscapeString("remark"),
 			Password:       s.getEscapeString("password"),
+			TargetType:     normalizeTargetType(s.GetString("target_type")),
 			LocalPath:      s.getEscapeString("local_path"),
 			StripPre:       s.getEscapeString("strip_pre"),
 			ProtoVersion:   s.getEscapeString("proto_version"),
-			Flow:           &file.Flow{},
+			Flow:           &file.Flow{FlowLimit: flowLimitMB},
+			MaxConn:        maxConn,
 			RateLimits:     file.RateLimits{UploadLimit: uploadLimit, DownloadLimit: downloadLimit},
 			Health:         health,
 			RegisteredOnly: s.GetBoolNoErr("registered_only"),
@@ -1416,6 +1472,18 @@ func (s *IndexController) Edit() {
 				s.AjaxErr(limitErr.Error())
 				return
 			}
+			t.RLock()
+			currentMaxConn := t.MaxConn
+			var currentFlowLimitMB int64
+			if t.Flow != nil {
+				currentFlowLimitMB = t.Flow.FlowLimit
+			}
+			t.RUnlock()
+			desiredMaxConn, desiredFlowLimitMB, capacityErr := parseTunnelCapacity(s, currentMaxConn, currentFlowLimitMB)
+			if capacityErr != nil {
+				s.AjaxErr(capacityErr.Error())
+				return
+			}
 			aclPriority, aclBlack, aclWhite, aclSubmitted, aclErr := parseSourceListsFromRequest(s, &t.SourceLists)
 			if aclErr != nil {
 				s.AjaxErr("隧道 IP 名单无效: " + aclErr.Error())
@@ -1441,6 +1509,13 @@ func (s *IndexController) Edit() {
 				s.AjaxErr(err.Error())
 				return
 			}
+			t.RLock()
+			currentTargetType := t.TargetType
+			t.RUnlock()
+			desiredTargetType := currentTargetType
+			if _, submitted := s.Ctx.Request.Form["target_type"]; submitted {
+				desiredTargetType = normalizeTargetType(s.GetString("target_type"))
+			}
 			desiredTarget := &file.Target{TargetStr: desiredTargetValue}
 			desiredTarget.LocalProxy = s.requestedLocalProxy(s.GetBoolNoErr("local_proxy"))
 			// Build the replacement atomically. Proxy workers take the same
@@ -1452,6 +1527,7 @@ func (s *IndexController) Edit() {
 			t.Mode = desiredMode
 			t.Target = desiredTarget
 			t.Password = s.getEscapeString("password")
+			t.TargetType = desiredTargetType
 			t.Id = id
 			t.LocalPath = s.getEscapeString("local_path")
 			t.ProtoVersion = s.getEscapeString("proto_version")
@@ -1462,6 +1538,12 @@ func (s *IndexController) Edit() {
 				t.Socks5Proxy = mixSocks5
 			}
 			t.SetRateLimits(desiredUploadLimit, desiredDownloadLimit)
+			t.MaxConn = desiredMaxConn
+			if t.Flow != nil {
+				t.Flow.SetLimit(desiredFlowLimitMB)
+			} else {
+				t.Flow = &file.Flow{FlowLimit: desiredFlowLimitMB}
+			}
 			copyHealthConfig(&t.Health, &desiredHealth)
 			t.RegisteredOnly = desiredRegisteredOnly
 			t.Unlock()
@@ -1795,6 +1877,11 @@ func (s *IndexController) AddHost() {
 			return
 		}
 		id := int(file.GetDb().JsonDb.GetHostId())
+		certFilePath, keyFilePath, certErr := s.resolveHostCertificatePaths(id, hostName, s.Ctx.Request)
+		if certErr != nil {
+			s.AjaxErr("add fail, " + certErr.Error())
+			return
+		}
 		h := &file.Host{
 			Id:                   id,
 			Host:                 hostName,
@@ -1811,8 +1898,8 @@ func (s *IndexController) AddHost() {
 			Flow:                 &file.Flow{},
 			RateLimits:           file.RateLimits{UploadLimit: uploadLimit, DownloadLimit: downloadLimit},
 			Scheme:               s.getEscapeString("scheme"),
-			KeyFilePath:          s.getEscapeString("key_file_path"),
-			CertFilePath:         s.getEscapeString("cert_file_path"),
+			KeyFilePath:          keyFilePath,
+			CertFilePath:         certFilePath,
 			AutoHttps:            s.GetBoolNoErr("AutoHttps"),
 			TargetIsHTTPS:        targetIsHTTPS,
 			HTTPSJustProxy:       httpsJustProxy,
@@ -2015,6 +2102,11 @@ func (s *IndexController) EditHost() {
 				s.AjaxErr("modified error," + err.Error())
 				return
 			}
+			desiredCertFilePath, desiredKeyFilePath, certErr := s.resolveHostCertificatePaths(id, desiredHost, s.Ctx.Request)
+			if certErr != nil {
+				s.AjaxErr("modified error," + certErr.Error())
+				return
+			}
 			replacement := &file.Host{
 				Id:                   id,
 				Host:                 desiredHost,
@@ -2031,8 +2123,8 @@ func (s *IndexController) EditHost() {
 				Auth:                 desiredAuth,
 				RateLimits:           file.RateLimits{UploadLimit: desiredUploadLimit, DownloadLimit: desiredDownloadLimit},
 				Scheme:               desiredScheme,
-				KeyFilePath:          s.getEscapeString("key_file_path"),
-				CertFilePath:         s.getEscapeString("cert_file_path"),
+				KeyFilePath:          desiredKeyFilePath,
+				CertFilePath:         desiredCertFilePath,
 				AutoHttps:            autoHTTPS,
 				TargetIsHTTPS:        desiredTargetIsHTTPS,
 				HTTPSJustProxy:       desiredHTTPSJustProxy,

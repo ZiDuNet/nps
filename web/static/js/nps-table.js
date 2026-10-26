@@ -651,10 +651,7 @@
         var en = englishLabel || 'Apply action';
         payload = payload && typeof payload === 'object' ? payload : {};
         var confirmMessage = localText('确定要对选中的 ' + ids.length + ' 条记录执行“' + zh + '”吗？', 'Apply "' + en + '" to ' + ids.length + ' selected record(s)?');
-        var requestConfirm = typeof window.npsConfirmDialog === 'function'
-            ? window.npsConfirmDialog(confirmMessage)
-            : Promise.resolve(window.confirm(confirmMessage));
-        requestConfirm.then(function (confirmed) {
+        window.npsConfirmDialog(confirmMessage).then(function (confirmed) {
             if (!confirmed) return;
             var succeeded = 0;
             var failed = 0;

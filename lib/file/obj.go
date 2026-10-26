@@ -480,15 +480,22 @@ type Tunnel struct {
 	Client             *Client
 	Ports              string
 	Flow               *Flow
-	Password           string
-	Remark             string
-	TargetAddr         string
-	NoStore            bool
-	LocalPath          string
-	StripPre           string
-	ProtoVersion       string
-	Target             *Target
-	MultiAccount       *MultiAccount
+	// MaxConn limits concurrent connections admitted by this tunnel. Zero
+	// means unlimited and matches historical records without the field.
+	MaxConn  int
+	Password string
+	Remark   string
+	// TargetType selects the protocol for secret/P2P visitors: tcp (default),
+	// udp, or all. TCP targets use stream forwarding while UDP targets use
+	// length-framed datagrams so packet boundaries survive the Bridge.
+	TargetType   string
+	TargetAddr   string
+	NoStore      bool
+	LocalPath    string
+	StripPre     string
+	ProtoVersion string
+	Target       *Target
+	MultiAccount *MultiAccount
 	// mixProxy exposes HTTP proxy and SOCKS5 on one TCP port. These flags are
 	// ignored for the separate legacy httpProxy and socks5 modes.
 	HttpProxy    bool
@@ -573,6 +580,40 @@ func (t *Tunnel) AllowsDestination(addr string) bool {
 		t.RUnlock()
 	}
 	return compiled != nil && compiled.Allows(addr)
+}
+
+// TryAcquireConn atomically admits one connection when the tunnel has a
+// configured MaxConn limit. It reuses CurrentConnections so topology views
+// keep reporting the same live count. A zero or negative limit is unlimited.
+func (t *Tunnel) TryAcquireConn() error {
+	if t == nil {
+		return nil
+	}
+	t.RLock()
+	limit := t.MaxConn
+	t.RUnlock()
+	if limit <= 0 {
+		return nil
+	}
+	for {
+		current := atomic.LoadInt32(&t.CurrentConnections)
+		if int(current) >= limit {
+			return errors.New("隧道连接数已达上限")
+		}
+		if atomic.CompareAndSwapInt32(&t.CurrentConnections, current, current+1) {
+			return nil
+		}
+	}
+}
+
+// ReleaseConn releases one connection acquired by TryAcquireConn.
+func (t *Tunnel) ReleaseConn() {
+	if t == nil {
+		return
+	}
+	if atomic.AddInt32(&t.CurrentConnections, -1) < 0 {
+		atomic.StoreInt32(&t.CurrentConnections, 0)
+	}
 }
 
 type Health struct {
@@ -750,5 +791,11 @@ type Glob struct {
 	// DashboardKeyHash is the administrator's read-only topology credential.
 	DashboardKeyHash       string `json:"dashboard_key_hash,omitempty"`
 	DashboardKeyCiphertext string `json:"dashboard_key_ciphertext,omitempty"`
+	// AdminAPIKeyHash/AdminAPIKeyCiphertext hold the optional web-managed
+	// administrator API credential. It is equivalent to auth_key in nps.conf:
+	// both authorize the signed md5(auth_key + timestamp) protocol, and the
+	// managed key can be rotated without touching the configuration file.
+	AdminAPIKeyHash       string `json:"admin_api_key_hash,omitempty"`
+	AdminAPIKeyCiphertext string `json:"admin_api_key_ciphertext,omitempty"`
 	sync.RWMutex
 }

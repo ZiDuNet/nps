@@ -11,6 +11,66 @@
             <section class="panel ibox float-e-margins management-table-card nps-panel">
                 <div class="ibox-content management-table-content">
                     <div id="toolbar" class="management-table-toolbar">
+                        <label class="nps-table-filter" for="audit-action">
+                            <span class="nps-table-filter__label" data-i18n-zh="动作" data-i18n-en="Action">动作</span>
+                            <select id="audit-action" name="action" class="form-control nps-table-filter__control" data-nps-table-filter="action" aria-label="动作" data-aria-label-zh="动作" data-aria-label-en="Action">
+                                <option value="" data-i18n-zh="全部动作" data-i18n-en="All actions">全部动作</option>
+                                <optgroup label="客户端">
+                                    <option value="client.create">创建客户端</option>
+                                    <option value="client.update">修改客户端</option>
+                                    <option value="client.delete">删除客户端</option>
+                                    <option value="client.status_change">启停客户端</option>
+                                    <option value="client.remote_update">下发升级</option>
+                                </optgroup>
+                                <optgroup label="隧道与域名">
+                                    <option value="tunnel.create">创建隧道</option>
+                                    <option value="tunnel.update">修改隧道</option>
+                                    <option value="tunnel.copy">复制隧道</option>
+                                    <option value="tunnel.start">启动隧道</option>
+                                    <option value="tunnel.stop">停止隧道</option>
+                                    <option value="tunnel.delete">删除隧道</option>
+                                    <option value="host.create">新增域名反代</option>
+                                    <option value="host.update">修改域名反代</option>
+                                    <option value="host.start">启用域名反代</option>
+                                    <option value="host.stop">停用域名反代</option>
+                                    <option value="host.delete">删除域名反代</option>
+                                </optgroup>
+                                <optgroup label="用户与密钥">
+                                    <option value="user.create">创建用户</option>
+                                    <option value="user.update">修改用户</option>
+                                    <option value="user.delete">删除用户</option>
+                                    <option value="user.status_change">启停用户</option>
+                                    <option value="user.password_change">修改密码</option>
+                                    <option value="user.api_key_rotate">生成用户 Token</option>
+                                    <option value="user.api_key_revoke">撤销用户 Token</option>
+                                    <option value="admin.api_key_rotate">生成管理员密钥</option>
+                                    <option value="admin.api_key_revoke">撤销管理员密钥</option>
+                                </optgroup>
+                                <optgroup label="系统">
+                                    <option value="server_config.update">修改服务配置</option>
+                                    <option value="server.restart">重启服务</option>
+                                    <option value="global.update">修改全局参数</option>
+                                    <option value="global.geodata.update">更新 Geo 数据</option>
+                                    <option value="ip_registration.revoke">撤销 IP 登记</option>
+                                    <option value="ip_registration.clean">清理 IP 登记</option>
+                                    <option value="login_ban.remove">解除登录封禁</option>
+                                </optgroup>
+                            </select>
+                        </label>
+                        <label class="nps-table-filter" for="audit-resource">
+                            <span class="nps-table-filter__label" data-i18n-zh="资源" data-i18n-en="Resource">资源</span>
+                            <select id="audit-resource" name="resource_type" class="form-control nps-table-filter__control" data-nps-table-filter="resource_type" aria-label="资源类型" data-aria-label-zh="资源类型" data-aria-label-en="Resource type">
+                                <option value="" data-i18n-zh="全部资源" data-i18n-en="All resources">全部资源</option>
+                                <option value="client" data-i18n-zh="客户端" data-i18n-en="Client">客户端</option>
+                                <option value="tunnel" data-i18n-zh="隧道" data-i18n-en="Tunnel">隧道</option>
+                                <option value="host" data-i18n-zh="域名反代" data-i18n-en="Host">域名反代</option>
+                                <option value="user" data-i18n-zh="用户" data-i18n-en="User">用户</option>
+                                <option value="global" data-i18n-zh="全局参数" data-i18n-en="Global">全局参数</option>
+                                <option value="dashboard" data-i18n-zh="大屏密钥" data-i18n-en="Dashboard key">大屏密钥</option>
+                                <option value="ip_registration" data-i18n-zh="IP 登记" data-i18n-en="IP registration">IP 登记</option>
+                                <option value="login_ban" data-i18n-zh="登录封禁" data-i18n-en="Login ban">登录封禁</option>
+                            </select>
+                        </label>
                         <label class="nps-table-filter" for="audit-result">
                             <span class="nps-table-filter__label" data-i18n-zh="结果" data-i18n-en="Result">结果</span>
                             <select id="audit-result" name="result" class="form-control nps-table-filter__control" data-nps-table-filter="result" aria-label="结果" data-aria-label-zh="结果" data-aria-label-en="Result">
