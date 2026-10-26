@@ -2,7 +2,7 @@
 
 > 轻量级、高性能、功能完整的内网穿透代理服务器。
 
-当前版本：**v1.1.31**。本版本在保留现有功能与多用户模型的基础上，把 Secret/P2P 的目标类型升级为真实 TCP/UDP 转发，补齐隧道配额、证书管理、API 接入、Geo 数据在线更新与仪表盘配置信息，并继续兼容旧客户端与旧配置。
+当前版本：**v1.1.32**。本版本新增统一的 `/api/v1` 对外接口，覆盖客户端、隧道、域名反代、用户、全局配置、Geo、IP 登记、审计、状态与拓扑；接口只使用管理员签名或普通用户 Token，具备统一信封、JSON 请求体和有界分页。旧管理接口、`/auth/*`、NPC 协议和配置文件继续兼容。
 
 ## 适用场景
 
@@ -38,9 +38,11 @@
 9. [Docker 部署](docker.md)
 10. [GUI 客户端](gui.md)
 11. [升级迁移](migrate.md)
-12. [1.1.31 本地升级说明](upgrade-1.1.31.md)
-13. [1.1.30 本地升级说明](upgrade-1.1.30.md)
-14. [功能与兼容矩阵](feature-matrix.md)
+12. [对外 API v1](api.md)
+13. [1.1.32 本地升级说明](upgrade-1.1.32.md)
+14. [1.1.31 本地升级说明](upgrade-1.1.31.md)
+15. [1.1.30 本地升级说明](upgrade-1.1.30.md)
+16. [功能与兼容矩阵](feature-matrix.md)
 
 ## 文档目录
 
@@ -80,6 +82,7 @@
 - [平台泛域名、证书热更新与规则诊断](extend/platform-domain.md)
 - [访问控制与配额](extend/access-control.md)
 - [运行说明与排查](extend/description.md)
+- [对外 API v1](api.md)
 - [Web API 鉴权](extend/api.md)
 - [Web API 清单](extend/webapi.md)
 
@@ -88,6 +91,7 @@
 - [用户体系](user.md)
 - [系统架构](architecture.md)
 - [升级迁移](migrate.md)
+- [1.1.32 本地升级说明](upgrade-1.1.32.md)
 - [1.1.31 本地升级说明](upgrade-1.1.31.md)
 - [1.1.30 本地升级说明](upgrade-1.1.30.md)
 - [功能与兼容矩阵](feature-matrix.md)

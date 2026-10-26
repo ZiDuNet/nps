@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.31</sub>
+﻿# NPS <sub>v1.1.32</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -19,6 +19,7 @@ Administrators can create users and assign multiple clients to one user; ordinar
 - 🌐 **Domain Proxy** — Custom headers, URL routing, platform wildcard domain pools, route diagnostics, auto HTTPS and certificate hot reload
 - 🔐 **TLS Encryption** — TLS encrypted communication between client and server
 - 📦 **Docker** — Multi-arch images (amd64/arm/arm64), one-command deployment
+- 🔌 **Open API** — Versioned `/api/v1` for clients, tunnels, hosts, users, global settings and audit, with administrator signatures and scoped user tokens
 - 💻 **GUI Client** — Wails-based desktop client for Windows/macOS/Linux desktop environments
 
 ## Quick Start
@@ -178,6 +179,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.32** (2026-10-26) - Added the unified `/api/v1` external API covering clients, tunnels, hosts, users, global configuration, Geo data, IP registration, audit, status and topology; it uses administrator signatures or scoped user Bearer tokens, a uniform response envelope, JSON request bodies and bounded pagination. The never-released `/v1/auth/*` aliases were removed; legacy `/auth/*` and all existing management endpoints remain unchanged.
 
 - **v1.1.31** (2026-10-26) - Enabled real TCP/UDP forwarding for Secret and P2P target types with datagram framing, added Secret fallback for P2P visitors, tunnel-level connection and traffic quotas, certificate upload/paste/validation, the API access page with reusable tokens, online GeoIP/Geosite updates, an expanded dashboard, and a modernized Bootstrap 5 web console; fixed config-file public-vkey registration and the P2P direct QUIC handshake panic.
 

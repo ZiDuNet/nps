@@ -6,7 +6,7 @@
 > 信封、`request_id`、JSON 请求体和 `page`/`page_size` 分页。它只接受 API
 > 凭据，不使用浏览器 Session；旧 `/client/*`、`/index/*`、`/user/*`、
 > `/global/*` 与 `/auth/*` 保持原样。完整清单和示例见
-> [API 鉴权说明](api.html)。
+> [对外 API v1](../api.html) 与 [API 鉴权说明](api.html)。
 
 ## 通用响应格式
 

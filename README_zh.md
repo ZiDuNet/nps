@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.31</sub>
+﻿# NPS <sub>v1.1.32</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -30,6 +30,7 @@ NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务
 - 🌐 **域名代理** — 自定义 Header、URL 路由、平台泛域名池、规则诊断、自动 HTTPS 与证书热更新
 - 🔐 **TLS 加密** — 客户端与服务端之间 TLS 加密通信
 - 📦 **Docker 部署** — 多平台镜像（amd64/arm/arm64），一键启动
+- 🔌 **开放 API** — 统一 `/api/v1`，覆盖客户端、隧道、域名反代、用户、全局配置、Geo、IP 登记与审计，支持管理员签名和普通用户独立 Token
 - 💻 **GUI 客户端** — 基于 Wails 的桌面客户端，支持 Windows/macOS/Linux 桌面环境
 
 ## 快速开始
@@ -193,6 +194,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.32** (2026-10-26) - 新增统一对外 API `/api/v1`，覆盖客户端、隧道、域名反代、用户、全局配置、Geo、IP 登记、审计、状态与拓扑；支持管理员签名、普通用户独立 Token、统一响应信封、JSON 请求体和有界分页。移除从未进入正式发布的 `/v1/auth/*` 别名，旧 `/auth/*` 和所有既有管理接口保持不变。
 
 - **v1.1.31** (2026-10-26) - Secret/P2P 目标类型真正支持 TCP/UDP 转发并保留数据报边界，P2P 访客支持 Secret 回退；隧道新增连接数与流量配额；证书支持路径、上传、粘贴与校验；新增可复用 Token 的 API 接入页、Geo 数据在线更新和更完整的仪表盘；管理面板全面迁移 Bootstrap 5 并现代化。修复配置文件模式公共 vkey 注册卡死与 P2P 直连 QUIC 握手崩溃。
 

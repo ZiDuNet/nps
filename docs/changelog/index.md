@@ -1,6 +1,14 @@
 # 更新日志
 
-## v1.1.31（当前版本）
+## v1.1.32（当前版本）
+
+- 新增统一对外 API `/api/v1`，覆盖客户端、隧道、域名反代、用户、全局参数、Geo、IP 登记、审计、状态与拓扑。
+- 所有响应统一返回 `status`、`code`、`msg`、`request_id`，失败额外返回 `error_code`；列表支持有界分页。
+- 管理员使用 `auth_key + timestamp` 签名，普通用户使用按授权范围生效的 Bearer Token；`/api/v1` 不依赖浏览器 Session。
+- 旧 `/auth/*`、`/client/*`、`/index/*`、`/user/*`、`/global/*` 路径和返回格式保持不变。
+- 开发期间短暂新增但从未正式发布的 `/v1/auth/*` 已移除，统一收口到 `/api/v1`。
+
+## v1.1.31
 
 - Secret/P2P 的 `target_type` 真正支持 `tcp`、`udp`、`all`，UDP 数据报边界完整保留；P2P 访客默认支持 Secret 回退。
 - 隧道新增最大连接数与总流量配额；域名反代证书支持路径、上传、粘贴与校验。

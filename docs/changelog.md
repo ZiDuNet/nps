@@ -1,6 +1,6 @@
 # 更新日志
 
-## 未发布
+## v1.1.32 (2026-10-26)
 
 - 新增统一对外 API `/api/v1`：覆盖客户端、隧道、域名反代、用户、全局参数、Geo、登录保护、IP 登记、审计、状态与拓扑，全部返回 `status`/`code`/`msg`/`error_code`/`request_id` 信封。
 - `/api/v1` 只接受 API 凭据（管理员 `auth_key+timestamp` 或普通用户 `Bearer npsu_...`），不依赖浏览器 Session；普通用户资源继续按授权客户端过滤。

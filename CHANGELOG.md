@@ -2,6 +2,22 @@
 
 所有重要变更记录在此。
 
+## [1.1.32] - 2026-10-26
+
+### Added
+
+- 新增统一对外 API `/api/v1`，覆盖概览、客户端、隧道、域名反代、用户、全局配置、Geo、登录保护、IP 登记、审计、状态与资源拓扑。
+- 管理员可使用 `auth_key + timestamp` 签名或等价的网页管理密钥；普通用户可使用按授权范围生效的 `npsu_` Bearer Token。`/api/v1` 不接受浏览器 Session。
+- 所有 `/api/v1` 响应统一使用 `status`、`code`、`msg`、`request_id` 信封；失败响应额外提供 `error_code`，并同步返回 `X-Request-ID` 响应头。
+- 写接口支持 `application/json`，同时兼容表单和查询参数；列表接口支持 `offset`/`limit` 与 `page`/`page_size`，默认每页 20 条、最大 500 条。
+- 新增公开的对时、密钥发现和 IP 登记接口：`/api/v1/time`、`/api/v1/authkey`、`/api/v1/ipwhiteauth`。
+
+### Compatibility
+
+- 旧 `/auth/*`、`/client/*`、`/index/*`、`/user/*` 和 `/global/*` 路径、参数及返回格式保持不变，现有 NPC 与 Web 页面无需调整。
+- `/api/v1` 是新增接口层，普通用户资源继续按客户端授权范围过滤，管理员资源继续要求管理员凭据。
+- 开发期间出现过但从未进入正式 Release 的 `/v1/auth/*` 已移除，统一收口到 `/api/v1`；已发布版本不包含该路径，因此没有发布前兼容负担。
+
 ## [1.1.31] - 2026-10-26
 
 ### Added
