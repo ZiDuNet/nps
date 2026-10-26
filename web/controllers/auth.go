@@ -58,50 +58,6 @@ func (s *AuthController) GetTime() {
 	s.ServeJSON()
 }
 
-// V1Time returns the server timestamp with the standard status envelope. The
-// legacy /auth/gettime response remains available for upstream-compatible API
-// consumers.
-func (s *AuthController) V1Time() {
-	if s.Ctx != nil && s.Ctx.ResponseWriter != nil {
-		s.Ctx.ResponseWriter.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-		s.Ctx.ResponseWriter.Header().Set("Pragma", "no-cache")
-		s.Ctx.ResponseWriter.Header().Set("Expires", "0")
-	}
-	s.Data["json"] = map[string]interface{}{
-		"status": 1,
-		"msg":    "ok",
-		"data":   map[string]interface{}{"time": time.Now().Unix()},
-	}
-	s.ServeJSON()
-}
-
-// V1AuthKey returns the encrypted auth_key with the standard envelope and an
-// explicit error message when auth_crypt_key is missing or misconfigured. The
-// legacy /auth/getauthkey shape stays untouched.
-func (s *AuthController) V1AuthKey() {
-	cryptKey := beego.AppConfig.String("auth_crypt_key")
-	if len(cryptKey) != 16 {
-		s.Data["json"] = map[string]interface{}{"status": 0, "msg": "auth_crypt_key 未配置或长度必须为 16 位"}
-		s.ServeJSON()
-		return
-	}
-	encrypted, err := crypt.AesEncrypt([]byte(beego.AppConfig.String("auth_key")), []byte(cryptKey))
-	if err != nil {
-		s.Data["json"] = map[string]interface{}{"status": 0, "msg": "加密 auth_key 失败"}
-		s.ServeJSON()
-		return
-	}
-	s.Data["json"] = map[string]interface{}{
-		"status": 1,
-		"msg":    "ok",
-		"data": map[string]interface{}{
-			"crypt_auth_key": hex.EncodeToString(encrypted),
-			"crypt_type":     "aes cbc",
-		},
-	}
-	s.ServeJSON()
-}
-
 func (s *AuthController) IpWhiteAuth() {
 	echoIPWhiteAuthCORS(s.Ctx)
 	if s.Ctx.Request.Method == "OPTIONS" {
@@ -109,25 +65,6 @@ func (s *AuthController) IpWhiteAuth() {
 		return
 	}
 	handleIPWhiteAuth(s.Ctx, s.respondIPWhiteAuth)
-}
-
-// V1IPWhiteAuth mirrors the legacy IP authorization flow with the standard
-// status/msg envelope and HTTP status codes.
-func (s *AuthController) V1IPWhiteAuth() {
-	echoIPWhiteAuthCORS(s.Ctx)
-	if s.Ctx.Request.Method == "OPTIONS" {
-		s.Ctx.ResponseWriter.WriteHeader(204)
-		return
-	}
-	handleIPWhiteAuth(s.Ctx, func(status int, success bool, message string) {
-		s.Ctx.Output.SetStatus(status)
-		code := 0
-		if success {
-			code = 1
-		}
-		s.Data["json"] = map[string]interface{}{"status": code, "msg": message}
-		s.ServeJSON()
-	})
 }
 
 // echoIPWhiteAuthCORS keeps the authorization page same-origin by echoing an

@@ -138,33 +138,35 @@ GET /auth/gettime/
 
 > 此接口无需鉴权。
 
-### v1 标准格式（新）
+### 标准格式（`/api/v1`）
 
-同一组公开接口提供 `/v1` 版本，统一使用 `status`/`msg`/`data` 标准信封。旧路径与旧返回格式继续保留，现有调用方无需改动：
+同一组公共能力在对外 API 中统一使用 `status`/`code`/`msg`/`data` 信封。
+旧 `/auth/*` 路径与返回格式继续保留，现有调用方无需改动：
 
-| 旧接口 | 新接口 | 说明 |
+| 旧接口 | 对外 API | 说明 |
 | --- | --- | --- |
-| `GET /auth/gettime/` | `GET /v1/auth/time` | 服务端时间戳 |
-| `GET /auth/getauthkey/` | `GET /v1/auth/authkey` | 加密后的 `auth_key` |
-| `POST /auth/ipwhiteauth` | `POST /v1/auth/ipwhiteauth` | IP 白名单授权 |
+| `GET /auth/gettime/` | `GET /api/v1/time` | 服务端时间戳 |
+| `GET /auth/getauthkey/` | `GET /api/v1/authkey` | 加密后的 `auth_key` |
+| `POST /auth/ipwhiteauth` | `POST /api/v1/ipwhiteauth` | IP 白名单授权 |
 
-`/v1/auth/time` 返回：
+`/api/v1/time` 返回：
 
 ```json
-{"status": 1, "msg": "ok", "data": {"time": 1717654321}}
+{"status": 1, "code": "ok", "msg": "ok", "data": {"time": 1717654321}}
 ```
 
-`/v1/auth/authkey` 返回：
+`/api/v1/authkey` 返回：
 
 ```json
 {
   "status": 1,
+  "code": "ok",
   "msg": "ok",
   "data": {"crypt_auth_key": "…", "crypt_type": "aes cbc"}
 }
 ```
 
-失败时返回 `{"status": 0, "msg": "错误说明"}` 并携带对应的 HTTP 状态码。
+失败时返回 `{"status": 0, "code": "error", "error_code": "...", "msg": "错误说明"}` 并携带对应的 HTTP 状态码。
 
 ## 获取服务端 auth_key（加密）
 

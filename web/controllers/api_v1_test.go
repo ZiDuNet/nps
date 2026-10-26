@@ -253,6 +253,9 @@ func TestAPIV1PublicTimeEnvelope(t *testing.T) {
 	if !ok || data["time"] == nil {
 		t.Fatalf("time data = %#v", payload["data"])
 	}
+	if requestID, ok := payload["request_id"].(string); !ok || requestID == "" {
+		t.Fatalf("time response is missing request_id: %#v", payload)
+	}
 }
 
 func TestAPIV1InfoDiscoveryIsPublic(t *testing.T) {

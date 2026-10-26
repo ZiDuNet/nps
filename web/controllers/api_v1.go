@@ -496,6 +496,13 @@ func numericStatus(value interface{}) (int, bool) {
 // infoRespond writes the public /api/v1 envelope from the unauthenticated
 // discovery controller.
 func (s *ApiV1InfoController) infoRespond(status int, payload map[string]interface{}) {
+	requestID := uuid.NewString()
+	if _, exists := payload["request_id"]; !exists {
+		payload["request_id"] = requestID
+	}
+	if s.Ctx != nil && s.Ctx.ResponseWriter != nil {
+		s.Ctx.ResponseWriter.Header().Set("X-Request-ID", requestID)
+	}
 	s.Ctx.Output.SetStatus(status)
 	s.Data["json"] = payload
 	s.ServeJSON()
@@ -511,7 +518,7 @@ func (s *ApiV1InfoController) Info() {
 		"version":     version.VERSION,
 		"github":      version.GitHubRepository,
 		"auth":        []string{"admin_md5_timestamp", "user_bearer_token"},
-		"description": "NPS 对外管理 API v1。旧 /client、/index、/user、/global、/v1/auth 接口继续兼容。",
+		"description": "NPS 对外管理 API v1。旧 /client、/index、/user、/global、/auth 接口继续兼容。",
 		"resources": []string{
 			"clients", "tunnels", "hosts", "users", "global", "status", "overview", "audit",
 		},

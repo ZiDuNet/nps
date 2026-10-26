@@ -5,7 +5,7 @@
 > **对外集成请优先使用 `/api/v1`**：统一 `status`/`code`/`msg`/`error_code`
 > 信封、`request_id`、JSON 请求体和 `page`/`page_size` 分页。它只接受 API
 > 凭据，不使用浏览器 Session；旧 `/client/*`、`/index/*`、`/user/*`、
-> `/global/*` 与 `/v1/auth/*` 保持原样。完整清单和示例见
+> `/global/*` 与 `/auth/*` 保持原样。完整清单和示例见
 > [API 鉴权说明](api.html)。
 
 ## 通用响应格式
@@ -23,8 +23,9 @@
 > 继续保留，新增的 `status`/`msg` 与其他管理接口保持一致。
 
 公开认证接口的旧路径（`/auth/gettime`、`/auth/getauthkey`、`/auth/ipwhiteauth`）
-原样保留，供登录页面和既有集成使用；`/v1/auth/*` 提供标准
-`status`/`msg`/`data` 信封的新版本，见 [API 鉴权说明](api.html)。
+原样保留，供登录页面和既有集成使用；标准信封版本统一使用
+`/api/v1/time`、`/api/v1/authkey`、`/api/v1/ipwhiteauth`，见
+[API 鉴权说明](api.html)。
 
 所有由管理控制器返回的写操作响应会额外包含 `code` 和 `request_id` 字段；原有的
 `status`、`msg`、`id` 字段继续保留，旧版调用方无需修改。`code` 当前为 `ok` 或

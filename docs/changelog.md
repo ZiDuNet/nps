@@ -5,13 +5,13 @@
 - 新增统一对外 API `/api/v1`：覆盖客户端、隧道、域名反代、用户、全局参数、Geo、登录保护、IP 登记、审计、状态与拓扑，全部返回 `status`/`code`/`msg`/`error_code`/`request_id` 信封。
 - `/api/v1` 只接受 API 凭据（管理员 `auth_key+timestamp` 或普通用户 `Bearer npsu_...`），不依赖浏览器 Session；普通用户资源继续按授权客户端过滤。
 - 新增公开的 `/api/v1/time`、`/api/v1/authkey`、`/api/v1/ipwhiteauth` 与发现接口 `/api/v1`。
+- 认证辅助接口统一收口到 `/api/v1`；未进入正式发布的 `/v1/auth/*` 已移除，旧 `/auth/*` 保持不变。
 - 对外 API 支持 `application/json` 请求体，默认分页 `limit=20`、最大 `500`，支持 `page`/`page_size`。
-- 旧 `/client/*`、`/index/*`、`/user/*`、`/global/*`、`/v1/auth/*` 路径和返回格式保持不变，现有 NPC 与页面无需调整。
+- 旧 `/client/*`、`/index/*`、`/user/*`、`/global/*`、`/auth/*` 路径和返回格式保持不变，现有 NPC 与页面无需调整。
 
 ## v1.1.31 (2026-10-26)
 
 - 移除管理面板的全局同源/Origin 校验：反代、混合 HTTP/HTTPS 和多端口部署不再出现「invalid request origin」误拦，POST 仅校验请求方法与登录/API 凭据。
-- 新增 `/v1/auth/time`、`/v1/auth/authkey`、`/v1/auth/ipwhiteauth` 标准信封接口，与旧 `/auth/*` 接口并存；旧路径和旧返回格式不变，登录页与既有集成无需调整。
 - `GetClient`、`GetOneTunnel`、`GetHost` 单个查询接口同时返回旧 `code`/`data` 与标准 `status`/`msg` 字段；新增/复制隧道成功响应直接携带 `AccessHost`、`AccessAddr`、`AccessURL` 等访问地址，无需再回查列表。
 - `addhost` 失败提示补齐标点，错误信息直接说明域名前缀冲突原因。
 - Secret/P2P 的 `target_type`（`tcp`、`udp`、`all`）升级为真实转发能力；UDP 使用数据报帧协议保留报文边界，旧记录与旧客户端继续按 TCP 兼容。
