@@ -109,7 +109,7 @@ docker build -f Dockerfile.npc -t npc .
 
 普通代码提交不会触发 Docker 发布。`.github/workflows/docker.yml` 仅保留从已有 `v*` 标签手动重跑的兜底入口，正式镜像由 Release 工作流统一推送版本号和 `latest`，避免一次发版生成两套来源不同的镜像标签。
 
-推送与源码版本严格一致的标签（例如源码为 `1.1.34` 时推送 `v1.1.34`）才会运行 Release 工作流并创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；CLI/GUI 自动更新和服务端下发的 NPC 在线升级仍只读取 GitHub 上经过完整校验的最新正式 Release，并按 `lib/version.VERSION` 与 Release tag 比较，不依赖 Docker 标签。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`；Release 的 Docker 构建同时推送版本号镜像（如 `1.1.34`）和 `latest`。因此正式发版只需：先把准备好的代码推送到 `master`，确认版本号后创建并推送对应的 `vX.Y.Z` 标签。也可以在 Actions 页面手动执行 Release 的 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.34`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
+推送与源码版本严格一致的标签（例如源码为 `1.1.35` 时推送 `v1.1.35`）才会运行 Release 工作流并创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；CLI/GUI 自动更新和服务端下发的 NPC 在线升级仍只读取 GitHub 上经过完整校验的最新正式 Release，并按 `lib/version.VERSION` 与 Release tag 比较，不依赖 Docker 标签。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`；Release 的 Docker 构建同时推送版本号镜像（如 `1.1.35`）和 `latest`。因此正式发版只需：先把准备好的代码推送到 `master`，确认版本号后创建并推送对应的 `vX.Y.Z` 标签。也可以在 Actions 页面手动执行 Release 的 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.35`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
 
 更新器只按 `lib/version.VERSION` 与 GitHub 最新正式 Release 比较，不会从 Docker Hub 的 `latest` 推断版本；因此只有正式标签完成 Release 后，`latest` 才会指向该版本。
 

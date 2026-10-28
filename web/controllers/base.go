@@ -141,10 +141,11 @@ func (s *BaseController) Prepare() {
 		}
 		s.Data["accountExpireTime"] = s.accountExpireTime()
 		s.Data["accountQuota"] = s.accountQuota()
-		// Ordinary users cannot browse the administrative user/global pages,
-		// but they may call the narrowly-scoped password endpoint to rotate
-		// their own dashboard credential from the account popover.
-		if s.controllerName == "global" || (s.controllerName == "user" && s.actionName != "changepassword" && s.actionName != "regenerateapikey" && s.actionName != "revokeapikey" && s.actionName != "apikeystatus") {
+		// Ordinary users cannot browse the administrative user/global pages.
+		// They may only open the API access page and manage their own token or
+		// dashboard password through the narrowly-scoped endpoints below.
+		if s.controllerName == "global" ||
+			(s.controllerName == "user" && !nonAdminUserActionAllowed(s.actionName)) {
 			s.StopRun()
 			return
 		}
@@ -255,6 +256,17 @@ func (s *BaseController) IsAdmin() bool {
 
 func isAdminAuthorized(apiAuthorized bool, sessionValue interface{}) bool {
 	return apiAuthorized || sessionBool(sessionValue)
+}
+
+// nonAdminUserActionAllowed narrows the user controller to the pages and
+// endpoints an ordinary account may use for its own credentials.
+func nonAdminUserActionAllowed(action string) bool {
+	switch action {
+	case "api", "changepassword", "regenerateapikey", "revokeapikey", "apikeystatus":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *BaseController) hasActiveNonAdminPrincipal() bool {

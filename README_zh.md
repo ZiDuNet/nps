@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.34</sub>
+﻿# NPS <sub>v1.1.35</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -8,6 +8,14 @@
 NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务器。支持 **TCP/UDP 流量转发、HTTP(S) 反向代理、HTTP / SOCKS 混合代理、P2P 穿透**等，并配备现代化 Web 管理面板。
 
 项目提供独立的多用户管理与资源隔离：管理员可创建用户并将多个客户端分配给同一个用户；普通用户也可在管理员配置的客户端配额内自行创建客户端。用户与客户端到期时间独立保存，客户端到期不得晚于用户到期，客户端留空时跟随用户。
+
+## 界面预览
+
+| 登录页 | IP 登记页 |
+| :---: | :---: |
+| ![NPS 登录页](docs/assets/screenshots/login.jpg) | ![IP 登记页](docs/assets/screenshots/ip-register.jpg) |
+| **客户端编辑** | **域名反代编辑** |
+| ![客户端编辑页](docs/assets/screenshots/client-edit.jpg) | ![域名反代编辑页](docs/assets/screenshots/host-edit.jpg) |
 
 ## 使用场景
 
@@ -194,6 +202,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.35** (2026-10-28) - 修复普通用户访问 `/user/api` 时页面白屏的问题，普通用户现可正常打开 API 接入页并管理个人 Token；用户管理、全局参数和管理员 API 密钥接口仍仅限管理员访问。新增非管理员页面与动作白名单回归测试，并在 README 首页增加登录、IP 登记、客户端编辑和域名反代编辑截图。
 
 - **v1.1.34** (2026-10-26) - 调整列表与表单排版：域名反代列表移除「认证」列，改为在访问入口前显示 Basic 认证锁图标；域名反代与 TCP 隧道的展开详情统一为紧凑卡片布局；全局参数「平台泛域名」输入区改为单列并限制输入宽度。修复域名反代新增/编辑页在健康检查目标为空时保存被浏览器校验拦截的问题。
 

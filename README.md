@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.34</sub>
+﻿# NPS <sub>v1.1.35</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -8,6 +8,14 @@
 NPS is a lightweight, high-performance **intranet penetration** proxy server supporting **TCP/UDP forwarding, HTTP(S) reverse proxy, HTTP/SOCKS mixed proxy and P2P tunneling**, with a modern web management panel.
 
 Administrators can create users and assign multiple clients to one user; ordinary users can create clients within their administrator-defined quota. Client expiry cannot exceed the owning user expiry, and a blank client expiry follows the user.
+
+## Screenshots
+
+| Login | IP registration |
+| :---: | :---: |
+| ![NPS login page](docs/assets/screenshots/login.jpg) | ![IP registration page](docs/assets/screenshots/ip-register.jpg) |
+| **Client editing** | **Domain reverse proxy editing** |
+| ![Client editing page](docs/assets/screenshots/client-edit.jpg) | ![Domain reverse proxy editing page](docs/assets/screenshots/host-edit.jpg) |
 
 ## Features
 
@@ -179,6 +187,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.35** (2026-10-28) - Fixed the blank API access page shown to ordinary users. Ordinary accounts can now open `/user/api` and manage their own token again, while administrative user-management, global-settings, and administrator-key endpoints remain protected. Added a regression test for the non-admin page/action allowlist and added login, IP registration, client editing, and domain reverse-proxy editing screenshots to the README.
 
 - **v1.1.34** (2026-10-26) - Reworked list details and form layout: the host list drops the authentication column in favor of a lock icon beside the public entry, the expanded host and TCP tunnel details use compact grouped cards, and the platform wildcard input in global settings is single-column with a bounded width. Fixed the host add/edit form being blocked by browser validation when no health-check target was configured.
 

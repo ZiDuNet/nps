@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const VERSION = "1.1.34"
+const VERSION = "1.1.35"
 
 // SecureHandshakeMinVersion is the first NPC release that uses the secure
 // Bridge handshake. Clients at or below 1.1.28 remain on the legacy handshake
