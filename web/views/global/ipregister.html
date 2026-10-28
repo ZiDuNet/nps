@@ -3,18 +3,18 @@
         <div class="form-page-heading">
             <div class="dashboard-page-kicker" data-i18n-zh="运行安全" data-i18n-en="Runtime security">运行安全</div>
             <h1 id="ip-register-admin-title" data-i18n-zh="IP 登记" data-i18n-en="IP registrations">IP 登记</h1>
-            <p data-i18n-zh="查看当前仍然有效的访问 IP，并在需要时撤销或清理。登记记录只保存在 NPS 内存中，服务重启后会自动清空。"
-               data-i18n-en="Review active visitor IP registrations and revoke or clean them when needed. Registrations stay in NPS memory and are cleared when the service restarts.">查看当前仍然有效的访问 IP，并在需要时撤销或清理。登记记录只保存在 NPS 内存中，服务重启后会自动清空。</p>
+            <p data-i18n-zh="{{if .ip_registration_admin}}查看所有仍然有效的访问 IP，并在需要时撤销或清理。{{else}}查看并管理你自己客户端下的访问 IP；其他用户和公共登记密钥的记录不会显示。{{end}}"
+               data-i18n-en="{{if .ip_registration_admin}}Review every active visitor IP registration and revoke or clean it when needed.{{else}}Review and manage visitor IP registrations for your own clients. Other users and the public registration bucket are hidden.{{end}}">{{if .ip_registration_admin}}查看所有仍然有效的访问 IP，并在需要时撤销或清理。{{else}}查看并管理你自己客户端下的访问 IP；其他用户和公共登记密钥的记录不会显示。{{end}}</p>
         </div>
         <div class="dashboard-page-actions form-page-actions">
             <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/ip/register" target="_blank" rel="noopener">
                 <i class="fa fa-external-link" aria-hidden="true"></i><span data-i18n-zh="打开登记页" data-i18n-en="Open registration page">打开登记页</span>
             </a>
             <button type="button" class="btn btn-outline btn-warning" id="ip-register-clean">
-                <i class="fa fa-broom" aria-hidden="true"></i><span data-i18n-zh="清理过期" data-i18n-en="Clean expired">清理过期</span>
+                <i class="fa fa-broom" aria-hidden="true"></i><span data-i18n-zh="{{if .ip_registration_admin}}清理过期{{else}}清理我的过期记录{{end}}" data-i18n-en="{{if .ip_registration_admin}}Clean expired{{else}}Clean my expired records{{end}}">{{if .ip_registration_admin}}清理过期{{else}}清理我的过期记录{{end}}</span>
             </button>
             <button type="button" class="btn btn-outline btn-danger" id="ip-register-clear">
-                <i class="fa fa-eraser" aria-hidden="true"></i><span data-i18n-zh="全部清空" data-i18n-en="Clear all">全部清空</span>
+                <i class="fa fa-eraser" aria-hidden="true"></i><span data-i18n-zh="{{if .ip_registration_admin}}全部清空{{else}}清空我的登记{{end}}" data-i18n-en="{{if .ip_registration_admin}}Clear all{{else}}Clear my registrations{{end}}">{{if .ip_registration_admin}}全部清空{{else}}清空我的登记{{end}}</span>
             </button>
         </div>
     </header>
@@ -25,8 +25,8 @@
             <strong id="ip-register-count">{{.ip_registration_count}}</strong>
         </div>
         <div class="ip-register-admin-summary__item">
-            <span class="ip-register-admin-summary__label" data-i18n-zh="公共登记" data-i18n-en="Global bucket">公共登记</span>
-            <strong data-i18n-zh="可用于所有启用登记的客户端" data-i18n-en="Applies to all clients requiring registration">可用于所有启用登记的客户端</strong>
+            <span class="ip-register-admin-summary__label" data-i18n-zh="{{if .ip_registration_admin}}公共登记{{else}}管理范围{{end}}" data-i18n-en="{{if .ip_registration_admin}}Global bucket{{else}}Scope{{end}}">{{if .ip_registration_admin}}公共登记{{else}}管理范围{{end}}</span>
+            <strong data-i18n-zh="{{if .ip_registration_admin}}可用于所有启用登记的客户端{{else}}仅限当前账号名下的客户端{{end}}" data-i18n-en="{{if .ip_registration_admin}}Applies to all clients requiring registration{{else}}Clients owned by the current account only{{end}}">{{if .ip_registration_admin}}可用于所有启用登记的客户端{{else}}仅限当前账号名下的客户端{{end}}</strong>
         </div>
         <div class="ip-register-admin-summary__item">
             <span class="ip-register-admin-summary__label" data-i18n-zh="登记密钥状态" data-i18n-en="Key status">登记密钥状态</span>
@@ -83,7 +83,7 @@
             var rows = response && Array.isArray(response.rows) ? response.rows : [];
             var body = $table.find('tbody').empty();
             $('#ip-register-count').text(response && response.total != null ? response.total : rows.length);
-            if (!rows.length) { body.append('<tr><td colspan="5" class="text-muted">暂无有效登记</td></tr>'); return; }
+            if (!rows.length) { body.append('<tr><td colspan="5" class="text-muted">{{if .ip_registration_admin}}暂无有效登记{{else}}当前账号名下暂无有效 IP 登记{{end}}</td></tr>'); return; }
             rows.forEach(function (row) {
                 var ip = escape(row.ip), client = escape(row.client), clientID = escape(row.client_id);
                 body.append('<tr><td><code>' + ip + '</code></td><td>' + client + '</td><td>' + escape(row.until) + '</td><td>' + escape(row.remaining) + '</td><td><button type="button" class="btn btn-xs btn-outline btn-danger js-ip-register-revoke" data-client-id="' + clientID + '" data-ip="' + ip + '">撤销</button></td></tr>');
@@ -109,7 +109,7 @@
     });
     $('#ip-register-clean').on('click', function () { postAction('/clean', {}, '已清理过期登记'); });
     $('#ip-register-clear').on('click', function () {
-        confirmAction('确认清空全部 IP 登记？访问者需要重新登记。', true, '清空').then(function (confirmed) {
+        confirmAction('{{if .ip_registration_admin}}确认清空全部 IP 登记？访问者需要重新登记。{{else}}确认清空当前账号名下客户端的 IP 登记？访问者需要重新登记。{{end}}', true, '清空').then(function (confirmed) {
             if (confirmed) postAction('/clear', {}, '已清空 IP 登记');
         });
     });

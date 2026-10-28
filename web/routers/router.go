@@ -13,6 +13,7 @@ func Init() {
 		ns := beego.NewNamespace(web_base_url,
 			beego.NSRouter("/ip/register", &controllers.LoginController{}, "*:IPRegister"),
 			beego.NSRouter("/", &controllers.IndexController{}, "*:Index"),
+			beego.NSRouter("/index/help/content", &controllers.IndexController{}, "GET:HelpContent"),
 			beego.NSRouter("/overview", &controllers.DashboardController{}, "*:Entry"),
 			beego.NSRouter("/overview/admin", &controllers.DashboardController{}, "*:Admin"),
 			beego.NSRouter("/overview/user", &controllers.DashboardController{}, "*:User"),
@@ -22,12 +23,14 @@ func Init() {
 			beego.NSRouter("/overview/accesskey/revoke", &controllers.DashboardAccessController{}, "POST:Revoke"),
 			beego.NSAutoRouter(&controllers.IndexController{}),
 			beego.NSAutoRouter(&controllers.LoginController{}),
+			beego.NSRouter("/login/register/code", &controllers.LoginController{}, "POST:RegisterEmailCode"),
 			beego.NSAutoRouter(&controllers.ClientController{}),
 			beego.NSAutoRouter(&controllers.UserController{}),
 			beego.NSAutoRouter(&controllers.AuthController{}),
 			beego.NSRouter("/auth/ipwhiteauth", &controllers.AuthController{}, "*:IpWhiteAuth"),
 			beego.NSRouter("/global/config", &controllers.GlobalController{}, "GET:Config"),
 			beego.NSRouter("/global/config/save", &controllers.GlobalController{}, "POST:SaveConfig"),
+			beego.NSRouter("/global/config/source", &controllers.GlobalController{}, "GET:ConfigSource;POST:SaveConfigSource"),
 			beego.NSRouter("/global/config/restart", &controllers.GlobalController{}, "POST:Restart"),
 			beego.NSRouter("/global/banlist", &controllers.GlobalController{}, "GET:Banlist;POST:Banlist"),
 			beego.NSRouter("/global/unban", &controllers.GlobalController{}, "POST:Unban"),
@@ -48,6 +51,7 @@ func Init() {
 	} else {
 		beego.Router("/ip/register", &controllers.LoginController{}, "*:IPRegister")
 		beego.Router("/", &controllers.IndexController{}, "*:Index")
+		beego.Router("/index/help/content", &controllers.IndexController{}, "GET:HelpContent")
 		beego.Router("/overview", &controllers.DashboardController{}, "*:Entry")
 		beego.Router("/overview/admin", &controllers.DashboardController{}, "*:Admin")
 		beego.Router("/overview/user", &controllers.DashboardController{}, "*:User")
@@ -57,12 +61,14 @@ func Init() {
 		beego.Router("/overview/accesskey/revoke", &controllers.DashboardAccessController{}, "POST:Revoke")
 		beego.AutoRouter(&controllers.IndexController{})
 		beego.AutoRouter(&controllers.LoginController{})
+		beego.Router("/login/register/code", &controllers.LoginController{}, "POST:RegisterEmailCode")
 		beego.AutoRouter(&controllers.ClientController{})
 		beego.AutoRouter(&controllers.UserController{})
 		beego.AutoRouter(&controllers.AuthController{})
 		beego.Router("/auth/ipwhiteauth", &controllers.AuthController{}, "*:IpWhiteAuth")
 		beego.Router("/global/config", &controllers.GlobalController{}, "GET:Config")
 		beego.Router("/global/config/save", &controllers.GlobalController{}, "POST:SaveConfig")
+		beego.Router("/global/config/source", &controllers.GlobalController{}, "GET:ConfigSource;POST:SaveConfigSource")
 		beego.Router("/global/config/restart", &controllers.GlobalController{}, "POST:Restart")
 		beego.Router("/global/banlist", &controllers.GlobalController{}, "GET:Banlist;POST:Banlist")
 		beego.Router("/global/unban", &controllers.GlobalController{}, "POST:Unban")
@@ -119,6 +125,7 @@ func apiV1Routers() []beego.LinkNamespace {
 		beego.NSRouter("/hosts/diagnose", &controllers.ApiV1Controller{}, "POST:HostDiagnose"),
 
 		// Dashboard users.
+		beego.NSRouter("/users/register", &controllers.ApiV1Controller{}, "POST:UsersRegister"),
 		beego.NSRouter("/users", &controllers.ApiV1Controller{}, "GET:Users;POST:UsersCreate"),
 		beego.NSRouter("/users/:id", &controllers.ApiV1Controller{}, "GET:UserGet;PATCH:UserUpdate;PUT:UserUpdate;DELETE:UserDelete"),
 		beego.NSRouter("/users/:id/status", &controllers.ApiV1Controller{}, "POST:UserStatus"),

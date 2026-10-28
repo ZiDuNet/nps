@@ -272,6 +272,7 @@ type User struct {
 	Id         int
 	UserName   string
 	Password   string
+	Email      string `json:"email,omitempty"`
 	APIKeyHash string `json:"api_key_hash,omitempty"`
 	// DashboardKeyHash stores only the SHA-256 digest of the read-only
 	// resource topology credential. DashboardKeyCiphertext stores the same
@@ -788,6 +789,12 @@ type Glob struct {
 	RateLimit       int // aggregate forwarding rate in KB/s; zero means unlimited
 	ServerUrl       string
 	PlatformDomains []PlatformDomain
+	// UsageGuideMode and UsageGuideSource configure the authenticated Help
+	// page. Supported modes are "disabled", "url", "file" and "html". HTML
+	// pasted in the console is stored as conf/qa.html so the page can be
+	// updated without rebuilding the embedded Web assets.
+	UsageGuideMode   string
+	UsageGuideSource string
 	// DashboardKeyHash is the administrator's read-only topology credential.
 	DashboardKeyHash       string `json:"dashboard_key_hash,omitempty"`
 	DashboardKeyCiphertext string `json:"dashboard_key_ciphertext,omitempty"`

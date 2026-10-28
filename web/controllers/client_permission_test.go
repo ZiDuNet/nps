@@ -331,7 +331,7 @@ func TestDashboardUserCannotDeleteAnotherUsersClient(t *testing.T) {
 	utils.JsonDb.Clients.Store(client.Id, client)
 
 	controller, recorder := newClientPermissionController(t, "Del", url.Values{"id": {"2"}}, testUserSession(7))
-	controller.Del()
+	runClientPermissionAction(t, controller.Del)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("cross-owner delete status = %d, want %d", recorder.Code, http.StatusForbidden)
 	}
@@ -351,7 +351,7 @@ func TestLegacyClientPrincipalCannotDeleteClient(t *testing.T) {
 		"auth":              true,
 	}
 	controller, recorder := newClientPermissionController(t, "Del", url.Values{"id": {"5"}}, sessionValues)
-	controller.Del()
+	runClientPermissionAction(t, controller.Del)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("legacy client delete status = %d, want %d", recorder.Code, http.StatusForbidden)
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,6 +34,62 @@ func TestClientLocalProxyAllowedScopes(t *testing.T) {
 				t.Fatalf("LocalProxyAllowed() = %t, want %t", got, test.want)
 			}
 		})
+	}
+}
+
+func TestUserEmailIsNormalizedAndUnique(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	first := &User{UserName: "alice", Password: "secret", Email: "Alice@Example.com", Status: true}
+	if err := utils.NewUser(first); err != nil {
+		t.Fatalf("create user with email: %v", err)
+	}
+	if first.Email != "alice@example.com" {
+		t.Fatalf("normalized email = %q, want alice@example.com", first.Email)
+	}
+	duplicate := &User{UserName: "bob", Password: "secret", Email: "ALICE@example.com", Status: true}
+	if err := utils.NewUser(duplicate); err == nil {
+		t.Fatal("duplicate email should be rejected case-insensitively")
+	}
+	withoutEmail := &User{UserName: "bob", Password: "secret", Status: true}
+	if err := utils.NewUser(withoutEmail); err != nil {
+		t.Fatalf("legacy user without email should remain valid: %v", err)
+	}
+}
+
+func TestUserEmailUniquenessIsAtomicForConcurrentRegistration(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var wait sync.WaitGroup
+	for _, username := range []string{"alice", "bob"} {
+		wait.Add(1)
+		go func(username string) {
+			defer wait.Done()
+			<-start
+			results <- utils.NewUser(&User{
+				UserName: username,
+				Password: "secret",
+				Email:    "shared@example.com",
+			})
+		}(username)
+	}
+	close(start)
+	wait.Wait()
+	close(results)
+
+	created := 0
+	for err := range results {
+		if err == nil {
+			created++
+		}
+	}
+	if created != 1 {
+		t.Fatalf("concurrent registrations created %d users with one email, want 1", created)
+	}
+	if got := countUsers(db); got != 1 {
+		t.Fatalf("stored %d users with one email, want 1", got)
 	}
 }
 

@@ -78,7 +78,9 @@ TLS 连接使用：
 
 HTTP 正向代理与 SOCKS5 在 Web 面板统一为“HTTP / SOCKS 混合代理”。一条混合代理隧道共用一个公网端口，可分别启用 HTTP 和 SOCKS5，至少启用一种；旧的 `httpProxy`、`socks5` 数据仍可继续使用，编辑后会迁移为混合代理。
 
-管理员还可以从「全局参数 → 服务端配置」按功能分组维护 `nps.conf`。可选监听、证书、密钥、日志归档和调试项关闭后会移除对应有效配置键；敏感字段脱敏，保存后必须重启 NPS。历史和自定义键只读展示并在保存时原样保留。
+管理员还可以从「全局参数 → 服务端配置」维护 `nps.conf`。页面提供“可视化配置”和“源码视图”两种模式：可视化模式支持按功能搜索、展开/收起、字段级启用开关和准确的默认值提示；源码模式展示完整文件并保留注释、空行、字段顺序和自定义项，保存前会检查语法、已知字段类型和关键证书/邮件配置关系。源码保存使用文件修订号检测并发修改，避免覆盖其他窗口刚提交的内容，文件上限为 1 MiB。两种视图都仅限管理员访问。
+
+密码、Token 和 API 密钥不会在可视化表单中回显；私钥文件路径会正常显示以便核对，但 NPS 不会读取或展示私钥内容。可选监听、证书、证书私钥路径、日志归档和调试项关闭后会从文件中移除对应有效配置键。保存后必须重启 NPS 才会应用监听端口、Bridge、TLS、Web 和日志等运行配置；历史和自定义键只读展示并在保存时原样保留。
 
 ## 用户与配额
 
@@ -86,6 +88,18 @@ HTTP 正向代理与 SOCKS5 在 Web 面板统一为“HTTP / SOCKS 混合代理�
 |--------|------|--------|
 | `allow_user_login` | 是否允许普通用户登录 | `true` |
 | `allow_user_register` | 是否允许自助注册 | `false` |
+| `register_captcha` | 注册提交是否要求图片验证码 | `true` |
+| `register_max_clients` | 新注册用户默认最大客户端数；`0` 表示不限 | `0` |
+| `register_max_tunnels` | 新注册用户默认总隧道数；域名反代也计入，`0` 表示不限 | `0` |
+| `register_expire_days` | 新注册用户默认有效天数；`0` 表示永久有效 | `7` |
+| `register_rate_window` | 注册频率统计窗口（秒） | `60` |
+| `register_rate_limit` | 同一 IP 或用户名在一个窗口内允许的注册提交次数；`0` 表示不限 | `5` |
+| `register_ip_rate_limit` | 同一来源 IP 在一个窗口内允许成功创建的账号数；`0` 表示不限 | `3` |
+| `register_email_verify` | 是否要求邮箱验证 | `false` |
+| `register_email_code_ttl` | 邮箱验证码有效期（秒） | `600` |
+| `register_email_code_cooldown` | 验证码发送冷却时间（秒） | `60` |
+| `smtp_host` / `smtp_port` / `smtp_security` | SMTP 主机、端口和加密方式；加密方式可选 `starttls`、`ssl`、`none` | 空 / `587` / `starttls` |
+| `smtp_username` / `smtp_password` / `smtp_from` | SMTP 认证与发件人配置；启用邮箱验证时必须提供主机、端口和发件人 | 空 |
 | `allow_user_change_username` | 是否允许普通用户修改用户名 | `true` |
 | `allow_tunnel_num_limit` | 是否显示隧道数量限制配置 | `true` |
 | `allow_flow_limit` | 是否显示流量限制配置 | `true` |

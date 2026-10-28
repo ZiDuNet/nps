@@ -1,189 +1,130 @@
-<main class="wrapper wrapper-content dashboard-page help-page" aria-label="代理模式配置指南" data-aria-label-zh="代理模式配置指南" data-aria-label-en="Proxy mode configuration guide">
-    <header class="dashboard-page-header help-page-header">
-        <div>
-            <div class="dashboard-page-kicker help-page-kicker" data-i18n-zh="操作指引" data-i18n-en="Guide">操作指引</div>
-            <h1 data-i18n-zh="帮助中心" data-i18n-en="Help center">帮助中心</h1>
-            <p data-i18n-zh="按常见的代理场景完成配置、连接和访问验证。" data-i18n-en="Configure, connect, and verify common proxy scenarios.">按常见的代理场景完成配置、连接和访问验证。</p>
+<section class="help-document-page" aria-labelledby="help-document-title">
+    <header class="dashboard-page-header help-document-header">
+        <div class="form-page-heading">
+            <div class="dashboard-page-kicker" data-i18n-zh="使用说明" data-i18n-en="Help">使用说明</div>
+            <h1 id="help-document-title" data-i18n-zh="使用说明" data-i18n-en="Help">使用说明</h1>
+            <p data-i18n-zh="说明内容由管理员独立维护，更新文件后刷新即可生效，无需重新构建或重启 NPS。"
+               data-i18n-en="The guide is maintained independently by an administrator. Refresh after replacing the file; rebuilding or restarting NPS is not required.">说明内容由管理员独立维护，更新文件后刷新即可生效，无需重新构建或重启 NPS。</p>
         </div>
-        <div class="dashboard-page-actions help-page-actions" aria-label="NPS GitHub 项目状态" data-aria-label-zh="NPS GitHub 项目状态" data-aria-label-en="NPS GitHub project actions">
-            <iframe class="help-github-button" title="Star NPS on GitHub" src="https://ghbtns.com/github-btn.html?user=ZiDuNet&repo=nps&type=star&count=true&size=large"
-                    frameborder="0" scrolling="0" width="160" height="30"></iframe>
-            <iframe class="help-github-button" title="Watch NPS on GitHub" src="https://ghbtns.com/github-btn.html?user=ZiDuNet&repo=nps&type=watch&count=true&size=large&v=2"
-                    frameborder="0" scrolling="0" width="160" height="30"></iframe>
-            <iframe class="help-github-button" title="Fork NPS on GitHub" src="https://ghbtns.com/github-btn.html?user=ZiDuNet&repo=nps&type=fork&count=true&size=large"
-                    frameborder="0" scrolling="0" width="158" height="30"></iframe>
+        <div class="dashboard-page-actions help-document-actions">
+            {{if eq .help_state "ready"}}
+            <a class="btn btn-outline btn-primary" href="{{.help_external_url}}" target="_blank" rel="noopener noreferrer">
+                <i class="fa fa-external-link" aria-hidden="true"></i>
+                <span data-i18n-zh="新窗口打开" data-i18n-en="Open in new window">新窗口打开</span>
+            </a>
+            <button type="button" class="btn btn-outline" id="help-document-refresh">
+                <i class="fa fa-sync-alt" aria-hidden="true"></i>
+                <span data-i18n-zh="刷新内容" data-i18n-en="Refresh">刷新内容</span>
+            </button>
+            {{end}}
+            {{if .isAdmin}}
+            <a class="btn btn-primary" href="{{.web_base_url}}/global/index#usage-guide-settings">
+                <i class="fa fa-edit" aria-hidden="true"></i>
+                <span data-i18n-zh="配置内容" data-i18n-en="Configure">配置内容</span>
+            </a>
+            {{end}}
         </div>
     </header>
 
-    <section class="help-guide-grid" aria-label="代理模式配置指南" data-aria-label-zh="代理模式配置指南" data-aria-label-en="Proxy mode configuration guide">
-        <div class="help-guide-full-column">
-            <article class="panel ibox float-e-margins help-guide-card help-guide-card--domain nps-panel">
-                <div class="ibox-title help-guide-card__header">
-                    <span class="help-guide-card__icon" aria-hidden="true"><i class="fa fa-globe"></i></span>
-                    <div>
-                        <span class="help-guide-card__eyebrow" data-i18n-zh="域名路由" data-i18n-en="Domain routing">域名路由</span>
-                        <h2 class="help-guide-card__title h5" data-i18n-zh="域名代理模式" data-i18n-en="Domain proxy mode">域名代理模式</h2>
-                    </div>
-                </div>
-                <div class="ibox-content help-guide-card__body">
-                    <p class="help-guide-card__scope"><strong data-i18n-zh="适用范围：" data-i18n-en="Use cases:">适用范围：</strong><span data-i18n-zh="小程序开发、微信公众号开发、产品演示" data-i18n-en="Mini-program development, WeChat public accounts, and product demos">小程序开发、微信公众号开发、产品演示</span></p>
-                    <div class="help-guide-card__scenario">
-                        <h3 data-i18n-zh="假设场景" data-i18n-en="Scenario">假设场景</h3>
-                        <ul>
-                            <li data-i18n-zh="有一个域名proxy.com，有一台公网机器ip为{{.ip}}" data-i18n-en="Use the domain proxy.com and a public server at {{.ip}}">有一个域名proxy.com，有一台公网机器ip为{{.ip}}</li>
-                            <li data-i18n-zh="两个内网开发站点127.0.0.1:81，127.0.0.1:82" data-i18n-en="Two internal development sites at 127.0.0.1:81 and 127.0.0.1:82">两个内网开发站点127.0.0.1:81，127.0.0.1:82</li>
-                            <li data-i18n-zh="想通过a.proxy.com访问127.0.0.1:81，通过b.proxy.com访问127.0.0.1:82" data-i18n-en="Route a.proxy.com to 127.0.0.1:81 and b.proxy.com to 127.0.0.1:82">想通过a.proxy.com访问127.0.0.1:81，通过b.proxy.com访问127.0.0.1:82</li>
-                        </ul>
-                    </div>
-                    <div class="help-guide-card__steps">
-                        <h3 data-i18n-zh="使用步骤" data-i18n-en="Steps">使用步骤</h3>
-                        <ol>
-                            <li data-i18n-zh="将*.proxy.com解析到公网服务器{{.ip}}" data-i18n-en="Point *.proxy.com to the public server at {{.ip}}">将*.proxy.com解析到公网服务器{{.ip}}</li>
-                            <li data-i18n-zh="在客户端管理中创建一个客户端，记录下验证密钥" data-i18n-en="Create a client in Client management and record its verify key">在客户端管理中创建一个客户端，记录下验证密钥</li>
-                            <li data-i18n-zh="点击该客户端的域名管理，添加两条规则：1、域名：a.proxy.com，内网目标：127.0.0.1:81；2、域名：b.proxy.com，内网目标：127.0.0.1:82" data-i18n-en="Open Domain management for that client and add two rules: a.proxy.com to 127.0.0.1:81, and b.proxy.com to 127.0.0.1:82">点击该客户端的域名管理，添加两条规则：1、域名：a.proxy.com，内网目标：127.0.0.1:81；2、域名：b.proxy.com，内网目标：127.0.0.1:82</li>
-                            <li>
-                                <span data-i18n-zh="内网客户端运行" data-i18n-en="Run the internal client">内网客户端运行</span>
-                                <pre class="help-command"><code data-i18n-zh="./npc -server={{.ip}}:{{.p}} -vkey=客户端的密钥" data-i18n-en="./npc -server={{.ip}}:{{.p}} -vkey=YOUR_VERIFY_KEY">./npc -server={{.ip}}:{{.p}} -vkey=客户端的密钥</code></pre>
-                            </li>
-                            <li data-i18n-zh="现在访问a.proxy.com，b.proxy.com即可成功" data-i18n-en="You can now open a.proxy.com and b.proxy.com">现在访问a.proxy.com，b.proxy.com即可成功</li>
-                        </ol>
-                    </div>
-                    <p class="help-guide-card__note"><span data-i18n-zh="注：上文中提到公网ip（{{.ip}}）为系统自动识别，如果是在测试环境中请自行对应，" data-i18n-en="Note: the public IP ({{.ip}}) is detected automatically. Replace it with your test address when needed. ">注：上文中提到公网ip（{{.ip}}）为系统自动识别，如果是在测试环境中请自行对应，</span><strong data-i18n-zh="如需使用https请在配置文件中将https端口设置为443，和将对应的证书文件路径添加到配置文件中" data-i18n-en="For HTTPS, set the HTTPS port to 443 and add the certificate paths to the configuration.">如需使用https请在配置文件中将https端口设置为443，和将对应的证书文件路径添加到配置文件中</strong></p>
-                </div>
-            </article>
+    {{if eq .help_state "ready"}}
+        {{if .help_mixed_content}}
+        <div class="help-document-warning" role="alert">
+            <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+            <span data-i18n-zh="当前面板通过 HTTPS 打开，但配置的是 HTTP 说明地址。浏览器可能拦截混合内容，建议改用 HTTPS 地址。"
+                  data-i18n-en="The console uses HTTPS but the guide URL uses HTTP. The browser may block this mixed content; use an HTTPS URL when possible.">当前面板通过 HTTPS 打开，但配置的是 HTTP 说明地址。浏览器可能拦截混合内容，建议改用 HTTPS 地址。</span>
         </div>
-
-        <div class="help-guide-column">
-            <article class="panel ibox float-e-margins help-guide-card nps-panel">
-                <div class="ibox-title help-guide-card__header">
-                    <span class="help-guide-card__icon" aria-hidden="true"><i class="fa fa-retweet"></i></span>
-                    <div>
-                        <span class="help-guide-card__eyebrow" data-i18n-zh="端口转发" data-i18n-en="Port forwarding">端口转发</span>
-                        <h2 class="help-guide-card__title h5" data-i18n-zh="tcp隧道模式" data-i18n-en="TCP tunnel mode">tcp隧道模式</h2>
-                    </div>
-                </div>
-                <div class="ibox-content help-guide-card__body">
-                    <p class="help-guide-card__scope"><strong data-i18n-zh="适用范围：" data-i18n-en="Use cases:">适用范围：</strong><span data-i18n-zh="ssh、远程桌面等tcp连接场景" data-i18n-en="SSH, remote desktop, and other TCP connections">ssh、远程桌面等tcp连接场景</span></p>
-                    <div class="help-guide-card__scenario">
-                        <h3 data-i18n-zh="假设场景" data-i18n-en="Scenario">假设场景</h3>
-                        <p data-i18n-zh="想通过访问公网服务器{{.ip}}的8001端口，连接内网机器10.1.50.101的22端口，实现ssh连接" data-i18n-en="Connect to internal host 10.1.50.101:22 through port 8001 on the public server {{.ip}}">想通过访问公网服务器{{.ip}}的8001端口，连接内网机器10.1.50.101的22端口，实现ssh连接</p>
-                    </div>
-                    <div class="help-guide-card__steps">
-                        <h3 data-i18n-zh="使用步骤" data-i18n-en="Steps">使用步骤</h3>
-                        <ol>
-                            <li data-i18n-zh="在客户端管理中创建一个客户端，记录下验证密钥" data-i18n-en="Create a client in Client management and record its verify key">在客户端管理中创建一个客户端，记录下验证密钥</li>
-                            <li>
-                                <span data-i18n-zh="内网客户端运行" data-i18n-en="Run the internal client">内网客户端运行</span>
-                                <pre class="help-command"><code data-i18n-zh="./npc -server={{.ip}}:{{.p}} -vkey=客户端的密钥" data-i18n-en="./npc -server={{.ip}}:{{.p}} -vkey=YOUR_VERIFY_KEY">./npc -server={{.ip}}:{{.p}} -vkey=客户端的密钥</code></pre>
-                            </li>
-                            <li data-i18n-zh="在该客户端隧道管理中添加一条tcp隧道，填写监听的端口（8001）、内网目标ip和目标端口（10.1.50.101:22），选择压缩方式，保存。" data-i18n-en="Add a TCP tunnel for this client with listen port 8001, target 10.1.50.101:22, then choose compression and save.">在该客户端隧道管理中添加一条tcp隧道，填写监听的端口（8001）、内网目标ip和目标端口（10.1.50.101:22），选择压缩方式，保存。</li>
-                            <li data-i18n-zh="访问公网服务器ip（{{.ip}}）,填写的监听端口(8001)，相当于访问内网ip(10.1.50.101):目标端口(22)，例如：ssh -p 8001 root@{{.ip}}" data-i18n-en="Connect to {{.ip}}:8001 to reach 10.1.50.101:22, for example: ssh -p 8001 root@{{.ip}}">访问公网服务器ip（{{.ip}}）,填写的监听端口(8001)，相当于访问内网ip(10.1.50.101):目标端口(22)，例如：ssh -p 8001 root@{{.ip}}</li>
-                        </ol>
-                    </div>
-                    <p class="help-guide-card__note" data-i18n-zh="注：上文中提到公网ip（{{.ip}}）为系统自动识别，如果是在测试环境中请自行对应，默认内网客户端已经启动" data-i18n-en="Note: the public IP ({{.ip}}) is detected automatically. Replace it for testing; the internal client is assumed to be running.">注：上文中提到公网ip（{{.ip}}）为系统自动识别，如果是在测试环境中请自行对应，默认内网客户端已经启动</p>
-                </div>
-            </article>
+        {{end}}
+        <div class="help-document-shell">
+            <div class="help-document-toolbar">
+                <span class="help-document-source">
+                    <i class="fa {{if eq .help_mode "url"}}fa-link{{else}}fa-file-code{{end}}" aria-hidden="true"></i>
+                    <strong>{{if eq .help_mode "url"}}远程页面{{else}}本地 HTML{{end}}</strong>
+                    <code title="{{.help_source}}">{{.help_source}}</code>
+                </span>
+                {{if eq .help_mode "url"}}
+                <small data-i18n-zh="目标站点可能通过 X-Frame-Options 或 CSP 禁止嵌入，此时请使用“新窗口打开”。"
+                       data-i18n-en="The target site may block embedding with X-Frame-Options or CSP. Use Open in new window in that case.">目标站点可能通过 X-Frame-Options 或 CSP 禁止嵌入，此时请使用“新窗口打开”。</small>
+                {{else}}
+                <small data-i18n-zh="本地说明在隔离沙箱中运行，不能读取管理面板登录态。" data-i18n-en="Local guides run in an isolated sandbox and cannot access the console session.">本地说明在隔离沙箱中运行，不能读取管理面板登录态。</small>
+                {{end}}
+            </div>
+            <iframe id="help-document-frame"
+                    class="help-document-frame"
+                    src="{{.help_embed_url}}"
+                    title="NPS 使用说明"
+                    sandbox="{{.help_iframe_sandbox}}"
+                    referrerpolicy="no-referrer"
+                    loading="eager"></iframe>
         </div>
-
-        <div class="help-guide-column">
-            <article class="panel ibox float-e-margins help-guide-card nps-panel">
-                <div class="ibox-title help-guide-card__header">
-                    <span class="help-guide-card__icon" aria-hidden="true"><i class="fa fa-random"></i></span>
-                    <div>
-                        <span class="help-guide-card__eyebrow" data-i18n-zh="数据报转发" data-i18n-en="Datagram forwarding">数据报转发</span>
-                        <h2 class="help-guide-card__title h5" data-i18n-zh="udp隧道模式" data-i18n-en="UDP tunnel mode">udp隧道模式</h2>
-                    </div>
-                </div>
-                <div class="ibox-content help-guide-card__body">
-                    <p class="help-guide-card__scope"><strong data-i18n-zh="适用范围：" data-i18n-en="Use cases:">适用范围：</strong><span data-i18n-zh="内网dns解析等udp连接场景" data-i18n-en="Internal DNS resolution and other UDP connections">内网dns解析等udp连接场景</span></p>
-                    <div class="help-guide-card__scenario">
-                        <h3 data-i18n-zh="假设场景" data-i18n-en="Scenario">假设场景</h3>
-                        <p data-i18n-zh="内网有一台dns（10.1.50.102:53），在非内网环境下想使用该dns，公网服务器为{{.ip}}" data-i18n-en="An internal DNS server runs at 10.1.50.102:53; expose it through the public server {{.ip}}.">内网有一台dns（10.1.50.102:53），在非内网环境下想使用该dns，公网服务器为{{.ip}}</p>
-                    </div>
-                    <div class="help-guide-card__steps">
-                        <h3 data-i18n-zh="使用步骤" data-i18n-en="Steps">使用步骤</h3>
-                        <ol>
-                            <li data-i18n-zh="在客户端管理中创建一个客户端，记录下验证密钥" data-i18n-en="Create a client in Client management and record its verify key">在客户端管理中创建一个客户端，记录下验证密钥</li>
-                            <li>
-                                <span data-i18n-zh="内网客户端运行" data-i18n-en="Run the internal client">内网客户端运行</span>
-                                <pre class="help-command"><code data-i18n-zh="./npc -server={{.ip}}:{{.p}} -vkey=客户端的密钥" data-i18n-en="./npc -server={{.ip}}:{{.p}} -vkey=YOUR_VERIFY_KEY">./npc -server={{.ip}}:{{.p}} -vkey=客户端的密钥</code></pre>
-                            </li>
-                            <li data-i18n-zh="在该客户端的隧道管理中添加一条udp隧道，填写监听的端口（53）、内网目标ip和目标端口（10.1.50.102:53），选择压缩方式，保存。" data-i18n-en="Add a UDP tunnel with listen port 53 and target 10.1.50.102:53, then choose compression and save.">在该客户端的隧道管理中添加一条udp隧道，填写监听的端口（53）、内网目标ip和目标端口（10.1.50.102:53），选择压缩方式，保存。</li>
-                            <li data-i18n-zh="修改本机 DNS 为{{.ip}}，则相当于使用 10.1.50.102 作为 DNS 服务器" data-i18n-en="Set your local DNS server to {{.ip}} to use 10.1.50.102 as the resolver.">修改本机 DNS 为{{.ip}}，则相当于使用 10.1.50.102 作为 DNS 服务器</li>
-                        </ol>
-                    </div>
-                    <p class="help-guide-card__note" data-i18n-zh="注：上文中提到公网ip（{{.ip}}）为系统自动识别，如果是在测试环境中请自行对应，默认内网客户端已经启动" data-i18n-en="Note: the public IP ({{.ip}}) is detected automatically. Replace it for testing; the internal client is assumed to be running.">注：上文中提到公网ip（{{.ip}}）为系统自动识别，如果是在测试环境中请自行对应，默认内网客户端已经启动</p>
-                </div>
-            </article>
+    {{else if eq .help_state "missing"}}
+        <div class="help-document-empty" role="status">
+            <span class="help-document-empty__icon"><i class="fa fa-file" aria-hidden="true"></i></span>
+            <div>
+                <h2 data-i18n-zh="使用说明文件不存在" data-i18n-en="Guide file not found">使用说明文件不存在</h2>
+                <p data-i18n-zh="页面仍可正常打开。请管理员创建配置文件，或在“全局参数”中直接粘贴 HTML。"
+                   data-i18n-en="The page remains available. Ask an administrator to create the configured file or paste HTML in Global settings.">页面仍可正常打开。请管理员创建配置文件，或在“全局参数”中直接粘贴 HTML。</p>
+                {{if .help_source}}<code>{{.help_source}}</code>{{end}}
+            </div>
         </div>
-
-        <div class="help-guide-column">
-            <article class="panel ibox float-e-margins help-guide-card nps-panel">
-                <div class="ibox-title help-guide-card__header">
-                    <span class="help-guide-card__icon" aria-hidden="true"><i class="fa fa-layer-group"></i></span>
-                    <div>
-                        <span class="help-guide-card__eyebrow" data-i18n-zh="通用代理" data-i18n-en="General proxy">通用代理</span>
-                        <h2 class="help-guide-card__title h5" data-i18n-zh="socks5代理模式" data-i18n-en="SOCKS5 proxy mode">socks5代理模式</h2>
-                    </div>
-                </div>
-                <div class="ibox-content help-guide-card__body">
-                    <p class="help-guide-card__scope"><strong data-i18n-zh="适用范围：" data-i18n-en="Use cases:">适用范围：</strong><span data-i18n-zh="在外网环境下如同使用vpn一样访问内网设备或者资源" data-i18n-en="Reach internal devices and resources from outside the network, like using a VPN">在外网环境下如同使用vpn一样访问内网设备或者资源</span></p>
-                    <div class="help-guide-card__scenario">
-                        <h3 data-i18n-zh="假设场景" data-i18n-en="Scenario">假设场景</h3>
-                        <p data-i18n-zh="想将公网服务器{{.ip}}的8003端口作为socks5代理，达到访问内网任意设备或者资源的效果" data-i18n-en="Use port 8003 on the public server {{.ip}} as a SOCKS5 proxy for any internal resource">想将公网服务器{{.ip}}的8003端口作为socks5代理，达到访问内网任意设备或者资源的效果</p>
-                    </div>
-                    <div class="help-guide-card__steps">
-                        <h3 data-i18n-zh="使用步骤" data-i18n-en="Steps">使用步骤</h3>
-                        <ol>
-                            <li data-i18n-zh="在客户端管理中创建一个客户端，记录下验证密钥" data-i18n-en="Create a client in Client management and record its verify key">在客户端管理中创建一个客户端，记录下验证密钥</li>
-                            <li>
-                                <span data-i18n-zh="内网客户端运行" data-i18n-en="Run the internal client">内网客户端运行</span>
-                                <pre class="help-command"><code data-i18n-zh="./npc -server={{.ip}}:{{.p}} -vkey=客户端的密钥" data-i18n-en="./npc -server={{.ip}}:{{.p}} -vkey=YOUR_VERIFY_KEY">./npc -server={{.ip}}:{{.p}} -vkey=客户端的密钥</code></pre>
-                            </li>
-                            <li data-i18n-zh="在该客户端隧道管理中添加一条socks5代理，填写监听的端口（8003），验证用户名和密码自行选择（建议先不填，部分客户端不支持，proxifer支持），选择压缩方式，保存。" data-i18n-en="Add a SOCKS5 proxy on port 8003. Choose credentials as needed; leaving them blank works with more clients. Select compression and save.">在该客户端隧道管理中添加一条socks5代理，填写监听的端口（8003），验证用户名和密码自行选择（建议先不填，部分客户端不支持，proxifer支持），选择压缩方式，保存。</li>
-                            <li data-i18n-zh="在外网环境的本机配置socks5代理，ip为公网服务器ip（{{.ip}}），端口为填写的监听端口(8003)，即可畅享内网了" data-i18n-en="Configure your local SOCKS5 proxy with server {{.ip}} and port 8003 to access the internal network.">在外网环境的本机配置socks5代理，ip为公网服务器ip（{{.ip}}），端口为填写的监听端口(8003)，即可畅享内网了</li>
-                        </ol>
-                    </div>
-                    <p class="help-guide-card__note" data-i18n-zh="注：上文中提到公网ip（{{.ip}}）为系统自动识别，如果是在测试环境中请自行对应，默认内网客户端已经启动" data-i18n-en="Note: the public IP ({{.ip}}) is detected automatically. Replace it for testing; the internal client is assumed to be running.">注：上文中提到公网ip（{{.ip}}）为系统自动识别，如果是在测试环境中请自行对应，默认内网客户端已经启动</p>
-                </div>
-            </article>
+    {{else if .help_error}}
+        <div class="help-document-empty help-document-empty--error" role="alert">
+            <span class="help-document-empty__icon"><i class="fa fa-exclamation-triangle" aria-hidden="true"></i></span>
+            <div>
+                <h2 data-i18n-zh="使用说明配置无效" data-i18n-en="Invalid guide configuration">使用说明配置无效</h2>
+                <p>{{.help_error}}</p>
+            </div>
         </div>
-
-        <div class="help-guide-column">
-            <article class="panel ibox float-e-margins help-guide-card nps-panel">
-                <div class="ibox-title help-guide-card__header">
-                    <span class="help-guide-card__icon" aria-hidden="true"><i class="fa fa-server"></i></span>
-                    <div>
-                        <span class="help-guide-card__eyebrow" data-i18n-zh="网页访问" data-i18n-en="Web access">网页访问</span>
-                        <h2 class="help-guide-card__title h5" data-i18n-zh="http代理模式" data-i18n-en="HTTP proxy mode">http代理模式</h2>
-                    </div>
-                </div>
-                <div class="ibox-content help-guide-card__body">
-                    <p class="help-guide-card__scope"><strong data-i18n-zh="适用范围：" data-i18n-en="Use cases:">适用范围：</strong><span data-i18n-zh="在外网环境下访问内网站点" data-i18n-en="Reach internal websites from outside the network">在外网环境下访问内网站点</span></p>
-                    <div class="help-guide-card__scenario">
-                        <h3 data-i18n-zh="假设场景" data-i18n-en="Scenario">假设场景</h3>
-                        <p data-i18n-zh="想将公网服务器{{.ip}}的8004端口作为http代理，访问内网网站" data-i18n-en="Use port 8004 on the public server {{.ip}} as an HTTP proxy for internal websites">想将公网服务器{{.ip}}的8004端口作为http代理，访问内网网站</p>
-                    </div>
-                    <div class="help-guide-card__steps">
-                        <h3 data-i18n-zh="使用步骤" data-i18n-en="Steps">使用步骤</h3>
-                        <ol>
-                            <li data-i18n-zh="在客户端管理中创建一个客户端，记录下验证密钥" data-i18n-en="Create a client in Client management and record its verify key">在客户端管理中创建一个客户端，记录下验证密钥</li>
-                            <li>
-                                <span data-i18n-zh="内网客户端运行" data-i18n-en="Run the internal client">内网客户端运行</span>
-                                <pre class="help-command"><code data-i18n-zh="./npc -server={{.ip}}:{{.p}} -vkey=客户端的密钥" data-i18n-en="./npc -server={{.ip}}:{{.p}} -vkey=YOUR_VERIFY_KEY">./npc -server={{.ip}}:{{.p}} -vkey=客户端的密钥</code></pre>
-                            </li>
-                            <li data-i18n-zh="在该客户端隧道管理中添加一条http代理，填写监听的端口（8004），选择压缩方式，保存。" data-i18n-en="Add an HTTP proxy on port 8004, choose compression, and save.">在该客户端隧道管理中添加一条http代理，填写监听的端口（8004），选择压缩方式，保存。</li>
-                            <li data-i18n-zh="在外网环境的本机配置http代理，ip为公网服务器ip（{{.ip}}），端口为填写的监听端口(8004)，即可访问了" data-i18n-en="Configure your local HTTP proxy with server {{.ip}} and port 8004 to reach the internal websites.">在外网环境的本机配置http代理，ip为公网服务器ip（{{.ip}}），端口为填写的监听端口(8004)，即可访问了</li>
-                        </ol>
-                    </div>
-                    <p class="help-guide-card__note" data-i18n-zh="注：上文中提到公网ip（{{.ip}}）为系统自动识别，如果是在测试环境中请自行对应，默认内网客户端已经启动" data-i18n-en="Note: the public IP ({{.ip}}) is detected automatically. Replace it for testing; the internal client is assumed to be running.">注：上文中提到公网ip（{{.ip}}）为系统自动识别，如果是在测试环境中请自行对应，默认内网客户端已经启动</p>
-                </div>
-            </article>
+    {{else}}
+        <div class="help-document-empty" role="status">
+            <span class="help-document-empty__icon"><i class="fa fa-book-open" aria-hidden="true"></i></span>
+            <div>
+                <h2 data-i18n-zh="管理员尚未配置使用说明" data-i18n-en="No guide configured">管理员尚未配置使用说明</h2>
+                <p data-i18n-zh="支持远程 URL、conf 目录下的 HTML 文件，或直接在全局参数中粘贴 HTML。"
+                   data-i18n-en="A remote URL, an HTML file under conf, or pasted HTML in Global settings can be used.">支持远程 URL、conf 目录下的 HTML 文件，或直接在全局参数中粘贴 HTML。</p>
+            </div>
         </div>
-    </section>
+    {{end}}
+</section>
 
-    <aside class="help-page-note" role="note" aria-label="单个客户端可以添加多条隧道或者域名解析" data-aria-label-zh="单个客户端可以添加多条隧道或者域名解析" data-aria-label-en="A client can have multiple tunnels or domain rules">
-        <i class="fa fa-info-circle" aria-hidden="true"></i>
-        <strong data-i18n-zh="单个客户端可以添加多条隧道或者域名解析" data-i18n-en="A client can have multiple tunnels or domain rules">单个客户端可以添加多条隧道或者域名解析</strong>
-    </aside>
-</main>
+<style>
+    .help-document-page { width: 100%; max-width: 1440px; margin: 0 auto; }
+    .help-document-header { align-items: flex-start; }
+    .help-document-actions { align-items: center; }
+    .help-document-shell { overflow: hidden; background: var(--nps-surface, #fff); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 12px; box-shadow: var(--nps-shadow-sm, 0 8px 24px rgba(26, 43, 68, .06)); }
+    .help-document-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; padding: 10px 16px; border-bottom: 1px solid var(--nps-line, #dfe5ee); background: var(--nps-surface-subtle, #f7f9fc); }
+    .help-document-source { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--nps-muted, #64748b); }
+    .help-document-source i { color: var(--nps-primary, #1769e0); }
+    .help-document-source strong { flex: 0 0 auto; color: var(--nps-ink, #1f2937); font-size: 12px; }
+    .help-document-source code { min-width: 0; overflow: hidden; color: var(--nps-muted, #64748b); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .help-document-toolbar small { max-width: 48%; color: var(--nps-muted, #64748b); font-size: 11px; line-height: 1.5; text-align: right; }
+    .help-document-frame { display: block; width: 100%; height: calc(100vh - 248px); min-height: 560px; background: #fff; border: 0; }
+    .help-document-warning { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; padding: 12px 14px; color: #8a5a00; background: #fff8e1; border: 1px solid #f0d48a; border-radius: 9px; font-size: 12px; }
+    .help-document-empty { display: flex; align-items: flex-start; gap: 18px; max-width: 760px; margin: 5vh auto 0; padding: 28px; background: var(--nps-surface, #fff); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 14px; box-shadow: var(--nps-shadow-sm, 0 8px 24px rgba(26, 43, 68, .06)); }
+    .help-document-empty__icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 44px; height: 44px; color: var(--nps-primary, #1769e0); background: var(--nps-primary-soft, #eaf2ff); border-radius: 11px; font-size: 18px; }
+    .help-document-empty h2 { margin: 0 0 7px; color: var(--nps-ink, #1f2937); font-size: 17px; }
+    .help-document-empty p { margin: 0; color: var(--nps-muted, #64748b); font-size: 13px; line-height: 1.7; }
+    .help-document-empty code { display: inline-block; margin-top: 10px; padding: 5px 8px; color: var(--nps-muted, #64748b); background: var(--nps-surface-subtle, #f5f7fa); border-radius: 5px; }
+    .help-document-empty--error .help-document-empty__icon { color: #b42318; background: #feeceb; }
+    @media (max-width: 767px) {
+        .help-document-toolbar { align-items: flex-start; flex-direction: column; gap: 5px; }
+        .help-document-toolbar small { max-width: none; text-align: left; }
+        .help-document-frame { height: calc(100vh - 300px); min-height: 440px; }
+        .help-document-empty { margin-top: 18px; padding: 20px; }
+    }
+</style>
+
+<script>
+(function () {
+    var refresh = document.getElementById('help-document-refresh');
+    var frame = document.getElementById('help-document-frame');
+    if (refresh && frame) refresh.addEventListener('click', function () {
+        try {
+            var url = new URL(frame.getAttribute('src'), window.location.href);
+            url.searchParams.set('_nps_refresh', Date.now().toString());
+            frame.src = url.toString();
+        } catch (error) {
+            frame.src = frame.getAttribute('src');
+        }
+    });
+}());
+</script>

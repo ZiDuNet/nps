@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.35</sub>
+﻿# NPS <sub>v1.1.36</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -202,6 +202,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.36** (2026-10-29) - 自助注册改为独立用户体系，支持配置默认客户端/隧道配额、有效期、图片验证码、注册限频和可选 SMTP 邮箱验证；新增管理员注册 API、普通用户自有客户端 IP 登记管理、可配置使用说明页面、支持搜索与源码视图的服务端配置页，以及默认 Geo 数据自动加载。现有配置、Bridge 协议和 NPC 版本保持兼容。
 
 - **v1.1.35** (2026-10-28) - 修复普通用户访问 `/user/api` 时页面白屏的问题，普通用户现可正常打开 API 接入页并管理个人 Token；用户管理、全局参数和管理员 API 密钥接口仍仅限管理员访问。新增非管理员页面与动作白名单回归测试，并在 README 首页增加登录、IP 登记、客户端编辑和域名反代编辑截图。
 

@@ -115,7 +115,16 @@
                     <p class="auth-panel__description" langtag="info-createaccount"></p>
                 </header>
 
-                <form class="form auth-form nps-form" onsubmit="return register()">
+                <div class="auth-form-hint" data-i18n-zh="注册后默认配额：{{.register_max_clients}} 个客户端{{if eq .register_max_clients 0}}（不限）{{end}}、{{.register_max_tunnels}} 个隧道{{if eq .register_max_tunnels 0}}（不限）{{end}}；有效期：{{if .register_expire_days}}{{.register_expire_days}} 天{{else}}永久{{end}}。" data-i18n-en="Default registration quota: {{.register_max_clients}} clients{{if eq .register_max_clients 0}} (unlimited){{end}} and {{.register_max_tunnels}} tunnels{{if eq .register_max_tunnels 0}} (unlimited){{end}}; valid for {{if .register_expire_days}}{{.register_expire_days}} days{{else}}an unlimited period{{end}}.">
+                    注册后默认配额：{{.register_max_clients}} 个客户端{{if eq .register_max_clients 0}}（不限）{{end}}、{{.register_max_tunnels}} 个隧道{{if eq .register_max_tunnels 0}}（不限）{{end}}；有效期：{{if .register_expire_days}}{{.register_expire_days}} 天{{else}}永久{{end}}。
+                </div>
+                {{if and .email_verify (not .email_ready)}}
+                <div class="alert alert-warning" role="alert" data-i18n-zh="邮箱验证已启用，但 SMTP 配置不完整：{{.smtp_error}}。请联系管理员修复后再注册。" data-i18n-en="Email verification is enabled but SMTP is incomplete: {{.smtp_error}}. Ask the administrator to fix it before registering.">
+                    邮箱验证已启用，但 SMTP 配置不完整：{{.smtp_error}}。请联系管理员修复后再注册。
+                </div>
+                {{end}}
+
+                <form id="register-form" class="form auth-form nps-form" onsubmit="return register()">
                     <div class="form-group auth-field">
                         <label class="auth-field__label" for="auth-username" langtag="word-username"></label>
                         <div class="auth-control input-icon-wrap">
@@ -132,7 +141,40 @@
                             <span class="help-block" data-i18n-zh="设置登录密码；提交后只保存加密结果，页面不会回显原文。" data-i18n-en="Set the dashboard password. Only an encrypted result is stored and the original is never echoed.">设置登录密码；提交后只保存加密结果，页面不会回显原文。</span>
                         </div>
                     </div>
-                    <button type="button" onclick="register()" class="auth-submit login-btn" langtag="word-register"></button>
+                    {{if .email_verify}}
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" for="auth-email" data-i18n-zh="邮箱" data-i18n-en="Email">邮箱</label>
+                        <div class="auth-control input-icon-wrap">
+                            <i class="fa fa-envelope input-icon" aria-hidden="true"></i>
+                            <input id="auth-email" name="email" type="email" class="form-control has-icon" placeholder="name@example.com" required autocomplete="email">
+                            <span class="help-block" data-i18n-zh="用于接收一次性注册验证码；同一邮箱只能绑定一个账号。" data-i18n-en="Used to receive a one-time registration code; an email can belong to only one account.">用于接收一次性注册验证码；同一邮箱只能绑定一个账号。</span>
+                        </div>
+                    </div>
+                    <div class="form-group auth-field">
+                        <label class="auth-field__label" for="auth-email-code" data-i18n-zh="邮箱验证码" data-i18n-en="Email code">邮箱验证码</label>
+                        <div class="auth-control">
+                            <div class="input-group">
+                                <input id="auth-email-code" name="email_code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="form-control" placeholder="6 位数字验证码" required autocomplete="one-time-code">
+                                <button id="auth-send-email-code" type="button" class="btn btn-outline btn-primary"{{if not .email_ready}} disabled{{end}} data-cooldown="{{.email_code_cooldown}}">获取验证码</button>
+                            </div>
+                            <span class="help-block" data-i18n-zh="验证码 {{.email_code_ttl_minutes}} 分钟内有效；同一邮箱或来源地址需间隔 {{.email_code_cooldown}} 秒再发送。" data-i18n-en="The code expires in {{.email_code_ttl_minutes}} minutes; wait {{.email_code_cooldown}} seconds before requesting another code for the same email or source address.">验证码 {{.email_code_ttl_minutes}} 分钟内有效；同一邮箱或来源地址需间隔 {{.email_code_cooldown}} 秒再发送。</span>
+                        </div>
+                    </div>
+                    {{end}}
+                    {{if .captcha_open}}
+                    <div class="form-group auth-field auth-field--captcha">
+                        <label class="auth-field__label" for="auth-captcha" langtag="word-captcha"></label>
+                        <div class="auth-captcha">
+                            <div class="auth-captcha__challenge">{{create_captcha}}</div>
+                            <div class="auth-control auth-captcha__input input-icon-wrap">
+                                <i class="fa fa-shield-alt input-icon" aria-hidden="true"></i>
+                                <input id="auth-captcha" name="captcha" class="form-control has-icon" placeholder="captcha" required autocomplete="off" langtag="word-captcha">
+                            </div>
+                        </div>
+                        <span class="help-block auth-captcha__hint" data-i18n-zh="按图片中的字符填写验证码；验证失败后可点击图片刷新。" data-i18n-en="Enter the characters shown in the image. Click the image to refresh it after a failed attempt.">按图片中的字符填写验证码；验证失败后可点击图片刷新。</span>
+                    </div>
+                    {{end}}
+                    <button type="button" onclick="register()" class="auth-submit login-btn" langtag="word-register"{{if and .email_verify (not .email_ready)}} disabled{{end}}></button>
                 </form>
 
                 <div class="auth-switch register-link">
@@ -168,10 +210,67 @@
         }
     });
 
+    function reloadRegisterCaptcha() {
+        var captchaImg = document.querySelector('img.captcha-img');
+        if (captchaImg) {
+            var src = captchaImg.getAttribute('src').split('?')[0];
+            captchaImg.setAttribute('src', src + '?reload=' + Date.now());
+        }
+        var captchaInput = document.querySelector('input[name="captcha"]');
+        if (captchaInput) captchaInput.value = '';
+    }
+
+    function startEmailCodeCountdown(seconds) {
+        var button = document.getElementById('auth-send-email-code');
+        if (!button) return;
+        var remaining = Math.max(Number(seconds) || 0, 0);
+        button.disabled = remaining > 0;
+        button.textContent = remaining > 0 ? (npsIsEnglish() ? 'Retry in ' + remaining + 's' : remaining + ' 秒后重试') : (npsIsEnglish() ? 'Get code' : '获取验证码');
+        if (remaining <= 0) return;
+        window.clearInterval(button._npsTimer);
+        button._npsTimer = window.setInterval(function () {
+            remaining -= 1;
+            if (remaining <= 0) {
+                window.clearInterval(button._npsTimer);
+                button.disabled = false;
+                button.textContent = npsIsEnglish() ? 'Get code' : '获取验证码';
+                return;
+            }
+            button.textContent = npsIsEnglish() ? 'Retry in ' + remaining + 's' : remaining + ' 秒后重试';
+        }, 1000);
+    }
+
+    $('#auth-send-email-code').on('click', function () {
+        var button = $(this);
+        var email = $('#auth-email').val();
+        if (!email) {
+            npsNotify('error', npsIsEnglish() ? 'Enter an email address first.' : '请先填写邮箱地址。');
+            return;
+        }
+        button.prop('disabled', true);
+        $.ajax({
+            type: 'POST',
+            url: '{{.web_base_url}}/login/register/code',
+            data: {email: email},
+            dataType: 'json'
+        }).done(function (response) {
+            if (response && response.status) {
+                npsNotify('success', response.msg || (npsIsEnglish() ? 'Verification code sent.' : '验证码已发送。'));
+                startEmailCodeCountdown(response.retry_after);
+            } else {
+                npsNotify('error', (response && response.msg) || (npsIsEnglish() ? 'Failed to send the code.' : '验证码发送失败。'));
+                button.prop('disabled', false);
+            }
+        }).fail(function (xhr) {
+            npsNotify('error', (xhr.responseJSON && xhr.responseJSON.msg) || npsRequestErrorMessage());
+            button.prop('disabled', false);
+        });
+    });
+
     function register() {
         if (!validateNpsForm(document.querySelector('.login-form-wrap form'), true)) return false;
         var data = {};
-        $("form").serializeArray().forEach(function (field) { data[field.name] = field.value; });
+        $("#register-form").serializeArray().forEach(function (field) { data[field.name] = field.value; });
         if (!npsRSAEncryptor || !window.nps.publicKey || !window.nps.loginNonce) {
             npsNotify('error', npsIsEnglish() ? 'Secure password encryption is unavailable. Refresh the page and try again.' : '安全密码加密不可用，请刷新页面后重试。');
             return false;
@@ -201,6 +300,8 @@
                     window.setTimeout(function () {
                         window.location.href = "{{.web_base_url}}/login/index";
                     }, 450);
+                } else {
+                    reloadRegisterCaptcha();
                 }
             },
             error: function () {

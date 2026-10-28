@@ -24,9 +24,10 @@ type GlobalController struct {
 	BaseController
 }
 
-// ipRegistrationRow is the administrator-facing view of an in-memory IP
-// registration. Keys are never rendered; only the owning bucket, address and
-// expiry are exposed so an administrator can safely revoke access.
+// ipRegistrationRow is the management view of an in-memory IP registration.
+// Keys are never rendered; only the owning bucket, address and expiry are
+// exposed so an administrator can audit the registry or a user can manage
+// their own clients.
 type ipRegistrationRow struct {
 	ClientID  int    `json:"client_id"`
 	Client    string `json:"client"`
@@ -35,11 +36,30 @@ type ipRegistrationRow struct {
 	Remaining string `json:"remaining"`
 }
 
-// IPRegisterPage renders the administrator view for short-lived IP
-// registrations. Registration state is deliberately not persisted and is
-// therefore presented as live runtime state rather than configuration.
+func (s *GlobalController) ipRegistrationScope() (bool, map[int]struct{}, bool) {
+	if s.IsAdmin() {
+		return true, nil, true
+	}
+	if s.userAPIAuthorized || s.hasActiveNonAdminPrincipal() {
+		return false, s.GetAllowedClientIds(), true
+	}
+	s.rejectRequest(http.StatusForbidden, "permission denied")
+	return false, nil, false
+}
+
+func ipRegistrationCount(admin bool, clientIDs map[int]struct{}) int {
+	if admin {
+		return ipreg.Count()
+	}
+	return ipreg.CountForClients(clientIDs)
+}
+
+// IPRegisterPage renders the account-scoped IP registration view.
+// Registration state is deliberately not persisted and is therefore presented
+// as live runtime state rather than configuration.
 func (s *GlobalController) IPRegisterPage() {
-	if !s.RequireAdmin() {
+	admin, _, allowed := s.ipRegistrationScope()
+	if !allowed {
 		return
 	}
 	if s.Ctx.Request.Method != http.MethodGet {
@@ -49,16 +69,21 @@ func (s *GlobalController) IPRegisterPage() {
 	s.Data["menu"] = "ipregister"
 	s.SetInfo("ipregister")
 	s.Data["ip_registration_configured"] = ipRegistrationConfigured()
-	s.Data["ip_registration_count"] = ipreg.Count()
+	s.Data["ip_registration_admin"] = admin
+	s.Data["ip_registration_count"] = ipRegistrationCount(admin, s.GetAllowedClientIds())
 	s.display("global/ipregister")
 }
 
 // IPRegisterList returns a paginated snapshot for the management table.
 func (s *GlobalController) IPRegisterList() {
-	if !s.RequireAdmin() || !s.RequirePost() {
+	admin, allowedIDs, authorized := s.ipRegistrationScope()
+	if !authorized || !s.RequirePost() {
 		return
 	}
 	rows := ipreg.List()
+	if !admin {
+		rows = ipreg.ListForClients(allowedIDs)
+	}
 	search := strings.ToLower(strings.TrimSpace(s.GetString("search")))
 	result := make([]*ipRegistrationRow, 0, len(rows))
 	for _, item := range rows {
@@ -125,13 +150,24 @@ func formatRegistrationRemaining(remaining time.Duration) string {
 
 // IPRegisterRevoke revokes one client/global bucket registration.
 func (s *GlobalController) IPRegisterRevoke() {
-	if !s.RequireAdmin() || !s.RequirePost() {
+	admin, allowedIDs, authorized := s.ipRegistrationScope()
+	if !authorized || !s.RequirePost() {
 		return
 	}
 	clientID, err := strconv.Atoi(strings.TrimSpace(s.GetString("client_id")))
 	if err != nil || clientID < 0 {
 		s.AjaxErr("客户端标识无效")
 		return
+	}
+	if !admin {
+		if clientID == ipreg.AnyClient {
+			s.rejectRequest(http.StatusForbidden, "公共 IP 登记仅管理员可管理")
+			return
+		}
+		if _, visible := allowedIDs[clientID]; !visible {
+			s.rejectRequest(http.StatusForbidden, "不能管理其他用户的 IP 登记")
+			return
+		}
 	}
 	ip := strings.TrimSpace(s.GetString("ip"))
 	if !ipreg.RevokeString(clientID, ip) {
@@ -144,21 +180,30 @@ func (s *GlobalController) IPRegisterRevoke() {
 
 // IPRegisterClean removes expired runtime registrations.
 func (s *GlobalController) IPRegisterClean() {
-	if !s.RequireAdmin() || !s.RequirePost() {
+	admin, allowedIDs, authorized := s.ipRegistrationScope()
+	if !authorized || !s.RequirePost() {
 		return
 	}
 	removed := ipreg.ClearExpired()
+	if !admin {
+		removed = ipreg.ClearExpiredForClients(allowedIDs)
+	}
 	s.auditMutation("global.ip_registration.clean", "ip_registration", 0, 0, "", nil, map[string]string{"removed": strconv.Itoa(removed)})
 	s.AjaxOk("已清理 " + strconv.Itoa(removed) + " 条过期登记")
 }
 
 // IPRegisterClear explicitly resets all runtime registrations.
 func (s *GlobalController) IPRegisterClear() {
-	if !s.RequireAdmin() || !s.RequirePost() {
+	admin, allowedIDs, authorized := s.ipRegistrationScope()
+	if !authorized || !s.RequirePost() {
 		return
 	}
 	count := ipreg.Count()
-	ipreg.Reset()
+	if admin {
+		ipreg.Reset()
+	} else {
+		count = ipreg.ResetClients(allowedIDs)
+	}
 	s.auditMutation("global.ip_registration.clear", "ip_registration", 0, 0, "", nil, map[string]string{"removed": strconv.Itoa(count)})
 	s.AjaxOk("已清空 IP 登记")
 }
@@ -458,6 +503,12 @@ func (s *GlobalController) Index() {
 		s.Data["globalMaxConn"] = global.MaxConn
 		s.Data["globalRateLimit"] = global.RateLimit
 		s.Data["serverUrl"] = global.ServerUrl
+		guideValue, guideError := usageGuideEditorValue(global)
+		s.Data["helpSourceInput"] = guideValue
+		s.Data["helpConfigError"] = guideError
+	} else {
+		s.Data["helpSourceInput"] = ""
+		s.Data["helpConfigError"] = ""
 	}
 	s.Data["platformDomains"] = platformDomainStatuses()
 	s.Data["geo"] = geoStatusSnapshot()
@@ -533,25 +584,36 @@ func (s *GlobalController) Save() {
 		s.AjaxErr("全局 IP 名单无效: " + err.Error())
 		return
 	}
-	t := &file.Glob{
-		BlackIpList:     blackIPList,
-		WhiteIpList:     whiteIPList,
-		IpListPriority:  priority,
-		MaxConn:         maxConn,
-		RateLimit:       rateLimit,
-		ServerUrl:       s.getEscapeString("serverUrl"),
-		PlatformDomains: platformDomains,
+	t := file.GetDb().GetGlobal()
+	if t == nil {
+		t = &file.Glob{}
 	}
-	if current := file.GetDb().GetGlobal(); current != nil {
-		current.RLock()
-		t.DashboardKeyHash = current.DashboardKeyHash
-		t.DashboardKeyCiphertext = current.DashboardKeyCiphertext
-		t.AdminAPIKeyHash = current.AdminAPIKeyHash
-		t.AdminAPIKeyCiphertext = current.AdminAPIKeyCiphertext
-		current.RUnlock()
+	t.BlackIpList = blackIPList
+	t.WhiteIpList = whiteIPList
+	t.IpListPriority = priority
+	t.MaxConn = maxConn
+	t.RateLimit = rateLimit
+	t.ServerUrl = s.getEscapeString("serverUrl")
+	t.PlatformDomains = platformDomains
+
+	var guideRollback func()
+	if s.Ctx.Request.Form != nil {
+		if _, submitted := s.Ctx.Request.Form["guide_source"]; submitted {
+			update, err := prepareUsageGuideUpdate(s.GetString("guide_source"))
+			if err != nil {
+				s.AjaxErr("使用说明配置无效: " + err.Error())
+				return
+			}
+			guideRollback = update.rollback
+			t.UsageGuideMode = update.Mode
+			t.UsageGuideSource = update.Source
+		}
 	}
 
 	if err := file.GetDb().SaveGlobal(t); err != nil {
+		if guideRollback != nil {
+			guideRollback()
+		}
 		s.AjaxErr(err.Error())
 		return
 	}

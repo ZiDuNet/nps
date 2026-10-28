@@ -85,6 +85,7 @@ var configMigrationOptionalKeys = map[string]struct{}{
 	"geoip_path": {}, "geosite_path": {}, "acl_max_rules": {}, "dns_server": {}, "log": {},
 	"web_close_on_not_found": {}, "login_ban_time": {}, "login_ip_ban_time": {},
 	"login_user_ban_time": {}, "login_max_fail_times": {}, "login_max_body": {}, "login_max_skew": {},
+	"smtp_host": {}, "smtp_port": {}, "smtp_security": {}, "smtp_username": {}, "smtp_password": {}, "smtp_from": {},
 }
 
 // migrateConfigCompatibility adds canonical keys when an existing

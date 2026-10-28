@@ -21,6 +21,7 @@ const sidebar: SidebarConfig = [
     text: '服务端',
     children: [
       { text: '服务端使用', link: '/server/nps_use.html' },
+      { text: '使用说明页面配置', link: '/usage-guide.html' },
       { text: '配置文件参考', link: '/server/server_config.html' },
       { text: '服务端增强功能', link: '/server/nps_extend.html' },
       { text: '服务端介绍', link: '/introduction.html' },

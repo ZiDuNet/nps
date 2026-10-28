@@ -92,7 +92,21 @@ web上可以自定义客户端连接的密钥，但是必须具有唯一性
 旧版本曾支持把客户端上的 `WebUserName` / `WebPassword` 当作登录账号。当前版本会兼容旧字段，但新部署不建议继续使用这种方式。详情见 [用户体系](user.md)。
 
 ## 用户注册功能
-nps服务端支持用户注册功能，可将`nps.conf`中的`allow_user_register`设置为true，开启后登陆页将会有有注册功能，
+将 `allow_user_register=true` 后登录页会出现注册入口。注册成功后创建独立用户并写入
+`users.json`，不会再把面板用户名和密码写入客户端记录。
+
+注册页和管理员 API 均支持以下默认规则：
+
+- `register_max_clients`：新用户默认客户端配额，`0` 表示不限；
+- `register_max_tunnels`：新用户默认隧道总配额，域名反代也计入，`0` 表示不限；
+- `register_expire_days`：新用户从注册成功时起默认有效天数，默认 `7`，`0` 表示永久有效；
+- `register_captcha`：是否要求图片验证码；
+- `register_rate_window`、`register_rate_limit`、`register_ip_rate_limit`：注册限频；
+- `register_email_verify`、SMTP 参数和邮箱验证码参数：可选邮箱验证。
+
+公开注册受 `allow_user_register` 控制；管理员通过 `POST /api/v1/users/register`
+创建账号时不受该公开注册开关限制。完整字段、SMTP 示例和迁移说明见
+[服务端配置](server_config.md#注册与邮箱验证)。
 
 ## 监听指定ip
 

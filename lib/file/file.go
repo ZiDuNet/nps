@@ -308,6 +308,8 @@ func cloneGlobal(global *Glob) *Glob {
 		MaxConn:                global.MaxConn,
 		RateLimit:              global.RateLimit,
 		PlatformDomains:        append([]PlatformDomain(nil), global.PlatformDomains...),
+		UsageGuideMode:         global.UsageGuideMode,
+		UsageGuideSource:       global.UsageGuideSource,
 		DashboardKeyHash:       global.DashboardKeyHash,
 		DashboardKeyCiphertext: global.DashboardKeyCiphertext,
 		AdminAPIKeyHash:        global.AdminAPIKeyHash,

@@ -313,35 +313,25 @@ func (s *ApiV1Controller) BanClean() {
 	s.emitLegacy(s.invokeSafe("global", "Banclean", &GlobalController{}, true))
 }
 
-// IPRegisterList lists short-lived IP registrations.
+// IPRegisterList lists short-lived IP registrations visible to the current
+// credential. Administrators see every bucket; user tokens see only clients
+// owned by that account.
 func (s *ApiV1Controller) IPRegisterList() {
-	if !s.requireAdmin() {
-		return
-	}
 	s.emitLegacy(s.invokeSafe("global", "IPRegisterList", &GlobalController{}, true))
 }
 
-// IPRegisterRevoke revokes one IP registration.
+// IPRegisterRevoke revokes one visible IP registration.
 func (s *ApiV1Controller) IPRegisterRevoke() {
-	if !s.requireAdmin() {
-		return
-	}
 	s.emitLegacy(s.invokeSafe("global", "IPRegisterRevoke", &GlobalController{}, true))
 }
 
-// IPRegisterClean removes expired registrations.
+// IPRegisterClean removes expired registrations in the caller's scope.
 func (s *ApiV1Controller) IPRegisterClean() {
-	if !s.requireAdmin() {
-		return
-	}
 	s.emitLegacy(s.invokeSafe("global", "IPRegisterClean", &GlobalController{}, true))
 }
 
-// IPRegisterClear resets all registrations.
+// IPRegisterClear resets registrations in the caller's scope.
 func (s *ApiV1Controller) IPRegisterClear() {
-	if !s.requireAdmin() {
-		return
-	}
 	s.emitLegacy(s.invokeSafe("global", "IPRegisterClear", &GlobalController{}, true))
 }
 

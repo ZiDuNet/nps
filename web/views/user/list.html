@@ -97,6 +97,7 @@
                 : '<span class="badge badge-default">' + (english ? 'Not set' : '未配置') + '</span>';
             return '<div class="user-detail-summary">'
                 + '<div><b data-i18n-zh="用户名" data-i18n-en="Username"></b><span>' + text(row.UserName, '-') + '</span></div>'
+                + '<div><b data-i18n-zh="邮箱" data-i18n-en="Email"></b><span>' + text(row.Email, '-') + '</span></div>'
                 + '<div><b data-i18n-zh="备注" data-i18n-en="Remark"></b><span>' + text(row.Remark, '-') + '</span></div>'
                 + '<div><b data-i18n-zh="创建时间" data-i18n-en="Created"></b><span>' + text(row.CreateTime, '-') + '</span></div>'
                 + '<div><b data-i18n-zh="有效期" data-i18n-en="Expiration"></b><span>' + text(row.ExpireTime, english ? 'Unlimited' : '永不过期') + '</span></div>'
@@ -109,6 +110,7 @@
         columns: [
             { field: 'Id', title: 'ID', halign: 'center', class: 'user-list__id', width: '56px' },
             { field: 'UserName', title: '<span data-i18n-zh="用户名" data-i18n-en="Username">用户名</span>', halign: 'center', escape: true },
+            { field: 'Email', title: '<span data-i18n-zh="邮箱" data-i18n-en="Email">邮箱</span>', halign: 'center', escape: true, formatter: function(value) { return userTableText(value || '-'); } },
             { field: 'Remark', title: '<span data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', halign: 'center', escape: true },
             { field: 'ClientCount', title: '<span data-i18n-zh="客户端数" data-i18n-en="Clients">客户端数</span>', align: 'center', halign: 'center', width: '72px', formatter: function(value) { return userTableText(Number(value) || 0); } },
             { field: 'MaxClientNum', title: '<span data-i18n-zh="客户端上限" data-i18n-en="Client limit">客户端上限</span>', halign: 'center', formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedQuotaText()); } },

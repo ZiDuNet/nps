@@ -34,7 +34,7 @@
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/flatpickr.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261029-1" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261026-3" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/nps-certificate.css?v={{.version}}&ui=20261026-1" rel="stylesheet">
 
@@ -123,11 +123,11 @@
                 <a href="{{.web_base_url}}/global/banlist"><i class="fa fa-shield-alt" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="登录封禁" data-i18n-en="Login bans">登录封禁</span></a>
                 </li>
+                {{end}}
                 <li class="{{if eq "ipregister" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/global/ipregister"><i class="fa fa-map-marker-alt" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="IP 登记" data-i18n-en="IP registrations">IP 登记</span></a>
                 </li>
-                {{end}}
                 <li class="{{if eq "api" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/user/api"><i class="fa fa-key" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="API 接入" data-i18n-en="API access">API 接入</span></a>
@@ -755,11 +755,7 @@
             return { document: parsed, content: next };
         }
 
-        function navigate(target, pushHistory) {
-            var url = sameOriginURL(target);
-            if (!url) return;
-            var current = normalizeURL(window.location.href);
-            if (pushHistory && current === normalizeURL(url.href)) return;
+        function performNavigation(url, pushHistory, current) {
             var serial = ++navigationSerial;
             if (navigationRequest && typeof navigationRequest.abort === 'function') {
                 try { navigationRequest.abort(); } catch (error) {}
@@ -813,10 +809,39 @@
             });
         }
 
+        function navigate(target, pushHistory) {
+            var url = sameOriginURL(target);
+            if (!url) return;
+            var current = normalizeURL(window.location.href);
+            if (pushHistory && current === normalizeURL(url.href)) return;
+            if (typeof window.npsBeforeNavigate !== 'function') {
+                performNavigation(url, pushHistory, current);
+                return;
+            }
+            Promise.resolve().then(function () {
+                return window.npsBeforeNavigate(url.href);
+            }).then(function (allowed) {
+                if (allowed !== false) performNavigation(url, pushHistory, current);
+            }).catch(function () {
+                // A failed navigation guard leaves the current page untouched.
+            });
+        }
+
+        window.npsNavigate = navigate;
         menu.addEventListener('click', function (event) {
             if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             var anchor = event.target.closest ? event.target.closest('a[href]') : null;
             if (!anchor || !menu.contains(anchor) || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+            var url = sameOriginURL(anchor.href);
+            if (!url || (url.hash && normalizeURL(url.href) === normalizeURL(window.location.href))) return;
+            event.preventDefault();
+            navigate(url.href, true);
+        });
+
+        content.addEventListener('click', function (event) {
+            if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            var anchor = event.target.closest ? event.target.closest('a[data-console-navigate][href]') : null;
+            if (!anchor || !content.contains(anchor) || anchor.target === '_blank' || anchor.hasAttribute('download')) return;
             var url = sameOriginURL(anchor.href);
             if (!url || (url.hash && normalizeURL(url.href) === normalizeURL(window.location.href))) return;
             event.preventDefault();

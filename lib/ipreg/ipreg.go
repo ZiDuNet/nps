@@ -105,8 +105,29 @@ func List() []Registration {
 	now := time.Now()
 	mu.Lock()
 	defer mu.Unlock()
+	return listLocked(now, nil)
+}
+
+// ListForClients returns active registrations whose bucket is in clientIDs.
+// The global/public bucket is intentionally excluded unless AnyClient is
+// present in the supplied set. Dashboard users are given a set containing only
+// their own clients, so filtering here prevents a search or pagination race
+// from exposing a registration owned by another account.
+func ListForClients(clientIDs map[int]struct{}) []Registration {
+	now := time.Now()
+	mu.Lock()
+	defer mu.Unlock()
+	return listLocked(now, clientIDs)
+}
+
+func listLocked(now time.Time, clientIDs map[int]struct{}) []Registration {
 	rows := make([]Registration, 0)
 	for clientID, byIP := range reg {
+		if clientIDs != nil {
+			if _, allowed := clientIDs[clientID]; !allowed {
+				continue
+			}
+		}
 		for ip, until := range byIP {
 			if !until.After(now) {
 				delete(byIP, ip)
@@ -125,6 +146,12 @@ func List() []Registration {
 		return rows[i].IP.String() < rows[j].IP.String()
 	})
 	return rows
+}
+
+// CountForClients returns the number of active registrations in the supplied
+// client buckets.
+func CountForClients(clientIDs map[int]struct{}) int {
+	return len(ListForClients(clientIDs))
 }
 
 // Revoke removes one registration from the requested bucket. A caller can
@@ -164,9 +191,26 @@ func RevokeString(clientID int, value string) bool {
 func ClearExpired() int {
 	mu.Lock()
 	defer mu.Unlock()
+	return clearExpiredLocked(nil)
+}
+
+// ClearExpiredForClients removes expired registrations only from the supplied
+// client buckets.
+func ClearExpiredForClients(clientIDs map[int]struct{}) int {
+	mu.Lock()
+	defer mu.Unlock()
+	return clearExpiredLocked(clientIDs)
+}
+
+func clearExpiredLocked(clientIDs map[int]struct{}) int {
 	now := time.Now()
 	removed := 0
 	for clientID, byIP := range reg {
+		if clientIDs != nil {
+			if _, allowed := clientIDs[clientID]; !allowed {
+				continue
+			}
+		}
 		for ip, until := range byIP {
 			if !until.After(now) {
 				delete(byIP, ip)
@@ -186,6 +230,23 @@ func Reset() {
 	mu.Lock()
 	reg = map[int]map[netip.Addr]time.Time{}
 	mu.Unlock()
+}
+
+// ResetClients removes every registration in the supplied client buckets and
+// returns the number removed. Registrations for other clients, including the
+// public bucket, remain untouched.
+func ResetClients(clientIDs map[int]struct{}) int {
+	mu.Lock()
+	defer mu.Unlock()
+	removed := 0
+	for clientID, byIP := range reg {
+		if _, allowed := clientIDs[clientID]; !allowed {
+			continue
+		}
+		removed += len(byIP)
+		delete(reg, clientID)
+	}
+	return removed
 }
 
 func validLocked(byIP map[netip.Addr]time.Time, ip netip.Addr, now time.Time) bool {

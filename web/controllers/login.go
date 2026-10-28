@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/astaxie/beego/cache"
 	"github.com/astaxie/beego/utils/captcha"
 	"html/template"
@@ -1008,30 +1009,159 @@ func cleanLoginBans() {
 	loginAttempts.cleanBans(configuredLoginPolicy(), time.Now())
 }
 
-// reserveLoginAttempt atomically admits at most maxLoginFailures explicit
-// attempts in one window. A successful login removes the reservation again.
-// Implicit no-auth checks on the login page must never count as failures.
+// RegisterEmailCode sends a short-lived verification code when email
+// verification is enabled. The endpoint is intentionally separate from the
+// final registration request so the image captcha is checked only once, at
+// account creation time.
+func (self *LoginController) RegisterEmailCode() {
+	setNoStore(self.Ctx)
+	if !self.requirePost() {
+		return
+	}
+	if allowed, err := beego.AppConfig.Bool("allow_user_register"); err != nil || !allowed {
+		self.Ctx.Output.SetStatus(http.StatusForbidden)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "当前未开放用户注册"}
+		self.ServeJSON()
+		return
+	}
+	if !registrationEmailVerifyEnabled() {
+		self.Ctx.Output.SetStatus(http.StatusBadRequest)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "当前注册不要求邮箱验证"}
+		self.ServeJSON()
+		return
+	}
+	emailAddress, err := file.NormalizeUserEmail(self.GetString("email"))
+	if err != nil {
+		self.Ctx.Output.SetStatus(http.StatusBadRequest)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": err.Error()}
+		self.ServeJSON()
+		return
+	}
+	if emailAddress == "" {
+		self.Ctx.Output.SetStatus(http.StatusBadRequest)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "邮箱不能为空"}
+		self.ServeJSON()
+		return
+	}
+	if !file.GetDb().VerifyUserEmail(emailAddress, 0) {
+		self.Ctx.Output.SetStatus(http.StatusConflict)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "该邮箱已绑定其他账号，请直接登录"}
+		self.ServeJSON()
+		return
+	}
+	ip := requestVisitorIP(self.Ctx)
+	now := time.Now()
+	code, retryAfter, err := registrationEmailCodes.issue(emailAddress, ip, now, registrationEmailCodeTTL(), registrationEmailCodeCooldown())
+	if err != nil {
+		appendAuthAudit(self, "auth.register.email_code", emailAddress, false, err.Error())
+		status := http.StatusTooManyRequests
+		if retryAfter <= 0 {
+			status = http.StatusServiceUnavailable
+		}
+		self.Ctx.Output.SetStatus(status)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": err.Error(), "retry_after": int((retryAfter + time.Second - 1) / time.Second)}
+		self.ServeJSON()
+		return
+	}
+	smtpConfig, err := configuredRegistrationSMTP()
+	if err != nil {
+		registrationEmailCodes.discard(emailAddress, ip)
+		appendAuthAudit(self, "auth.register.email_code", emailAddress, false, err.Error())
+		self.Ctx.Output.SetStatus(http.StatusServiceUnavailable)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "邮件服务未配置完整：" + err.Error()}
+		self.ServeJSON()
+		return
+	}
+	if err := sendRegistrationVerificationEmail(emailAddress, code, smtpConfig); err != nil {
+		registrationEmailCodes.discard(emailAddress, ip)
+		appendAuthAudit(self, "auth.register.email_code", emailAddress, false, err.Error())
+		self.Ctx.Output.SetStatus(http.StatusBadGateway)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "验证码邮件发送失败，请检查 SMTP 配置"}
+		self.ServeJSON()
+		return
+	}
+	appendAuthAudit(self, "auth.register.email_code", emailAddress, true, "")
+	self.Data["json"] = map[string]interface{}{
+		"status":      1,
+		"msg":         "验证码已发送，请检查收件箱和垃圾邮件",
+		"retry_after": int(registrationEmailCodeCooldown() / time.Second),
+		"expires_in":  int(registrationEmailCodeTTL() / time.Second),
+	}
+	self.ServeJSON()
+}
+
 func (self *LoginController) Register() {
 	setNoStore(self.Ctx)
+	webBaseURL := beego.AppConfig.String("web_base_url")
+	allowed, allowErr := beego.AppConfig.Bool("allow_user_register")
 	if self.Ctx.Request.Method == "GET" {
-		self.Data["web_base_url"] = beego.AppConfig.String("web_base_url")
+		if allowErr != nil || !allowed {
+			self.Redirect(webBaseURL+"/login/index", http.StatusFound)
+			self.StopRun()
+			return
+		}
+		self.Data["web_base_url"] = webBaseURL
 		self.Data["version"] = version.VERSION
 		self.Data["login_nonce"] = crypt.GetRandomString(16)
 		self.SetSession("login_nonce", self.Data["login_nonce"])
 		self.releaseCookieSession()
 		self.Data["public_key"], _ = crypt.GetRSAPublicKeyPEM()
+		self.Data["captcha_open"] = registrationCaptchaEnabled()
+		self.Data["email_verify"] = registrationEmailVerifyEnabled()
+		self.Data["email_code_cooldown"] = int(registrationEmailCodeCooldown() / time.Second)
+		self.Data["email_code_ttl_minutes"] = max(int(registrationEmailCodeTTL()/time.Minute), 1)
+		self.Data["register_expire_days"] = registrationExpireDays()
+		self.Data["register_max_clients"] = registrationMaxClients()
+		self.Data["register_max_tunnels"] = registrationMaxTunnels()
+		if self.Data["email_verify"] == true {
+			_, smtpErr := configuredRegistrationSMTP()
+			self.Data["email_ready"] = smtpErr == nil
+			if smtpErr != nil {
+				self.Data["smtp_error"] = smtpErr.Error()
+			}
+		}
 		self.TplName = "login/register.html"
 		return
 	}
 	if !self.requirePost() {
 		return
 	}
-	if b, err := beego.AppConfig.Bool("allow_user_register"); err != nil || !b {
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "register is not allow"}
+	if allowErr != nil || !allowed {
+		self.Ctx.Output.SetStatus(http.StatusForbidden)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "当前未开放用户注册"}
 		self.ServeJSON()
 		return
 	}
-	username := self.GetString("username")
+	username := strings.TrimSpace(self.GetString("username"))
+	now := time.Now()
+	ip := requestVisitorIP(self.Ctx)
+	if !registrationAttempts.reserveAttempt(ip, username, now, configuredRegistrationPolicy()) {
+		self.Ctx.Output.SetStatus(http.StatusTooManyRequests)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "注册请求过于频繁，请稍后重试"}
+		self.ServeJSON()
+		return
+	}
+	if registrationCaptchaEnabled() {
+		if cpt == nil || !cpt.VerifyReq(self.Ctx.Request) {
+			self.Data["json"] = map[string]interface{}{"status": 0, "msg": "图片验证码错误，请刷新后重试"}
+			self.ServeJSON()
+			return
+		}
+	}
+	emailAddress := ""
+	emailVerify := registrationEmailVerifyEnabled()
+	if emailVerify {
+		var err error
+		emailAddress, err = file.NormalizeUserEmail(self.GetString("email"))
+		if err != nil || emailAddress == "" {
+			if err == nil {
+				err = fmt.Errorf("启用邮箱验证时必须填写邮箱")
+			}
+			self.Data["json"] = map[string]interface{}{"status": 0, "msg": err.Error()}
+			self.ServeJSON()
+			return
+		}
+	}
 	rawPassword := self.GetString("password")
 	password := rawPassword
 	if payload, err := crypt.ParseLoginPayload(rawPassword); err == nil {
@@ -1043,25 +1173,71 @@ func (self *LoginController) Register() {
 		}
 		password = payload.Password
 	}
-	if username == "" || password == "" || len(password) < 6 || username == beego.AppConfig.String("web_username") {
+	adminUsername := strings.TrimSpace(beego.AppConfig.String("web_username"))
+	if username == "" || len(username) > 64 || password == "" || len(password) < 6 || strings.EqualFold(username, adminUsername) {
 		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "please check your input (password min 6 chars)"}
 		self.ServeJSON()
 		return
 	}
-	t := &file.Client{
-		Id:          int(file.GetDb().JsonDb.GetClientId()),
-		Status:      true,
-		Cnf:         &file.Config{},
-		WebUserName: username,
-		WebPassword: password,
-		Flow:        &file.Flow{},
+	if !file.GetDb().VerifyUserLoginName(username, 0) {
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "用户名已被使用，请更换后重试"}
+		self.ServeJSON()
+		return
 	}
-	if err := file.GetDb().NewClient(t); err != nil {
+	if emailVerify && !file.GetDb().VerifyUserEmail(emailAddress, 0) {
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "邮箱已绑定其他账号，请更换邮箱"}
+		self.ServeJSON()
+		return
+	}
+	if !registrationAttempts.reserveSuccess(ip, now, configuredRegistrationPolicy()) {
+		self.Ctx.Output.SetStatus(http.StatusTooManyRequests)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "当前来源地址注册账号数量已达上限，请稍后重试"}
+		self.ServeJSON()
+		return
+	}
+	if emailVerify && !registrationEmailCodes.verify(emailAddress, self.GetString("email_code"), now) {
+		registrationAttempts.releaseSuccess(ip)
+		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "邮箱验证码错误或已过期，请重新获取"}
+		self.ServeJSON()
+		return
+	}
+	// The legacy self-registration flow stored dashboard credentials on a
+	// Client record through WebUserName/WebPassword. New registrations use the
+	// modern multi-user model so quotas, ownership and lifecycle apply.
+	//
+	// Legacy implementation retained for reference:
+	// t := &file.Client{
+	//     Id:          int(file.GetDb().JsonDb.GetClientId()),
+	//     Status:      true,
+	//     Cnf:         &file.Config{},
+	//     WebUserName: username,
+	//     WebPassword: password,
+	//     Flow:        &file.Flow{},
+	// }
+	// if err := file.GetDb().NewClient(t); err != nil { ... }
+	// else { appendAuthAudit(...); register success }
+	user := &file.User{
+		UserName:     username,
+		Password:     password,
+		Email:        emailAddress,
+		Status:       true,
+		MaxClientNum: registrationMaxClients(),
+		MaxTunnelNum: registrationMaxTunnels(),
+		ExpireTime:   registrationExpireTime(now, registrationExpireDays()),
+		CreateTime:   now.Format("2006-01-02 15:04:05"),
+	}
+	if err := file.GetDb().NewUser(user); err != nil {
+		registrationAttempts.releaseSuccess(ip)
 		appendAuthAudit(self, "auth.register", username, false, err.Error())
 		self.Data["json"] = map[string]interface{}{"status": 0, "msg": err.Error()}
 	} else {
 		appendAuthAudit(self, "auth.register", username, true, "")
-		self.Data["json"] = map[string]interface{}{"status": 1, "msg": "register success"}
+		self.Data["json"] = map[string]interface{}{
+			"status": 1,
+			"msg":    "注册成功，请登录",
+			"id":     user.Id,
+			"expire": user.ExpireTime,
+		}
 	}
 	self.ServeJSON()
 }

@@ -104,6 +104,7 @@ Token 与管理员签名不同，不携带 `timestamp`。Token 在「API 接入�
 | 域名反代 | `/api/v1/hosts/{id}` | `GET`、`PATCH`、`PUT`、`DELETE` |
 | 域名反代 | `/api/v1/hosts/{id}/start`、`/stop` | `POST` |
 | 域名反代 | `/api/v1/hosts/check`、`/diagnose` | `POST` |
+| 用户注册 | `/api/v1/users/register` | `POST`（管理员） |
 | 用户 | `/api/v1/users` | `GET`、`POST`（管理员） |
 | 用户 | `/api/v1/users/{id}` | `GET`、`PATCH`、`PUT`、`DELETE`（管理员） |
 | 用户 | `/api/v1/users/{id}/status`、`/password` | `POST` |
@@ -113,7 +114,7 @@ Token 与管理员签名不同，不携带 `timestamp`。Token 在「API 接入�
 | 全局参数 | `/api/v1/global/config/restart` | `POST`（管理员） |
 | Geo 数据 | `/api/v1/global/geo`、`/geo/update` | `GET`、`POST`（管理员） |
 | 登录保护 | `/api/v1/global/banlist`、`/unban`、`/unbanall`、`/banclean` | `GET`、`POST`（管理员） |
-| IP 登记 | `/api/v1/global/ip-register`、`/revoke`、`/clean`、`/clear` | `GET`、`POST`（管理员） |
+| IP 登记 | `/api/v1/global/ip-register`、`/revoke`、`/clean`、`/clear` | `GET`、`POST`（管理员或普通用户 Token） |
 | 审计 | `/api/v1/audit` | `GET`、`POST`（管理员） |
 
 统一成功信封：
@@ -171,6 +172,63 @@ curl -s -X POST "http://127.0.0.1:8081/api/v1/clients?auth_key=${sign}&timestamp
 `UserId` 授权范围过滤；用户、全局参数、审计等管理资源只允许管理员
 凭据访问。API 密钥与登录 Session 相互独立，浏览器 Cookie 不能替代本接口
 要求的凭据。
+
+### 管理员创建注册用户
+
+```http
+POST /api/v1/users/register
+```
+
+该接口仅允许管理员凭据调用，不受公开注册开关 `allow_user_register` 影响。
+请求体可以使用 JSON，也可以使用表单或查询参数。
+
+| 参数 | 说明 |
+| --- | --- |
+| `username` | 必填，最多 64 个字符，不能与现有用户或配置文件管理员用户名重复 |
+| `password` | 必填，至少 6 个字符；API 调用方应通过 HTTPS 传输 |
+| `email` | 可选；填写后必须格式有效，且不区分大小写全局唯一 |
+| `remark` | 可选备注 |
+| `max_client` / `max_client_num` | 客户端配额；省略时使用 `register_max_clients`，`0` 表示不限 |
+| `max_tunnel` / `max_tunnel_num` | 隧道总配额；省略时使用 `register_max_tunnels`，`0` 表示不限 |
+| `expire_days` | 从请求成功时起有效天数；`0` 表示永久 |
+| `expire_time` | 指定绝对到期时间，格式同用户编辑页；填写后优先于 `expire_days` |
+
+有效期取值优先级为 `expire_time`、`expire_days`、`register_expire_days`。
+两者都省略时使用服务端默认值，模板默认 `7` 天。
+
+```bash
+ts=$(date +%s)
+sign=$(printf '%s' "your_auth_key${ts}" | md5sum | awk '{print $1}')
+curl -s -X POST \
+  "http://127.0.0.1:8081/api/v1/users/register?auth_key=${sign}&timestamp=${ts}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "alice",
+    "password": "replace-with-a-strong-password",
+    "email": "alice@example.com",
+    "remark": "API registered",
+    "max_client": 1,
+    "max_tunnel": 2,
+    "expire_days": 7
+  }'
+```
+
+成功响应的 `data` 为用户列表行，包含用户 ID、配额、到期时间和资源计数。
+
+### IP 登记接口的权限范围
+
+IP 登记接口可以由管理员签名或普通用户 Bearer Token 调用，但两种凭据看到的
+数据范围不同：
+
+- 管理员可以查看、撤销和清理所有客户端的登记，也可以管理 `AnyClient`
+  公共登记桶；
+- 普通用户 Token 只能查看、撤销、清理和清空 Token 所属用户名下客户端的
+  登记，不能查看或操作其他用户及公共登记桶；
+- 服务端会按数据库中的客户端归属实时过滤，不依赖请求参数中的
+  `client_id`。即使手工构造其他客户端的 `client_id`，撤销请求也会返回
+  `403`；
+- 该权限与 Web 面板中的「系统 → IP 登记」一致，隐藏按钮不是权限边界，
+  后端仍会再次校验归属。
 
 ## 通用返回
 
@@ -290,6 +348,7 @@ POST /user/add
 |------|------|
 | `username` | 用户名 |
 | `password` | 密码 |
+| `email` | 可选邮箱；不区分大小写且全局唯一 |
 | `remark` | 备注 |
 | `max_tunnel` | 用户最大隧道数 |
 | `max_client` | 用户最大客户端数，`0` 为不限制。管理员分配和用户自建客户端共用此配额。 |
@@ -306,6 +365,7 @@ POST /user/edit
 | `id` | 用户 ID |
 | `username` | 用户名 |
 | `password` | 密码 |
+| `email` | 可选邮箱；不区分大小写且全局唯一 |
 | `remark` | 备注 |
 | `max_tunnel` | 用户最大隧道数 |
 | `max_client` | 用户最大客户端数，`0` 为不限制；不能调低到当前已分配数量以下。 |

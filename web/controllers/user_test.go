@@ -74,7 +74,7 @@ func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 		CreateTime:       "2025-01-01 00:00:00",
 	}
 
-	updated := newUserUpdateCandidate(existing, "alice-updated", "", "after", 0, 6, "2027-01-01 00:00:00")
+	updated := newUserUpdateCandidate(existing, "alice-updated", "", "alice@example.com", "after", 0, 6, "2027-01-01 00:00:00")
 	if updated == existing {
 		t.Fatal("update candidate must not mutate the stored user in place")
 	}
@@ -88,7 +88,7 @@ func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 		t.Fatalf("building an update candidate mutated the existing user: %#v", existing)
 	}
 
-	updated = newUserUpdateCandidate(existing, "alice", "replacement<password>&", "before", 0, 3, existing.ExpireTime)
+	updated = newUserUpdateCandidate(existing, "alice", "replacement<password>&", "alice@example.com", "before", 0, 3, existing.ExpireTime)
 	if updated.Password != "replacement<password>&" {
 		t.Fatalf("supplied password should replace the credential, got %q", updated.Password)
 	}

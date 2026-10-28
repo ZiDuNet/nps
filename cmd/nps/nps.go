@@ -581,10 +581,12 @@ func run() error {
 }
 
 // startAccessListWatcher keeps GeoIP/Geosite-backed ACLs in sync with files
-// updated by an external downloader. It is intentionally started only when a
-// data path is configured, and is idempotent across service reload paths.
+// updated by an external downloader. Empty nps.conf paths resolve to the
+// default data files, so those deployments need the watcher as well. The
+// watcher is idempotent across service reload paths.
 func startAccessListWatcher() {
-	if strings.TrimSpace(beego.AppConfig.String("geoip_path")) == "" && strings.TrimSpace(beego.AppConfig.String("geosite_path")) == "" {
+	ipPath, sitePath := acl.GeoFiles()
+	if ipPath == "" && sitePath == "" {
 		return
 	}
 	accessListMu.Lock()

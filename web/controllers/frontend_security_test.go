@@ -113,6 +113,9 @@ func TestPublicLayoutKeepsShellAndNavigatesContentOnly(t *testing.T) {
 		`window.addEventListener('popstate'`,
 		`executeContentScripts(content)`,
 		`X-Requested-With`,
+		`a[data-console-navigate][href]`,
+		`window.npsBeforeNavigate`,
+		`window.npsNavigate = navigate`,
 	} {
 		if !strings.Contains(template, marker) {
 			t.Fatalf("public layout misses content navigation marker %q", marker)

@@ -22,6 +22,7 @@ type userListRow struct {
 	Id            int
 	UserName      string
 	Password      string
+	Email         string
 	Status        bool
 	Remark        string
 	ClientCount   int
@@ -45,13 +46,14 @@ func newUserListRowsWithResourceCounts(users []*file.User, counts map[int]file.U
 		}
 		user.RLock()
 		id, userName, status := user.Id, user.UserName, user.Status
-		remark, maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash := user.Remark, user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash
+		email, remark, maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash := user.Email, user.Remark, user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash
 		user.RUnlock()
 		resourceCounts := counts[id]
 		rows = append(rows, &userListRow{
 			Id:            id,
 			UserName:      html.UnescapeString(userName),
 			Password:      "",
+			Email:         html.UnescapeString(email),
 			Status:        status,
 			Remark:        html.UnescapeString(remark),
 			ClientCount:   resourceCounts.ClientCount,
@@ -103,7 +105,7 @@ func parseUserStatus(value string) (bool, error) {
 	return strconv.ParseBool(value)
 }
 
-func newUserUpdateCandidate(existing *file.User, username, password, remark string, maxClientNum, maxTunnelNum int, expireTime string) *file.User {
+func newUserUpdateCandidate(existing *file.User, username, password, email, remark string, maxClientNum, maxTunnelNum int, expireTime string) *file.User {
 	existing.RLock()
 	id, existingPassword, existingAPIKeyHash, existingAPIKeyCiphertext, existingDashboardKeyHash, existingDashboardKeyCiphertext, status, createTime := existing.Id, existing.Password, existing.APIKeyHash, existing.APIKeyCiphertext, existing.DashboardKeyHash, existing.DashboardKeyCiphertext, existing.Status, existing.CreateTime
 	existing.RUnlock()
@@ -111,6 +113,7 @@ func newUserUpdateCandidate(existing *file.User, username, password, remark stri
 		Id:                     id,
 		UserName:               username,
 		Password:               existingPassword,
+		Email:                  email,
 		APIKeyHash:             existingAPIKeyHash,
 		APIKeyCiphertext:       existingAPIKeyCiphertext,
 		DashboardKeyHash:       existingDashboardKeyHash,
@@ -332,6 +335,7 @@ func (s *UserController) Add() {
 	u := &file.User{
 		UserName:     s.getEscapeString("username"),
 		Password:     s.GetString("password"),
+		Email:        strings.TrimSpace(s.GetString("email")),
 		Status:       true,
 		Remark:       s.getEscapeString("remark"),
 		MaxClientNum: normalizeUserClientLimit(s.GetIntNoErr("max_client")),
@@ -378,6 +382,7 @@ func (s *UserController) Edit() {
 		u,
 		s.getEscapeString("username"),
 		s.GetString("password"),
+		strings.TrimSpace(s.GetString("email")),
 		s.getEscapeString("remark"),
 		normalizeUserClientLimit(s.GetIntNoErr("max_client")),
 		normalizeUserTunnelLimit(s.GetIntNoErr("max_tunnel")),

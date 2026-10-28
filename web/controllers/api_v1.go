@@ -165,7 +165,12 @@ func (s *ApiV1Controller) mergeJSONBody() error {
 		return fmt.Errorf("JSON 请求体无效: %w", err)
 	}
 	if request.Form == nil {
-		request.Form = url.Values{}
+		// Keep query-string parameters available to controllers. Without this,
+		// replacing Form with the JSON map makes signed API credentials in the
+		// query invisible even though they were sent correctly.
+		if err := request.ParseForm(); err != nil {
+			return fmt.Errorf("解析请求参数失败: %w", err)
+		}
 	}
 	if request.PostForm == nil {
 		request.PostForm = url.Values{}

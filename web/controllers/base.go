@@ -144,7 +144,7 @@ func (s *BaseController) Prepare() {
 		// Ordinary users cannot browse the administrative user/global pages.
 		// They may only open the API access page and manage their own token or
 		// dashboard password through the narrowly-scoped endpoints below.
-		if s.controllerName == "global" ||
+		if (s.controllerName == "global" && !nonAdminGlobalActionAllowed(s.actionName)) ||
 			(s.controllerName == "user" && !nonAdminUserActionAllowed(s.actionName)) {
 			s.StopRun()
 			return
@@ -263,6 +263,19 @@ func isAdminAuthorized(apiAuthorized bool, sessionValue interface{}) bool {
 func nonAdminUserActionAllowed(action string) bool {
 	switch action {
 	case "api", "changepassword", "regenerateapikey", "revokeapikey", "apikeystatus":
+		return true
+	default:
+		return false
+	}
+}
+
+// nonAdminGlobalActionAllowed exposes only the account-scoped IP registration
+// registry. Every listed action performs a second ownership check in
+// GlobalController, so a user cannot widen the scope through a crafted
+// client_id parameter.
+func nonAdminGlobalActionAllowed(action string) bool {
+	switch action {
+	case "ipregisterpage", "ipregisterlist", "ipregisterrevoke", "ipregisterclean", "ipregisterclear":
 		return true
 	default:
 		return false
@@ -461,6 +474,9 @@ func (s *BaseController) rejectRequest(status int, message string) {
 	s.Ctx.Output.SetStatus(status)
 	s.Data["json"] = s.withRequestMeta(ajax(message, 0))
 	s.ServeJSON()
+	// ServeJSON only writes the response. StopRun prevents a controller action
+	// from continuing into a state mutation after an authorization failure.
+	s.StopRun()
 }
 
 func useForwardedAuthority(request *http.Request) bool {

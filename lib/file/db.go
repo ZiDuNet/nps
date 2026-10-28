@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/mail"
 	"sort"
 	"strconv"
 	"strings"
@@ -175,19 +176,28 @@ func (s *DbUtils) NewUser(u *User) error {
 	if u.Password == "" {
 		return errors.New("password can not be empty")
 	}
-	if !s.VerifyUserLoginName(u.UserName, u.Id) {
-		return errors.New("username duplicate, please reset")
+	email, err := NormalizeUserEmail(u.Email)
+	if err != nil {
+		return err
 	}
-	if u.MaxClientNum < 0 {
-		return errors.New("最大客户端数不能小于 0")
+	u.Email = email
+	if u.MaxClientNum < 0 || u.MaxTunnelNum < 0 {
+		return errors.New("最大客户端数和隧道数不能小于 0")
 	}
 	expireTime, err := NormalizeExpiryTime(u.ExpireTime)
 	if err != nil {
 		return err
 	}
 	u.ExpireTime = expireTime
+
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()
+	if !s.VerifyUserLoginName(u.UserName, u.Id) {
+		return errors.New("username duplicate, please reset")
+	}
+	if !s.VerifyUserEmail(u.Email, u.Id) {
+		return errors.New("邮箱已被其他用户使用")
+	}
 	if u.Id == 0 {
 		u.Id = int(s.JsonDb.GetUserId())
 	}
@@ -210,11 +220,13 @@ func (s *DbUtils) UpdateUser(u *User) error {
 	if u.Password == "" {
 		return errors.New("password can not be empty")
 	}
-	if !s.VerifyUserLoginName(u.UserName, u.Id) {
-		return errors.New("username duplicate, please reset")
+	email, err := NormalizeUserEmail(u.Email)
+	if err != nil {
+		return err
 	}
-	if u.MaxClientNum < 0 {
-		return errors.New("最大客户端数不能小于 0")
+	u.Email = email
+	if u.MaxClientNum < 0 || u.MaxTunnelNum < 0 {
+		return errors.New("最大客户端数和隧道数不能小于 0")
 	}
 	expireTime, err := NormalizeExpiryTime(u.ExpireTime)
 	if err != nil {
@@ -224,6 +236,12 @@ func (s *DbUtils) UpdateUser(u *User) error {
 
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()
+	if !s.VerifyUserLoginName(u.UserName, u.Id) {
+		return errors.New("username duplicate, please reset")
+	}
+	if !s.VerifyUserEmail(u.Email, u.Id) {
+		return errors.New("邮箱已被其他用户使用")
+	}
 	if existing, getErr := s.GetUser(u.Id); getErr == nil && existing != nil {
 		existing.RLock()
 		existingMaxClientNum, existingExpireTime := existing.MaxClientNum, existing.ExpireTime
@@ -604,6 +622,46 @@ func (s *DbUtils) VerifyUserLoginName(username string, id int) bool {
 		return true
 	})
 	return res
+}
+
+// NormalizeUserEmail validates an optional account email and stores it in a
+// stable lower-case form. An empty address remains valid for legacy and
+// username/password-only accounts.
+func NormalizeUserEmail(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	address, err := mail.ParseAddress(value)
+	if err != nil || address == nil || address.Address == "" {
+		return "", errors.New("邮箱地址格式无效")
+	}
+	return strings.ToLower(strings.TrimSpace(address.Address)), nil
+}
+
+// VerifyUserEmail enforces one account per verified email. Emails are unique
+// case-insensitively because NormalizeUserEmail stores them in lower-case.
+func (s *DbUtils) VerifyUserEmail(email string, id int) bool {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return true
+	}
+	available := true
+	s.JsonDb.Users.Range(func(key, value interface{}) bool {
+		user, ok := value.(*User)
+		if !ok || user == nil {
+			return true
+		}
+		user.RLock()
+		userEmail, userID := user.Email, user.Id
+		user.RUnlock()
+		if userID != id && strings.EqualFold(strings.TrimSpace(userEmail), email) {
+			available = false
+			return false
+		}
+		return true
+	})
+	return available
 }
 
 func (s *DbUtils) MigrateUsersFromClients() error {

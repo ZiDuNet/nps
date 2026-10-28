@@ -36,6 +36,13 @@
                         </div>
                     </div>
                     <div class="form-group">
+                        <label class="form-label font-bold" for="user-email" data-i18n-zh="邮箱" data-i18n-en="Email">邮箱</label>
+                        <div class="form-group-wrapper">
+                            <input id="user-email" class="form-control" value="{{.u.Email}}" type="email" name="email" autocomplete="email" data-placeholder-zh="可选，用于账号联系" data-placeholder-en="Optional account contact email" placeholder="可选，用于账号联系">
+                            <span class="help-block" data-i18n-zh="可选；同一邮箱只能绑定一个账号。留空表示不绑定邮箱。" data-i18n-en="Optional; each email can belong to only one account. Leave blank for no email.">可选；同一邮箱只能绑定一个账号。留空表示不绑定邮箱。</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
                         <label class="form-label font-bold" for="user-remark" data-i18n-zh="备注" data-i18n-en="Remark">备注</label>
                         <div class="form-group-wrapper">
                             <input id="user-remark" class="form-control" value="{{.u.Remark}}" type="text" name="remark" autocomplete="off">

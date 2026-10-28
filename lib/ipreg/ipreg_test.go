@@ -83,3 +83,43 @@ func TestClearExpiredReportsRemovedEntries(t *testing.T) {
 		t.Fatal("expired registration remained after ClearExpired")
 	}
 }
+
+func TestClientScopedOperationsDoNotLeakOtherBuckets(t *testing.T) {
+	Reset()
+	t.Cleanup(Reset)
+	first, _ := ParseIP("198.51.100.21")
+	second, _ := ParseIP("198.51.100.22")
+	public, _ := ParseIP("203.0.113.21")
+	Register(7, first, time.Hour)
+	Register(8, second, time.Hour)
+	Register(AnyClient, public, time.Hour)
+	allowed := map[int]struct{}{7: {}}
+
+	rows := ListForClients(allowed)
+	if len(rows) != 1 || rows[0].ClientID != 7 {
+		t.Fatalf("ListForClients returned %#v, want only client 7", rows)
+	}
+	if got := CountForClients(allowed); got != 1 {
+		t.Fatalf("CountForClients = %d, want 1", got)
+	}
+
+	expired, _ := ParseIP("198.51.100.23")
+	Register(7, expired, time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
+	if removed := ClearExpiredForClients(allowed); removed != 1 {
+		t.Fatalf("ClearExpiredForClients removed %d, want 1", removed)
+	}
+	if !RegisteredString(8, second.String()) || !RegisteredString(AnyClient, public.String()) {
+		t.Fatal("scoped cleanup touched another bucket")
+	}
+
+	if removed := ResetClients(allowed); removed != 1 {
+		t.Fatalf("ResetClients removed %d, want 1", removed)
+	}
+	if RegisteredString(7, first.String()) {
+		t.Fatal("ResetClients left the selected bucket active")
+	}
+	if !RegisteredString(8, second.String()) || !RegisteredString(AnyClient, public.String()) {
+		t.Fatal("ResetClients touched another bucket")
+	}
+}

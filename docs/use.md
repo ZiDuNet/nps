@@ -6,6 +6,7 @@
 - [安装部署](install.md)
 - [运行命令速查](run.md)
 - [用户体系](user.md)
+- [使用说明页面配置](usage-guide.md)
 - [隧道模式](tunnel.md)
 - [服务端配置](server_config.md)
 - [客户端配置](client_config.md)

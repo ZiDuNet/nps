@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	htmltemplate "html/template"
 	"net"
 	"net/http"
 	"net/url"
@@ -893,7 +894,77 @@ func (s *IndexController) dashboardSnapshot() map[string]interface{} {
 func (s *IndexController) Help() {
 	s.Data["menu"] = "help"
 	s.SetInfo("about")
+	s.Data["help_state"] = "unconfigured"
+	s.Data["help_mode"] = usageGuideModeDisabled
+	s.Data["help_source"] = ""
+	s.Data["help_embed_url"] = htmltemplate.URL("")
+	s.Data["help_external_url"] = htmltemplate.URL("")
+	s.Data["help_error"] = ""
+	s.Data["help_mixed_content"] = false
+	s.Data["help_iframe_sandbox"] = "allow-scripts allow-forms allow-popups allow-downloads"
+
+	global := file.GetDb().GetGlobal()
+	if global == nil {
+		s.display("index/help")
+		return
+	}
+	mode := strings.ToLower(strings.TrimSpace(global.UsageGuideMode))
+	source := strings.TrimSpace(global.UsageGuideSource)
+	s.Data["help_mode"] = mode
+	s.Data["help_source"] = source
+	switch mode {
+	case usageGuideModeURL:
+		embedURL, err := trustedUsageGuideURL(source)
+		if err != nil {
+			s.Data["help_error"] = err.Error()
+			break
+		}
+		s.Data["help_state"] = "ready"
+		s.Data["help_embed_url"] = embedURL
+		s.Data["help_external_url"] = embedURL
+		// Remote documents need their own origin to retain normal navigation and
+		// storage behavior. They are already isolated from the NPS origin; local
+		// documents below deliberately omit allow-same-origin.
+		s.Data["help_iframe_sandbox"] = "allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
+		currentScheme := requestScheme(s.Ctx.Request, useForwardedAuthority(s.Ctx.Request))
+		s.Data["help_mixed_content"] = currentScheme == "https" && strings.HasPrefix(string(embedURL), "http://")
+	case usageGuideModeFile, usageGuideModeHTML:
+		if _, _, err := readUsageGuideHTML(global); err != nil {
+			if strings.Contains(err.Error(), "不存在") {
+				s.Data["help_state"] = "missing"
+			} else {
+				s.Data["help_error"] = err.Error()
+			}
+			break
+		}
+		contentURL := strings.TrimRight(beego.AppConfig.String("web_base_url"), "/") + "/index/help/content"
+		s.Data["help_state"] = "ready"
+		s.Data["help_embed_url"] = htmltemplate.URL(contentURL)
+		s.Data["help_external_url"] = htmltemplate.URL(contentURL)
+	default:
+		s.Data["help_mode"] = usageGuideModeDisabled
+	}
 	s.display("index/help")
+}
+
+// HelpContent serves the configured local HTML document through an
+// authenticated, sandboxed response. The configured source is resolved again
+// on every request so administrators can replace the file without restarting
+// NPS, and a stale global.json can never turn this endpoint into an arbitrary
+// filesystem read.
+func (s *IndexController) HelpContent() {
+	writer := s.Ctx.ResponseWriter
+	usageGuideContentHeaders(writer.Header())
+	content, _, err := readUsageGuideHTML(file.GetDb().GetGlobal())
+	if err != nil {
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte(`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;padding:32px;background:#f5f7fb;color:#475569;font:14px/1.65 system-ui,sans-serif"><div style="max-width:620px;margin:10vh auto;padding:24px;border:1px solid #dbe3ef;border-radius:14px;background:#fff"><strong style="display:block;margin-bottom:8px;color:#1e293b">使用说明暂时无法显示</strong><span>管理员尚未部署对应 HTML 文件，或文件正在更新。请稍后刷新。</span></div></body></html>`))
+		s.StopRun()
+		return
+	}
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write(content)
+	s.StopRun()
 }
 
 func (s *IndexController) Tcp() {

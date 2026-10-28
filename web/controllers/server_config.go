@@ -60,6 +60,16 @@ type serverConfigUnknownView struct {
 	Sensitive    bool
 }
 
+type serverConfigSummary struct {
+	Sections  int
+	Fields    int
+	Editable  int
+	Enabled   int
+	Sensitive int
+	ReadOnly  int
+	Missing   int
+}
+
 type serverConfigUpdate struct {
 	Key    string
 	Value  string
@@ -76,7 +86,7 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"show_http_proxy_port":    {Label: "显示非标准 HTTP 端口", Category: "HTTP(S) 入口", Description: "面板访问地址中是否显示非 80 的 HTTP 端口。"},
 	"http3_proxy_port":        {Label: "HTTP/3 反代端口", Category: "HTTP(S) 入口", Description: "使用 QUIC/HTTP/3 提供域名反代；需要 UDP 放行和可用证书。", Type: "int", Optional: true},
 	"https_default_cert_file": {Label: "默认 HTTPS 证书", Category: "HTTP(S) 入口", Description: "Host 未单独配置证书时使用的证书文件。", Optional: true},
-	"https_default_key_file":  {Label: "默认 HTTPS 私钥", Category: "HTTP(S) 入口", Description: "默认 HTTPS 证书对应的私钥文件。", Optional: true, Sensitive: true},
+	"https_default_key_file":  {Label: "默认 HTTPS 私钥", Category: "HTTP(S) 入口", Description: "默认 HTTPS 证书对应的私钥文件路径；路径本身会正常回显，私钥内容不会读取。", Optional: true},
 	"force_auto_ssl":          {Label: "自动申请 HTTPS 证书", Category: "HTTP(S) 入口", Description: "按 Host 自动申请/续期 ACME 证书；需要公网 80/443 和 DNS 解析。", Type: "bool", Optional: true},
 	"ssl_path":                {Label: "证书缓存目录", Category: "HTTP(S) 入口", Description: "ACME 证书和缓存的存储目录。", Optional: true},
 	"ssl_email":               {Label: "ACME 联系邮箱", Category: "HTTP(S) 入口", Description: "ACME 注册邮箱，用于续期失败通知。", Optional: true},
@@ -107,7 +117,7 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"bridge_select_mode":        {Label: "同密钥选主策略", Category: "Bridge 与传输", Description: "同一 VKEY 存在多个连接时的选择策略。", Type: "select", Options: []string{"Primary", "RoundRobin", "Random"}, Optional: true},
 	"bridge_http3":              {Label: "HTTP/3 Bridge", Category: "Bridge 与传输", Description: "允许通过 HTTP/3/QUIC 入口承载新版 Bridge。", Type: "bool", Optional: true},
 	"bridge_cert_file":          {Label: "Bridge 证书", Category: "Bridge 与传输", Description: "Bridge 独立 TLS 证书路径；留空使用默认证书。", Optional: true},
-	"bridge_key_file":           {Label: "Bridge 私钥", Category: "Bridge 与传输", Description: "Bridge 独立 TLS 私钥路径。", Optional: true, Sensitive: true},
+	"bridge_key_file":           {Label: "Bridge 私钥", Category: "Bridge 与传输", Description: "Bridge 独立 TLS 私钥路径；路径本身会正常回显，私钥内容不会读取。", Optional: true},
 	"client_history_limit":      {Label: "客户端连接历史条数", Category: "Bridge 与传输", Description: "每个客户端保留的最近连接历史数量，0 表示关闭。"},
 
 	"public_vkey":           {Label: "公共验证密钥", Category: "客户端认证与 IP 登记", Description: "允许使用公共密钥连接的客户端；留空表示关闭。", Optional: true, Sensitive: true},
@@ -118,7 +128,7 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"ip_register_ip":        {Label: "独立登记监听地址", Category: "客户端认证与 IP 登记", Description: "独立 IP 登记监听的本机地址；端口为 0 时可以关闭该项。", Optional: true},
 	"ip_register_port":      {Label: "独立登记监听端口", Category: "客户端认证与 IP 登记", Description: "端口为 0 时仅使用管理面板的 /ip/register。", Optional: true},
 	"ip_register_cert_file": {Label: "登记 HTTPS 证书", Category: "客户端认证与 IP 登记", Description: "独立登记监听的证书路径；需与私钥同时配置。", Optional: true},
-	"ip_register_key_file":  {Label: "登记 HTTPS 私钥", Category: "客户端认证与 IP 登记", Description: "独立登记监听的私钥路径；需与证书同时配置。", Optional: true, Sensitive: true},
+	"ip_register_key_file":  {Label: "登记 HTTPS 私钥", Category: "客户端认证与 IP 登记", Description: "独立登记监听的私钥路径；需与证书同时配置。", Optional: true},
 
 	"flow_store_interval": {Label: "流量持久化间隔", Category: "日志与审计", Description: "流量数据持久化间隔，单位分钟；不启用流量持久化时关闭该项。", Optional: true},
 	"log_level":           {Label: "日志级别", Category: "日志与审计", Description: "支持 0 到 7，也支持 trace/debug/info/warn/error/fatal/panic/off。", Type: "text"},
@@ -150,32 +160,49 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"web_port":               {Label: "管理面板端口", Category: "Web 管理面板", Description: "管理面板监听端口。"},
 	"web_ip":                 {Label: "管理面板监听地址", Category: "Web 管理面板", Description: "管理面板监听的本机地址。"},
 	"web_base_url":           {Label: "管理面板 URL 前缀", Category: "Web 管理面板", Description: "反向代理到子路径时填写，例如 /nps。", Optional: true},
-	"instance_key_file":      {Label: "会话实例密钥路径", Category: "Web 管理面板", Description: "留空时使用 conf/instance.key。", Optional: true, Sensitive: true},
+	"instance_key_file":      {Label: "会话实例密钥路径", Category: "Web 管理面板", Description: "留空时使用 conf/instance.key。", Optional: true},
 	"web_open_ssl":           {Label: "管理面板 HTTPS", Category: "Web 管理面板", Description: "是否直接为管理面板启用 HTTPS。"},
 	"web_cert_file":          {Label: "管理面板证书路径", Category: "Web 管理面板", Description: "web_open_ssl=true 时使用；关闭 HTTPS 时可不写入。", Optional: true},
-	"web_key_file":           {Label: "管理面板私钥路径", Category: "Web 管理面板", Description: "web_open_ssl=true 时使用；关闭 HTTPS 时可不写入。", Optional: true, Sensitive: true},
+	"web_key_file":           {Label: "管理面板私钥路径", Category: "Web 管理面板", Description: "web_open_ssl=true 时使用；关闭 HTTPS 时可不写入。", Optional: true},
 	"web_close_on_not_found": {Label: "未知路径直接断开", Category: "Web 管理面板", Description: "访问不存在的管理路径时尽力关闭连接，不返回 404 响应。", Type: "bool", Optional: true},
 
 	"auth_key":       {Label: "Web API 密钥", Category: "Web API 认证", Description: "签名 API 请求使用的密钥。", Sensitive: true},
 	"auth_crypt_key": {Label: "API 密钥加密密钥", Category: "Web API 认证", Description: "必须恰好为 16 个字符。", Sensitive: true},
 
-	"allow_user_login":           {Label: "允许普通用户登录", Category: "用户与资源权限", Description: "是否启用多用户面板登录。"},
-	"allow_user_vkey_login":      {Label: "允许 VKEY 登录面板", Category: "用户与资源权限", Description: "是否允许普通用户使用客户端 VKEY 登录管理面板。", Type: "bool"},
-	"allow_user_register":        {Label: "允许普通用户注册", Category: "用户与资源权限", Description: "是否允许公开注册面板账号。"},
-	"allow_user_change_username": {Label: "允许修改用户名", Category: "用户与资源权限", Description: "普通用户是否可以修改自己的用户名。"},
-	"allow_user_local":           {Label: "允许用户使用本地代理", Category: "用户与资源权限", Description: "允许普通用户让 NPS 服务端使用本地代理访问目标；默认关闭。", Type: "bool", Optional: true},
-	"allow_secret_link":          {Label: "允许 Secret 访问任意目标", Category: "用户与资源权限", Description: "允许 Secret 代理连接任意目标；默认关闭。", Type: "bool", Optional: true},
-	"allow_secret_local":         {Label: "允许 Secret 访问服务端本地", Category: "用户与资源权限", Description: "允许 Secret 代理连接 NPS 所在主机的本地地址；默认关闭。", Type: "bool", Optional: true},
-	"allow_remote_update":        {Label: "允许远程升级客户端", Category: "用户与资源权限", Description: "管理员是否可以从 Web 面板向在线 NPC 下发升级指令。", Type: "bool", Optional: true},
-	"allow_time_limit":           {Label: "启用客户端时间限制", Category: "用户与资源权限", Description: "按客户端到期时间拒绝已过期连接。", Type: "bool", Optional: true},
-	"allow_flow_limit":           {Label: "允许流量配额", Category: "用户与资源权限", Description: "是否在客户端页面维护流量上限。"},
-	"flow_limit_type":            {Label: "流量配额计算口径", Category: "用户与资源权限", Description: "total 按上下行总量计算；actual 按实际消耗计算（总量乘 2）。", Type: "select", Options: []string{"total", "actual"}},
-	"allow_rate_limit":           {Label: "允许带宽配额", Category: "用户与资源权限", Description: "是否在客户端和隧道页面维护带宽上限。"},
-	"allow_tunnel_num_limit":     {Label: "允许隧道数量配额", Category: "用户与资源权限", Description: "是否限制客户端和用户的隧道数量。"},
-	"allow_local_proxy":          {Label: "允许本地代理", Category: "用户与资源权限", Description: "是否允许隧道使用服务端本地代理访问目标。"},
-	"allow_connection_num_limit": {Label: "允许连接数配额", Category: "用户与资源权限", Description: "是否维护客户端最大连接数。"},
-	"allow_multi_ip":             {Label: "允许绑定监听地址", Category: "用户与资源权限", Description: "是否允许每条隧道绑定不同的服务端监听 IP。"},
-	"system_info_display":        {Label: "显示系统监控", Category: "用户与资源权限", Description: "仪表盘是否显示 CPU、内存和网络信息。"},
+	"allow_user_login":      {Label: "允许普通用户登录", Category: "用户与资源权限", Description: "是否启用多用户面板登录。"},
+	"allow_user_vkey_login": {Label: "允许 VKEY 登录面板", Category: "用户与资源权限", Description: "是否允许普通用户使用客户端 VKEY 登录管理面板。", Type: "bool"},
+
+	"allow_user_register":          {Label: "允许普通用户注册", Category: "注册配置", Description: "打开后登录页显示注册入口；关闭时注册页面和提交接口都不可用。", Type: "bool"},
+	"register_captcha":             {Label: "注册图片验证码", Category: "注册配置", Description: "注册提交时是否必须填写图片验证码。建议保持开启，防止自动化批量注册。", Type: "bool"},
+	"register_max_clients":         {Label: "默认客户端配额", Category: "注册配置", Description: "新注册用户默认最多可拥有的客户端数；0 表示不限制。", Type: "int"},
+	"register_max_tunnels":         {Label: "默认隧道配额", Category: "注册配置", Description: "新注册用户默认最多可创建的总隧道数，域名反代也计入；0 表示不限制。", Type: "int"},
+	"register_expire_days":         {Label: "默认注册有效期", Category: "注册配置", Description: "新注册用户从注册成功时起默认有效天数；0 表示永久有效。", Type: "int"},
+	"register_rate_window":         {Label: "注册限频窗口", Category: "注册配置", Description: "注册提交次数和同 IP 成功注册数的统计窗口，单位秒。", Type: "int"},
+	"register_rate_limit":          {Label: "注册提交次数上限", Category: "注册配置", Description: "同一 IP 或同一用户名在一个窗口内允许提交的注册次数；0 表示不限制。", Type: "int"},
+	"register_ip_rate_limit":       {Label: "单 IP 注册账号上限", Category: "注册配置", Description: "同一来源 IP 在一个窗口内允许成功创建的账号数；0 表示不限制。", Type: "int"},
+	"register_email_verify":        {Label: "启用邮箱验证", Category: "注册配置", Description: "开启后注册必须填写邮箱并输入邮件验证码；关闭时为用户名和密码注册。", Type: "bool"},
+	"register_email_code_ttl":      {Label: "邮箱验证码有效期", Category: "注册配置", Description: "邮件验证码有效时间，单位秒。", Type: "int"},
+	"register_email_code_cooldown": {Label: "邮箱验证码发送间隔", Category: "注册配置", Description: "同一邮箱或来源 IP 两次发送验证码的最小间隔，单位秒；0 表示不限制。", Type: "int"},
+	"smtp_host":                    {Label: "SMTP 主机", Category: "注册配置", Description: "邮件服务器主机名，例如 smtp.example.com。启用邮箱验证时必填。", Optional: true},
+	"smtp_port":                    {Label: "SMTP 端口", Category: "注册配置", Description: "STARTTLS 常用 587，隐式 TLS 常用 465。启用邮箱验证时必填。", Type: "int", Optional: true},
+	"smtp_security":                {Label: "SMTP 加密方式", Category: "注册配置", Description: "starttls 使用 587 等端口升级加密；ssl 直接建立 TLS 连接；none 仅用于可信内网邮件中继。留空按 starttls 处理。", Type: "select", Options: []string{"starttls", "ssl", "none"}, Optional: true},
+	"smtp_username":                {Label: "SMTP 用户名", Category: "注册配置", Description: "邮件服务器认证用户名；不需要认证的内网中继可以留空。", Optional: true},
+	"smtp_password":                {Label: "SMTP 密码", Category: "注册配置", Description: "邮件服务器认证密码；页面不会回显，留空表示保持原值。", Optional: true, Sensitive: true},
+	"smtp_from":                    {Label: "邮件发件人", Category: "注册配置", Description: "验证码邮件的 From 地址；启用邮箱验证时必填。", Optional: true},
+	"allow_user_change_username":   {Label: "允许修改用户名", Category: "用户与资源权限", Description: "普通用户是否可以修改自己的用户名。"},
+	"allow_user_local":             {Label: "允许用户使用本地代理", Category: "用户与资源权限", Description: "允许普通用户让 NPS 服务端使用本地代理访问目标；默认关闭。", Type: "bool", Optional: true},
+	"allow_secret_link":            {Label: "允许 Secret 访问任意目标", Category: "用户与资源权限", Description: "允许 Secret 代理连接任意目标；默认关闭。", Type: "bool", Optional: true},
+	"allow_secret_local":           {Label: "允许 Secret 访问服务端本地", Category: "用户与资源权限", Description: "允许 Secret 代理连接 NPS 所在主机的本地地址；默认关闭。", Type: "bool", Optional: true},
+	"allow_remote_update":          {Label: "允许远程升级客户端", Category: "用户与资源权限", Description: "管理员是否可以从 Web 面板向在线 NPC 下发升级指令。", Type: "bool", Optional: true},
+	"allow_time_limit":             {Label: "启用客户端时间限制", Category: "用户与资源权限", Description: "按客户端到期时间拒绝已过期连接。", Type: "bool", Optional: true},
+	"allow_flow_limit":             {Label: "允许流量配额", Category: "用户与资源权限", Description: "是否在客户端页面维护流量上限。"},
+	"flow_limit_type":              {Label: "流量配额计算口径", Category: "用户与资源权限", Description: "total 按上下行总量计算；actual 按实际消耗计算（总量乘 2）。", Type: "select", Options: []string{"total", "actual"}},
+	"allow_rate_limit":             {Label: "允许带宽配额", Category: "用户与资源权限", Description: "是否在客户端和隧道页面维护带宽上限。"},
+	"allow_tunnel_num_limit":       {Label: "允许隧道数量配额", Category: "用户与资源权限", Description: "是否限制客户端和用户的隧道数量。"},
+	"allow_local_proxy":            {Label: "允许本地代理", Category: "用户与资源权限", Description: "是否允许隧道使用服务端本地代理访问目标。"},
+	"allow_connection_num_limit":   {Label: "允许连接数配额", Category: "用户与资源权限", Description: "是否维护客户端最大连接数。"},
+	"allow_multi_ip":               {Label: "允许绑定监听地址", Category: "用户与资源权限", Description: "是否允许每条隧道绑定不同的服务端监听 IP。"},
+	"system_info_display":          {Label: "显示系统监控", Category: "用户与资源权限", Description: "仪表盘是否显示 CPU、内存和网络信息。"},
 
 	"http_add_origin_header":      {Label: "添加来源请求头", Category: "HTTP 转发与缓存", Description: "向后端添加客户端真实 IP 相关请求头。"},
 	"http_cache":                  {Label: "启用 HTTP 缓存", Category: "HTTP 转发与缓存", Description: "是否启用 HTTP 响应缓存。"},
@@ -193,24 +220,100 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"ntp_server":           {Label: "NTP 校时服务器", Category: "运行与安全", Description: "留空关闭校时；失败时继续使用上次成功偏移。", Optional: true},
 	"ntp_interval":         {Label: "NTP 校时周期", Category: "运行与安全", Description: "校时周期，单位分钟；留空使用默认 5 分钟。", Type: "int", Optional: true},
 	"timezone":             {Label: "服务时区", Category: "运行与安全", Description: "日志和时间显示使用的时区。", Optional: true},
-	"geoip_path":           {Label: "GeoIP 数据路径", Category: "运行与安全", Description: "GeoIP 数据文件路径；规则中可使用 geoip: 前缀。", Optional: true},
-	"geosite_path":         {Label: "Geosite 数据路径", Category: "运行与安全", Description: "Geosite 数据文件路径；规则中可使用 geosite: 前缀。", Optional: true},
+	"geoip_path":           {Label: "GeoIP 数据路径", Category: "运行与安全", Description: "GeoIP 数据文件路径；规则中可使用 geoip: 前缀。留空时使用运行目录 conf/geoip.dat，文件存在才会加载。", Optional: true},
+	"geosite_path":         {Label: "Geosite 数据路径", Category: "运行与安全", Description: "Geosite 数据文件路径；规则中可使用 geosite: 前缀。留空时使用运行目录 conf/geosite.dat，文件存在才会加载。", Optional: true},
 	"acl_max_rules":        {Label: "ACL 最大规则数", Category: "运行与安全", Description: "每张用户资源黑名单、白名单或目标 ACL 的有效规则上限；空行和注释不计数。", Type: "int", Optional: true},
 	"geo_reload_interval":  {Label: "Geo 数据刷新周期", Category: "运行与安全", Description: "检测 GeoIP/Geosite 文件变化的周期，单位秒。", Type: "int", Optional: true},
 	"dns_server":           {Label: "DNS 服务器", Category: "运行与安全", Description: "新版 P2P/STUN 和目标解析使用的 DNS 服务器。", Optional: true},
-	"login_ban_time":       {Label: "登录最小间隔", Category: "运行与安全", Description: "同一 IP 或用户名两次登录请求的最小间隔，单位秒。", Type: "int"},
-	"login_ip_ban_time":    {Label: "IP 失败重置周期", Category: "运行与安全", Description: "IP 维度失败次数的重置周期，单位秒。", Type: "int"},
-	"login_user_ban_time":  {Label: "用户名失败重置周期", Category: "运行与安全", Description: "用户名维度失败次数的重置周期，单位秒。", Type: "int"},
-	"login_max_fail_times": {Label: "最大登录失败次数", Category: "运行与安全", Description: "达到此次数后在对应重置周期内拒绝登录。", Type: "int"},
-	"login_max_body":       {Label: "登录请求体上限", Category: "运行与安全", Description: "登录请求体最大字节数。", Type: "int"},
-	"login_max_skew":       {Label: "登录时间偏移容忍度", Category: "运行与安全", Description: "RSA 登录时间戳允许的最大偏差，单位毫秒；设为 0 可关闭时间校验。", Type: "int"},
+	"login_ban_time":       {Label: "登录最小间隔", Category: "运行与安全", Description: "同一 IP 或用户名两次登录请求的最小间隔，单位秒；未写入时使用默认值。", Type: "int", Optional: true},
+	"login_ip_ban_time":    {Label: "IP 失败重置周期", Category: "运行与安全", Description: "IP 维度失败次数的重置周期，单位秒；未写入时使用默认值。", Type: "int", Optional: true},
+	"login_user_ban_time":  {Label: "用户名失败重置周期", Category: "运行与安全", Description: "用户名维度失败次数的重置周期，单位秒；未写入时使用默认值。", Type: "int", Optional: true},
+	"login_max_fail_times": {Label: "最大登录失败次数", Category: "运行与安全", Description: "达到此次数后在对应重置周期内拒绝登录；未写入时使用默认值。", Type: "int", Optional: true},
+	"login_max_body":       {Label: "登录请求体上限", Category: "运行与安全", Description: "登录请求体最大字节数；未写入时使用默认值。", Type: "int", Optional: true},
+	"login_max_skew":       {Label: "登录时间偏移容忍度", Category: "运行与安全", Description: "RSA 登录时间戳允许的最大偏差，单位毫秒；设为 0 可关闭时间校验，未写入时使用默认值。", Type: "int", Optional: true},
 
 	"allow_ports": {Label: "允许映射端口范围", Category: "运行与安全", Description: "限制客户端可映射的服务端端口，例如 9001-9009,10001；留空表示不限制。", Optional: true},
 }
 
 var serverConfigCategoryOrder = []string{
 	"HTTP(S) 入口", "Bridge 与传输", "客户端认证与 IP 登记", "日志与审计", "P2P 与调试",
-	"Web 管理面板", "Web API 认证", "用户与资源权限", "HTTP 转发与缓存", "运行与安全", "兼容/自定义",
+	"Web 管理面板", "Web API 认证", "注册配置", "用户与资源权限", "HTTP 转发与缓存", "运行与安全", "兼容/自定义",
+}
+
+var serverConfigCategoryDescriptions = map[string]string{
+	"HTTP(S) 入口":   "域名反代监听端口、证书、HTTP/3 与来源请求头。",
+	"Bridge 与传输":   "NPC 接入端口、传输协议、多入口和连接复用。",
+	"客户端认证与 IP 登记": "客户端接入密钥、来源限制和公网 IP 登记入口。",
+	"日志与审计":        "运行日志、轮转策略和操作审计文件。",
+	"P2P 与调试":      "P2P 中继、STUN、端口映射和性能调试端点。",
+	"Web 管理面板":     "管理面板监听、HTTPS、登录账号和安全选项。",
+	"Web API 认证":   "管理 API 的签名密钥和本地加密密钥。",
+	"注册配置":         "自助注册开关、默认配额、限频、邮箱验证和 SMTP。",
+	"用户与资源权限":      "普通用户登录、配额能力以及代理资源限制。",
+	"HTTP 转发与缓存":   "反向代理请求头、超时和响应缓存。",
+	"运行与安全":        "登录保护、TLS、校时、Geo 数据、DNS 和端口权限。",
+	"兼容/自定义":       "历史版本或自定义部署中的只读配置，会在保存时原样保留。",
+}
+
+var serverConfigKeyPriority = map[string]int{
+	"http_proxy_ip": 10, "http_proxy_port": 20, "https_proxy_port": 30,
+	"show_http_proxy_port": 40, "http_proxy_access_port": 50, "https_proxy_access_port": 60,
+	"https_default_cert_file": 70, "https_default_key_file": 80, "force_auto_ssl": 90,
+	"http3_proxy_port": 100, "ssl_path": 110, "ssl_email": 120, "ssl_ca": 130,
+	"ssl_zerossl_api": 140,
+
+	"bridge_ip": 10, "bridge_port": 20, "bridge_type": 30, "bridge_select_mode": 40,
+	"bridge_kcp_port": 50, "bridge_ws_port": 60, "bridge_wss_port": 70,
+	"bridge_quic_port": 80, "bridge_quic_ip": 90, "bridge_path": 100,
+	"bridge_addr": 110, "bridge_host": 120, "bridge_real_ip_header": 130,
+	"bridge_trusted_ips": 140, "bridge_cert_file": 150, "bridge_key_file": 160,
+
+	"public_register_key": 10, "ip_limit": 20, "public_vkey": 30,
+	"ip_register_max_hours": 40, "ip_register_ip": 50, "ip_register_port": 60,
+	"ip_register_cert_file": 70, "ip_register_key_file": 80, "auth_time_window": 90,
+
+	"log_level": 10, "log_path": 20, "audit_log_path": 30, "log_max_size": 40,
+	"log_max_files": 50, "log_max_days": 60, "log_compress": 70,
+	"log_rotate_daily": 80, "flow_store_interval": 90,
+
+	"p2p_ip": 10, "p2p_port": 20, "p2p_stun_servers": 30,
+	"p2p_enable_upnp_portmap": 40, "p2p_enable_pcp_portmap": 50,
+	"p2p_enable_natpmp_portmap": 60, "p2p_portmap_lease_seconds": 70,
+	"p2p_probe_timeout_ms": 80, "p2p_handshake_timeout_ms": 90,
+	"p2p_transport_timeout_ms": 100, "pprof_ip": 110, "pprof_port": 120,
+
+	"web_ip": 10, "web_port": 20, "web_username": 30, "web_password": 40,
+	"web_base_url": 50, "web_open_ssl": 60, "web_cert_file": 70, "web_key_file": 80,
+	"totp_secret": 90, "x_nps_http_only": 120, "web_host": 130,
+	"web_close_on_not_found": 140,
+
+	"auth_key": 10, "auth_crypt_key": 20,
+
+	"allow_user_register": 10, "register_email_verify": 20, "register_captcha": 30,
+	"register_max_clients": 40, "register_max_tunnels": 50, "register_expire_days": 60,
+	"register_rate_window": 70, "register_rate_limit": 80, "register_ip_rate_limit": 90,
+	"register_email_code_ttl": 100, "register_email_code_cooldown": 110,
+	"smtp_host": 120, "smtp_port": 130, "smtp_security": 140,
+	"smtp_username": 150, "smtp_password": 160, "smtp_from": 170,
+
+	"allow_user_login": 10, "allow_user_vkey_login": 20, "allow_user_change_username": 30,
+	"allow_user_local": 40, "allow_secret_link": 50, "allow_secret_local": 60,
+	"allow_remote_update": 70, "allow_time_limit": 80, "allow_flow_limit": 90,
+	"flow_limit_type": 100, "allow_rate_limit": 110, "allow_tunnel_num_limit": 120,
+	"allow_local_proxy": 130, "allow_connection_num_limit": 140,
+	"allow_multi_ip": 150, "system_info_display": 160,
+
+	"http_add_origin_header": 10, "http_proxy_response_timeout": 20,
+	"http_cache": 30, "http_cache_length": 40,
+
+	"allow_x_real_ip": 10, "trusted_proxy_ips": 20, "tls_enable": 30,
+	"tls_bridge_port": 40, "disconnect_timeout": 50, "open_captcha": 60,
+	"force_pow": 70, "pow_bits": 80, "login_ban_time": 90,
+	"login_max_fail_times": 100, "login_ip_ban_time": 110,
+	"login_user_ban_time": 120, "login_max_body": 130, "login_max_skew": 140,
+	"ntp_server": 150, "ntp_interval": 160, "timezone": 170,
+	"geoip_path": 180, "geosite_path": 190, "geo_reload_interval": 200,
+	"acl_max_rules": 210, "dns_server": 220, "allow_ports": 230,
 }
 
 var serverConfigExtraKeys = []string{
@@ -260,13 +363,26 @@ func serverConfigKeyFromLine(raw string) (string, bool) {
 
 func serverConfigSensitive(key string) bool {
 	key = strings.ToLower(key)
-	return strings.Contains(key, "password") || strings.Contains(key, "secret") || strings.Contains(key, "vkey") || strings.Contains(key, "auth_key") || strings.Contains(key, "instance_key") || strings.Contains(key, "private") || strings.Contains(key, "key_file")
+	if strings.HasSuffix(key, "_key_file") {
+		// A TLS/session key file setting contains only the path. Hiding the path
+		// makes the configuration impossible to audit and does not protect the
+		// private-key contents, which NPS never reads into this page.
+		return false
+	}
+	return strings.Contains(key, "password") || strings.Contains(key, "secret") ||
+		strings.Contains(key, "vkey") || strings.Contains(key, "auth_key") ||
+		strings.Contains(key, "api_key") || strings.Contains(key, "instance_key") ||
+		strings.Contains(key, "private")
 }
 
 func serverConfigMetaFor(key, defaultValue string) serverConfigMeta {
 	if meta, ok := serverConfigMetaByKey[key]; ok {
 		if meta.Type == "" {
 			meta.Type = inferServerConfigType(key, defaultValue)
+		}
+		if meta.Sensitive || serverConfigSensitive(key) {
+			meta.Sensitive = true
+			meta.Type = "secret"
 		}
 		return meta
 	}
@@ -276,7 +392,11 @@ func serverConfigMetaFor(key, defaultValue string) serverConfigMeta {
 		Description: "该配置由当前运行版本或历史版本识别；请确认用途后再修改。",
 		Type:        inferServerConfigType(key, defaultValue),
 		Editable:    false,
+		Optional:    true,
 		Sensitive:   serverConfigSensitive(key),
+	}
+	if meta.Sensitive {
+		meta.Type = "secret"
 	}
 	return meta
 }
@@ -362,6 +482,9 @@ func serverConfigSections(content string) ([]serverConfigSectionView, []serverCo
 		if !present {
 			value = templateValues[key]
 		}
+		if meta.Type == "bool" {
+			value = strings.ToLower(strings.TrimSpace(value))
+		}
 		field := serverConfigFieldView{
 			Key: key, Label: meta.Label, Category: meta.Category, Description: meta.Description,
 			Type: meta.Type, Value: value, Options: meta.Options, Editable: meta.Editable,
@@ -373,7 +496,9 @@ func serverConfigSections(content string) ([]serverConfigSectionView, []serverCo
 		}
 		field.Enabled = present && serverConfigValueEnabled(meta, value)
 		if !meta.Optional {
-			field.Enabled = present
+			// A required key missing from an older configuration must remain
+			// editable so the administrator can repair it from the panel.
+			field.Enabled = true
 		}
 		if field.Sensitive {
 			field.DisplayValue = "未配置"
@@ -407,10 +532,52 @@ func serverConfigSections(content string) ([]serverConfigSectionView, []serverCo
 		if len(fields) == 0 {
 			continue
 		}
-		sort.SliceStable(fields, func(i, j int) bool { return fields[i].Key < fields[j].Key })
-		result = append(result, serverConfigSectionView{Name: category, Description: "保存后需要重启 NPS 才会应用。", Fields: fields})
+		sort.SliceStable(fields, func(i, j int) bool {
+			left := serverConfigKeyPriority[fields[i].Key]
+			right := serverConfigKeyPriority[fields[j].Key]
+			if left == 0 {
+				left = 10000
+			}
+			if right == 0 {
+				right = 10000
+			}
+			if left != right {
+				return left < right
+			}
+			return fields[i].Key < fields[j].Key
+		})
+		description := serverConfigCategoryDescriptions[category]
+		if description == "" {
+			description = "按业务分组维护此区域的服务端配置。"
+		}
+		result = append(result, serverConfigSectionView{Name: category, Description: description, Fields: fields})
 	}
 	return result, unknown, nil
+}
+
+func summarizeServerConfigSections(sections []serverConfigSectionView, unknown []serverConfigUnknownView) serverConfigSummary {
+	summary := serverConfigSummary{Sections: len(sections), ReadOnly: len(unknown)}
+	for _, section := range sections {
+		summary.Fields += len(section.Fields)
+		for _, field := range section.Fields {
+			if field.Editable {
+				summary.Editable++
+			} else {
+				summary.ReadOnly++
+			}
+			if field.Enabled {
+				summary.Enabled++
+			}
+			if field.Sensitive {
+				summary.Sensitive++
+			}
+			if !field.Present && !field.Optional {
+				summary.Missing++
+			}
+		}
+	}
+	summary.Fields += len(unknown)
+	return summary
 }
 
 func (s *GlobalController) Config() {
@@ -424,6 +591,10 @@ func (s *GlobalController) Config() {
 		sections, unknown, _ := serverConfigSections(string(content))
 		s.Data["config_sections"] = sections
 		s.Data["config_unknown"] = unknown
+		s.Data["config_summary"] = summarizeServerConfigSections(sections, unknown)
+		if err := validateServerConfigSource(string(content)); err != nil {
+			s.Data["config_validation_error"] = err.Error()
+		}
 	}
 	s.Data["menu"] = "global"
 	s.SetInfo("server config")
@@ -529,6 +700,23 @@ func validateServerConfigUpdateSet(current map[string]string, updates []serverCo
 	if certSet != keySet {
 		return errors.New("IP 登记 HTTPS 证书和私钥必须成对配置")
 	}
+	if strings.EqualFold(strings.TrimSpace(values["register_email_verify"]), "true") {
+		if strings.TrimSpace(values["smtp_host"]) == "" {
+			return errors.New("启用注册邮箱验证时，SMTP 主机不能为空")
+		}
+		port, err := strconv.Atoi(strings.TrimSpace(values["smtp_port"]))
+		if err != nil || port < 1 || port > 65535 {
+			return errors.New("启用注册邮箱验证时，SMTP 端口必须是 1-65535")
+		}
+		if strings.TrimSpace(values["smtp_from"]) == "" {
+			return errors.New("启用注册邮箱验证时，邮件发件人不能为空")
+		}
+		username := strings.TrimSpace(values["smtp_username"])
+		password := strings.TrimSpace(values["smtp_password"])
+		if username != "" && password == "" {
+			return errors.New("填写 SMTP 用户名时必须同时配置 SMTP 密码")
+		}
+	}
 	return nil
 }
 
@@ -584,6 +772,22 @@ func validateServerConfigValue(key string, meta serverConfigMeta, value string) 
 	}
 	if key == "web_base_url" && value != "" && !strings.HasPrefix(value, "/") {
 		return errors.New("web_base_url 必须为空或以 / 开头")
+	}
+	if strings.HasPrefix(key, "register_") && (strings.HasSuffix(key, "_days") || strings.HasSuffix(key, "_limit") ||
+		strings.HasSuffix(key, "_window") || strings.HasSuffix(key, "_ttl") || strings.HasSuffix(key, "_cooldown")) {
+		n, _ := strconv.Atoi(value)
+		if n > 36500 {
+			return fmt.Errorf("配置 %s 的数值过大", key)
+		}
+	}
+	if key == "register_email_code_ttl" {
+		n, _ := strconv.Atoi(value)
+		if n < 60 {
+			return errors.New("register_email_code_ttl 不能小于 60 秒")
+		}
+	}
+	if key == "smtp_from" && value != "" && !strings.Contains(value, "@") {
+		return errors.New("smtp_from 必须是有效的邮箱地址")
 	}
 	return nil
 }

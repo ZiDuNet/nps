@@ -181,6 +181,9 @@ func TestLayoutSupportsContentOnlyNavigation(t *testing.T) {
 		`history.pushState({ npsConsole: true }`,
 		`window.addEventListener('popstate'`,
 		`X-Requested-With`,
+		`a[data-console-navigate][href]`,
+		`window.npsBeforeNavigate`,
+		`window.npsNavigate = navigate`,
 		`content.classList.toggle('is-loading'`,
 		`$(window).triggerHandler('pagehide')`,
 	} {

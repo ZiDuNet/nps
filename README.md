@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.35</sub>
+﻿# NPS <sub>v1.1.36</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -187,6 +187,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.36** (2026-10-29) - Rebuilt self-registration around the independent user model with configurable client/tunnel quotas, expiry, CAPTCHA, rate limits and optional SMTP email verification. Added the administrator registration API, account-scoped IP registration management, configurable in-app usage documentation, a searchable/source-aware server configuration editor, and automatic default Geo data loading. Existing configuration, Bridge compatibility and NPC versions remain unchanged.
 
 - **v1.1.35** (2026-10-28) - Fixed the blank API access page shown to ordinary users. Ordinary accounts can now open `/user/api` and manage their own token again, while administrative user-management, global-settings, and administrator-key endpoints remain protected. Added a regression test for the non-admin page/action allowlist and added login, IP registration, client editing, and domain reverse-proxy editing screenshots to the README.
 
