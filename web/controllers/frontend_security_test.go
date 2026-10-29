@@ -98,6 +98,39 @@ func TestLanguageDropdownKeepsCompactViewportBoundaries(t *testing.T) {
 	}
 }
 
+func TestListToolbarsUseUnifiedRightAlignedControlOrder(t *testing.T) {
+	scriptContent, err := os.ReadFile("../static/js/nps-table.js")
+	if err != nil {
+		t.Fatalf("read table script: %v", err)
+	}
+	script := string(scriptContent)
+	if !strings.Contains(script, "this.$toolbar.append(this.$bars, this.$search, this.$filters, this.$columns, this.$barActions)") {
+		t.Fatal("table utility controls must be ordered search, filters, columns, refresh")
+	}
+	if !strings.Contains(script, "if ($item.is('.nps-table-filter')) self.$filters.append($item)") {
+		t.Fatal("table filters must be moved into their dedicated right-aligned group")
+	}
+
+	styleContent, err := os.ReadFile("../static/css/nps-console.css")
+	if err != nil {
+		t.Fatalf("read console stylesheet: %v", err)
+	}
+	stylesheet := string(styleContent)
+	for _, marker := range []string{
+		"body.nps-bootstrap .nps-table__toolbar {\n    justify-content: flex-end;",
+		"body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__bars {\n    margin-right: auto !important;",
+		"body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__columns,",
+		"body.nps-bootstrap .nps-table__search {\n    order: 1;",
+		"body.nps-bootstrap .nps-table__filters {\n    display: flex;\n    order: 2;",
+		"body.nps-bootstrap .nps-table__columns {\n    order: 3;",
+		"body.nps-bootstrap .nps-table__bar-actions {\n    order: 4;",
+	} {
+		if !strings.Contains(stylesheet, marker) {
+			t.Fatalf("console stylesheet misses unified toolbar contract %q", marker)
+		}
+	}
+}
+
 func TestPublicLayoutKeepsShellAndNavigatesContentOnly(t *testing.T) {
 	content, err := os.ReadFile("../views/public/layout.html")
 	if err != nil {

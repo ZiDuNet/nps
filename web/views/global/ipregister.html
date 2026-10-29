@@ -36,25 +36,8 @@
 
     <section class="panel ibox nps-panel">
         <div class="ibox-content">
-            <div class="ip-register-admin-toolbar">
-                <div>
-                    <label class="sr-only" for="ip-register-search" data-i18n-zh="搜索 IP 或客户端" data-i18n-en="Search IP or client">搜索 IP 或客户端</label>
-                    <input id="ip-register-search" class="form-control" type="search" autocomplete="off" placeholder="搜索 IP 或客户端名称" data-placeholder-zh="搜索 IP 或客户端名称" data-placeholder-en="Search IP or client name">
-                </div>
-                <span class="help-block" data-i18n-zh="只显示当前有效记录；点击撤销后，访问者需要重新登记。" data-i18n-en="Only active records are shown. After revocation, the visitor must register again.">只显示当前有效记录；点击撤销后，访问者需要重新登记。</span>
-            </div>
-            <div class="table-responsive">
-                <table id="ip-registration-table" class="table table-hover nps-table">
-                    <thead><tr>
-                        <th data-i18n-zh="来源 IP" data-i18n-en="Source IP">来源 IP</th>
-                        <th data-i18n-zh="登记范围" data-i18n-en="Scope">登记范围</th>
-                        <th data-i18n-zh="到期时间" data-i18n-en="Expires">到期时间</th>
-                        <th data-i18n-zh="剩余时间" data-i18n-en="Remaining">剩余时间</th>
-                        <th data-i18n-zh="操作" data-i18n-en="Actions">操作</th>
-                    </tr></thead>
-                    <tbody><tr><td colspan="5" class="text-muted" data-i18n-zh="加载中…" data-i18n-en="Loading…">加载中…</td></tr></tbody>
-                </table>
-            </div>
+            <div id="ip-register-toolbar" class="management-table-toolbar"></div>
+            <table id="ip-registration-table"></table>
         </div>
     </section>
 </section>
@@ -64,55 +47,95 @@
     .ip-register-admin-summary__item { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 15px 17px; border: 1px solid var(--nps-line, #e5e7eb); border-radius: 10px; background: var(--nps-surface, #fff); box-shadow: 0 5px 18px rgba(21, 39, 66, .04); }
     .ip-register-admin-summary__label { color: var(--nps-muted, #64748b); font-size: 12px; }
     .ip-register-admin-summary__item strong { color: var(--nps-ink, #182230); font-size: 16px; overflow-wrap: anywhere; }
-    .ip-register-admin-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 15px; }
-    .ip-register-admin-toolbar > div { width: min(100%, 340px); }
-    .ip-register-admin-toolbar .help-block { margin: 0 !important; }
     #ip-registration-table code { color: var(--nps-primary, #1769e0); }
-    @media (max-width: 760px) { .ip-register-admin-summary { grid-template-columns: 1fr; } .ip-register-admin-toolbar { align-items: stretch; flex-direction: column; } .ip-register-admin-toolbar > div { width: 100%; } }
+    @media (max-width: 760px) { .ip-register-admin-summary { grid-template-columns: 1fr; } }
 </style>
 
 <script>
 (function () {
     var endpoint = '{{.web_base_url}}/global/ipregister';
     var $table = $('#ip-registration-table');
-    function escape(value) { return $('<div>').text(value == null ? '' : String(value)).html(); }
-    function notify(type, message) { npsNotify(type, message); }
-    function refresh() {
-        var search = $('#ip-register-search').val() || '';
-        $.post(endpoint + '/list', {search: search, offset: 0, limit: 1000}, function (response) {
-            var rows = response && Array.isArray(response.rows) ? response.rows : [];
-            var body = $table.find('tbody').empty();
-            $('#ip-register-count').text(response && response.total != null ? response.total : rows.length);
-            if (!rows.length) { body.append('<tr><td colspan="5" class="text-muted">{{if .ip_registration_admin}}暂无有效登记{{else}}当前账号名下暂无有效 IP 登记{{end}}</td></tr>'); return; }
-            rows.forEach(function (row) {
-                var ip = escape(row.ip), client = escape(row.client), clientID = escape(row.client_id);
-                body.append('<tr><td><code>' + ip + '</code></td><td>' + client + '</td><td>' + escape(row.until) + '</td><td>' + escape(row.remaining) + '</td><td><button type="button" class="btn btn-xs btn-outline btn-danger js-ip-register-revoke" data-client-id="' + clientID + '" data-ip="' + ip + '">撤销</button></td></tr>');
-            });
-            if (typeof $('body').setLang === 'function') $('body').setLang('#ip-registration-table');
-        }).fail(function () { $table.find('tbody').html('<tr><td colspan="5" class="text-danger">读取 IP 登记失败</td></tr>'); });
-    }
+    var text = function (value) {
+        return typeof npsEscapeHtml === 'function'
+            ? npsEscapeHtml(value == null ? '' : String(value))
+            : $('<div>').text(value == null ? '' : String(value)).html();
+    };
+    var localText = function (zh, en) {
+        return typeof npsIsEnglish === 'function' && npsIsEnglish() ? en : zh;
+    };
+    var notify = function (type, message) {
+        if (typeof npsNotify === 'function') npsNotify(type, message);
+    };
+    var refresh = function () {
+        $table.npsTable('refresh');
+    };
+    var ipText = function (value) {
+        return '<code>' + text(value) + '</code>';
+    };
+    var actionText = function (value, row) {
+        return '<button type="button" class="btn btn-xs btn-outline btn-danger js-ip-register-revoke" data-client-id="'
+            + text(row.client_id) + '" data-ip="' + text(row.ip) + '">' + localText('撤销', 'Revoke') + '</button>';
+    };
+
+    $table.npsTable({
+        toolbar: '#ip-register-toolbar',
+        method: 'post',
+        url: endpoint + '/list',
+        contentType: 'application/x-www-form-urlencoded',
+        search: true,
+        showHeader: true,
+        showColumns: true,
+        showRefresh: true,
+        pagination: true,
+        sidePagination: 'server',
+        pageNumber: 1,
+        pageList: [10, 20, 50],
+        storageKey: 'ip-registration',
+        smartDisplay: true,
+        formatLoadingMessage: function () { return npsTableState('ip-registration', true); },
+        formatNoMatches: function () {
+            return '{{if .ip_registration_admin}}' + localText('暂无有效登记', 'No active registrations') + '{{else}}' + localText('当前账号名下暂无有效 IP 登记', 'No active IP registrations for this account') + '{{end}}';
+        },
+        onPostBody: function () { $('body').setLang('#ip-registration-table'); npsApplyTableState(this, 'ip-registration'); },
+        onLoadSuccess: function (data) {
+            $('#ip-register-count').text(data && data.total != null ? data.total : 0);
+        },
+        onLoadError: function () { notify('error', localText('读取 IP 登记失败', 'Failed to load IP registrations')); },
+        columns: [
+            {field: 'ip', title: '<span data-i18n-zh="来源 IP" data-i18n-en="Source IP">来源 IP</span>', halign: 'center', formatter: ipText},
+            {field: 'client', title: '<span data-i18n-zh="登记范围" data-i18n-en="Scope">登记范围</span>', halign: 'center', escape: true},
+            {field: 'until', title: '<span data-i18n-zh="到期时间" data-i18n-en="Expires">到期时间</span>', halign: 'center', escape: true},
+            {field: 'remaining', title: '<span data-i18n-zh="剩余时间" data-i18n-en="Remaining">剩余时间</span>', halign: 'center', escape: true},
+            {field: 'ip', stateKey: 'actions', title: '<span data-i18n-zh="操作" data-i18n-en="Actions">操作</span>', align: 'center', halign: 'center', formatter: actionText}
+        ]
+    });
+
     function postAction(path, data, successMessage) {
         $.post(endpoint + path, data || {}, function (response) {
-            if (response && response.status) { notify('success', response.msg || successMessage); refresh(); }
-            else notify('error', response && response.msg ? response.msg : '操作失败');
-        }, 'json').fail(function () { notify('error', '请求失败，请刷新后重试'); });
+            if (response && response.status) {
+                notify('success', response.msg || successMessage);
+                refresh();
+            } else {
+                notify('error', response && response.msg ? response.msg : localText('操作失败', 'Action failed'));
+            }
+        }, 'json').fail(function () {
+            notify('error', localText('请求失败，请刷新后重试', 'Request failed. Refresh and try again.'));
+        });
     }
     function confirmAction(message, danger, confirmLabel) {
-        return npsConfirmDialog(message, { danger: danger, confirmLabel: confirmLabel || (npsIsEnglish() ? 'Confirm' : '确认') });
+        return npsConfirmDialog(message, { danger: danger, confirmLabel: confirmLabel || localText('确认', 'Confirm') });
     }
-    $('#ip-register-search').on('input', function () { window.clearTimeout(this._npsTimer); this._npsTimer = window.setTimeout(refresh, 220); });
     $table.on('click', '.js-ip-register-revoke', function () {
         var button = this, clientID = $(button).data('client-id'), ip = $(button).data('ip');
-        confirmAction('确认撤销 ' + ip + ' 的 IP 登记？', true, '撤销').then(function (confirmed) {
-            if (confirmed) postAction('/revoke', {client_id: clientID, ip: ip}, '已撤销 IP 登记');
+        confirmAction(localText('确认撤销 ' + ip + ' 的 IP 登记？', 'Revoke the IP registration for ' + ip + '?'), true, localText('撤销', 'Revoke')).then(function (confirmed) {
+            if (confirmed) postAction('/revoke', {client_id: clientID, ip: ip}, localText('已撤销 IP 登记', 'IP registration revoked'));
         });
     });
-    $('#ip-register-clean').on('click', function () { postAction('/clean', {}, '已清理过期登记'); });
+    $('#ip-register-clean').on('click', function () { postAction('/clean', {}, localText('已清理过期登记', 'Expired registrations cleaned')); });
     $('#ip-register-clear').on('click', function () {
-        confirmAction('{{if .ip_registration_admin}}确认清空全部 IP 登记？访问者需要重新登记。{{else}}确认清空当前账号名下客户端的 IP 登记？访问者需要重新登记。{{end}}', true, '清空').then(function (confirmed) {
-            if (confirmed) postAction('/clear', {}, '已清空 IP 登记');
+        confirmAction(localText('{{if .ip_registration_admin}}确认清空全部 IP 登记？访问者需要重新登记。{{else}}确认清空当前账号名下客户端的 IP 登记？访问者需要重新登记。{{end}}', '{{if .ip_registration_admin}}Clear all IP registrations? Visitors will need to register again.{{else}}Clear IP registrations for clients owned by this account? Visitors will need to register again.{{end}}'), true, localText('清空', 'Clear')).then(function (confirmed) {
+            if (confirmed) postAction('/clear', {}, localText('已清空 IP 登记', 'IP registrations cleared'));
         });
     });
-    refresh();
 }());
 </script>

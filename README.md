@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.37</sub>
+﻿# NPS <sub>v1.1.38</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -193,6 +193,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.38** (2026-10-29) - Unified list-page toolbars and expanded client connection audit details with server-side addresses, Bridge channels, handshake stages, client versions, public/local address provenance, account state and expiry information. Added terminal-style raw JSON detail views, public-table migrations for login bans and IP registration, login-ban filtering and pagination, and fixed scoped server-configuration saves and response-card layout.
 
 - **v1.1.37** (2026-10-29) - Added protocol-aware Bridge command discovery for TCP, TLS, KCP, WS, WSS, QUIC and HTTP/3, with compatible v2 quick commands and multi-protocol NPC/GUI support. Added shared user quotas, connection audit logs, an independent certificate settings page, stricter custom-domain certificate APIs, and a redesigned registration and administration experience.
 

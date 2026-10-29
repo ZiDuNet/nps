@@ -16,6 +16,11 @@ func TestAppendListAndFilter(t *testing.T) {
 		{
 			ID: "first", Time: first, Kind: KindBridge, Action: ActionBridgeConnected,
 			Result: ResultSuccess, UserID: 7, ClientID: 11, BridgeTransport: "ws",
+			BridgeChannel: "main", SourceIP: "198.51.100.8",
+			RemoteAddr: "198.51.100.8:4567", ServerAddr: "192.0.2.10:8024",
+			ClientLocalAddr:       "10.20.30.40",
+			ClientLocalAddrSource: ClientLocalAddrSourceCurrentReport,
+			HandshakeStage:        "connected",
 		},
 		{
 			ID: "second", Time: first.Add(time.Minute), Kind: KindTunnel,
@@ -37,6 +42,17 @@ func TestAppendListAndFilter(t *testing.T) {
 	}
 	if page.Total != 2 || len(page.Events) != 2 || page.Events[0].ID != "second" {
 		t.Fatalf("unexpected page: %+v", page)
+	}
+	page, err = List(Filter{OwnerUserID: &owner, Search: "10.20.30.40", Limit: 10})
+	if err != nil || page.Total != 1 || page.Events[0].ID != "first" {
+		t.Fatalf("unexpected detail search page: %+v err=%v", page, err)
+	}
+	if event := page.Events[0]; event.RemoteAddr != "198.51.100.8:4567" ||
+		event.ServerAddr != "192.0.2.10:8024" ||
+		event.ClientLocalAddr != "10.20.30.40" ||
+		event.ClientLocalAddrSource != ClientLocalAddrSourceCurrentReport ||
+		event.BridgeChannel != "main" {
+		t.Fatalf("connection detail fields were not persisted: %+v", event)
 	}
 	page, err = List(Filter{OwnerUserID: &owner, Result: ResultFailure, Limit: 10})
 	if err != nil || page.Total != 1 || page.Events[0].ID != "second" {

@@ -78,7 +78,7 @@ $('#table').npsTable({
         var clientFilter = $('#host-client-filter').val();
         return {offset: params.offset, limit: params.limit, search: params.search, client_id: hostListClientId, filter_client_id: clientFilter};
     },
-    search: true, contentType: 'application/x-www-form-urlencoded', striped: true, showHeader: true, showColumns: false, showRefresh: true,
+    search: true, contentType: 'application/x-www-form-urlencoded', striped: true, showHeader: true, showColumns: true, showRefresh: true,
     pagination: true, sidePagination: 'server', pageNumber: 1, pageList: [10, 20, 50], storageKey: 'host', detailView: true, smartDisplay: true,
     // A dense card record is clearer than a compressed multi-column grid on phones.
     cardView: window.matchMedia && window.matchMedia('(max-width: 768px)').matches,

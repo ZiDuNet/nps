@@ -22,6 +22,26 @@ func TestServerConfigTemplateParses(t *testing.T) {
 	}
 }
 
+func TestServerConfigTemplateUsesResponsiveDenseCardGrid(t *testing.T) {
+	content, err := os.ReadFile("../views/global/config.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := string(content)
+	for _, marker := range []string{
+		"grid-template-columns: repeat(3, minmax(0, 1fr))",
+		"@media (min-width: 1600px)",
+		"grid-template-columns: repeat(4, minmax(0, 1fr))",
+		"@media (max-width: 1180px)",
+		"grid-template-columns: minmax(0, 1fr); padding: 7px",
+		"body.nps-bootstrap .server-config-field__control .input-group > .server-config-secret-reveal",
+	} {
+		if !strings.Contains(template, marker) {
+			t.Fatalf("server config template is missing responsive grid rule %q", marker)
+		}
+	}
+}
+
 func TestServerConfigTemplateRendersConfiguredValues(t *testing.T) {
 	content := strings.Join([]string{
 		"http_proxy_ip=127.0.0.1",
@@ -572,6 +592,65 @@ func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
 	}
 	if !foundDisabledDisplay {
 		t.Fatal("bridge_tcp_show=false update is missing")
+	}
+}
+
+func TestParseGeneralServerConfigUpdatesIgnoresDedicatedPageSettingsAndRelationships(t *testing.T) {
+	defaults := serverConfigKeyValues(npsconf.DefaultNpsConf)
+	form := url.Values{}
+	excluded := generalServerConfigExcludedKeys()
+	for _, key := range generalServerConfigKeys() {
+		meta := serverConfigMetaFor(key, defaults[key])
+		if meta.Optional {
+			continue
+		}
+		form.Set("config_"+key, defaults[key])
+	}
+
+	// These are the values that produced the false "cannot be empty" errors
+	// when the general editor submitted only its own fields.
+	form.Del("config_web_open_ssl")
+	form.Del("config_register_rate_window")
+
+	// Invalid relationships owned by the certificate and registration pages
+	// must not block an otherwise valid general configuration save.
+	current := strings.Join([]string{
+		"register_email_verify=true",
+		"bridge_cert_file=conf/ssl/bridge.pem",
+	}, "\n")
+	request := httptest.NewRequest(http.MethodPost, "/global/config/save", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	updates, err := parseServerConfigUpdates(request, current)
+	if err != nil {
+		t.Fatalf("parseServerConfigUpdates() error = %v", err)
+	}
+	for _, update := range updates {
+		if _, skip := excluded[update.Key]; skip {
+			t.Fatalf("general config update unexpectedly touched dedicated-page setting %q", update.Key)
+		}
+	}
+}
+
+func TestScopedServerConfigRelationshipsDoNotBlockOtherPages(t *testing.T) {
+	current := map[string]string{
+		"register_email_verify": "true",
+		"bridge_cert_file":      "conf/ssl/bridge.pem",
+		"web_open_ssl":          "true",
+	}
+	if err := validateServerConfigUpdateSetForKeys(current, []serverConfigUpdate{
+		{Key: "http_proxy_port", Value: "80"},
+	}, generalServerConfigKeys()); err != nil {
+		t.Fatalf("general configuration was blocked by unrelated relationships: %v", err)
+	}
+	if err := validateServerConfigUpdateSetForKeys(current, []serverConfigUpdate{
+		{Key: "allow_user_register", Value: "true"},
+	}, registrationConfigKeys()); err == nil {
+		t.Fatal("registration email relationship should still be validated on the registration page")
+	}
+	if err := validateServerConfigUpdateSetForKeys(current, []serverConfigUpdate{
+		{Key: "web_open_ssl", Value: "false"},
+	}, []string{"web_open_ssl", "web_cert_file", "web_key_file"}); err != nil {
+		t.Fatalf("certificate configuration was blocked by unrelated registration relationship: %v", err)
 	}
 }
 

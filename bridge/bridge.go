@@ -914,23 +914,23 @@ func (s *Bridge) startExtraBridgeTransports() error {
 
 // requestClientLocalAddr asks the client for private/LAN IPs on the main
 // signal connection. The short deadline keeps older clients compatible.
-func (s *Bridge) requestClientLocalAddr(id int, c *conn.Conn) {
+func (s *Bridge) requestClientLocalAddr(id int, c *conn.Conn) string {
 	if c == nil || c.Conn == nil {
-		return
+		return ""
 	}
 	if _, err := c.Write([]byte(common.REPORT_LOCAL_IP)); err != nil {
-		return
+		return ""
 	}
 	_ = c.Conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	defer func() { _ = c.Conn.SetReadDeadline(time.Time{}) }()
 	b, err := c.GetShortLenContent()
 	if err != nil {
 		logs.Trace("[兼容] clientId %d 未上报内网地址（旧客户端或超时）：%v", id, err)
-		return
+		return ""
 	}
 	localAddr := strings.TrimSpace(string(b))
 	if localAddr == "" {
-		return
+		return ""
 	}
 	if client, err := file.GetDb().GetClient(id); err == nil {
 		client.Lock()
@@ -938,6 +938,7 @@ func (s *Bridge) requestClientLocalAddr(id int, c *conn.Conn) {
 		client.Unlock()
 		logs.Info("[客户端] clientId %d 内网地址：%s", id, localAddr)
 	}
+	return localAddr
 }
 
 func matchesHealthClient(client *file.Client, id int) bool {
@@ -1063,13 +1064,22 @@ func (s *Bridge) cliProcess(c *conn.Conn, transport ...string) {
 	if len(transport) > 0 && transport[0] != "" {
 		transportType = transport[0]
 	}
+	sourceAddr := netAddrString(c.Conn.RemoteAddr())
+	serverAddr := netAddrString(c.Conn.LocalAddr())
 	// Apply the administrator's global source policy before reading the
 	// handshake. This protects the bridge/control plane as well as visitor
 	// proxy listeners and avoids spending handshake resources on denied peers.
-	if file.GetDb().GlobalIPDenied(c.Conn.RemoteAddr().String()) {
+	if file.GetDb().GlobalIPDenied(sourceAddr) {
 		logs.Warn("[访问控制] 拒绝桥接来源 %s", c.Conn.RemoteAddr())
-		recordBridgeEvent(0, connectionlog.ActionBridgeAuthFailed, connectionlog.ResultFailure,
-			c.Conn.RemoteAddr().String(), "", transportType, "global access control denied")
+		recordBridgeEvent(bridgeEventOptions{
+			action:     connectionlog.ActionBridgeFailed,
+			result:     connectionlog.ResultFailure,
+			stage:      "global_access_control",
+			sourceAddr: sourceAddr,
+			serverAddr: serverAddr,
+			transport:  transportType,
+			message:    "global access control denied",
+		})
 		_ = c.Close()
 		return
 	}
@@ -1078,6 +1088,15 @@ func (s *Bridge) cliProcess(c *conn.Conn, transport ...string) {
 	//read test flag
 	if _, err := c.GetShortContent(3); err != nil {
 		logs.Info("[连接异常] 客户端 %s 握手失败：%s", c.Conn.RemoteAddr(), err.Error())
+		recordBridgeEvent(bridgeEventOptions{
+			action:     connectionlog.ActionBridgeFailed,
+			result:     connectionlog.ResultFailure,
+			stage:      "handshake",
+			sourceAddr: sourceAddr,
+			serverAddr: serverAddr,
+			transport:  transportType,
+			message:    err.Error(),
+		})
 		c.Close()
 		return
 	}
@@ -1092,6 +1111,15 @@ func (s *Bridge) cliProcess(c *conn.Conn, transport ...string) {
 	var err error
 	if vs, err = c.GetShortLenContent(); err != nil {
 		logs.Info("[连接异常] 读取客户端 %s 版本失败：%s", c.Conn.RemoteAddr(), err.Error())
+		recordBridgeEvent(bridgeEventOptions{
+			action:     connectionlog.ActionBridgeFailed,
+			result:     connectionlog.ResultFailure,
+			stage:      "client_version",
+			sourceAddr: sourceAddr,
+			serverAddr: serverAddr,
+			transport:  transportType,
+			message:    err.Error(),
+		})
 		c.Close()
 		return
 	}
@@ -1099,8 +1127,17 @@ func (s *Bridge) cliProcess(c *conn.Conn, transport ...string) {
 	id, err := s.authenticateClient(c, clientVersion, file.GetDb())
 	if err != nil {
 		logs.Info("[验证失败] 拒绝客户端连接 %s，版本 %q，原因：%v", c.Conn.RemoteAddr(), clientVersion, err)
-		recordBridgeEvent(id, connectionlog.ActionBridgeAuthFailed, connectionlog.ResultFailure,
-			c.Conn.RemoteAddr().String(), clientVersion, transportType, err.Error())
+		recordBridgeEvent(bridgeEventOptions{
+			clientID:      id,
+			action:        connectionlog.ActionBridgeAuthFailed,
+			result:        connectionlog.ResultFailure,
+			stage:         "authentication",
+			sourceAddr:    sourceAddr,
+			serverAddr:    serverAddr,
+			clientVersion: clientVersion,
+			transport:     transportType,
+			message:       err.Error(),
+		})
 		_ = c.Close()
 		return
 	}
@@ -1109,6 +1146,17 @@ func (s *Bridge) cliProcess(c *conn.Conn, transport ...string) {
 		s.typeDeal(flag, c, id, clientVersion, transportType)
 	} else {
 		logs.Warn("[连接异常] 读取客户端连接类型失败：%v，flag=%q", err, flag)
+		recordBridgeEvent(bridgeEventOptions{
+			clientID:      id,
+			action:        connectionlog.ActionBridgeFailed,
+			result:        connectionlog.ResultFailure,
+			stage:         "connection_type",
+			sourceAddr:    sourceAddr,
+			serverAddr:    serverAddr,
+			clientVersion: clientVersion,
+			transport:     transportType,
+			message:       err.Error(),
+		})
 		c.Close()
 	}
 	return
@@ -1609,46 +1657,128 @@ func (s *Bridge) recordClientConnection(id int, online bool) {
 		client.RecordConnection(online, time.Now())
 		if !online {
 			client.RLock()
-			sourceIP, clientVersion := client.Addr, client.Version
+			sourceAddr, clientVersion := client.Addr, client.Version
 			client.RUnlock()
-			recordBridgeEvent(id, connectionlog.ActionBridgeDisconnected, connectionlog.ResultSuccess,
-				sourceIP, clientVersion, "", "")
+			recordBridgeEvent(bridgeEventOptions{
+				clientID:      id,
+				action:        connectionlog.ActionBridgeDisconnected,
+				result:        connectionlog.ResultSuccess,
+				channel:       common.WORK_MAIN,
+				stage:         "disconnect",
+				sourceAddr:    sourceAddr,
+				clientVersion: clientVersion,
+			})
 		}
 	}
 }
 
-func recordBridgeEvent(clientID int, action, result, sourceIP, clientVersion, transport, message string) {
+type bridgeEventOptions struct {
+	clientID          int
+	action            string
+	result            string
+	channel           string
+	stage             string
+	sourceAddr        string
+	serverAddr        string
+	clientVersion     string
+	transport         string
+	clientLocalAddr   string
+	clientLocalSource string
+	message           string
+}
+
+func recordBridgeChannelEvent(c *conn.Conn, clientID int, result, clientVersion, transport, channel, stage, message string) {
+	options := bridgeEventOptions{
+		clientID:      clientID,
+		action:        connectionlog.ActionBridgeChannel,
+		result:        result,
+		channel:       channel,
+		stage:         stage,
+		clientVersion: clientVersion,
+		transport:     transport,
+		message:       message,
+	}
+	if c != nil && c.Conn != nil {
+		options.sourceAddr = netAddrString(c.Conn.RemoteAddr())
+		options.serverAddr = netAddrString(c.Conn.LocalAddr())
+	}
+	recordBridgeEvent(options)
+}
+
+func recordBridgeEvent(options bridgeEventOptions) {
+	action := strings.TrimSpace(options.action)
+	result := strings.TrimSpace(options.result)
+	if action == "" {
+		if result == connectionlog.ResultFailure {
+			action = connectionlog.ActionBridgeAuthFailed
+		} else {
+			action = connectionlog.ActionBridgeConnected
+		}
+	}
+	if result == "" {
+		result = connectionlog.ResultSuccess
+	}
+	sourceAddr := strings.TrimSpace(options.sourceAddr)
 	event := connectionlog.Event{
-		Kind:          connectionlog.KindBridge,
-		Action:        action,
-		Result:        result,
-		ClientID:      clientID,
-		ResourceType:  "client",
-		ResourceID:    clientID,
-		SourceIP:      common.GetIpByAddr(sourceIP),
-		ClientVersion: strings.TrimSpace(clientVersion),
-		Error:         message,
+		Kind:                  connectionlog.KindBridge,
+		Action:                action,
+		Result:                result,
+		ClientID:              options.clientID,
+		ResourceType:          "client",
+		ResourceID:            options.clientID,
+		BridgeChannel:         normalizeBridgeChannel(options.channel),
+		SourceIP:              common.GetIpByAddr(sourceAddr),
+		RemoteAddr:            sourceAddr,
+		ServerAddr:            strings.TrimSpace(options.serverAddr),
+		ClientLocalAddr:       strings.TrimSpace(options.clientLocalAddr),
+		ClientLocalAddrSource: strings.TrimSpace(options.clientLocalSource),
+		ClientVersion:         strings.TrimSpace(options.clientVersion),
+		HandshakeStage:        strings.TrimSpace(options.stage),
+		Error:                 options.message,
 	}
-	if strings.TrimSpace(transport) != "" {
-		event.BridgeTransport = normalizeBridgeTransport(transport)
+	if strings.TrimSpace(options.transport) != "" {
+		event.BridgeTransport = normalizeBridgeTransport(options.transport)
 	}
-	if clientID > 0 {
-		if client, err := file.GetDb().GetClient(clientID); err == nil && client != nil {
+	if options.clientID > 0 {
+		if client, err := file.GetDb().GetClient(options.clientID); err == nil && client != nil {
 			client.RLock()
 			event.UserID = client.UserId
 			event.UserName = client.UserName
 			event.ClientRemark = client.Remark
 			if event.SourceIP == "" {
-				event.SourceIP = client.Addr
+				event.SourceIP = common.GetIpByAddr(client.Addr)
+			}
+			if event.RemoteAddr == "" {
+				event.RemoteAddr = strings.TrimSpace(client.Addr)
 			}
 			if event.ClientVersion == "" {
 				event.ClientVersion = client.Version
 			}
+			event.ClientPublicIP = common.GetIpByAddr(client.Addr)
+			event.ClientStatus = enabledStatus(client.Status)
+			event.ClientExpireTime = strings.TrimSpace(client.ExpireTime)
+			event.ClientLastOnlineTime = strings.TrimSpace(client.LastOnlineTime)
+			if event.ClientLocalAddr == "" {
+				event.ClientLocalAddr = strings.TrimSpace(client.LocalAddr)
+				if event.ClientLocalAddr != "" {
+					event.ClientLocalAddrSource = connectionlog.ClientLocalAddrSourceClientRecord
+					if action == connectionlog.ActionBridgeAuthFailed {
+						event.ClientLocalAddrSource = connectionlog.ClientLocalAddrSourceLastSuccessful
+					}
+				}
+			}
 			client.RUnlock()
-			if event.UserID > 0 && event.UserName == "" {
+			if effectiveExpire, expireErr := file.GetDb().EffectiveClientExpireTime(client); expireErr == nil {
+				event.ClientEffectiveExpireTime = effectiveExpire
+			}
+			if event.UserID > 0 {
 				if user, userErr := file.GetDb().GetUser(event.UserID); userErr == nil && user != nil {
 					user.RLock()
-					event.UserName = user.UserName
+					if event.UserName == "" {
+						event.UserName = user.UserName
+					}
+					event.UserStatus = enabledStatus(user.Status)
+					event.UserExpireTime = strings.TrimSpace(user.ExpireTime)
 					user.RUnlock()
 				}
 			}
@@ -1656,6 +1786,43 @@ func recordBridgeEvent(clientID int, action, result, sourceIP, clientVersion, tr
 	}
 	if err := connectionlog.Append(event); err != nil {
 		logs.Warn("写入连接日志失败: %v", err)
+	}
+}
+
+func netAddrString(addr net.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	return strings.TrimSpace(addr.String())
+}
+
+func enabledStatus(enabled bool) string {
+	if enabled {
+		return "enabled"
+	}
+	return "disabled"
+}
+
+func normalizeBridgeChannel(channel string) string {
+	switch strings.ToLower(strings.TrimSpace(channel)) {
+	case common.WORK_MAIN:
+		return "main"
+	case common.WORK_CHAN:
+		return "data"
+	case common.WORK_CONFIG:
+		return "config"
+	case common.WORK_REGISTER:
+		return "register"
+	case common.WORK_SECRET:
+		return "secret"
+	case common.WORK_FILE:
+		return "file"
+	case common.WORK_P2P, "p2p":
+		return "p2p"
+	case common.WORK_P2P_SESSION, "p2p_session":
+		return "p2p_session"
+	default:
+		return strings.ToLower(strings.TrimSpace(channel))
 	}
 }
 
@@ -1678,6 +1845,8 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 	switch typeVal {
 	case common.WORK_MAIN:
 		if isPub {
+			recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+				common.WORK_MAIN, "channel_rejected", "公共客户端不能建立主控制连接")
 			c.Close()
 			return
 		}
@@ -1728,12 +1897,27 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 			s.recordClientConnection(id, true)
 		}
 		s.clientsMu.Unlock()
-		recordBridgeEvent(id, connectionlog.ActionBridgeConnected, connectionlog.ResultSuccess,
-			c.Conn.RemoteAddr().String(), vs, transportType, "")
 		if oldSignal != nil && oldSignal != c {
 			_ = oldSignal.Close()
 		}
-		s.requestClientLocalAddr(id, c)
+		clientLocalAddr := s.requestClientLocalAddr(id, c)
+		clientLocalAddrSource := ""
+		if clientLocalAddr != "" {
+			clientLocalAddrSource = connectionlog.ClientLocalAddrSourceCurrentReport
+		}
+		recordBridgeEvent(bridgeEventOptions{
+			clientID:          id,
+			action:            connectionlog.ActionBridgeConnected,
+			result:            connectionlog.ResultSuccess,
+			channel:           common.WORK_MAIN,
+			stage:             "connected",
+			sourceAddr:        netAddrString(c.Conn.RemoteAddr()),
+			serverAddr:        netAddrString(c.Conn.LocalAddr()),
+			clientVersion:     vs,
+			transport:         transportType,
+			clientLocalAddr:   clientLocalAddr,
+			clientLocalSource: clientLocalAddrSource,
+		})
 		if err := s.RequestClientHealthConfig(id); err != nil {
 			// An offline/reconnecting data channel must not make the control
 			// connection fail. The next reconnect repeats this synchronization.
@@ -1781,6 +1965,8 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 	case common.WORK_CONFIG:
 		client, err := file.GetDb().GetClient(id)
 		if err != nil || client == nil {
+			recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+				common.WORK_CONFIG, "channel_setup", "客户端记录不存在")
 			c.Close()
 			return
 		}
@@ -1788,6 +1974,8 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 		configConnAllow := client.ConfigConnAllow
 		client.RUnlock()
 		if !isPub && !configConnAllow {
+			recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+				common.WORK_CONFIG, "channel_rejected", "客户端未启用配置通道")
 			c.Close()
 			return
 		}
@@ -1800,6 +1988,8 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 			s.SecretChan <- conn.NewSecret(string(b), c)
 		} else {
 			logs.Error("secret error, failed to match the key successfully")
+			recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+				common.WORK_SECRET, "channel_setup", err.Error())
 			c.Close()
 		}
 	case common.WORK_FILE:
@@ -1810,6 +2000,12 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 			key, valid := file.ParseFileAccessTarget(file.FileAccessTargetPrefix + string(payload))
 			if err != nil || !valid || !fileAccessKeyOwnedByClient(id, key) {
 				logs.Warn("[文件访问] clientId %d 提交了无效或未授权的文件通道键", id)
+				message := "文件通道键无效或不属于该客户端"
+				if err != nil {
+					message = err.Error()
+				}
+				recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+					common.WORK_FILE, "channel_setup", message)
 				_ = c.Close()
 				return
 			}
@@ -1846,6 +2042,8 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 			if oldFile != nil && oldFile != muxConn {
 				_ = oldFile.Close()
 			}
+			recordBridgeChannelEvent(c, id, connectionlog.ResultSuccess, vs, transportType,
+				common.WORK_FILE, "channel_ready", "")
 			return
 		}
 		muxConn := nps_mux.NewMux(c.Conn, transportType, s.disconnectTime)
@@ -1880,15 +2078,21 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 		// NPC 1.1.29+ sends the modern JSON control request. Older clients
 		// continue through the historical UDP/KCP handshake below.
 		if version.SupportsModernP2P(vs) && s.p2p.Load() != nil {
+			recordBridgeChannelEvent(c, id, connectionlog.ResultSuccess, vs, transportType,
+				common.WORK_P2P, "channel_ready", "")
 			go s.handleP2PVisitor(c, id, 0, vs, "", transportType)
 			return
 		}
 		//read md5 secret
 		if b, err := c.GetShortContent(32); err != nil {
 			logs.Error("p2p error,", err.Error())
+			recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+				common.WORK_P2P, "channel_setup", err.Error())
 			c.Close()
 		} else if t := file.GetDb().GetTaskByMd5Password(string(b)); t == nil {
 			logs.Error("p2p error, failed to match the key successfully")
+			recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+				common.WORK_P2P, "channel_setup", "P2P 任务密钥不存在")
 			c.Close()
 		} else {
 			t.RLock()
@@ -1896,6 +2100,8 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 			t.RUnlock()
 			if !taskStatus || taskMode != "p2p" || taskClient == nil {
 				logs.Error("p2p error, task is inactive or malformed")
+				recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+					common.WORK_P2P, "channel_rejected", "P2P 任务已停用或数据无效")
 				c.Close()
 				return
 			}
@@ -1903,6 +2109,8 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 			clientID := taskClient.Id
 			taskClient.RUnlock()
 			if cl := s.selectSession(clientID, "signal"); cl == nil {
+				recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+					common.WORK_P2P, "channel_setup", "P2P 提供端未在线")
 				c.Close()
 				return
 			} else {
@@ -1911,35 +2119,65 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 				cl.mu.Unlock()
 				if sig == nil {
 					logs.Error("p2p error, client signal is nil")
+					recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+						common.WORK_P2P, "channel_setup", "P2P 提供端控制连接不可用")
 					c.Close()
 					return
 				}
 				if _, err := sig.Write([]byte(common.NEW_UDP_CONN)); err != nil {
+					recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+						common.WORK_P2P, "channel_setup", err.Error())
 					_ = c.Close()
 					return
 				}
 				svrAddr := beego.AppConfig.String("p2p_ip") + ":" + beego.AppConfig.String("p2p_port")
 				if err := sig.WriteLenContent([]byte(svrAddr)); err != nil {
+					recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+						common.WORK_P2P, "channel_setup", err.Error())
 					_ = c.Close()
 					return
 				}
 				if err := sig.WriteLenContent(b); err != nil {
+					recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+						common.WORK_P2P, "channel_setup", err.Error())
 					_ = c.Close()
 					return
 				}
 				if err := c.WriteLenContent([]byte(svrAddr)); err != nil {
+					recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+						common.WORK_P2P, "channel_setup", err.Error())
 					_ = c.Close()
+					return
 				}
+				recordBridgeChannelEvent(c, id, connectionlog.ResultSuccess, vs, transportType,
+					common.WORK_P2P, "channel_ready", "")
 			}
 		}
 		return
 	case common.WORK_P2P_SESSION:
 		if version.SupportsModernP2P(vs) && s.p2p.Load() != nil {
+			recordBridgeChannelEvent(c, id, connectionlog.ResultSuccess, vs, transportType,
+				common.WORK_P2P_SESSION, "channel_ready", "")
 			go s.handleP2PJoin(c, id, 0, vs, transportType)
 			return
 		}
+		recordBridgeChannelEvent(c, id, connectionlog.ResultFailure, vs, transportType,
+			common.WORK_P2P_SESSION, "channel_rejected", "当前连接不支持新版 P2P")
 		_ = c.Close()
 		return
+	}
+	if typeVal != common.WORK_MAIN {
+		recordBridgeEvent(bridgeEventOptions{
+			clientID:      id,
+			action:        connectionlog.ActionBridgeChannel,
+			result:        connectionlog.ResultSuccess,
+			channel:       typeVal,
+			stage:         "channel_ready",
+			sourceAddr:    netAddrString(c.Conn.RemoteAddr()),
+			serverAddr:    netAddrString(c.Conn.LocalAddr()),
+			clientVersion: vs,
+			transport:     transportType,
+		})
 	}
 	c.SetAlive(transportType)
 	return

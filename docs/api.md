@@ -71,11 +71,20 @@ API 文档固定发布在：
 | 连接日志 | `/api/v1/audit/connections` | `GET`、`POST`（管理员查看全部；普通用户仅查看所属客户端） |
 
 审计和连接日志使用相同的分页参数。连接日志支持
-`kind=bridge|tunnel|host`、`result=success|failure`、
+`kind=bridge|tunnel|host`、`action=bridge.connected|bridge.disconnected|bridge.auth_failed|bridge.failed|bridge.channel|proxy.connection`、`result=success|failure`、
 `bridge_transport=tcp|tls|kcp|ws|wss|quic|http3` 和 `search`。
 普通用户凭据不能通过筛选参数扩大资源范围。连接日志记录 Bridge 上下线、
-认证失败，以及隧道和域名反代的来源、目标、耗时与双向字节数；不会保存
+子通道、认证或握手失败，以及隧道和域名反代的来源、目标、耗时与双向字节数；不会保存
 Basic 密码、API Token、验证密钥、请求头或代理正文。
+
+连接日志行还提供 `RemoteAddr`、`ServerAddr`、`ClientPublicIP`、
+`ClientLocalAddr`、`ClientLocalAddrSource`、`BridgeChannel`、
+`HandshakeStage`、`ClientStatus`、`ClientExpireTime`、
+`ClientEffectiveExpireTime`、`ClientLastOnlineTime`、`UserStatus` 和
+`UserExpireTime` 等详情字段。`ClientLocalAddr` 是 NPC 自报的局域网地址；
+成功主连接可标记为 `current_report`，子通道或代理会话通常标记为
+`client_record`，认证失败时若只能读取历史值则标记为
+`last_successful`。认证前失败或旧 NPC 未上报时该字段为空。
 
 ### Bridge TLS 证书接口
 

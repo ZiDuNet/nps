@@ -224,7 +224,53 @@ func (s *GlobalController) Banlist() {
 		return
 	}
 	rows := currentLoginBanList()
-	s.AjaxTable(rows, len(rows), len(rows), nil)
+	rows = filterLoginBanRecords(rows, s.GetString("search"), s.GetString("ban_type"), s.GetString("status"))
+	start, limit := s.GetAjaxParams()
+	if start < 0 {
+		start = 0
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	total := len(rows)
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	s.AjaxTable(rows[start:end], end-start, total, nil)
+}
+
+func filterLoginBanRecords(rows []loginBanRecord, search, banType, status string) []loginBanRecord {
+	search = strings.ToLower(strings.TrimSpace(search))
+	banType = strings.TrimSpace(banType)
+	status = strings.TrimSpace(status)
+	filtered := make([]loginBanRecord, 0, len(rows))
+	for _, row := range rows {
+		if banType != "" && row.BanType != banType {
+			continue
+		}
+		if status == "banned" && !row.IsBanned {
+			continue
+		}
+		if status == "expired" && row.IsBanned {
+			continue
+		}
+		if search != "" {
+			typeName := row.BanType
+			statusName := "expired"
+			if row.IsBanned {
+				statusName = "banned"
+			}
+			if !strings.Contains(strings.ToLower(row.Key+" "+typeName+" "+statusName+" "+row.LastLoginTime), search) {
+				continue
+			}
+		}
+		filtered = append(filtered, row)
+	}
+	return filtered
 }
 
 func (s *GlobalController) Unban() {

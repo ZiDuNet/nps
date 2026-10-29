@@ -18,38 +18,60 @@ type AuditController struct {
 }
 
 type auditListRow struct {
-	ID       string
-	Time     string
-	Actor    string
-	SourceIP string
-	Action   string
-	Resource string
-	Result   string
-	Error    string
-	Details  string
+	ID           string
+	Time         string
+	Actor        string
+	ActorType    string
+	ActorID      int
+	OwnerUserID  int
+	SourceIP     string
+	Action       string
+	Resource     string
+	ResourceType string
+	ResourceID   int
+	Result       string
+	Error        string
+	Details      string
 }
 
 type connectionListRow struct {
-	ID          string
-	Time        string
-	Result      string
-	Kind        string
-	User        string
-	Client      string
-	Resource    string
-	Transport   string
-	SourceIP    string
-	Target      string
-	Duration    string
-	Traffic     string
-	ClientVer   string
-	Error       string
-	StartedAt   string
-	EndedAt     string
-	Action      string
-	RawDuration int64
-	BytesIn     int64
-	BytesOut    int64
+	ID                        string
+	Time                      string
+	Result                    string
+	Kind                      string
+	User                      string
+	UserID                    int
+	Client                    string
+	ClientID                  int
+	Resource                  string
+	ResourceType              string
+	ResourceID                int
+	Transport                 string
+	BridgeChannel             string
+	HandshakeStage            string
+	SourceIP                  string
+	RemoteAddr                string
+	ServerAddr                string
+	ClientPublicIP            string
+	ClientLocalAddr           string
+	ClientLocalAddrSource     string
+	Target                    string
+	Duration                  string
+	Traffic                   string
+	ClientVer                 string
+	ClientStatus              string
+	ClientExpireTime          string
+	ClientEffectiveExpireTime string
+	ClientLastOnlineTime      string
+	UserStatus                string
+	UserExpireTime            string
+	Error                     string
+	StartedAt                 string
+	EndedAt                   string
+	Action                    string
+	RawDuration               int64
+	BytesIn                   int64
+	BytesOut                  int64
 }
 
 func (s *AuditController) List() {
@@ -100,15 +122,20 @@ func (s *AuditController) List() {
 			resource += " #" + strconv.Itoa(event.ResourceID)
 		}
 		rows = append(rows, &auditListRow{
-			ID:       event.ID,
-			Time:     event.Time.Local().Format("2006-01-02 15:04:05"),
-			Actor:    actor,
-			SourceIP: event.SourceIP,
-			Action:   event.Action,
-			Resource: resource,
-			Result:   event.Result,
-			Error:    event.Error,
-			Details:  details,
+			ID:           event.ID,
+			Time:         event.Time.Local().Format("2006-01-02 15:04:05"),
+			Actor:        actor,
+			ActorType:    event.ActorType,
+			ActorID:      event.ActorID,
+			OwnerUserID:  event.OwnerUserID,
+			SourceIP:     event.SourceIP,
+			Action:       event.Action,
+			Resource:     resource,
+			ResourceType: event.ResourceType,
+			ResourceID:   event.ResourceID,
+			Result:       event.Result,
+			Error:        event.Error,
+			Details:      details,
 		})
 	}
 	s.AjaxTable(rows, len(rows), page.Total, nil)
@@ -164,26 +191,43 @@ func (s *AuditController) Connections() {
 			resource += " · " + event.ResourceRemark
 		}
 		rows = append(rows, &connectionListRow{
-			ID:          event.ID,
-			Time:        event.EndedAt.Local().Format("2006-01-02 15:04:05"),
-			Result:      event.Result,
-			Kind:        event.Kind,
-			User:        user,
-			Client:      client,
-			Resource:    resource,
-			Transport:   strings.TrimSpace(strings.Join(nonEmpty(event.BridgeTransport, event.ProxyProtocol), " / ")),
-			SourceIP:    event.SourceIP,
-			Target:      event.Target,
-			Duration:    formatDuration(event.DurationMS),
-			Traffic:     formatTraffic(event.BytesIn, event.BytesOut),
-			ClientVer:   event.ClientVersion,
-			Error:       event.Error,
-			StartedAt:   event.StartedAt.Local().Format("2006-01-02 15:04:05"),
-			EndedAt:     event.EndedAt.Local().Format("2006-01-02 15:04:05"),
-			Action:      event.Action,
-			RawDuration: event.DurationMS,
-			BytesIn:     event.BytesIn,
-			BytesOut:    event.BytesOut,
+			ID:                        event.ID,
+			Time:                      event.EndedAt.Local().Format("2006-01-02 15:04:05"),
+			Result:                    event.Result,
+			Kind:                      event.Kind,
+			User:                      user,
+			UserID:                    event.UserID,
+			Client:                    client,
+			ClientID:                  event.ClientID,
+			Resource:                  resource,
+			ResourceType:              event.ResourceType,
+			ResourceID:                event.ResourceID,
+			Transport:                 strings.TrimSpace(strings.Join(nonEmpty(event.BridgeTransport, event.ProxyProtocol), " / ")),
+			BridgeChannel:             event.BridgeChannel,
+			HandshakeStage:            event.HandshakeStage,
+			SourceIP:                  event.SourceIP,
+			RemoteAddr:                event.RemoteAddr,
+			ServerAddr:                event.ServerAddr,
+			ClientPublicIP:            event.ClientPublicIP,
+			ClientLocalAddr:           event.ClientLocalAddr,
+			ClientLocalAddrSource:     event.ClientLocalAddrSource,
+			Target:                    event.Target,
+			Duration:                  formatDuration(event.DurationMS),
+			Traffic:                   formatTraffic(event.BytesIn, event.BytesOut),
+			ClientVer:                 event.ClientVersion,
+			ClientStatus:              event.ClientStatus,
+			ClientExpireTime:          event.ClientExpireTime,
+			ClientEffectiveExpireTime: event.ClientEffectiveExpireTime,
+			ClientLastOnlineTime:      event.ClientLastOnlineTime,
+			UserStatus:                event.UserStatus,
+			UserExpireTime:            event.UserExpireTime,
+			Error:                     event.Error,
+			StartedAt:                 event.StartedAt.Local().Format("2006-01-02 15:04:05"),
+			EndedAt:                   event.EndedAt.Local().Format("2006-01-02 15:04:05"),
+			Action:                    event.Action,
+			RawDuration:               event.DurationMS,
+			BytesIn:                   event.BytesIn,
+			BytesOut:                  event.BytesOut,
 		})
 	}
 	s.AjaxTable(rows, len(rows), page.Total, nil)
@@ -214,7 +258,7 @@ func formatTraffic(in, out int64) string {
 	if in <= 0 && out <= 0 {
 		return "-"
 	}
-	return "↑ " + humanBytes(in) + " / ↓ " + humanBytes(out)
+	return humanBytes(in) + " / " + humanBytes(out)
 }
 
 func humanBytes(value int64) string {

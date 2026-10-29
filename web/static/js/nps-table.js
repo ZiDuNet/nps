@@ -194,19 +194,29 @@
         this.$el.empty();
 
         var toolbarSelector = this.options.toolbar;
-        this.$toolbar = $('<div class="nps-table__toolbar"></div>');
+        this.$toolbar = $('<div class="nps-table__toolbar" role="toolbar"></div>');
         this.$bars = $('<div class="nps-table__bars"></div>');
+        this.$filters = $('<div class="nps-table__filters"></div>');
         this.$columns = $('<div class="nps-table__columns"></div>');
         this.$search = $('<div class="nps-table__search"></div>');
         this.$barActions = $('<div class="nps-table__bar-actions"></div>');
-        // Keep record actions/filters on the left and the utility controls
-        // (columns, refresh, search) in a separate right-aligned group.
-        this.$toolbar.append(this.$bars, this.$columns, this.$barActions, this.$search);
+        // Record actions stay on the left. Utility controls share one
+        // right-aligned group, ordered left-to-right as
+        // search -> filters -> columns -> refresh.
+        this.$toolbar.append(this.$bars, this.$search, this.$filters, this.$columns, this.$barActions);
         this.$root.prepend(this.$toolbar);
 
         if (toolbarSelector) {
             var $source = $(toolbarSelector);
-            if ($source.length) this.$bars.append($source.detach());
+            if ($source.length) {
+                var self = this;
+                $source.children().each(function () {
+                    var $item = $(this);
+                    if ($item.is('.nps-table-filter')) self.$filters.append($item);
+                    else self.$bars.append($item);
+                });
+                $source.remove();
+            }
         }
         if (this.options.showRefresh) {
             this.$barActions.append('<button type="button" class="btn btn-outline nps-table__refresh" title="'
@@ -218,6 +228,9 @@
                 + localText('搜索', 'Search') + '</span><i class="fa fa-search" aria-hidden="true"></i><input type="search" class="form-control nps-table__search-input" placeholder="'
                 + localText('搜索', 'Search') + '" autocomplete="off"></label>');
         }
+        this.$toolbar.children().each(function () {
+            $(this).toggle($(this).children().length > 0);
+        });
 
         this.$container = $('<div class="nps-table__container"></div>');
         this.$body = $('<div class="nps-table__body"></div>');

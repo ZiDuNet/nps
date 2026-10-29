@@ -776,6 +776,23 @@ func generalServerConfigExcludedKeys() map[string]struct{} {
 	return excluded
 }
 
+// generalServerConfigKeys returns only the fields rendered by the general
+// visual editor. Certificate and registration fields have dedicated pages and
+// are intentionally absent from this form, so they must not be validated as
+// empty or removed by a general configuration save.
+func generalServerConfigKeys() []string {
+	excluded := generalServerConfigExcludedKeys()
+	keys := make([]string, 0, len(serverConfigMetaByKey)-len(excluded))
+	for key := range serverConfigMetaByKey {
+		if _, skip := excluded[key]; skip {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func summarizeServerConfigSections(sections []serverConfigSectionView, unknown []serverConfigUnknownView) serverConfigSummary {
 	summary := serverConfigSummary{Sections: len(sections), ReadOnly: len(unknown)}
 	for _, section := range sections {
@@ -890,11 +907,7 @@ func (s *GlobalController) SaveRegistration() {
 }
 
 func parseServerConfigUpdates(request *http.Request, content string) ([]serverConfigUpdate, error) {
-	keys := make([]string, 0, len(serverConfigMetaByKey))
-	for key := range serverConfigMetaByKey {
-		keys = append(keys, key)
-	}
-	return parseServerConfigUpdatesForKeys(request, content, keys)
+	return parseServerConfigUpdatesForKeys(request, content, generalServerConfigKeys())
 }
 
 func parseServerConfigUpdatesForKeys(request *http.Request, content string, keys []string) ([]serverConfigUpdate, error) {
@@ -958,7 +971,7 @@ func parseServerConfigUpdatesForKeys(request *http.Request, content string, keys
 		}
 		updates = append(updates, serverConfigUpdate{Key: key, Value: raw, Secret: meta.Sensitive})
 	}
-	if err := validateServerConfigUpdateSet(current, updates); err != nil {
+	if err := validateServerConfigUpdateSetForKeys(current, updates, keys); err != nil {
 		return nil, err
 	}
 	return updates, nil
@@ -980,30 +993,77 @@ func effectiveServerConfigValues(current map[string]string, updates []serverConf
 }
 
 func validateServerConfigUpdateSet(current map[string]string, updates []serverConfigUpdate) error {
+	return validateServerConfigUpdateSetScopes(current, updates, true, true, true, true, true)
+}
+
+// validateServerConfigUpdateSetForKeys applies only the relationship checks
+// owned by the page being saved. Certificate, registration and general
+// configuration pages share nps.conf, but an invalid relationship on one page
+// must not make every other page impossible to save.
+func validateServerConfigUpdateSetForKeys(current map[string]string, updates []serverConfigUpdate, keys []string) error {
+	scoped := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		scoped[key] = struct{}{}
+	}
+	return validateServerConfigUpdateSetScopes(
+		current,
+		updates,
+		serverConfigScopeTouches(scoped, "web_open_ssl", "web_cert_file", "web_key_file"),
+		serverConfigScopeTouches(scoped, "bridge_cert_file", "bridge_key_file"),
+		serverConfigScopeTouches(scoped, "ip_register_port"),
+		serverConfigScopeTouches(scoped, "ip_register_cert_file", "ip_register_key_file"),
+		serverConfigScopeTouches(scoped, registrationConfigKeys()...),
+	)
+}
+
+func serverConfigScopeTouches(scoped map[string]struct{}, keys ...string) bool {
+	for _, key := range keys {
+		if _, ok := scoped[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func validateServerConfigUpdateSetScopes(
+	current map[string]string,
+	updates []serverConfigUpdate,
+	checkWebTLS,
+	checkBridgeTLS,
+	checkIPRegisterPort,
+	checkIPRegisterTLS,
+	checkRegistrationEmail bool,
+) error {
 	values := effectiveServerConfigValues(current, updates)
-	if strings.EqualFold(strings.TrimSpace(values["web_open_ssl"]), "true") {
+	if checkWebTLS && strings.EqualFold(strings.TrimSpace(values["web_open_ssl"]), "true") {
 		if strings.TrimSpace(values["web_cert_file"]) == "" || strings.TrimSpace(values["web_key_file"]) == "" {
 			return errors.New("启用管理面板 HTTPS 时，证书路径和私钥路径必须同时填写")
 		}
 	}
-	bridgeCertSet := strings.TrimSpace(values["bridge_cert_file"]) != ""
-	bridgeKeySet := strings.TrimSpace(values["bridge_key_file"]) != ""
-	if bridgeCertSet != bridgeKeySet {
-		return errors.New("Bridge TLS 证书和私钥必须成对配置")
-	}
-	registerPort := strings.TrimSpace(values["ip_register_port"])
-	if registerPort != "" {
-		port, err := strconv.Atoi(registerPort)
-		if err != nil || port < 0 || port > 65535 {
-			return errors.New("IP 登记监听端口范围必须是 0-65535")
+	if checkBridgeTLS {
+		bridgeCertSet := strings.TrimSpace(values["bridge_cert_file"]) != ""
+		bridgeKeySet := strings.TrimSpace(values["bridge_key_file"]) != ""
+		if bridgeCertSet != bridgeKeySet {
+			return errors.New("Bridge TLS 证书和私钥必须成对配置")
 		}
 	}
-	certSet := strings.TrimSpace(values["ip_register_cert_file"]) != ""
-	keySet := strings.TrimSpace(values["ip_register_key_file"]) != ""
-	if certSet != keySet {
-		return errors.New("IP 登记 HTTPS 证书和私钥必须成对配置")
+	if checkIPRegisterPort {
+		registerPort := strings.TrimSpace(values["ip_register_port"])
+		if registerPort != "" {
+			port, err := strconv.Atoi(registerPort)
+			if err != nil || port < 0 || port > 65535 {
+				return errors.New("IP 登记监听端口范围必须是 0-65535")
+			}
+		}
 	}
-	if strings.EqualFold(strings.TrimSpace(values["register_email_verify"]), "true") {
+	if checkIPRegisterTLS {
+		certSet := strings.TrimSpace(values["ip_register_cert_file"]) != ""
+		keySet := strings.TrimSpace(values["ip_register_key_file"]) != ""
+		if certSet != keySet {
+			return errors.New("IP 登记 HTTPS 证书和私钥必须成对配置")
+		}
+	}
+	if checkRegistrationEmail && strings.EqualFold(strings.TrimSpace(values["register_email_verify"]), "true") {
 		if strings.TrimSpace(values["smtp_host"]) == "" {
 			return errors.New("启用注册邮箱验证时，SMTP 主机不能为空")
 		}

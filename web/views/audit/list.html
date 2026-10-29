@@ -7,18 +7,28 @@
     .audit-hub__view { display: none; }
     .audit-hub__view.is-active { display: block; }
     .audit-hub .management-table-card { margin-bottom: 0; }
-    .audit-connection-detail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 3px 0; }
-    .audit-connection-detail__item { min-width: 0; padding: 8px 9px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 8px; }
-    .audit-connection-detail__item--wide { grid-column: span 2; }
-    .audit-connection-detail__label { display: block; margin-bottom: 3px; color: var(--nps-faint); font-size: 9px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; }
-    .audit-connection-detail__value { display: block; color: var(--nps-ink); font-size: 10.5px; line-height: 1.45; overflow-wrap: anywhere; }
-    .audit-connection-detail code { padding: 0; color: inherit; background: transparent; font: 10px/1.45 "Fira Code", monospace; }
-    @media (max-width: 1180px) { .audit-connection-detail { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .audit-connection-raw {
+        max-height: 310px;
+        margin: 3px 0;
+        padding: 12px 14px;
+        overflow: auto;
+        color: #d8e6f5;
+        background: #0b1220;
+        border: 1px solid #26364d;
+        border-radius: 8px;
+        box-shadow: inset 0 0 0 1px rgba(148, 198, 255, .04);
+        font: 10.5px/1.5 "Fira Code", "Cascadia Code", Consolas, monospace;
+        tab-size: 2;
+        white-space: pre;
+    }
+    .audit-connection-raw::selection { color: #fff; background: #2563eb; }
+    .audit-connection-summary { display: grid; gap: 2px; min-width: 0; text-align: left; }
+    .audit-connection-summary__main { color: var(--nps-ink); font-weight: 650; white-space: nowrap; }
+    .audit-connection-summary__sub { color: var(--nps-muted); font-size: 9.5px; line-height: 1.35; overflow-wrap: anywhere; }
     @media (max-width: 760px) {
         .audit-hub__tabs { display: flex; }
         .audit-hub__tab { flex: 1 1 50%; justify-content: center; }
-        .audit-connection-detail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .audit-connection-detail__item--wide { grid-column: 1 / -1; }
+        .audit-connection-raw { max-height: 260px; }
     }
 </style>
 
@@ -27,8 +37,8 @@
         <div>
             <div class="dashboard-page-kicker" data-i18n-zh="安全与运维" data-i18n-en="Security and operations">安全与运维</div>
             <h1 id="audit-list-title" data-i18n-zh="审计与连接" data-i18n-en="Audit and connections">审计与连接</h1>
-            <p data-i18n-zh="查看管理操作，以及客户端 Bridge、隧道和域名代理连接结果。日志不保存密码、密钥、请求头或业务正文。"
-               data-i18n-en="Review management actions and Bridge, tunnel, or host connection results. Passwords, keys, headers, and payloads are never stored.">查看管理操作，以及客户端 Bridge、隧道和域名代理连接结果。日志不保存密码、密钥、请求头或业务正文。</p>
+            <p data-i18n-zh="查看管理操作，以及客户端 Bridge、隧道和域名代理连接详情，包括公网来源、服务端入口、客户端上报内网地址、版本与失败阶段。日志不保存密码、密钥、请求头或业务正文。"
+               data-i18n-en="Review management actions and detailed Bridge, tunnel, or host connection records, including public source, server endpoint, client-reported LAN address, version, and failure stage. Passwords, keys, headers, and payloads are never stored.">查看管理操作，以及客户端 Bridge、隧道和域名代理连接详情，包括公网来源、服务端入口、客户端上报内网地址、版本与失败阶段。日志不保存密码、密钥、请求头或业务正文。</p>
         </div>
     </header>
 
@@ -155,6 +165,18 @@
                             <option value="failure" data-i18n-zh="失败" data-i18n-en="Failure">失败</option>
                         </select>
                     </label>
+                    <label class="nps-table-filter" for="connection-action">
+                        <span class="nps-table-filter__label" data-i18n-zh="动作" data-i18n-en="Action">动作</span>
+                        <select id="connection-action" name="action" class="form-control nps-table-filter__control" data-nps-table-filter="action">
+                            <option value="" data-i18n-zh="全部动作" data-i18n-en="All actions">全部动作</option>
+                            <option value="bridge.connected" data-i18n-zh="主连接成功" data-i18n-en="Main connected">主连接成功</option>
+                            <option value="bridge.disconnected" data-i18n-zh="主连接断开" data-i18n-en="Main disconnected">主连接断开</option>
+                            <option value="bridge.auth_failed" data-i18n-zh="认证失败" data-i18n-en="Authentication failed">认证失败</option>
+                            <option value="bridge.failed" data-i18n-zh="Bridge 阶段失败" data-i18n-en="Bridge stage failed">Bridge 阶段失败</option>
+                            <option value="bridge.channel" data-i18n-zh="子通道" data-i18n-en="Bridge channel">子通道</option>
+                            <option value="proxy.connection" data-i18n-zh="代理会话" data-i18n-en="Proxy session">代理会话</option>
+                        </select>
+                    </label>
                 </div>
                 <table id="connection-table"></table>
             </div>
@@ -179,6 +201,65 @@ $(function () {
         var labels = {bridge: 'Bridge', tunnel: english ? 'Tunnel' : '隧道', host: english ? 'Host' : '域名反代'};
         return labels[value] || value || '-';
     };
+    var actionLabel = function (value) {
+        var labels = english ? {
+            'bridge.connected': 'Main connected',
+            'bridge.disconnected': 'Main disconnected',
+            'bridge.auth_failed': 'Authentication failed',
+            'bridge.failed': 'Bridge stage failed',
+            'bridge.channel': 'Bridge channel',
+            'proxy.connection': 'Proxy session'
+        } : {
+            'bridge.connected': '主连接成功',
+            'bridge.disconnected': '主连接断开',
+            'bridge.auth_failed': '认证失败',
+            'bridge.failed': 'Bridge 阶段失败',
+            'bridge.channel': '子通道',
+            'proxy.connection': '代理会话'
+        };
+        return labels[value] || value || '-';
+    };
+    var channelLabel = function (value) {
+        var labels = english ? {
+            main: 'Main control', data: 'Data mux', config: 'Configuration', register: 'IP registration',
+            secret: 'Secret proxy', file: 'File transfer', p2p: 'P2P', p2p_session: 'P2P session'
+        } : {
+            main: '主控制', data: '数据复用', config: '配置交换', register: 'IP 登记',
+            secret: '私密代理', file: '文件传输', p2p: 'P2P', p2p_session: 'P2P 会话'
+        };
+        return labels[value] || value || '-';
+    };
+    var identitySummary = function (value, row) {
+        var user = row.User || (english ? 'No user' : '未关联用户');
+        var client = row.Client || (english ? 'Unknown client' : '未知客户端');
+        return '<div class="audit-connection-summary">'
+            + '<span class="audit-connection-summary__main">' + text(user) + '</span>'
+            + '<span class="audit-connection-summary__sub">' + text(client) + '</span></div>';
+    };
+    var connectionSummary = function (value, row) {
+        var action = actionLabel(row.Action);
+        var channel = row.BridgeChannel ? channelLabel(row.BridgeChannel) : '';
+        return '<div class="audit-connection-summary">'
+            + '<span class="audit-connection-summary__main">' + text(kindLabel(row.Kind)) + '</span>'
+            + '<span class="audit-connection-summary__sub">' + text(action + (channel ? ' · ' + channel : '')) + '</span></div>';
+    };
+    var protocolSummary = function (value, row) {
+        var protocol = row.Transport || '-';
+        var channel = row.BridgeChannel ? channelLabel(row.BridgeChannel) : '';
+        return '<div class="audit-connection-summary">'
+            + '<span class="audit-connection-summary__main">' + text(protocol) + '</span>'
+            + (channel ? '<span class="audit-connection-summary__sub">' + text(channel) + '</span>' : '')
+            + '</div>';
+    };
+    var parseDetails = function (value) {
+        if (!value) return {};
+        try {
+            var parsed = JSON.parse(value);
+            return parsed && typeof parsed === 'object' ? parsed : value;
+        } catch (error) {
+            return value;
+        }
+    };
 
     $('#audit-table').npsTable({
         toolbar: '#audit-toolbar',
@@ -196,9 +277,30 @@ $(function () {
         pageList: [10, 20, 50, 100],
         storageKey: 'audit.operations',
         smartDisplay: true,
+        detailView: true,
         formatLoadingMessage: function () { return npsTableState('audit.operations', true); },
         formatNoMatches: function () { return npsTableState('audit.operations', false); },
         onPostBody: function () { $('body').setLang('#audit-table'); npsApplyTableState(this, 'audit.operations'); },
+        onExpandRow: function () { $('body').setLang('.detail-view'); },
+        detailFormatter: function (index, row) {
+            var raw = {
+                id: row.ID,
+                time: row.Time,
+                actor: row.Actor,
+                actor_type: row.ActorType,
+                actor_id: row.ActorID,
+                owner_user_id: row.OwnerUserID,
+                source_ip: row.SourceIP,
+                action: row.Action,
+                resource: row.Resource,
+                resource_type: row.ResourceType,
+                resource_id: row.ResourceID,
+                result: row.Result,
+                error: row.Error,
+                details: parseDetails(row.Details)
+            };
+            return '<pre class="audit-connection-raw">' + text(JSON.stringify(raw, null, 2)) + '</pre>';
+        },
         columns: [
             {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', width: '154px'},
             {field: 'Actor', title: '<span data-i18n-zh="操作者" data-i18n-en="Actor">操作者</span>', halign: 'center', escape: true},
@@ -233,39 +335,55 @@ $(function () {
         onPostBody: function () { $('body').setLang('#connection-table'); npsApplyTableState(this, 'audit.connections'); },
         onExpandRow: function () { $('body').setLang('.detail-view'); },
         detailFormatter: function (index, row) {
-            var item = function (label, value, wide) {
-                return '<div class="audit-connection-detail__item' + (wide ? ' audit-connection-detail__item--wide' : '') + '">'
-                    + '<span class="audit-connection-detail__label">' + text(label) + '</span>'
-                    + '<span class="audit-connection-detail__value">' + text(value || '-') + '</span></div>';
+            var raw = {
+                id: row.ID,
+                time: row.Time,
+                result: row.Result,
+                kind: row.Kind,
+                action: row.Action,
+                started_at: row.StartedAt,
+                ended_at: row.EndedAt,
+                duration: row.Duration,
+                duration_ms: row.RawDuration,
+                user_id: row.UserID,
+                user_name: row.User,
+                user_status: row.UserStatus,
+                user_expire_time: row.UserExpireTime,
+                client_id: row.ClientID,
+                client_name: row.Client,
+                client_status: row.ClientStatus,
+                client_version: row.ClientVer,
+                client_expire_time: row.ClientExpireTime,
+                client_effective_expire_time: row.ClientEffectiveExpireTime,
+                client_last_online_time: row.ClientLastOnlineTime,
+                resource_type: row.ResourceType,
+                resource_id: row.ResourceID,
+                resource: row.Resource,
+                transport: row.Transport,
+                bridge_channel: row.BridgeChannel,
+                handshake_stage: row.HandshakeStage,
+                source_ip: row.SourceIP,
+                remote_addr: row.RemoteAddr,
+                server_addr: row.ServerAddr,
+                client_public_ip: row.ClientPublicIP,
+                client_local_addr: row.ClientLocalAddr,
+                client_local_addr_source: row.ClientLocalAddrSource,
+                bytes_in: row.BytesIn,
+                bytes_out: row.BytesOut,
+                target: row.Target,
+                error: row.Error
             };
-            var codeItem = function (label, value, wide) {
-                return '<div class="audit-connection-detail__item' + (wide ? ' audit-connection-detail__item--wide' : '') + '">'
-                    + '<span class="audit-connection-detail__label">' + text(label) + '</span>'
-                    + '<code class="audit-connection-detail__value">' + text(value || '-') + '</code></div>';
-            };
-            return '<div class="audit-connection-detail">'
-                + item('Start', row.StartedAt)
-                + item('End', row.EndedAt)
-                + item('Action', row.Action)
-                + item('Duration', row.Duration)
-                + item('Bytes in', row.BytesIn)
-                + item('Bytes out', row.BytesOut)
-                + codeItem('Target', row.Target, true)
-                + codeItem('Client version', row.ClientVer)
-                + item('Error', row.Error, true)
-                + '</div>';
+            return '<pre class="audit-connection-raw">' + text(JSON.stringify(raw, null, 2)) + '</pre>';
         },
         columns: [
-            {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', width: '154px'},
-            {field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', width: '74px', formatter: resultBadge},
-            {field: 'Kind', title: '<span data-i18n-zh="类型" data-i18n-en="Type">类型</span>', halign: 'center', formatter: kindLabel},
-            {field: 'User', title: '<span data-i18n-zh="用户" data-i18n-en="User">用户</span>', halign: 'center', escape: true},
-            {field: 'Client', title: '<span data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>', halign: 'center', escape: true},
+            {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', width: '148px'},
+            {field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', width: '68px', formatter: resultBadge},
+            {field: 'Kind', title: '<span data-i18n-zh="连接" data-i18n-en="Connection">连接</span>', halign: 'center', width: '155px', formatter: connectionSummary},
+            {field: 'User', title: '<span data-i18n-zh="用户 / 客户端" data-i18n-en="User / client">用户 / 客户端</span>', halign: 'center', width: '150px', formatter: identitySummary},
             {field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', escape: true},
-            {field: 'Transport', title: '<span data-i18n-zh="协议" data-i18n-en="Protocol">协议</span>', halign: 'center', escape: true},
-            {field: 'SourceIP', title: '<span data-i18n-zh="来源 IP" data-i18n-en="Source IP">来源 IP</span>', halign: 'center', escape: true},
-            {field: 'Duration', title: '<span data-i18n-zh="耗时" data-i18n-en="Duration">耗时</span>', halign: 'center', escape: true},
-            {field: 'Traffic', title: '<span data-i18n-zh="上 / 下行" data-i18n-en="Up / down">上 / 下行</span>', halign: 'center', escape: true},
+            {field: 'Transport', title: '<span data-i18n-zh="协议" data-i18n-en="Protocol">协议</span>', halign: 'center', width: '88px', formatter: protocolSummary},
+            {field: 'SourceIP', title: '<span data-i18n-zh="来源 IP" data-i18n-en="Source IP">来源 IP</span>', halign: 'center', width: '120px', escape: true},
+            {field: 'ClientLocalAddr', title: '<span data-i18n-zh="客户端内网地址" data-i18n-en="Client LAN">客户端内网地址</span>', halign: 'center', width: '135px', escape: true},
             {field: 'Error', title: '<span data-i18n-zh="结果说明" data-i18n-en="Result details">结果说明</span>', halign: 'center', escape: true}
         ]
     });

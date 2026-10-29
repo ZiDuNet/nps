@@ -25,7 +25,19 @@ func TestAuditConnectionsScopesOrdinaryUsersToOwnedClients(t *testing.T) {
 	connectionlog.Configure(filepath.Join(dir, "connection.log"))
 	t.Cleanup(func() { connectionlog.Configure("") })
 	for _, event := range []connectionlog.Event{
-		{ClientID: 101, UserID: 7, ClientRemark: "visible", Action: connectionlog.ActionBridgeConnected},
+		{
+			ClientID: 101, UserID: 7, UserName: "alice", ClientRemark: "visible",
+			Action: connectionlog.ActionBridgeConnected, BridgeTransport: "wss",
+			BridgeChannel: "main", HandshakeStage: "connected",
+			SourceIP: "198.51.100.9", RemoteAddr: "198.51.100.9:50123",
+			ServerAddr: "192.0.2.1:8024", ClientPublicIP: "198.51.100.9",
+			ClientLocalAddr:       "10.0.0.8",
+			ClientLocalAddrSource: connectionlog.ClientLocalAddrSourceCurrentReport,
+			ClientVersion:         "1.1.37", ClientStatus: "enabled",
+			ClientExpireTime:          "2030-01-01 00:00:00",
+			ClientEffectiveExpireTime: "2030-01-01 00:00:00",
+			UserStatus:                "enabled", UserExpireTime: "2030-01-01 00:00:00",
+		},
 		{ClientID: 102, UserID: 9, ClientRemark: "hidden", Action: connectionlog.ActionBridgeConnected},
 	} {
 		if err := connectionlog.Append(event); err != nil {
@@ -39,6 +51,14 @@ func TestAuditConnectionsScopesOrdinaryUsersToOwnedClients(t *testing.T) {
 	rows := auditRows(t, recorder)
 	if len(rows) != 1 || rows[0]["Client"] != "visible #101" {
 		t.Fatalf("ordinary connection rows = %#v", rows)
+	}
+	if rows[0]["RemoteAddr"] != "198.51.100.9:50123" ||
+		rows[0]["ServerAddr"] != "192.0.2.1:8024" ||
+		rows[0]["ClientLocalAddr"] != "10.0.0.8" ||
+		rows[0]["ClientLocalAddrSource"] != connectionlog.ClientLocalAddrSourceCurrentReport ||
+		rows[0]["BridgeChannel"] != "main" ||
+		rows[0]["HandshakeStage"] != "connected" {
+		t.Fatalf("ordinary connection detail row = %#v", rows[0])
 	}
 
 	admin, adminRecorder := newAuditTestController(t, "Connections", map[interface{}]interface{}{"auth": true, "isAdmin": true})
@@ -55,7 +75,12 @@ func TestAuditListScopesOrdinaryUsersToOwnerAndKeepsAdminGlobal(t *testing.T) {
 	t.Cleanup(func() { audit.Configure("") })
 	now := time.Now()
 	for _, event := range []audit.Event{
-		{Time: now, OwnerUserID: 7, Action: "client.create"},
+		{
+			Time: now, ID: "owned", ActorType: "user", ActorID: 7, ActorName: "alice",
+			OwnerUserID: 7, SourceIP: "198.51.100.20", Action: "client.create",
+			ResourceType: "client", ResourceID: 101, Result: audit.ResultSuccess,
+			Details: map[string]string{"remark": "visible"},
+		},
 		{Time: now, OwnerUserID: 9, Action: "client.delete"},
 		{Time: now, OwnerUserID: 0, Action: "auth.login"},
 	} {
@@ -69,6 +94,12 @@ func TestAuditListScopesOrdinaryUsersToOwnerAndKeepsAdminGlobal(t *testing.T) {
 	rows := auditRows(t, recorder)
 	if len(rows) != 1 || rows[0]["Action"] != "client.create" {
 		t.Fatalf("ordinary audit rows = %#v", rows)
+	}
+	if rows[0]["ActorType"] != "user" || rows[0]["ActorID"] != float64(7) ||
+		rows[0]["OwnerUserID"] != float64(7) || rows[0]["ResourceType"] != "client" ||
+		rows[0]["ResourceID"] != float64(101) || rows[0]["SourceIP"] != "198.51.100.20" ||
+		rows[0]["Details"] != `{"remark":"visible"}` {
+		t.Fatalf("ordinary audit raw fields = %#v", rows[0])
 	}
 
 	admin, adminRecorder := newAuditTestController(t, "List", map[interface{}]interface{}{"auth": true, "isAdmin": true})

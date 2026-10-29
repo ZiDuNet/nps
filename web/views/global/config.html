@@ -44,7 +44,7 @@
     .server-config-section.is-collapsed .server-config-section__header { border-bottom-color: transparent; }
     .server-config-section.is-collapsed .server-config-section__toggle i { transform: rotate(-90deg); }
     .server-config-section.is-collapsed .server-config-section__body { display: none; }
-    .server-config-section__body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 9px; background: color-mix(in srgb, var(--nps-surface-subtle) 52%, var(--nps-surface)); }
+    .server-config-section__body { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 9px; background: color-mix(in srgb, var(--nps-surface-subtle) 52%, var(--nps-surface)); }
     .server-config-section__body--table { display: block; }
     .server-config-field { display: grid; align-content: start; gap: 9px; min-width: 0; min-height: 0; padding: 11px 12px; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 9px; transition: border-color .16s ease, background-color .16s ease, opacity .16s ease; }
     .server-config-field:hover { border-color: color-mix(in srgb, var(--nps-primary) 32%, var(--nps-line)); }
@@ -73,6 +73,7 @@
     .server-config-readonly { min-height: 34px; padding: 8px 9px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px dashed var(--nps-line-strong); border-radius: 7px; font: 10px/1.45 "Fira Code", monospace; overflow-wrap: anywhere; }
     .server-config-secret-note { display: block; margin-top: 5px; color: var(--nps-warning); font-size: 9px; line-height: 1.4; }
     .server-config-secret-reveal { display: inline-flex; flex: 0 0 38px; align-items: center; justify-content: center; min-width: 38px !important; width: 38px; padding: 0 !important; white-space: nowrap; }
+    body.nps-bootstrap .server-config-field__control .input-group > .server-config-secret-reveal { flex: 0 0 38px !important; width: 38px !important; min-width: 38px !important; }
     .server-config-savebar { position: sticky; bottom: 10px; z-index: 7; display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 12px; padding: 9px 11px; background: color-mix(in srgb, var(--nps-surface) 94%, transparent); border: 1px solid color-mix(in srgb, var(--nps-primary) 18%, var(--nps-line)); border-radius: 11px; box-shadow: 0 -8px 28px rgba(15,23,42,.11); backdrop-filter: blur(14px); }
     .server-config-savebar__copy { min-width: 220px; margin-right: auto; }
     .server-config-savebar__copy strong { display: block; color: var(--nps-ink); font-size: 11.5px; }
@@ -101,8 +102,11 @@
         .server-config-hero { grid-template-columns: minmax(0, 1fr); }
         .server-config-hero > .server-config-notice { padding: 2px; }
     }
-    @media (max-width: 1100px) {
-        .server-config-section__body { grid-template-columns: minmax(0, 1fr); }
+    @media (min-width: 1600px) {
+        .server-config-section__body { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 1180px) {
+        .server-config-section__body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 760px) {
         .server-config-commandbar { position: static; align-items: stretch; }
@@ -112,7 +116,7 @@
         .server-config-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .server-config-section__header { align-items: flex-start; padding: 11px; }
         .server-config-section__toggle span { display: none; }
-        .server-config-section__body { padding: 7px; }
+        .server-config-section__body { grid-template-columns: minmax(0, 1fr); padding: 7px; }
         .server-config-field { padding: 10px; }
         .server-config-filter-count { width: 100%; margin-left: 0; }
         .server-config-savebar { position: static; }
@@ -160,7 +164,7 @@
     {{if .config_validation_error}}
     <div class="alert alert-warning server-config-notice server-config-validation-warning" role="alert">
         <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
-        <div><strong data-i18n-zh="当前配置存在关联校验问题" data-i18n-en="Current configuration has a relationship validation issue">当前配置存在关联校验问题</strong><p>{{.config_validation_error}}<span data-i18n-zh="。可在下方表单中修正；修正前源码视图不会允许保存。" data-i18n-en=". Fix it in the visual form below; source saving is blocked until the issue is resolved.">。可在下方表单中修正；修正前源码视图不会允许保存。</span></p></div>
+        <div><strong data-i18n-zh="当前配置存在关联校验问题" data-i18n-en="Current configuration has a relationship validation issue">当前配置存在关联校验问题</strong><p>{{.config_validation_error}}<span data-i18n-zh="。请在本页或对应的专用设置页中修正；修正前源码视图不会允许保存。" data-i18n-en=". Fix it on this page or the dedicated settings page involved; source saving is blocked until the issue is resolved.">。请在本页或对应的专用设置页中修正；修正前源码视图不会允许保存。</span></p></div>
     </div>
     {{end}}
     <div class="server-config-hero">

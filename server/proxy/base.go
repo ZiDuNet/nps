@@ -290,7 +290,8 @@ func (s *BaseServer) dealClient(c *conn.Conn, client *file.Client, addr string,
 	startedAt := time.Now()
 	logResult, logError := connectionlog.ResultSuccess, ""
 	var bytesIn, bytesOut int64
-	logEvent := proxyConnectionLogEvent(client, task, host, tp, addr, c.Conn.RemoteAddr().String(), startedAt)
+	logEvent := proxyConnectionLogEvent(client, task, host, tp, addr,
+		proxyAddrString(c.Conn.RemoteAddr()), proxyAddrString(c.Conn.LocalAddr()), startedAt)
 	defer func() {
 		endedAt := time.Now()
 		logEvent.Time = endedAt.UTC()
@@ -406,7 +407,8 @@ func (s *BaseServer) dealClient(c *conn.Conn, client *file.Client, addr string,
 	return nil
 }
 
-func proxyConnectionLogEvent(client *file.Client, task *file.Tunnel, host *file.Host, protocol, target, sourceIP string, startedAt time.Time) connectionlog.Event {
+func proxyConnectionLogEvent(client *file.Client, task *file.Tunnel, host *file.Host, protocol, target, sourceAddr, serverAddr string, startedAt time.Time) connectionlog.Event {
+	sourceAddr = strings.TrimSpace(sourceAddr)
 	event := connectionlog.Event{
 		Time:          startedAt.UTC(),
 		StartedAt:     startedAt.UTC(),
@@ -414,7 +416,9 @@ func proxyConnectionLogEvent(client *file.Client, task *file.Tunnel, host *file.
 		Action:        connectionlog.ActionProxyConnection,
 		Result:        connectionlog.ResultSuccess,
 		ProxyProtocol: strings.TrimSpace(protocol),
-		SourceIP:      common.GetIpByAddr(sourceIP),
+		SourceIP:      common.GetIpByAddr(sourceAddr),
+		RemoteAddr:    sourceAddr,
+		ServerAddr:    strings.TrimSpace(serverAddr),
 		Target:        strings.TrimSpace(target),
 	}
 	if host != nil {
@@ -441,16 +445,45 @@ func proxyConnectionLogEvent(client *file.Client, task *file.Tunnel, host *file.
 		event.ClientID = client.Id
 		event.ClientRemark = strings.TrimSpace(client.Remark)
 		event.ClientVersion = strings.TrimSpace(client.Version)
+		event.ClientPublicIP = common.GetIpByAddr(client.Addr)
+		event.ClientLocalAddr = strings.TrimSpace(client.LocalAddr)
+		if event.ClientLocalAddr != "" {
+			event.ClientLocalAddrSource = connectionlog.ClientLocalAddrSourceClientRecord
+		}
+		event.ClientStatus = connectionStatus(client.Status)
+		event.ClientExpireTime = strings.TrimSpace(client.ExpireTime)
+		event.ClientLastOnlineTime = strings.TrimSpace(client.LastOnlineTime)
 		client.RUnlock()
-		if event.UserID > 0 && event.UserName == "" {
+		if effectiveExpire, err := file.GetDb().EffectiveClientExpireTime(client); err == nil {
+			event.ClientEffectiveExpireTime = effectiveExpire
+		}
+		if event.UserID > 0 {
 			if user, err := file.GetDb().GetUser(event.UserID); err == nil && user != nil {
 				user.RLock()
-				event.UserName = user.UserName
+				if event.UserName == "" {
+					event.UserName = user.UserName
+				}
+				event.UserStatus = connectionStatus(user.Status)
+				event.UserExpireTime = strings.TrimSpace(user.ExpireTime)
 				user.RUnlock()
 			}
 		}
 	}
 	return event
+}
+
+func connectionStatus(enabled bool) string {
+	if enabled {
+		return "enabled"
+	}
+	return "disabled"
+}
+
+func proxyAddrString(addr net.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	return strings.TrimSpace(addr.String())
 }
 
 // localProxyAllowedForClient applies both the historical global switch and

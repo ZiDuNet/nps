@@ -33,7 +33,13 @@ const (
 	ActionBridgeConnected    = "bridge.connected"
 	ActionBridgeDisconnected = "bridge.disconnected"
 	ActionBridgeAuthFailed   = "bridge.auth_failed"
+	ActionBridgeFailed       = "bridge.failed"
+	ActionBridgeChannel      = "bridge.channel"
 	ActionProxyConnection    = "proxy.connection"
+
+	ClientLocalAddrSourceCurrentReport  = "current_report"
+	ClientLocalAddrSourceClientRecord   = "client_record"
+	ClientLocalAddrSourceLastSuccessful = "last_successful"
 
 	defaultLimit  = 100
 	maxLimit      = 500
@@ -44,29 +50,42 @@ const (
 // StartedAt and EndedAt describe the observed session. Bridge authentication
 // failures use one timestamp and normally have an empty client ID.
 type Event struct {
-	ID              string    `json:"id"`
-	Time            time.Time `json:"time"`
-	StartedAt       time.Time `json:"started_at"`
-	EndedAt         time.Time `json:"ended_at"`
-	Kind            string    `json:"kind"`
-	Action          string    `json:"action"`
-	Result          string    `json:"result"`
-	UserID          int       `json:"user_id,omitempty"`
-	UserName        string    `json:"user_name,omitempty"`
-	ClientID        int       `json:"client_id,omitempty"`
-	ClientRemark    string    `json:"client_remark,omitempty"`
-	ResourceType    string    `json:"resource_type,omitempty"`
-	ResourceID      int       `json:"resource_id,omitempty"`
-	ResourceRemark  string    `json:"resource_remark,omitempty"`
-	BridgeTransport string    `json:"bridge_transport,omitempty"`
-	ProxyProtocol   string    `json:"proxy_protocol,omitempty"`
-	SourceIP        string    `json:"source_ip,omitempty"`
-	Target          string    `json:"target,omitempty"`
-	ClientVersion   string    `json:"client_version,omitempty"`
-	DurationMS      int64     `json:"duration_ms,omitempty"`
-	BytesIn         int64     `json:"bytes_in,omitempty"`
-	BytesOut        int64     `json:"bytes_out,omitempty"`
-	Error           string    `json:"error,omitempty"`
+	ID                        string    `json:"id"`
+	Time                      time.Time `json:"time"`
+	StartedAt                 time.Time `json:"started_at"`
+	EndedAt                   time.Time `json:"ended_at"`
+	Kind                      string    `json:"kind"`
+	Action                    string    `json:"action"`
+	Result                    string    `json:"result"`
+	UserID                    int       `json:"user_id,omitempty"`
+	UserName                  string    `json:"user_name,omitempty"`
+	ClientID                  int       `json:"client_id,omitempty"`
+	ClientRemark              string    `json:"client_remark,omitempty"`
+	ResourceType              string    `json:"resource_type,omitempty"`
+	ResourceID                int       `json:"resource_id,omitempty"`
+	ResourceRemark            string    `json:"resource_remark,omitempty"`
+	BridgeTransport           string    `json:"bridge_transport,omitempty"`
+	BridgeChannel             string    `json:"bridge_channel,omitempty"`
+	ProxyProtocol             string    `json:"proxy_protocol,omitempty"`
+	SourceIP                  string    `json:"source_ip,omitempty"`
+	RemoteAddr                string    `json:"remote_addr,omitempty"`
+	ServerAddr                string    `json:"server_addr,omitempty"`
+	ClientPublicIP            string    `json:"client_public_ip,omitempty"`
+	ClientLocalAddr           string    `json:"client_local_addr,omitempty"`
+	ClientLocalAddrSource     string    `json:"client_local_addr_source,omitempty"`
+	Target                    string    `json:"target,omitempty"`
+	ClientVersion             string    `json:"client_version,omitempty"`
+	ClientStatus              string    `json:"client_status,omitempty"`
+	ClientExpireTime          string    `json:"client_expire_time,omitempty"`
+	ClientEffectiveExpireTime string    `json:"client_effective_expire_time,omitempty"`
+	ClientLastOnlineTime      string    `json:"client_last_online_time,omitempty"`
+	UserStatus                string    `json:"user_status,omitempty"`
+	UserExpireTime            string    `json:"user_expire_time,omitempty"`
+	HandshakeStage            string    `json:"handshake_stage,omitempty"`
+	DurationMS                int64     `json:"duration_ms,omitempty"`
+	BytesIn                   int64     `json:"bytes_in,omitempty"`
+	BytesOut                  int64     `json:"bytes_out,omitempty"`
+	Error                     string    `json:"error,omitempty"`
 }
 
 // Filter controls a newest-first connection-log query. OwnerUserID and
@@ -287,8 +306,13 @@ func List(filter Filter) (Page, error) {
 			haystack := strings.Join([]string{
 				event.Action, event.Result, event.UserName, event.ClientRemark,
 				event.ResourceType, event.ResourceRemark, event.BridgeTransport,
-				event.ProxyProtocol, event.SourceIP, event.Target,
-				event.ClientVersion, event.Error,
+				event.BridgeChannel, event.ProxyProtocol, event.SourceIP,
+				event.RemoteAddr, event.ServerAddr, event.ClientPublicIP,
+				event.ClientLocalAddr, event.ClientLocalAddrSource, event.Target,
+				event.ClientVersion, event.ClientStatus, event.ClientExpireTime,
+				event.ClientEffectiveExpireTime, event.ClientLastOnlineTime,
+				event.UserStatus, event.UserExpireTime, event.HandshakeStage,
+				event.Error,
 			}, " ")
 			if !strings.Contains(strings.ToLower(haystack), search) {
 				continue

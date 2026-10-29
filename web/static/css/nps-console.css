@@ -4672,3 +4672,118 @@ body.nps-bootstrap .nps-table__grid .nps-table__empty-row > td {
         background: var(--nps-surface-hover) !important;
     }
 }
+
+/* Unified list toolbar contract:
+   record actions stay left; utility controls form one right-aligned group
+   ordered left-to-right as search, filters, columns, refresh. */
+body.nps-bootstrap .nps-table__toolbar {
+    justify-content: flex-end;
+    gap: 8px !important;
+}
+body.nps-bootstrap .nps-table__bars {
+    flex: 0 1 auto !important;
+    min-width: 0;
+}
+body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__bars {
+    margin-right: auto !important;
+}
+body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__columns,
+body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__search {
+    margin-left: 0 !important;
+}
+body.nps-bootstrap .nps-table__bars .management-table-toolbar {
+    flex: 0 1 auto;
+}
+body.nps-bootstrap .nps-table__search {
+    order: 1;
+    flex: 0 1 220px !important;
+    margin-left: 0 !important;
+}
+body.nps-bootstrap .nps-table__filters {
+    display: flex;
+    order: 2;
+    flex: 0 1 auto;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+body.nps-bootstrap .nps-table__columns {
+    order: 3;
+    flex: 0 0 auto;
+    margin-left: 0 !important;
+}
+body.nps-bootstrap .nps-table__bar-actions {
+    order: 4;
+}
+body.nps-bootstrap .nps-table__filters .nps-table-filter {
+    margin-left: 0;
+    gap: 6px;
+}
+body.nps-bootstrap .nps-table__filters .nps-table-filter__control {
+    min-width: 124px !important;
+    max-width: 155px !important;
+}
+
+/* Full desktop width has enough room for the two-filter tunnel and host
+   lists when their controls stay compact. Keep the utility order intact and
+   prevent refresh from dropping onto an otherwise empty second row. */
+@media (min-width: 1450px) {
+    body.nps-bootstrap .nps-table__toolbar {
+        flex-wrap: nowrap !important;
+    }
+}
+
+@media (max-width: 1199px) {
+    body.nps-bootstrap .nps-table__toolbar {
+        align-items: flex-end;
+    }
+    body.nps-bootstrap .nps-table__search {
+        flex-basis: 220px !important;
+    }
+}
+
+@media (max-width: 991px) {
+    body.nps-bootstrap .nps-table__toolbar {
+        align-items: stretch;
+        justify-content: flex-start;
+    }
+    body.nps-bootstrap .nps-table__bars {
+        flex: 1 1 100% !important;
+        width: 100%;
+    }
+    body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__bars {
+        margin-right: 0 !important;
+    }
+    body.nps-bootstrap .nps-table__search {
+        order: 1;
+        flex: 1 1 100% !important;
+        width: 100%;
+    }
+    body.nps-bootstrap .nps-table__search-field,
+    body.nps-bootstrap .nps-table__search-input {
+        width: 100% !important;
+        max-width: none !important;
+    }
+    body.nps-bootstrap .nps-table__filters {
+        order: 2;
+        flex: 1 1 100%;
+        justify-content: flex-start;
+    }
+    body.nps-bootstrap .nps-table__filters .nps-table-filter {
+        flex: 1 1 220px;
+        max-width: 100%;
+    }
+    body.nps-bootstrap .nps-table__filters .nps-table-filter__control {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: none;
+    }
+    body.nps-bootstrap .nps-table__columns {
+        order: 3;
+    }
+    body.nps-bootstrap .nps-table__bar-actions {
+        order: 4;
+    }
+}

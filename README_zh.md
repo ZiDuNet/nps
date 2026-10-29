@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.37</sub>
+﻿# NPS <sub>v1.1.38</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -208,6 +208,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.38** (2026-10-29) - 统一所有列表页工具栏，完善客户端连接审计：补充服务端地址、Bridge 通道、握手阶段、客户端版本、公网/内网地址来源、账号状态及到期信息；详情使用终端式原始 JSON 展示。登录封禁和 IP 登记迁移到公共列表并增加筛选、分页，修复服务端分类配置的关联校验误拦，同时优化响应式配置卡片。
 
 - **v1.1.37** (2026-10-29) - 新增 TCP、TLS、KCP、WS、WSS、QUIC 和 HTTP/3 的多 Bridge 连接命令展示与兼容 v2 快捷命令，完善多协议 NPC/GUI 与系统服务；新增用户共享并发和带宽额度、连接审计、独立证书设置页、自定义域名证书 API 约束，并重新设计注册与后台管理体验。
 
