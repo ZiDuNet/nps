@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"crypto/subtle"
+	"html"
 	"net/http"
 	"strings"
 
@@ -21,7 +23,8 @@ func effectiveHTTPRemoteAddr(r *http.Request) string {
 	if !allowForwarded {
 		secret := strings.TrimSpace(beego.AppConfig.String("x_nps_http_only"))
 		provided := strings.TrimSpace(r.Header.Get("X-NPS-Http-Only"))
-		allowForwarded = secret != "" && provided != "" && constantTimeSecretEqual(secret, provided)
+		allowForwarded = secret != "" && provided != "" &&
+			subtle.ConstantTimeCompare([]byte(html.UnescapeString(secret)), []byte(provided)) == 1
 	}
 	return common.EffectiveHTTPClientIP(
 		r.RemoteAddr,

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
@@ -159,7 +160,7 @@ func (s *httpServer) startHTTP3() (net.PacketConn, http3Service, error) {
 					}
 					return
 				}
-				s.bridgeServer.ServeQUICConn(qc, 10*time.Second)
+				s.bridgeServer.ServeQUICConn(qc, 10*time.Second, "http3")
 			}(qc)
 		}
 	}()
@@ -234,6 +235,17 @@ func (s *httpServer) handleHTTP3(w http.ResponseWriter, r *http.Request) {
 func (s *httpServer) http3TLSConfig() *tls.Config {
 	config := &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{http3.NextProtoH3}}
 	config.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		// The shared UDP listener uses ALPN and SNI to route Bridge sessions.
+		// Those sessions must receive the Bridge certificate, not a Host-proxy
+		// or HTTPS default certificate selected by the browser-facing path.
+		if hello != nil &&
+			beego.AppConfig.DefaultBool("bridge_http3", false) &&
+			sameBridgeHost(hello.ServerName, beego.AppConfig.String("bridge_host")) {
+			certificate := crypt.GetCert()
+			if len(certificate.Certificate) > 0 {
+				return &certificate, nil
+			}
+		}
 		if s != nil && s.acmeManager != nil {
 			if cert, err := s.acmeManager.GetCertificate(hello); err == nil && cert != nil {
 				return cert, nil

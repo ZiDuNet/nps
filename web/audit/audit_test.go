@@ -56,6 +56,27 @@ func TestAppendRejectsMissingActionAndIgnoresMalformedLines(t *testing.T) {
 	}
 }
 
+func TestEmptyPathDisablesJournal(t *testing.T) {
+	dir := t.TempDir()
+	Configure("")
+	if Path() != "" {
+		t.Fatalf("disabled journal path = %q, want empty", Path())
+	}
+	if err := Append(Event{Action: "login"}); err != nil {
+		t.Fatalf("disabled append returned error: %v", err)
+	}
+	page, err := List(Filter{})
+	if err != nil {
+		t.Fatalf("disabled list returned error: %v", err)
+	}
+	if page.Total != 0 || len(page.Events) != 0 {
+		t.Fatalf("disabled journal returned records: %+v", page)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "audit.log")); !os.IsNotExist(err) {
+		t.Fatalf("disabled journal unexpectedly created audit.log: %v", err)
+	}
+}
+
 func intPtr(value int) *int { return &value }
 
 func readFile(t *testing.T, path string) []byte {

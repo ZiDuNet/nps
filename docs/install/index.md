@@ -38,7 +38,9 @@ NPS 分为服务端 `nps`、命令行客户端 `npc` 和桌面 GUI 客户端。�
 
 ### GUI 客户端
 
-桌面用户可下载 NPC GUI，粘贴 Web 后台生成的【快捷启动命令】，或手动填写服务端地址和 `VerifyKey`。GUI 使用、日志位置和自动更新见 [NPC GUI 客户端](../gui.md)。
+桌面用户可下载 NPC GUI，粘贴 Web 面板当前 Bridge 入口生成的快捷启动命令，
+或手动填写服务端地址、`VerifyKey`、协议及对应的 Path/ALPN/TLS 参数。完整
+说明见 [NPC GUI 客户端](../gui.md)。
 
 ## Docker 安装
 
@@ -55,11 +57,14 @@ docker run -d \
   -p 80:80 \
   -p 443:443 \
   -p 127.0.0.1:8081:8081 \
+  -e NPS_WEB_IP=0.0.0.0 \
   -v /opt/nps/conf:/conf \
   wushuo98/nps:latest
 ```
 
-仅发布实际使用的端口。管理面板示例仅绑定到宿主机回环地址；远程管理应通过 HTTPS 反向代理、VPN 或受控管理网段访问。
+`NPS_WEB_IP=0.0.0.0` 让容器内的管理面板接受 Docker 端口映射；宿主机发布
+地址仍是 `127.0.0.1`。仅发布实际使用的端口，远程管理应通过 HTTPS 反向代理、
+VPN 或受控管理网段访问。
 
 客户端容器示例：
 

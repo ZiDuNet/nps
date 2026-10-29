@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"ehang.io/nps/lib/quickcommand"
 	"github.com/kardianos/service"
 )
 
@@ -166,7 +167,7 @@ func TestFindNpcCommandAfterFlags(t *testing.T) {
 }
 
 func TestResolveNpcServiceName(t *testing.T) {
-	names := []string{"nps-client-alpha", "nps-client-beta"}
+	names := []string{"nps-client-alpha", "nps-client-beta", "nps-client-gamma-ws"}
 	tests := []struct {
 		input string
 		want  string
@@ -174,6 +175,7 @@ func TestResolveNpcServiceName(t *testing.T) {
 	}{
 		{input: "alpha", want: "nps-client-alpha"},
 		{input: "nps-client-beta", want: "nps-client-beta"},
+		{input: "gamma", want: "nps-client-gamma-ws"},
 		{input: "missing", fail: true},
 		{input: "../alpha", fail: true},
 		{input: "", fail: true},
@@ -194,6 +196,35 @@ func TestResolveNpcServiceName(t *testing.T) {
 				t.Fatalf("resolveNpcServiceName(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNpcServiceNameSeparatesProtocols(t *testing.T) {
+	tests := []struct {
+		command quickcommand.Command
+		want    string
+	}{
+		{command: quickcommand.Command{Server: "bridge:8024", VKey: "alpha", Transport: "tcp"}, want: "nps-client-alpha"},
+		{command: quickcommand.Command{Server: "bridge:8025", VKey: "alpha", Transport: "tcp", TLS: true}, want: "nps-client-alpha-tls"},
+		{command: quickcommand.Command{Server: "bridge:8027", VKey: "alpha", Transport: "ws", BridgePath: "/ws"}, want: "nps-client-alpha-ws"},
+		{command: quickcommand.Command{Server: "bridge:8028", VKey: "alpha", Transport: "wss", BridgePath: "/ws"}, want: "nps-client-alpha-wss"},
+		{command: quickcommand.Command{Server: "bridge:8029", VKey: "alpha", Transport: "quic", QuicALPN: "nps"}, want: "nps-client-alpha-quic"},
+		{command: quickcommand.Command{Server: "bridge:8443", VKey: "alpha", Endpoint: "http3", Transport: "quic", QuicALPN: "nps"}, want: "nps-client-alpha-http3"},
+	}
+	for _, tt := range tests {
+		if got := npcServiceName(tt.command); got != tt.want {
+			t.Fatalf("npcServiceName(%+v) = %q, want %q", tt.command, got, tt.want)
+		}
+	}
+}
+
+func TestResolveNpcServiceNameRejectsAmbiguousProtocolServices(t *testing.T) {
+	_, err := resolveNpcServiceName([]string{
+		"nps-client-alpha-tls",
+		"nps-client-alpha-ws",
+	}, "alpha")
+	if err == nil {
+		t.Fatal("ambiguous protocol services should require a complete service name")
 	}
 }
 

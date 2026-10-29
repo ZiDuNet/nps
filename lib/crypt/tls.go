@@ -1,6 +1,7 @@
 package crypt
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -19,6 +20,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/astaxie/beego/logs"
@@ -28,9 +30,12 @@ var (
 	cert     tls.Certificate
 	rsaKey   *rsa.PrivateKey
 	rsaKeyMu sync.Mutex
+
+	certLoadedFromFiles atomic.Bool
 )
 
 func InitTls() {
+	certLoadedFromFiles.Store(false)
 	c, k, err := generateKeyPair("NPS Org")
 	if err == nil {
 		cert, err = tls.X509KeyPair(c, k)
@@ -65,12 +70,21 @@ func InitTlsFromFiles(certPath, keyPath string) error {
 		return fmt.Errorf("parse Bridge certificate: %w", err)
 	}
 	cert = loaded
+	certLoadedFromFiles.Store(true)
 	ensureLoginRSAKey()
 	return nil
 }
 
 func GetCert() tls.Certificate {
 	return cert
+}
+
+// IsCertLoadedFromFiles reports whether the process is currently serving the
+// operator-configured Bridge certificate instead of the generated temporary
+// certificate. It is used by the management panel to distinguish the active
+// certificate from a newly saved, not-yet-restarted configuration.
+func IsCertLoadedFromFiles() bool {
+	return certLoadedFromFiles.Load()
 }
 
 // GetCertFingerprint returns the SHA-256 fingerprint of the server
@@ -82,6 +96,34 @@ func GetCertFingerprint() string {
 	}
 	digest := sha256.Sum256(cert.Certificate[0])
 	return hex.EncodeToString(digest[:])
+}
+
+// IsCertSelfSigned reports whether the active Bridge leaf certificate is
+// self-signed. Generated temporary certificates and common self-signed
+// deployments need a pin; CA-issued certificates should use the client's
+// normal trust store and hostname verification so automatic renewal does not
+// invalidate every existing NPC command.
+func IsCertSelfSigned() bool {
+	return IsCertificateSelfSigned(cert)
+}
+
+// IsCertificateSelfSigned applies the same policy to supplied server
+// certificates. It verifies both the issuer/subject identity and the leaf
+// signature instead of relying only on string equality.
+func IsCertificateSelfSigned(certificate tls.Certificate) bool {
+	if len(certificate.Certificate) == 0 {
+		return false
+	}
+	leaf := certificate.Leaf
+	if leaf == nil {
+		parsed, err := x509.ParseCertificate(certificate.Certificate[0])
+		if err != nil {
+			return false
+		}
+		leaf = parsed
+	}
+	return bytes.Equal(leaf.RawIssuer, leaf.RawSubject) &&
+		leaf.CheckSignature(leaf.SignatureAlgorithm, leaf.RawTBSCertificate, leaf.Signature) == nil
 }
 
 // GetCertificateFingerprint returns the SHA-256 fingerprint of a supplied

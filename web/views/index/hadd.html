@@ -100,19 +100,14 @@
                         <div id="custom-certificate-fields" class="form-group form-group--wide">
                             <label class="form-label font-bold" data-i18n-zh="证书与私钥" data-i18n-en="Certificate and key">证书与私钥</label>
                             <div class="form-group-wrapper host-certificate-fields">
-                                <div class="certificate-pair" data-certificate-pair data-validate-url="{{.web_base_url}}/index/checkcertificate" data-hostname-provider="#custom-host">
+                                <div class="certificate-pair" data-certificate-pair data-certificate-modes="upload,paste" data-validate-url="{{.web_base_url}}/index/checkcertificate" data-hostname-provider="#custom-host">
                                     <div class="certificate-mode-row">
                                         <span class="certificate-mode-label" data-i18n-zh="填写方式" data-i18n-en="Input method">填写方式</span>
                                         <select class="form-control certificate-mode-select" name="cert_mode" aria-label="证书填写方式" data-aria-label-zh="证书填写方式" data-aria-label-en="Certificate input method">
-                                            <option value="path" data-i18n-zh="路径" data-i18n-en="Path">路径</option>
                                             <option value="upload" data-i18n-zh="上传" data-i18n-en="Upload">上传</option>
                                             <option value="paste" data-i18n-zh="粘贴" data-i18n-en="Paste">粘贴</option>
                                         </select>
                                         <button type="button" class="btn btn-outline btn-primary certificate-validate" data-i18n-zh="校验证书" data-i18n-en="Validate">校验证书</button>
-                                    </div>
-                                    <div class="certificate-mode-pane certificate-mode-pane--path">
-                                        <div class="host-certificate-field"><label class="host-certificate-field__label" for="host-cert" data-i18n-zh="证书（公钥链）路径" data-i18n-en="Certificate (public chain) path">证书（公钥链）路径</label><input id="host-cert" class="form-control" type="text" name="cert_file_path" data-cert-path placeholder="/certs/app.example.com.pem"></div>
-                                        <div class="host-certificate-field"><label class="host-certificate-field__label" for="host-key" data-i18n-zh="私钥（key）路径" data-i18n-en="Private key path">私钥（key）路径</label><input id="host-key" class="form-control" type="text" name="key_file_path" data-key-path placeholder="/certs/app.example.com.key"></div>
                                     </div>
                                     <div class="certificate-mode-pane certificate-mode-pane--upload" hidden>
                                         <div class="host-certificate-field"><label class="host-certificate-field__label" for="host-cert-upload" data-i18n-zh="证书（公钥链）文件" data-i18n-en="Certificate (public chain) file">证书（公钥链）文件</label><input id="host-cert-upload" class="form-control" type="file" accept=".pem,.crt,.cer,.crt,.key" data-cert-upload></div>
@@ -122,10 +117,10 @@
                                         <div class="host-certificate-field"><label class="host-certificate-field__label" for="host-cert-paste" data-i18n-zh="证书（公钥链）内容" data-i18n-en="Certificate (public chain) content">证书（公钥链）内容</label><textarea id="host-cert-paste" class="form-control" rows="5" data-cert-paste placeholder="-----BEGIN CERTIFICATE-----"></textarea></div>
                                         <div class="host-certificate-field"><label class="host-certificate-field__label" for="host-key-paste" data-i18n-zh="私钥（key）内容" data-i18n-en="Private key content">私钥（key）内容</label><textarea id="host-key-paste" class="form-control" rows="5" data-key-paste placeholder="-----BEGIN PRIVATE KEY-----"></textarea></div>
                                     </div>
-                                    <input type="hidden" name="cert_data" data-cert-data value="">
-                                    <input type="hidden" name="key_data" data-key-data value="">
+                                    <input type="hidden" name="cert" data-cert-data value="">
+                                    <input type="hidden" name="key" data-key-data value="">
                                     <div class="certificate-validation-result" role="status" hidden></div>
-                                    <span class="help-block host-certificate-field__help" data-i18n-zh="仅 HTTPS 或双协议规则需要。路径模式直接引用服务器上的证书与私钥文件；上传和粘贴模式会在保存时校验证书与私钥是否匹配、是否覆盖当前域名，然后安全托管到服务器证书目录。三组内容只需按当前选中的方式填写一组。" data-i18n-en="Required only for HTTPS or dual-protocol rules. Path mode references certificate and key files on the server; upload and paste modes verify that the pair matches and covers this domain on save, then store it safely in the managed certificate directory. Fill in only the group for the selected method.">仅 HTTPS 或双协议规则需要。路径模式直接引用服务器上的证书与私钥文件；上传和粘贴模式会在保存时校验证书与私钥是否匹配、是否覆盖当前域名，然后安全托管到服务器证书目录。三组内容只需按当前选中的方式填写一组。</span>
+                                    <span class="help-block host-certificate-field__help" data-i18n-zh="仅 HTTPS 或双协议规则需要。自定义域名只支持上传或粘贴证书；请先点击“校验证书”，确认证书与私钥匹配且覆盖当前域名后才能保存。校验通过后会安全托管到服务器证书目录。" data-i18n-en="Required only for HTTPS or dual-protocol rules. Custom domains accept uploaded or pasted certificates only. Validate that the pair matches and covers this domain before saving it to the managed certificate directory.">仅 HTTPS 或双协议规则需要。自定义域名只支持上传或粘贴证书；请先点击“校验证书”，确认证书与私钥匹配且覆盖当前域名后才能保存。校验通过后会安全托管到服务器证书目录。</span>
                                 </div>
                             </div>
                         </div>

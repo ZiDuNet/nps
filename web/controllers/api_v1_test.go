@@ -6,14 +6,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"ehang.io/nps/bridge"
+	"ehang.io/nps/lib/connectionlog"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/ipreg"
 	"ehang.io/nps/server"
 	"github.com/astaxie/beego"
 	beecontext "github.com/astaxie/beego/context"
@@ -203,6 +206,57 @@ func TestAPIV1UserTokenCannotReadAnotherUsersClient(t *testing.T) {
 	}
 }
 
+func TestAPIV1AuditConnectionsScopesUserTokenToOwnedClients(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	token, hash, err := generateUserAPIToken()
+	if err != nil {
+		t.Fatalf("generateUserAPIToken: %v", err)
+	}
+	db.JsonDb.Users.Store(7, &file.User{
+		Id: 7, UserName: "alice", Status: true,
+		ExpireTime: time.Now().Add(24 * time.Hour).Format("2006-01-02 15:04:05"),
+		APIKeyHash: hash,
+	})
+	db.JsonDb.Clients.Store(101, &file.Client{Id: 101, UserId: 7, Remark: "visible", Status: true})
+	db.JsonDb.Clients.Store(102, &file.Client{Id: 102, UserId: 9, Remark: "hidden", Status: true})
+
+	logPath := filepath.Join(t.TempDir(), "connection.log")
+	previousLogPath := beego.AppConfig.String("connection_log_path")
+	_ = beego.AppConfig.Set("connection_log_path", logPath)
+	connectionlog.Configure(logPath)
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("connection_log_path", previousLogPath)
+		connectionlog.Configure("")
+	})
+	for _, event := range []connectionlog.Event{
+		{ClientID: 101, UserID: 7, ClientRemark: "visible", Action: connectionlog.ActionBridgeConnected},
+		{ClientID: 102, UserID: 9, ClientRemark: "hidden", Action: connectionlog.ActionBridgeConnected},
+	} {
+		if err := connectionlog.Append(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	connectionlog.Flush()
+
+	controller, recorder := newAPIV1TestController(t, http.MethodGet, "/api/v1/audit/connections", nil, "")
+	controller.Ctx.Request.Header.Set("Authorization", "Bearer "+token)
+	controller.Prepare()
+	runClientPermissionAction(t, controller.AuditConnections)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := readAPIV1JSON(t, recorder)
+	rows, ok := payload["rows"].([]interface{})
+	if !ok || len(rows) != 1 {
+		t.Fatalf("user connection rows = %#v, want one owned record", payload["rows"])
+	}
+	row, _ := rows[0].(map[string]interface{})
+	if row["Client"] != "visible #101" {
+		t.Fatalf("visible connection row = %#v", row)
+	}
+}
+
 func TestAPIV1JSONBodyMergesIntoLegacyForm(t *testing.T) {
 	body := `{"remark":"json client","vkey":"json-vkey","flow_limit":123,"compress":true,"allow_ports":["80","443"]}`
 	controller, _ := newAPIV1TestController(t, http.MethodPost, "/api/v1/clients", strings.NewReader(body), "application/json")
@@ -225,8 +279,16 @@ func TestAPIV1JSONBodyMergesIntoLegacyForm(t *testing.T) {
 
 func newAPIV1InfoTestController(t *testing.T, method, target string) (*ApiV1InfoController, *httptest.ResponseRecorder) {
 	t.Helper()
-	request := httptest.NewRequest(method, "http://console.test"+target, nil)
+	return newAPIV1InfoTestControllerWithBody(t, method, target, nil, "")
+}
+
+func newAPIV1InfoTestControllerWithBody(t *testing.T, method, target string, body io.Reader, contentType string) (*ApiV1InfoController, *httptest.ResponseRecorder) {
+	t.Helper()
+	request := httptest.NewRequest(method, "http://console.test"+target, body)
 	request.Host = "console.test"
+	if contentType != "" {
+		request.Header.Set("Content-Type", contentType)
+	}
 	recorder := httptest.NewRecorder()
 	ctx := beecontext.NewContext()
 	ctx.Reset(recorder, request)
@@ -272,16 +334,124 @@ func TestAPIV1InfoDiscoveryIsPublic(t *testing.T) {
 	}
 }
 
-func TestAPIV1IPWhiteAuthRejectsNonPostWithEnvelope(t *testing.T) {
-	controller, recorder := newAPIV1InfoTestController(t, http.MethodGet, "/api/v1/ipwhiteauth")
-	runClientPermissionAction(t, controller.IPWhiteAuth)
+func TestAPIV1IPRegisterRejectsNonPostWithEnvelope(t *testing.T) {
+	controller, recorder := newAPIV1InfoTestController(t, http.MethodGet, "/api/v1/ip-register")
+	runClientPermissionAction(t, controller.IPRegister)
 
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusMethodNotAllowed)
 	}
 	payload := readAPIV1JSON(t, recorder)
-	if payload["status"] != float64(0) || payload["error_code"] != "ip_white_auth_failed" {
-		t.Fatalf("ip white auth envelope = %#v", payload)
+	if payload["status"] != float64(0) || payload["error_code"] != "method_not_allowed" {
+		t.Fatalf("IP registration method envelope = %#v", payload)
+	}
+}
+
+func TestAPIV1IPRegisterUsesRequestBodyAndPeerAddress(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	db.JsonDb.Clients.Store(23, &file.Client{
+		Id:               23,
+		VerifyKey:        "client-register-key",
+		RegisterMaxHours: 3,
+		Status:           true,
+	})
+	oldAllow := beego.AppConfig.String("allow_x_real_ip")
+	_ = beego.AppConfig.Set("allow_x_real_ip", "false")
+	ipreg.Reset()
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
+		ipreg.Reset()
+	})
+
+	controller, recorder := newAPIV1InfoTestControllerWithBody(
+		t,
+		http.MethodPost,
+		"/api/v1/ip-register",
+		strings.NewReader(`{"key":"client-register-key","hours":2}`),
+		"application/json",
+	)
+	controller.Ctx.Request.RemoteAddr = "198.51.100.23:43210"
+	controller.Ctx.Request.Header.Set("X-Real-IP", "203.0.113.90")
+	runClientPermissionAction(t, controller.IPRegister)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := readAPIV1JSON(t, recorder)
+	data, ok := payload["data"].(map[string]interface{})
+	if payload["status"] != float64(1) || !ok || data["ip"] != "198.51.100.23" {
+		t.Fatalf("IP registration envelope = %#v", payload)
+	}
+	if !ipreg.RegisteredString(23, "198.51.100.23:8080") {
+		t.Fatal("API registration did not create the client-scoped runtime entry")
+	}
+	if ipreg.RegisteredString(23, "203.0.113.90:8080") {
+		t.Fatal("API registration trusted X-Real-IP while allow_x_real_ip was disabled")
+	}
+}
+
+func TestAPIV1IPRegisterAcceptsPostForm(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	db.JsonDb.Clients.Store(23, &file.Client{
+		Id:               23,
+		VerifyKey:        "client-register-key",
+		RegisterMaxHours: 3,
+		Status:           true,
+	})
+	oldAllow := beego.AppConfig.String("allow_x_real_ip")
+	_ = beego.AppConfig.Set("allow_x_real_ip", "false")
+	ipreg.Reset()
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("allow_x_real_ip", oldAllow)
+		ipreg.Reset()
+	})
+
+	controller, recorder := newAPIV1InfoTestControllerWithBody(
+		t,
+		http.MethodPost,
+		"/api/v1/ip-register",
+		strings.NewReader("key=client-register-key&hours=2"),
+		"application/x-www-form-urlencoded",
+	)
+	controller.Ctx.Request.RemoteAddr = "198.51.100.24:43210"
+	runClientPermissionAction(t, controller.IPRegister)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if !ipreg.RegisteredString(23, "198.51.100.24:8080") {
+		t.Fatal("form registration did not create the client-scoped runtime entry")
+	}
+}
+
+func TestAPIV1IPRegisterRejectsQueryStringCredential(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	db.JsonDb.Clients.Store(23, &file.Client{
+		Id:               23,
+		VerifyKey:        "client-register-key",
+		RegisterMaxHours: 3,
+		Status:           true,
+	})
+	ipreg.Reset()
+	t.Cleanup(ipreg.Reset)
+
+	controller, recorder := newAPIV1InfoTestController(
+		t,
+		http.MethodPost,
+		"/api/v1/ip-register?key=client-register-key&hours=2",
+	)
+	controller.Ctx.Request.RemoteAddr = "198.51.100.25:43210"
+	runClientPermissionAction(t, controller.IPRegister)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
+	}
+	payload := readAPIV1JSON(t, recorder)
+	if payload["error_code"] != "invalid_registration_key" {
+		t.Fatalf("query-string credential response = %#v", payload)
+	}
+	if ipreg.RegisteredString(23, "198.51.100.25:8080") {
+		t.Fatal("query-string credential unexpectedly registered the peer IP")
 	}
 }
 

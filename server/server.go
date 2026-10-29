@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ehang.io/nps/bridge"
+	"ehang.io/nps/lib/bridgeendpoint"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/ipreg"
@@ -38,6 +39,35 @@ var (
 type managementRunListKey struct{ _ byte }
 
 var managementServiceKey managementRunListKey
+
+// GetBridgeEndpoints returns Bridge listeners that are enabled in the active
+// configuration and currently listening. HTTP/3 shares the management HTTP
+// service and can be skipped even when configured, so its runtime state is
+// checked before exposing a copyable client command.
+func GetBridgeEndpoints(requestHost, serverURL string) []bridgeendpoint.Endpoint {
+	endpoints := bridgeendpoint.Enabled(bridgeendpoint.Resolve(
+		bridgeendpoint.FromAppConfig(requestHost, serverURL),
+	))
+	if managementHTTP3Listening() {
+		return endpoints
+	}
+	filtered := make([]bridgeendpoint.Endpoint, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		if endpoint.Key != "http3" {
+			filtered = append(filtered, endpoint)
+		}
+	}
+	return filtered
+}
+
+func managementHTTP3Listening() bool {
+	value, ok := RunList.Load(managementServiceKey)
+	if !ok || value == nil {
+		return false
+	}
+	checker, ok := value.(interface{ HTTP3Listening() bool })
+	return ok && checker.HTTP3Listening()
+}
 
 func refreshClientHealthConfig(clientID int) {
 	if Bridge == nil || clientID <= 0 {
@@ -98,6 +128,14 @@ func (s *managementService) Close() error {
 		}
 	}
 	return closeErr
+}
+
+func (s *managementService) HTTP3Listening() bool {
+	if s == nil || s.host == nil {
+		return false
+	}
+	checker, ok := s.host.(interface{ HTTP3Listening() bool })
+	return ok && checker.HTTP3Listening()
 }
 
 func init() {
@@ -1021,6 +1059,24 @@ func GetDashboardDataForClients(allowedClientIds map[int]struct{}) map[string]in
 	return getDashboardData(allowedClientIds, allowedClientIds == nil)
 }
 
+// dashboardBridgeEndpoints returns the public Bridge entry points shown on the
+// dashboard. Ordinary users only receive endpoints explicitly exposed for
+// client commands; administrators also see listening endpoints hidden from
+// command generation so they can diagnose display overrides.
+func dashboardBridgeEndpoints(commandsOnly bool) []bridgeendpoint.Endpoint {
+	serverURL := ""
+	if global := file.GetDb().GetGlobal(); global != nil {
+		global.RLock()
+		serverURL = global.ServerUrl
+		global.RUnlock()
+	}
+	endpoints := GetBridgeEndpoints(beego.AppConfig.String("web_host"), serverURL)
+	if commandsOnly {
+		return bridgeendpoint.Available(endpoints)
+	}
+	return endpoints
+}
+
 func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[string]interface{} {
 	data := make(map[string]interface{})
 	data["dashboardIsAdmin"] = isAdmin
@@ -1193,6 +1249,9 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 		// Host-machine CPU, memory, socket and NIC samples, as well as listener
 		// configuration, are administrator-only. Resource counters above are
 		// already derived from the allowlist and remain safe for this scope.
+		// Public Bridge endpoints are needed to create or update an NPC and do
+		// not expose host or management-listener details.
+		data["bridgeEndpoints"] = dashboardBridgeEndpoints(true)
 		return data
 	}
 	data["bridgeType"] = beego.AppConfig.String("bridge_type")
@@ -1203,6 +1262,7 @@ func getDashboardData(allowedClientIds map[int]struct{}, isAdmin bool) map[strin
 	data["bridgeWSSPort"] = beego.AppConfig.String("bridge_wss_port")
 	data["bridgeQUICPort"] = beego.AppConfig.String("bridge_quic_port")
 	data["bridgeWSPath"] = beego.AppConfig.String("bridge_path")
+	data["bridgeEndpoints"] = dashboardBridgeEndpoints(false)
 	data["httpProxyPort"] = beego.AppConfig.String("http_proxy_port")
 	data["httpsProxyPort"] = beego.AppConfig.String("https_proxy_port")
 	data["ipLimit"] = beego.AppConfig.String("ip_limit")

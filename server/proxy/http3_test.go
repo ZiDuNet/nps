@@ -1,9 +1,13 @@
 package proxy
 
 import (
+	"bytes"
+	"crypto/tls"
 	"strings"
 	"testing"
 
+	"ehang.io/nps/lib/crypt"
+	"github.com/astaxie/beego"
 	"github.com/quic-go/quic-go/http3"
 )
 
@@ -58,5 +62,32 @@ func TestBridgeHTTP3NextProtosAvoidsDuplicateH3(t *testing.T) {
 		if strings.Join(got, ",") != strings.Join(test.want, ",") {
 			t.Fatalf("bridgeHTTP3NextProtos(%q) = %v, want %v", test.alpn, got, test.want)
 		}
+	}
+}
+
+func TestHTTP3BridgeSNIUsesBridgeCertificate(t *testing.T) {
+	previousHTTP3 := beego.AppConfig.String("bridge_http3")
+	previousHost := beego.AppConfig.String("bridge_host")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("bridge_http3", previousHTTP3)
+		_ = beego.AppConfig.Set("bridge_host", previousHost)
+	})
+	_ = beego.AppConfig.Set("bridge_http3", "true")
+	_ = beego.AppConfig.Set("bridge_host", "bridge.example")
+	crypt.InitTls()
+
+	certificate, err := (&httpServer{}).http3TLSConfig().GetCertificate(&tls.ClientHelloInfo{
+		ServerName: "BRIDGE.EXAMPLE.",
+	})
+	if err != nil {
+		t.Fatalf("select Bridge certificate: %v", err)
+	}
+	if certificate == nil || len(certificate.Certificate) == 0 {
+		t.Fatal("HTTP/3 Bridge SNI did not return the Bridge certificate")
+	}
+	want := crypt.GetCertificateFingerprint(crypt.GetCert())
+	got := crypt.GetCertificateFingerprint(*certificate)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("HTTP/3 Bridge certificate fingerprint = %x, want %x", got, want)
 	}
 }

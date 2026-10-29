@@ -1,31 +1,32 @@
 ﻿# 增强功能
 
-## 使用 https
+## HTTPS 域名代理
 
-> nps 会根据域名是否上传了证书自动选择处理方式：
+NPS 根据域名规则是否绑定证书选择 TLS 处理方式：
 
-| 是否在 web 上传证书 | 行为 | 真实 IP |
+| 证书配置 | 行为 | NPS 可获取的信息 |
 | --- | --- | --- |
-| 是 | nps 直接接管 SSL 终结，再转发到内网 | ✅ 可拿到 |
-| 否 | nps 透传 TLS（端口转发），由内网服务器自行解密 | ❌ 拿不到 |
-
-![image](/image/new/https.png)
+| 已配置证书与私钥 | NPS 终结 TLS，再以 HTTP 转发给内网目标 | 请求头、来源地址和正文 |
+| 未配置证书 | TLS 流量由内网目标自行终止 | 只能转发加密连接，不能修改 HTTP 内容 |
 
 ## 自动 HTTPS
 
-在 web 域名编辑页勾选「自动 HTTPS」后，nps 会把对应域名的 http 请求 301 重定向到 https。
-重定向会按 `https_proxy_port` 配置的端口跳转（例如 `https_proxy_port=8443` 时会跳到 `https://<host>:8443/...`），方便非标准端口部署。
+在「域名反代」的新增或编辑页勾选「自动 HTTPS」后，NPS 会把对应域名的
+HTTP 请求以 `301` 重定向到 HTTPS。重定向会使用 `https_proxy_port` 中的端口；
+例如 `https_proxy_port=8443` 时会跳转到 `https://<host>:8443/...`。
 
 ## HTTPS 证书来源
 
-web 域名编辑页的「证书」/「私钥」字段同时支持：
+「域名反代」中的自定义域名只提供上传和粘贴两种证书录入模式：
 
-- **直接粘贴证书 / 私钥内容**
-- **填写服务器上的文件路径**（例如 `/etc/letsencrypt/live/proxy.com/fullchain.pem`）
+- **上传模式**：从本机选择证书和私钥文件，由 NPS 安全托管。
+- **粘贴模式**：直接粘贴 PEM 内容，由 NPS 安全托管。
 
-nps 会自动识别是文件路径还是内容。文件路径方式便于配合 acme.sh / certbot 自动续期，无需每次手工拷贝。
-
-
+两种模式只需填写当前选中的一组，并且必须先通过有效性、私钥匹配和域名覆盖
+校验才能保存。管理员仍可在「证书设置」中通过路径维护平台泛域名和 Bridge
+证书。历史自定义域名中已经保存的路径证书继续生效并只读回显；外部脚本原子
+替换有效证书后，后续 TLS 连接会自动加载，无需重启 NPS。完整说明见
+[域名代理与路由](../extend/domain-proxy.md#https证书和自动跳转)。
 
 ## TLS 桥接加密
 
@@ -34,7 +35,7 @@ nps 会自动识别是文件路径还是内容。文件路径方式便于配合 
 ```ini
 # nps.conf
 tls_enable=true
-tls_bridge_port=8025      # v0.26.18 引入，与 bridge_port 并存
+tls_bridge_port=8025      # 与 bridge_port 并存
 ```
 
 客户端任选一种方式接入：
@@ -58,17 +59,22 @@ npc.exe -server=1.1.1.1:8025 -vkey=xxx -tls_enable=true      # TLS 桥接（tls_
 
 ## 全局参数
 
-> 未来会在此页面继续扩展更多功能，欢迎提需求。
-
-web 后台 → 全局参数 页面（对应 `conf/global.json`）：
+管理员进入「系统 → 全局参数」的「全局参数」Tab，可维护保存在
+`conf/global.json` 中的业务设置：
 
 | 字段 | 含义 |
 | --- | --- |
-| 全局 IP 黑名单 | 一行一个精确 IP（支持 IPv4 或 IPv6），不支持 CIDR 或范围匹配。命中后所有 TCP/HTTP/HTTPS/UDP 入口请求都会被直接关闭。用于防止扫描和暴力破解 |
-| 服务地址 |用于在 web 上生成 [客户端快捷启动命令]、隧道访问 URL 时拼接的服务端地址。留空则使用浏览器当前访问地址 |
-| 平台泛域名 | 管理多个 `*.example.com`、对应的证书和私钥路径。平台域名会保存到同一个 `conf/global.json`，被 Host 使用后不能删除或改名；证书路径可更新并同步到关联 Host。 |
+| 服务地址 | 控制台生成客户端快捷命令、隧道访问地址和域名链接时优先使用的对外主机名；留空时回退到当前访问地址。它不改变实际监听地址 |
+| 全局最大连接数 | 所有客户端和代理入口共享的并发连接上限；`0` 表示不限 |
+| 全局限速 | 所有转发流量共享的总带宽上限，单位 `KB/s`，并叠加在客户端和资源限速之上；`0` 表示不限 |
+| 全局 IP 黑名单 / 白名单 | 支持 IPv4、IPv6、CIDR、IPv4 通配和 `geoip:` 规则，作用于客户端连接、代理入口和 Web 面板。同时配置两张名单时可选择“黑名单优先”或“白名单优先” |
+| 使用说明 | 自动识别远程 URL、`conf` 下的 HTML 文件或粘贴的 HTML；远程 URL 和本地文件说明见[使用说明页面配置](../usage-guide.md) |
+| Geo 数据 | 显示 `geoip.dat`、`geosite.dat` 的路径、大小、加载状态和版本，并支持在线更新 |
 
-平台泛域名的 DNS 泛解析、普通用户创建子域名、证书状态和规则诊断见[平台泛域名、证书热更新与规则诊断](../extend/platform-domain.md)。
+平台泛域名、Bridge/管理面板/默认 HTTPS 证书和 ACME 已集中到
+「系统 → 全局参数」的「证书设置」Tab。访问控制规则和配额优先级见
+[访问控制与配额](../extend/access-control.md)，字段默认值见
+[服务端配置文件参考](server_config.md)。
 
 ## 代理到服务端本地
 
@@ -95,27 +101,34 @@ allow_local_proxy=true
 本地转发让规则创建者可以访问 NPS 主机可达的内部服务。只应授予可信管理员，且应将管理面板限制在管理网络。
 
 
-## 客户端黑名单
-在客户端编辑页可填写多个 IP，命中后该客户端下所有隧道都会拒绝服务，用于针对单个客户端阻断。
+## 客户端与资源访问控制
 
-## 客户端白名单 + IP 授权
+客户端、隧道和 Host 都可以维护黑名单、白名单及冲突策略。规则支持 IPv4、
+IPv6、CIDR、IPv4 通配和 `geoip:`；`geosite:` 只用于混合代理的目标 ACL。
+需要来源固定、可提前录入时使用静态名单；需要允许访问者自助登记时使用
+“仅允许已登记 IP”。
 
-在客户端编辑页：
+开启“仅允许已登记 IP”后，访问者先到 `/ip/register` 输入登记密钥，将
+服务端识别到的公网来源地址登记一段有限时间，再访问目标资源。
 
-1. 直接添加 IP 到白名单
-2. 或填写「IP 授权密码」。当外网 IP 不在白名单时，会被重定向到 IP 授权页面，输入正确密码即可把该 IP 自动加入白名单。
+登记密钥可使用客户端或资源自身的 `register_key`，也可由管理员配置
+`public_register_key`。登记最长有效期由客户端/资源设置和
+`ip_register_max_hours` 共同约束；记录只保存在内存中，到期或 NPS 重启后
+失效。普通用户只能管理自己客户端下的登记，管理员可管理全部登记。
 
-![img](/image/new/ip.png)
-
-
-##  Proxy Protocol
-
-在 web 上 TCP 隧道编辑页开启「Proxy Protocol」开关，nps 会以 PROXY v1/v2 协议向后端转发原始来源 IP。后端服务（nginx、HAProxy 等）只需正常解析 PROXY 协议即可拿到真实客户端 IP。
-
-![img](/image/new/protocol.png)
+API 集成使用 `POST /api/v1/ip-register`。旧版“IP 授权密码”、跳转授权页、
+持久化 IP 授权列表以及 `/authIp`、`/auth/ipwhiteauth`、
+`/api/v1/ipwhiteauth` 均已删除。
 
 
-## WEB登录验证码
+## 后端 PROXY Protocol
+
+TCP 隧道和域名反代的编辑页都提供「后端 PROXY Protocol」选项。选择
+`PROXY v1` 或 `PROXY v2` 后，NPS 会在每个新后端 TCP 连接开始时发送对应的
+PROXY 头，让明确支持该协议的后端获知访问者地址。普通 HTTP 服务不应开启
+该选项；只有 Nginx、HAProxy 等后端显式启用 PROXY Protocol 时才应使用。
+
+## Web 登录验证码
 
 `nps.conf` 中：
 
@@ -123,28 +136,43 @@ allow_local_proxy=true
 open_captcha=true
 ```
 
-开启后 web 登录页会要求图形验证码。结合「web 管理保护」（连续 10 次失败封禁 1 分钟，见 [说明](../extend/description.md#web-管理保护)），可以有效缓解暴力破解。
+开启后 Web 登录页会要求图形验证码。结合登录失败限频、来源 IP 策略和
+HTTPS 反向代理，可以降低暴力破解风险；具体窗口与失败次数见
+[Web 管理保护](../extend/description.md#web-管理保护)。
 
 ## 关闭代理
 
-如需关闭 http 代理，将 `http_proxy_port` 留空；如需关闭 https 代理，将 `https_proxy_port` 留空。
+如需关闭 HTTP 域名代理，将 `http_proxy_port` 留空；如需关闭 HTTPS 域名代理，
+将 `https_proxy_port` 留空。
 
 ## 流量数据持久化
+
 服务端默认每 1 分钟持久化一次流量数据。将 `flow_store_interval` 设为空或 `0` 可关闭定时持久化；单位为分钟。
 
-**注意：** nps 不会持久化通过公钥连接的客户端。
+**注意：** NPS 不会持久化通过公共 VKey 连接的客户端。
 
 ## 系统信息显示
-nps 服务端支持在 web 上显示和统计服务器相关信息，`system_info_display` 默认开启；如需关闭可在 `nps.conf` 中设置 `system_info_display=false`。
+
+NPS 支持在 Web 仪表盘显示服务器 CPU、内存、连接和网卡信息。
+`system_info_display` 默认开启；如需关闭，可在 `nps.conf` 中设置
+`system_info_display=false`。
 
 
-## 关闭 web 管理
+## 关闭 Web 管理
+
 将 `nps.conf` 中的 `web_port` 设置为空或删除。
 
 ## 服务端多用户登录
-`allow_user_login` 默认开启。当前优先使用「用户管理」中创建的普通用户账号登录，账号与密码保存在 `users.json`；登录后可管理归属给该用户的多个客户端，并可在 `MaxClientNum`（`0` 表示不限制）内自行创建客户端。历史客户端仍兼容两种登录方式：配置过 `WebUserName`/`WebPassword` 时使用该凭据；两项均为空时可使用用户名 `user` 与该客户端 `VerifyKey` 登录。新部署请使用独立用户体系，详见[用户体系](../user.md)。
+
+`allow_user_login` 默认开启。当前优先使用「用户管理」中创建的普通用户账号登录，
+账号与密码保存在 `users.json`；登录后可管理归属给该用户的多个客户端，并可在
+`MaxClientNum`（`0` 表示不限制）内自行创建客户端。历史客户端仍兼容旧登录方式：
+`allow_user_vkey_login=true` 时，配置过 `WebUserName`/`WebPassword` 的客户端使用
+该凭据；两项均为空时可使用用户名 `user` 与该客户端 `VerifyKey` 登录。新部署应
+关闭旧 VKey 登录并使用独立用户体系，详见[用户体系](../user.md)。
 
 ## 用户注册功能
+
 将 `allow_user_register=true` 后登录页会出现注册入口。注册成功后创建独立用户并写入
 `users.json`，不会再把面板用户名和密码写入客户端记录。
 
@@ -152,18 +180,23 @@ nps 服务端支持在 web 上显示和统计服务器相关信息，`system_inf
 
 - `register_max_clients`：新用户默认客户端配额，`0` 表示不限；
 - `register_max_tunnels`：新用户默认隧道总配额，域名反代也计入，`0` 表示不限；
-- `register_expire_days`：新用户从注册成功时起默认有效天数，默认 `7`，`0` 表示永久有效；
+- `register_max_conn`：新用户全部客户端共享的并发连接上限，`0` 表示不限；
+- `register_upload_limit`：新用户全部客户端共享的上行带宽，单位 KB/s，`0` 表示不限；
+- `register_download_limit`：新用户全部客户端共享的下行带宽，单位 KB/s，`0` 表示不限；
+- `register_expire_days`：新用户从注册成功时起默认有效天数，默认 `0`（永久有效）；
 - `register_captcha`：是否要求图片验证码；
 - `register_rate_window`、`register_rate_limit`、`register_ip_rate_limit`：注册限频；
 - `register_email_verify`、SMTP 参数和邮箱验证码参数：可选邮箱验证。
 
 公开注册受 `allow_user_register` 控制；管理员通过 `POST /api/v1/users/register`
 创建账号时不受该公开注册开关限制。完整字段、SMTP 示例和迁移说明见
-[服务端配置](./server_config.md#注册与邮箱验证)。
+[服务端配置](./server_config.md#注册与邮箱验证)。所有注册参数也可在
+「系统 → 全局参数」的「用户注册」Tab 中维护。
 
 ## 监听指定 IP
 
-nps 支持每个隧道监听不同的服务端 IP，`nps.conf` 中设置 `allow_multi_ip=true` 后，可在 web 中控制，或 npc 配置文件中指定：
+NPS 支持每个隧道监听不同的服务端 IP。`nps.conf` 中设置
+`allow_multi_ip=true` 后，可在 Web 面板控制，或在 NPC 配置文件中指定：
 
 ```ini
 server_ip=xxx
@@ -188,9 +221,10 @@ server_ip=xxx
 
 
 
-## 与 nginx 配合
+## 与 Nginx 配合
 
-有时需要在云服务器上跑 nginx 做静态缓存或多服务复用 80/443。把 `http_proxy_port` 设为非 80 端口（例如 8010），由 nginx 反代：
+有时需要在云服务器上运行 Nginx，做静态缓存或多服务复用 80/443。
+可把 `http_proxy_port` 设为非 80 端口（例如 `8010`），再由 Nginx 反代：
 
 ```
 server {
@@ -203,44 +237,57 @@ server {
 }
 ```
 
-如需 https 也由 nginx 终结，将 `https_proxy_port` 留空关闭，由 nginx 监听 443：
+如需 HTTPS 也由 Nginx 终结，将 `https_proxy_port` 留空关闭，由 Nginx
+监听 443。下面使用当前推荐的 TLS 配置：
 
-```
+```nginx
 server {
-    listen 443;
+    listen 443 ssl;
+    http2 on;
     server_name *.proxy.com;
-    ssl on;
-    ssl_certificate  certificate.crt;
-    ssl_certificate_key private.key;
+
+    ssl_certificate     /etc/letsencrypt/live/proxy.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/proxy.example.com/privkey.pem;
     ssl_session_timeout 5m;
-    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;
-    ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
     ssl_prefer_server_ciphers on;
+
     location / {
-        proxy_set_header Host  $http_host;
-        proxy_pass http://127.0.0.1:8020;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://127.0.0.1:8010;
     }
 }
 ```
 
-## web 管理使用 https
-在 `nps.conf` 中设置 `web_open_ssl=true`，并配置 `web_cert_file` 与 `web_key_file`。
+如果 NPS 前面还有其他可信代理，应只在该链路按实际架构传递真实 IP，并确保
+每一层都覆盖而不是追加客户端自带的 `X-Forwarded-For`。
 
-## web 使用 Caddy 代理
+## Web 管理使用 HTTPS
 
-实现子路径访问 nps，假设想通过 `http://caddy_ip:caddy_port/nps` 访问后台：
+可直接在 `nps.conf` 中设置 `web_open_ssl=true` 并配置 `web_cert_file`、
+`web_key_file`；也可以在「系统 → 全局参数」的「证书设置」Tab 中打开
+“管理面板 HTTPS”进行维护。证书替换后需重启 NPS。
 
-```nginx
-caddy_ip:caddy_port/nps {
-  ##server_ip 为 nps 服务器IP
-  ##web_port 为 nps 后台端口
-  proxy / http://server_ip:web_port/nps {
-	transparent
-  }
+## Web 使用 Caddy 代理
+
+以下示例把管理面板发布到 `https://nps.example.com/nps`，并保留 `/nps`
+路径。`nps.conf` 中同时设置：
+
+```ini
+web_base_url=/nps
+```
+
+Caddy 2 配置：
+
+```caddyfile
+nps.example.com {
+    reverse_proxy /nps/* 127.0.0.1:8081
 }
 ```
 
-`nps.conf` 中设置：
-```
-web_base_url=/nps
-```
+修改 `web_base_url` 或代理路径后重启 NPS，并清理浏览器缓存。不要再使用
+Caddy v1 的 `proxy / ... { transparent }` 语法。

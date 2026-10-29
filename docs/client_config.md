@@ -20,7 +20,20 @@
 ./npc -server=<服务器IP>:8024 -vkey=<VerifyKey>
 ```
 
-TLS Bridge：
+其他 Bridge 入口：
+
+| 入口 | 示例命令 | 注意事项 |
+|------|----------|----------|
+| TCP + TLS | `./npc -server=<服务器IP>:8025 -vkey=<VerifyKey> -tls_enable=true` | 服务端需启用 `tls_enable` |
+| KCP | `./npc -server=<服务器IP>:8026 -vkey=<VerifyKey> -type=kcp` | 需放行 UDP |
+| WS | `./npc -server=<服务器IP>:8027 -vkey=<VerifyKey> -type=ws -bridge_path=/ws` | 路径需与服务端 `bridge_path` 一致 |
+| WSS | `./npc -server=<服务器IP>:8028 -vkey=<VerifyKey> -type=wss -bridge_path=/ws` | 需放行 TCP，路径与服务端一致 |
+| QUIC | `./npc -server=<服务器IP>:8029 -vkey=<VerifyKey> -type=quic -quic_alpn=nps -tls_server_name=<证书域名>` | 需放行 UDP，ALPN 与服务端一致 |
+| HTTP/3 Bridge | `./npc -server=<Bridge域名>:<http3端口> -vkey=<VerifyKey> -type=quic -quic_alpn=nps -tls_server_name=<bridge_host>` | 仅在 HTTPS 入口、HTTP/3 反代和 `bridge_http3=true` 均已启用时可用 |
+
+Web 面板只展示实际启用且能够监听的入口。`bridge_*_show=false` 可隐藏某一入口的命令，但不会关闭对应监听。
+
+TLS 系列 Bridge：
 
 ```bash
 ./npc -server=<服务器IP>:8025 -vkey=<VerifyKey> -tls_enable=true
@@ -73,7 +86,9 @@ npc.exe -server=<服务器IP>:8024 -vkey=<VerifyKey>
 | `-server` | 服务端地址，格式 `ip:port` | 空 |
 | `-vkey` | 客户端连接密钥，多个用英文逗号分隔 | 空 |
 | `-config` | 配置文件路径 | 默认配置路径 |
-| `-type` | Bridge 类型，`tcp`、`kcp`、`ws`、`wss` 或 `quic`；WS/WSS/QUIC 需服务端启用对应端口 | `tcp` |
+| `-time` | 执行 `npc register` 时请求的临时 IP 登记时长，单位小时 | `2` |
+| `-service_name` | 通过 `install` 注册的系统服务名；交互菜单创建的独立服务不使用这一默认名 | `Npc` |
+| `-type` | Bridge 类型，`tcp`、`kcp`、`ws`、`wss` 或 `quic`；`tls` 等价于 TCP 并启用 TLS | `tcp` |
 | `-bridge_path` | WS/WSS Bridge URL 路径，需与服务端配置相同 | `/ws` |
 | `-quic_alpn` | QUIC Bridge 的 ALPN，需与服务端配置相同 | `nps` |
 | `-tls_enable` | 启用 TLS Bridge | `false` |
@@ -146,7 +161,7 @@ server_port=9001
 | `compress` | 使用 Snappy 压缩 Bridge 数据，可降低带宽占用；CPU 较弱时可关闭 | `false` |
 | `crypt` | 加密 Bridge 数据，需与服务端/客户端配置保持一致 | `false` |
 | `server_addr` | 服务端地址；兼容旧配置别名 `server` | 空 |
-| `conn_type` | 连接类型；兼容旧配置别名 `tp` | `tcp` |
+| `conn_type` | 连接类型 `tcp`、`kcp`、`ws`、`wss` 或 `quic`；兼容旧配置别名 `tp` | `tcp` |
 | `tls_ca_file` | 服务端 CA 证书文件 | 空 |
 | `tls_server_name` | TLS SNI/证书名称 | 服务端地址 |
 | `tls_fingerprint` | 服务端证书 SHA-256 指纹 | 空 |
@@ -161,9 +176,9 @@ server_port=9001
 | 输入 | 操作 |
 |------|------|
 | `1` | 注册系统服务，需要输入快捷启动命令；可一次输入多个，用英文逗号分隔 |
-| `2` | 删除/卸载系统服务，需要输入 `vkey`；会先停止服务再卸载，可一次输入多个，用英文逗号分隔 |
-| `3` | 启动系统服务，需要输入 `vkey` |
-| `4` | 停止系统服务，需要输入 `vkey` |
+| `2` | 删除/卸载系统服务，需要输入 `vkey` 或完整服务名；会先停止服务再卸载 |
+| `3` | 启动系统服务，需要输入 `vkey` 或完整服务名 |
+| `4` | 停止系统服务，需要输入 `vkey` 或完整服务名 |
 | `5` | 更新客户端 |
 | `6` | 查看已注册的 `nps-client-*` 服务列表，并显示每个服务状态 |
 | `7` | 查看指定 `vkey` 对应服务的状态 |
@@ -174,17 +189,30 @@ server_port=9001
 
 也可以直接粘贴 Web 面板生成的「快捷启动命令」。多个快捷启动命令用英文逗号拼接。
 
-快捷启动命令由 Web 面板生成，内容是 Base64。当前 GUI 使用的格式为：
+快捷启动命令由 Web 面板按实际启用的 Bridge 入口生成，内容始终是 Base64。
+
+TCP 和 TCP + TLS 继续使用永久兼容的 v1 格式：
 
 ```text
 nps:<名称>|<服务端地址:端口>|<VerifyKey>|<是否TLS>[|<TLS证书指纹>]
 ```
 
-命令行 `npc` 同时兼容旧格式，解析后会转成：
+KCP、WS、WSS、QUIC 和 HTTP/3 使用 v2 JSON 格式，可携带协议、WS Path、QUIC ALPN、TLS Server Name 与证书指纹。Web 面板会在命令旁标记 `v1` 或 `v2`：
 
-```text
-<服务端地址:端口> <VerifyKey> <是否TLS>
+```json
+{
+  "v": 2,
+  "name": "测试客户端",
+  "server": "nps.example.com:8027",
+  "vkey": "a22c306c64",
+  "endpoint": "ws",
+  "transport": "ws",
+  "bridge_path": "/ws",
+  "tls": false
+}
 ```
+
+命令行 `npc` 与 NPC GUI 都兼容 v1 和 v2。v1 可由历史 NPC 继续读取；v2 需要升级到支持多协议快捷命令的 NPC/GUI（`1.1.37` 或更高）。无法识别 v2 的旧版程序不会错误地按 TCP 参数启动连接。
 
 ## 系统服务
 
@@ -206,29 +234,42 @@ npc.exe start
 
 Linux 上请使用 `sudo` 执行安装。安装后服务会固定使用系统安装路径（通常为 `/usr/bin/npc`，无权限时为 `/usr/local/bin/npc`），不依赖解压目录；可以移动或删除下载的压缩包目录。
 
-交互式菜单注册服务时，会按 `vkey` 创建独立服务，服务名格式为：
+交互式菜单注册服务时，会按 `vkey` 和 Bridge 入口创建独立服务。普通 TCP 保留历史名称：
 
 ```text
 nps-client-<vkey>
 ```
 
-交互式菜单里的「删除/卸载系统服务」就是删除这个独立服务。菜单里的「查看已注册服务列表」会扫描当前系统中已经注册的 `nps-client-*` 服务，适合一台机器绑定多个客户端时排查。
+其他入口使用协议后缀：
+
+| 入口 | 服务名 |
+|------|--------|
+| TCP | `nps-client-<vkey>` |
+| TCP + TLS | `nps-client-<vkey>-tls` |
+| KCP | `nps-client-<vkey>-kcp` |
+| WS | `nps-client-<vkey>-ws` |
+| WSS | `nps-client-<vkey>-wss` |
+| QUIC | `nps-client-<vkey>-quic` |
+| HTTP/3 Bridge | `nps-client-<vkey>-http3` |
+
+同一 VKey 安装多个入口时互不覆盖。启动、停止或删除时如果只填写 VKey 且存在多个后缀服务，程序会列出完整服务名并要求重新选择；直接输入完整服务名可精确操作。服务参数会完整保存协议、`-bridge_path`、`-quic_alpn`、TLS Server Name、证书指纹和 CA 文件，重启后不会退回普通 TCP。
+
+交互式菜单里的「查看已注册服务列表」会扫描当前系统中已经注册的 `nps-client-*` 服务，适合一台机器绑定多个服务端或多个协议时排查。
 
 日志默认位置：
 
 | 系统 | 日志路径 |
 |------|----------|
-| Linux/macOS | `/var/log/npc.log`，独立服务会写成 `/var/log/npc-<vkey>.log` |
-| Windows | `npc.exe` 所在目录下的 `npc.log` 或 `npc-<vkey>.log` |
+| Linux/macOS | `/var/log/npc.log`；独立服务按入口写成 `/var/log/npc-<vkey>[-协议].log` |
+| Windows | `npc.exe` 所在目录下的 `npc.log` 或 `npc-<vkey>[-协议].log` |
 
 ## HTTP/SOCKS5 代理认证
 
-HTTP 正向代理和 SOCKS5 代理的账号密码不在「新增隧道」页面设置，而是在「客户端」的认证配置里设置：
+HTTP 正向代理和 SOCKS5 优先使用各自隧道上配置的独立认证；没有配置时才回退到所属客户端的公共 Basic 认证：
 
-1. 进入「客户端」。
-2. 新增或编辑客户端。
-3. 在「认证配置」里填写「Basic 认证用户名」和「Basic 认证密码」。
-4. 保存后，该客户端下的 HTTP 正向代理、SOCKS5 代理以及域名代理会使用这组认证信息。
+1. 独立认证：编辑「HTTP / SOCKS 混合代理」规则，在「认证配置」中填写 `用户名:密码`，每行一个账号。该账号只作用于当前代理端口，设置后不会回退到客户端公共认证。
+2. 公共认证：如果没有配置独立认证，可在「客户端 → 编辑 → 认证配置」填写「Basic 认证用户名」和「Basic 认证密码」。该客户端下的混合代理和域名规则会复用这组认证。
+3. 文件访问本身不使用这组穿透入口认证；需要保护时应在反向代理或上游应用增加认证。
 
 如果这两个字段都为空，SOCKS5 会允许无认证连接，知道服务端 IP 和端口的人都可以尝试连接。公网开放 SOCKS5 时，建议务必设置账号密码，并配合客户端黑名单、全局黑名单或防火墙限制来源 IP。
 

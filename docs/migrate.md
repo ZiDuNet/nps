@@ -27,7 +27,7 @@ NPS 仍使用 JSON 文件持久化，默认位于 `conf` 目录。
 | `users.json` | 普通用户数据 |
 | `tasks.json` | 普通隧道数据 |
 | `hosts.json` | HTTP/HTTPS 域名规则 |
-| `global.json` | 全局设置 |
+| `global.json` | 全局参数（服务地址、全局容量与名单、使用说明、平台泛域名和 API 凭据等） |
 
 每个对象文件使用 `*#*` 分隔多条 JSON 记录，这是当前项目的既有格式。
 
@@ -93,12 +93,12 @@ NPC 不认识这两个字段时会忽略它们，原有连接协议和目标配�
 
 - `p2p_stun_servers`、`p2p_enable_*_portmap`、`p2p_portmap_lease_seconds` 和三个 P2P 超时字段；
 - `http3_proxy_port`、`https_default_*`、`force_auto_ssl` 和 ACME 缓存字段；
-- `allow_user_register`、`register_captcha`、`register_max_clients`、`register_max_tunnels`、`register_expire_days` 和注册限频字段；
+- `allow_user_register`、`register_captcha`、`register_max_clients`、`register_max_tunnels`、`register_max_conn`、`register_upload_limit`、`register_download_limit`、`register_expire_days` 和注册限频字段；
 - 邮箱验证所需的 `register_email_verify`、验证码有效期/冷却时间及 `smtp_*` 字段；不启用邮箱验证时 SMTP 字段可保持为空；
 - `allow_user_local`、`allow_secret_link`、`allow_secret_local`、`allow_remote_update`；
 - `ntp_server`、`ntp_interval`、`geoip_path`、`geosite_path`、`geo_reload_interval`、`acl_max_rules`、`dns_server`。
 
-这些字段可以在 Web 的「全局参数 → 服务端配置」中按分组查看。保存后会提示重启；配置页不会覆盖未知自定义字段，敏感值只显示掩码。生产环境可以先复制旧 `nps.conf`，再让 NPS 自动追加字段，不要求重写端口和证书路径。
+注册相关字段可以在「系统 → 全局参数」的「用户注册」Tab 中维护；其他字段在「服务端配置」Tab 中按分组查看，证书、私钥和 ACME 字段在「证书设置」Tab 中统一维护。完整配置仍可在服务端配置的源码视图查看。保存后会提示重启；配置页不会覆盖未知自定义字段，敏感值只显示掩码。生产环境可以先复制旧 `nps.conf`，再让 NPS 自动追加字段，不要求重写端口和证书路径。已有显式 `register_expire_days` 不会被迁移覆盖。
 
 ### 二进制部署
 

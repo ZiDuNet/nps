@@ -1,6 +1,6 @@
 # 功能与能力边界
 
-本页按当前实现列出可用功能、配置入口和使用边界。完整的端到端操作可直接参考[使用示例](example.md)；服务端参数见[服务端配置](../server_config.md)，NPC 参数与配置文件格式见[客户端配置](../client_config.md)。
+本页按当前实现列出可用功能、配置入口和使用边界。完整的端到端操作可直接参考[使用示例](example.md)；服务端参数见[服务端配置文件参考](../server/server_config.md)，NPC 参数与配置文件格式见[客户端配置](../client_config.md)。
 
 ## 功能索引
 
@@ -12,15 +12,15 @@
 | 配置 Basic 认证、白名单、黑名单、端口限制、用户和客户端配额 | [访问控制与配额](access-control.md) |
 | 打开 TLS Bridge、KCP、压缩/加密、多路复用或健康检查 | [服务端增强功能](../server/nps_extend.md)与[NPC 配置文件参考](../client/config-file.md) |
 | 查看真实 IP、流量、带宽、连接状态、日志、pprof 和排查顺序 | [运行说明](description.md) |
-| 使用 Web API 自动化客户端、隧道和 Host 管理 | [API 鉴权](api.md)与[API 清单](webapi.md) |
+| 使用 API 自动化客户端、隧道和 Host 管理 | [对外 API v1](../api.md)、[API 鉴权](api.md)与[历史 Web API](webapi.md) |
 
 ## 代理模式
 
 | 模式 | 适用场景 | 配置入口 |
 | --- | --- | --- |
-| TCP | SSH、RDP、数据库、任意 TCP 服务 | Web 面板「隧道」或 NPC 配置文件 `mode=tcp` |
-| UDP | DNS、游戏、VoIP 等 UDP 服务 | Web 面板「隧道」或 `mode=udp` |
-| HTTP(S) 域名代理 | 网站、Webhook、接口回调 | Web 面板「域名」；共用 `http_proxy_port` / `https_proxy_port` |
+| TCP | SSH、RDP、数据库、任意 TCP 服务 | Web 面板「TCP 隧道」或 NPC 配置文件 `mode=tcp` |
+| UDP | DNS、游戏、VoIP 等 UDP 服务 | Web 面板「UDP 隧道」或 `mode=udp` |
+| HTTP(S) 域名代理 | 网站、Webhook、接口回调 | Web 面板「域名反代」；共用 `http_proxy_port` / `https_proxy_port` |
 | HTTP 正向代理 | 通过内网客户端访问 HTTP 资源 | `mode=httpProxy` |
 | SOCKS5 | 通用代理访问内网资源 | `mode=socks5` |
 | Secret 私密代理 | 不固定占用公网端口的受密码保护连接 | `mode=secret`，访问端以 `-local_type=secret` 启动 NPC |
@@ -41,15 +41,15 @@
 
 ## 域名代理能力
 
-在 Web 面板「域名」新增 Host 规则，或在 NPC 配置文件中配置 `host` 和 `target_addr`。每条规则可以设置：
+在 Web 面板「域名反代」新增 Host 规则，或在 NPC 配置文件中配置 `host` 和 `target_addr`。每条规则可以设置：
 
 - **精确域名与泛域名**：`app.example.com` 或 `*.example.com`。DNS 仍要将相应域名解析到 NPS 公网 IP。
-- **平台泛域名池**：管理员可在全局参数维护多个 `*.example.com`，按需绑定证书；用户选择后以唯一前缀创建子域名，平台证书在服务端锁定，无证书项仅支持 HTTP。DNS、续期和诊断见[平台域名说明](platform-domain.md)。
+- **平台泛域名池**：管理员可在「系统 → 全局参数」的「证书设置」Tab 中维护多个 `*.example.com`，按需绑定证书；用户选择后以唯一前缀创建子域名，平台证书在服务端锁定，无证书项仅支持 HTTP。DNS、续期和诊断见[平台域名说明](platform-domain.md)。
 - **协议选择**：`http`、`https` 或 `all`。HTTP 与 HTTPS 监听端口由 `http_proxy_port` 和 `https_proxy_port` 决定；非 80/443 端口需要在浏览器 URL 中显式写出。
 - **路径路由**：同一个域名可按 `location` 匹配不同路径，例如 `/api` 和 `/static`。
 - **多目标轮询**：目标地址每行一个，NPS 按顺序轮换，可用于简单负载均衡。需要按存活状态摘除节点时，配合[健康检查](#健康检查)。
 - **Host 重写和自定义请求 Header**：用于后端虚拟主机、上游鉴权或兼容已有应用；Header 每行 `名称: 值`。
-- **Basic 认证**：在所属客户端的「认证配置」中设置用户名和密码，域名代理、HTTP 正向代理与 SOCKS5 共用该组凭据。
+- **Basic 认证**：域名代理优先使用 Host 级账号；HTTP 正向代理和 SOCKS5 优先使用混合代理规则级账号；未配置时才回退到所属客户端的公共 Basic。
 - **HTTPS 终结或透传**：可上传/引用证书与私钥，或者让内网服务自行处理 TLS。自动 HTTPS 会将 HTTP 请求重定向到对应 HTTPS 端口。
 - **真实来源 Header**：`http_add_origin_header=true` 时，NPS 向后端添加 `X-Forwarded-For` 与 `X-Real-IP`。代理链路和信任边界见[部署与运行说明](description.md#获取访问者真实-ip)。
 
@@ -90,9 +90,13 @@ crypt=true
 
 这会影响客户端与 NPS 的代理数据传输。需要使用标准 TLS 保护 Bridge 时，在服务端启用 `tls_enable=true`，客户端改连 `tls_bridge_port` 并传入 `-tls_enable=true`；自签名证书建议设置 `-tls_fingerprint` 或 `-tls_ca_file`，不要在生产环境使用 `-tls_insecure_skip_verify=true`。
 
-Bridge 控制连接支持 `tcp`、`kcp`、`ws`、`wss` 和 `quic`。TCP TLS 可使用独立的 TLS Bridge 端口；WS/WSS 使用独立端口与 `bridge_path`（默认 `/ws`），WSS 使用服务端 Bridge 证书。KCP 可作为主 Bridge（`bridge_type=kcp`），也可通过 `bridge_kcp_port` 与 TCP 并行监听；WS/WSS 和 QUIC 也可设置独立监听端口。KCP/QUIC 使用 UDP；WS/WSS 使用 TCP，并需在前置反向代理放行 WebSocket Upgrade。QUIC Bridge 是加密的 UDP 字节流入口，NPC 使用 `-type=quic`，服务端和客户端的 `quic_alpn` 必须一致；它不是面向浏览器的 HTTP/3 反向代理。
+Bridge 控制连接支持 `tcp`、`kcp`、`ws`、`wss` 和 `quic`。TCP TLS 可使用独立的 TLS Bridge 端口；WS/WSS 使用独立端口与 `bridge_path`（默认 `/ws`），WSS 使用服务端 Bridge 证书。KCP 可作为主 Bridge（`bridge_type=kcp`），也可通过 `bridge_kcp_port` 与 TCP 并行监听；WS/WSS 和 QUIC 也可设置独立监听端口。KCP/QUIC 使用 UDP；WS/WSS 使用 TCP，并需在前置反向代理放行 WebSocket Upgrade。QUIC Bridge 是加密的 UDP 字节流入口，NPC 使用 `-type=quic`，服务端和客户端的 `quic_alpn` 必须一致。
+
+启用 `bridge_http3=true` 且 HTTPS 入口正常监听后，HTTP/3 反代 UDP 端口还可同时承载 Bridge QUIC。Web 面板通过 ALPN 与服务端 `bridge_host` 生成独立命令，客户端仍使用 `-type=quic`；这不是另一个传输实现。HTTPS 入口关闭、UDP 绑定失败或页面配置未生效时，不会生成不可用的 HTTP/3 命令。
 
 NPC `1.1.29` 及以上支持配置文件中的 `conn_type=ws` / `wss`、命令行 `-type=ws` / `-type=wss`，以及 `bridge_path` / `-bridge_path`。`1.1.28` 及以下仍按原 TCP/KCP 连接方式工作，不会收到新控制消息。
+
+Web 客户端详情会同时列出所有实际启用的 Bridge 入口，每个入口都可复制普通命令和快捷启动命令。TCP、TCP + TLS 快捷命令继续使用历史 v1 格式；KCP、WS、WSS、QUIC、HTTP/3 使用可携带 Path、ALPN、SNI 和证书指纹的 v2 格式。`1.1.37` 起 NPC/GUI 同时兼容两种格式，同 VKey 安装多个协议系统服务时使用 `-tls`、`-kcp`、`-ws`、`-wss`、`-quic`、`-http3` 后缀。`bridge_*_show` 仅控制命令展示，`bridge_*_show_ip/port` 仅覆盖复制命令中的公网地址与端口。
 
 ### 多路复用
 
@@ -179,18 +183,20 @@ allow_ports=9001-9009,10001,11000-12000
 
 ### IP 白名单、黑名单与访问授权
 
-- 全局黑名单在「全局设置」中维护，命中的来源会被所有入口拒绝。
+- 全局黑名单在「系统 → 全局参数」的「全局参数」Tab 中通过“全局访问控制”卡片维护，命中的来源会被所有入口拒绝。
 - 客户端黑名单只作用于该客户端名下的隧道和 Host 规则。
-- 客户端白名单可直接维护允许地址，也可配置 IP 授权密码，让访问者通过授权页登记当前公网 IP。
-- `ip_limit=true` 时，只有已注册的来源 IP 才能访问代理。可用 `npc register -server=<NPS>:<bridge-port> -vkey=<key> -time=2` 注册临时授权；单位为小时。
+- 客户端白名单可直接维护允许地址；需要让外部访问者自助登记时，应使用“仅允许已登记 IP”和独立的 IP 登记密钥。
+- 访问者可在 `/ip/register` 或 `POST /api/v1/ip-register` 登记服务端识别到的来源 IP；登记只保存在内存中，到期或 NPS 重启后失效。旧版跳转授权页、持久化 IP 授权列表和 `/authIp` 流程已移除。
+- 在客户端、隧道或 Host 上开启「仅允许已登记 IP」后，服务端会按实际访问来源检查该客户端的 `RegisteredOnly` 或资源级 `registered_only` 限时登记；访问者通过 `/ip/register` 或 `POST /api/v1/ip-register` 完成登记后，方可访问对应资源。
+- `ip_limit` 是旧版 Bridge 来源 IP 登记总开关，与新版「仅允许已登记 IP」不是同一功能。仅旧部署仍可使用 `npc register -server=<NPS>:<bridge-port> -vkey=<key> -time=2` 写入旧登记表，单位小时；新部署应使用资源级登记与黑白名单。
 
 白名单、黑名单和 IP 注册都依赖 NPS 实际看到的来源地址。若 NPS 位于反向代理或四层负载均衡之后，先确认源地址透传方式，再启用严格的 IP 策略。
 
 ### 认证与 API
 
 - 管理员账号在 `nps.conf` 中；普通用户、客户端级 Web 登录账号保存在 JSON 数据文件中。
-- HTTP 正向代理、SOCKS5 与域名代理使用客户端的 Basic 认证配置。
-- Web API 使用 `auth_key` 与时间戳签名；见[API 鉴权](api.md)和[API 清单](webapi.md)。
+- 域名代理支持 Host 级 Basic；HTTP 正向代理和 SOCKS5 支持混合代理规则级 Basic，并在留空时回退客户端公共 Basic。
+- `/api/v1` 使用管理员签名或普通用户 Bearer Token；鉴权边界见[API 鉴权与兼容](api.md)，旧接口见[历史 Web API](webapi.md)。
 - 登录验证码通过 `open_captcha=true` 开启，登录尝试限制和安全部署建议见[部署与运行说明](description.md#web-管理保护)。
 
 ## 运维能力
@@ -211,4 +217,4 @@ allow_ports=9001-9009,10001,11000-12000
 - 完整的 `nps.conf` 热重载；端口、监听器和 TLS/P2P 启停都需要重启 NPS。
 - NPC 的 `reload` 子命令。修改 NPC 配置文件后应重启对应 NPC 进程或系统服务。
 
-部署前请以本仓库版本、[服务端配置](../server_config.md)和实际启动日志为准，不要直接套用其他 NPS 分支或旧版文档中的默认值。
+部署前请以本仓库版本、[服务端配置文件参考](../server/server_config.md)和实际启动日志为准，不要直接套用其他 NPS 分支或旧版文档中的默认值。

@@ -1,104 +1,124 @@
 <style>
-    .server-config-page { max-width: 1560px; }
-    .server-config-header { align-items: flex-end; }
-    .server-config-path { display: inline-flex; align-items: center; gap: 7px; margin-top: 9px; color: var(--nps-faint); font: 12px/1.4 "Fira Code", monospace; overflow-wrap: anywhere; }
+    .server-config-page { max-width: 1680px; margin: 0 auto; }
+    .server-config-header { align-items: flex-end; margin-bottom: 18px; }
+    .server-config-path { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; margin-top: 9px; padding: 4px 8px; color: var(--nps-faint); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 6px; font: 10.5px/1.4 "Fira Code", monospace; overflow-wrap: anywhere; }
     .server-config-path i { color: var(--nps-primary); }
-    .server-config-hero { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, .75fr); gap: 16px; margin-bottom: 16px; }
-    .server-config-notice { display: flex; align-items: flex-start; gap: 12px; margin: 0; padding: 16px 18px; color: var(--nps-info); background: linear-gradient(135deg, var(--nps-info-soft), var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-info) 28%, var(--nps-line)); border-radius: var(--nps-radius); }
-    .server-config-notice i { margin-top: 3px; }
-    .server-config-notice strong { display: block; margin-bottom: 4px; color: var(--nps-ink); }
-    .server-config-notice p { margin: 0; color: var(--nps-muted); line-height: 1.65; }
-    .server-config-validation-warning { margin-bottom: 16px; color: var(--nps-warning); background: linear-gradient(135deg, color-mix(in srgb, var(--nps-warning) 11%, var(--nps-surface)), var(--nps-surface)); border-color: color-mix(in srgb, var(--nps-warning) 36%, var(--nps-line)); }
-    .server-config-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .server-config-stat { padding: 12px 14px; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 10px; }
-    .server-config-stat strong { display: block; color: var(--nps-ink); font-size: 20px; line-height: 1.1; }
-    .server-config-stat span { display: block; margin-top: 5px; color: var(--nps-muted); font-size: 11px; }
+    .server-config-page .system-settings-tabs { margin-bottom: 14px; }
+    .server-config-hero { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(440px, .8fr); gap: 14px; margin-bottom: 13px; padding: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 5%, var(--nps-surface-subtle)), var(--nps-surface) 58%); border: 1px solid color-mix(in srgb, var(--nps-primary) 16%, var(--nps-line)); border-radius: 14px; }
+    .server-config-notice { display: flex; align-items: flex-start; gap: 11px; margin: 0 0 13px; padding: 12px 14px; color: var(--nps-info); background: color-mix(in srgb, var(--nps-info-soft) 76%, var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-info) 26%, var(--nps-line)); border-radius: 11px; }
+    .server-config-hero > .server-config-notice { align-items: center; margin: 0; padding: 0; background: transparent; border: 0; }
+    .server-config-notice > i { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 34px; height: 34px; margin: 0; color: var(--nps-primary); background: color-mix(in srgb, var(--nps-primary) 10%, var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-primary) 20%, var(--nps-line)); border-radius: 10px; font-size: 15px; line-height: 1; }
+    .server-config-notice > div { min-width: 0; }
+    .server-config-notice strong { display: block; margin-bottom: 3px; color: var(--nps-ink); font-size: 12px; }
+    .server-config-notice p { margin: 0; color: var(--nps-muted); font-size: 10.5px; line-height: 1.55; }
+    .server-config-validation-warning { color: var(--nps-warning); background: linear-gradient(135deg, color-mix(in srgb, var(--nps-warning) 10%, var(--nps-surface)), var(--nps-surface)); border-color: color-mix(in srgb, var(--nps-warning) 34%, var(--nps-line)); }
+    .server-config-validation-warning > i { color: var(--nps-warning); background: color-mix(in srgb, var(--nps-warning) 11%, var(--nps-surface)); border-color: color-mix(in srgb, var(--nps-warning) 25%, var(--nps-line)); }
+    .server-config-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+    .server-config-stat { min-width: 0; padding: 9px 10px; background: color-mix(in srgb, var(--nps-surface) 88%, transparent); border: 1px solid var(--nps-line); border-radius: 9px; }
+    .server-config-stat strong { display: block; color: var(--nps-ink); font-size: 17px; line-height: 1.05; }
+    .server-config-stat span { display: block; margin-top: 4px; color: var(--nps-muted); font-size: 9.5px; line-height: 1.3; }
+    .server-config-stat.is-warning { background: color-mix(in srgb, var(--nps-warning) 7%, var(--nps-surface)); border-color: color-mix(in srgb, var(--nps-warning) 25%, var(--nps-line)); }
     .server-config-stat.is-warning strong { color: var(--nps-warning); }
-    .server-config-commandbar { position: sticky; top: 10px; z-index: 8; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 15px; padding: 10px; background: color-mix(in srgb, var(--nps-surface) 94%, transparent); border: 1px solid var(--nps-line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.12); backdrop-filter: blur(12px); }
+    .server-config-commandbar { position: sticky; top: 10px; z-index: 8; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px; background: color-mix(in srgb, var(--nps-surface) 94%, transparent); border: 1px solid color-mix(in srgb, var(--nps-primary) 13%, var(--nps-line)); border-radius: 12px; box-shadow: 0 10px 28px rgba(15,23,42,.11); backdrop-filter: blur(14px); }
     .server-config-view-switch { display: inline-flex; gap: 3px; padding: 3px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 9px; }
-    .server-config-view-switch button { min-height: 34px; padding: 0 13px; color: var(--nps-muted); background: transparent; border: 0; border-radius: 7px; font-size: 12px; font-weight: 650; cursor: pointer; }
-    .server-config-view-switch button.is-active { color: var(--nps-primary); background: var(--nps-surface); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
-    .server-config-search { position: relative; flex: 1 1 280px; min-width: 220px; }
-    .server-config-search i { position: absolute; top: 50%; left: 12px; color: var(--nps-faint); transform: translateY(-50%); pointer-events: none; }
-    .server-config-search input { width: 100%; min-height: 38px; padding: 0 36px 0 34px; color: var(--nps-ink); background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 8px; }
-    .server-config-search button { position: absolute; top: 50%; right: 6px; width: 28px; height: 28px; color: var(--nps-muted); background: transparent; border: 0; border-radius: 6px; transform: translateY(-50%); cursor: pointer; }
-    .server-config-commandbar .btn { min-height: 36px; }
-    .server-config-filter-count { margin-left: auto; color: var(--nps-muted); font-size: 11px; white-space: nowrap; }
-    .server-config-stack { display: grid; gap: 13px; }
-    .server-config-section { overflow: hidden; border: 1px solid var(--nps-line); }
-    .server-config-section__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; background: var(--nps-surface); border-bottom: 1px solid var(--nps-line); cursor: pointer; }
+    .server-config-view-switch button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 11px; color: var(--nps-muted); background: transparent; border: 0; border-radius: 7px; font-size: 11px; font-weight: 680; cursor: pointer; }
+    .server-config-view-switch button.is-active { color: var(--nps-primary); background: var(--nps-surface); box-shadow: 0 2px 8px rgba(15,23,42,.1); }
+    .server-config-search { position: relative; flex: 1 1 260px; min-width: 210px; }
+    .server-config-search i { position: absolute; top: 50%; left: 11px; color: var(--nps-faint); transform: translateY(-50%); pointer-events: none; }
+    .server-config-search input { width: 100%; min-height: 36px; padding: 0 34px 0 32px; color: var(--nps-ink); background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 8px; font-size: 11.5px; }
+    .server-config-search input:focus { border-color: color-mix(in srgb, var(--nps-primary) 55%, var(--nps-line)); box-shadow: var(--nps-focus, 0 0 0 3px color-mix(in srgb, var(--nps-primary) 14%, transparent)); outline: 0; }
+    .server-config-search button { position: absolute; top: 50%; right: 5px; width: 27px; height: 27px; color: var(--nps-muted); background: transparent; border: 0; border-radius: 6px; transform: translateY(-50%); cursor: pointer; }
+    .server-config-commandbar .btn { min-height: 34px; padding-right: 10px; padding-left: 10px; font-size: 10.5px; }
+    .server-config-filter-count { margin-left: auto; color: var(--nps-muted); font-size: 10px; white-space: nowrap; }
+    .server-config-stack { display: grid; gap: 9px; }
+    body.nps-bootstrap .server-config-page .server-config-section { margin: 0 !important; overflow: hidden; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 11px !important; box-shadow: 0 3px 12px rgba(15,23,42,.035) !important; }
+    .server-config-section__header { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 62px; padding: 11px 13px; background: var(--nps-surface); border-bottom: 1px solid var(--nps-line); cursor: pointer; }
     .server-config-section__heading { min-width: 0; }
-    .server-config-section__title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
-    .server-config-section__heading h2 { margin: 0; color: var(--nps-ink); font-size: 15px; font-weight: 760; }
-    .server-config-section__heading p { margin: 5px 0 0; color: var(--nps-muted); font-size: 12px; }
-    .server-config-section__count { display: inline-flex; align-items: center; min-height: 23px; padding: 0 8px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 999px; font-size: 10px; }
-    .server-config-section__toggle { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; min-height: 32px; padding: 0 10px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 7px; font-size: 11px; cursor: pointer; }
+    .server-config-section__title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .server-config-section__heading h2 { margin: 0; color: var(--nps-ink); font-size: 13px; font-weight: 760; }
+    .server-config-section__heading p { margin: 4px 0 0; color: var(--nps-muted); font-size: 10.5px; line-height: 1.45; }
+    .server-config-section__count { display: inline-flex; align-items: center; min-height: 21px; padding: 0 7px; color: var(--nps-primary); background: var(--nps-primary-soft); border: 1px solid color-mix(in srgb, var(--nps-primary) 18%, var(--nps-line)); border-radius: 999px; font-size: 9px; font-weight: 680; }
+    .server-config-section__toggle { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; min-height: 30px; padding: 0 9px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 7px; font-size: 10px; cursor: pointer; }
+    .server-config-section__toggle:hover { color: var(--nps-primary); border-color: color-mix(in srgb, var(--nps-primary) 30%, var(--nps-line)); }
     .server-config-section__toggle i { transition: transform .16s ease; }
     .server-config-section.is-collapsed .server-config-section__header { border-bottom-color: transparent; }
     .server-config-section.is-collapsed .server-config-section__toggle i { transform: rotate(-90deg); }
     .server-config-section.is-collapsed .server-config-section__body { display: none; }
-    .server-config-section__body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; background: color-mix(in srgb, var(--nps-surface-subtle) 42%, var(--nps-surface)); }
+    .server-config-section__body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 9px; background: color-mix(in srgb, var(--nps-surface-subtle) 52%, var(--nps-surface)); }
     .server-config-section__body--table { display: block; }
-    .server-config-field { display: flex; flex-direction: column; min-width: 0; min-height: 184px; padding: 14px; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 10px; transition: border-color .16s ease, opacity .16s ease; }
-    .server-config-field:hover { border-color: color-mix(in srgb, var(--nps-primary) 36%, var(--nps-line)); }
-    .server-config-field.is-disabled { background: color-mix(in srgb, var(--nps-surface-subtle) 55%, var(--nps-surface)); }
-    .server-config-field__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .server-config-field { display: grid; align-content: start; gap: 9px; min-width: 0; min-height: 0; padding: 11px 12px; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 9px; transition: border-color .16s ease, background-color .16s ease, opacity .16s ease; }
+    .server-config-field:hover { border-color: color-mix(in srgb, var(--nps-primary) 32%, var(--nps-line)); }
+    .server-config-field.is-disabled { background: color-mix(in srgb, var(--nps-surface-subtle) 58%, var(--nps-surface)); }
+    .server-config-field__head { display: block; min-width: 0; }
     .server-config-field__label { min-width: 0; }
-    .server-config-field__label label { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 0; color: var(--nps-ink); font-size: 13px; font-weight: 740; }
-    .server-config-field__label code { padding: 2px 6px; color: var(--nps-faint); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 5px; font: 10px/1.35 "Fira Code", monospace; font-weight: 500; }
-    .server-config-field__label p { margin: 7px 0 0; color: var(--nps-muted); font-size: 11px; line-height: 1.55; }
-    .server-config-field__badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
-    .server-config-badge { display: inline-flex; align-items: center; min-height: 21px; padding: 0 7px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 999px; font-size: 9px; line-height: 1; }
+    .server-config-field__label label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; color: var(--nps-ink); font-size: 11.5px; font-weight: 730; }
+    .server-config-field__label code { padding: 2px 5px; color: var(--nps-faint); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 5px; font: 9px/1.3 "Fira Code", monospace; font-weight: 500; }
+    .server-config-field__label p { margin: 4px 0 0; color: var(--nps-muted); font-size: 10px; line-height: 1.45; }
+    .server-config-field__badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .server-config-badge { display: inline-flex; align-items: center; min-height: 19px; padding: 0 6px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 999px; font-size: 8.5px; line-height: 1; }
     .server-config-badge.is-enabled { color: var(--nps-success); border-color: color-mix(in srgb, var(--nps-success) 30%, var(--nps-line)); }
     .server-config-badge.is-secret { color: var(--nps-warning); border-color: color-mix(in srgb, var(--nps-warning) 30%, var(--nps-line)); }
     .server-config-badge.is-missing { color: var(--nps-danger); border-color: color-mix(in srgb, var(--nps-danger) 30%, var(--nps-line)); }
-    .server-config-field__control { min-width: 0; margin-top: auto; padding-top: 14px; }
-    .server-config-field.is-disabled .server-config-field__control { opacity: .58; }
-    .server-config-field__control .form-control { width: 100%; min-width: 0; min-height: 38px; }
-    .server-config-field__control select.form-control { padding-right: 34px; }
-    .server-config-optional { display: inline-flex; align-items: center; gap: 7px; margin: 0 0 9px; color: var(--nps-muted); font-size: 11px; cursor: pointer; }
-    .server-config-optional input { accent-color: var(--nps-primary); }
-    .server-config-readonly { min-height: 38px; padding: 10px 11px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px dashed var(--nps-line-strong); border-radius: 7px; font: 11px/1.5 "Fira Code", monospace; overflow-wrap: anywhere; }
-    .server-config-secret-note { display: block; margin-top: 7px; color: var(--nps-warning); font-size: 10px; }
-    .server-config-secret-reveal { min-width: 40px; }
-    .server-config-savebar { position: sticky; bottom: 10px; z-index: 7; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; padding: 11px 12px; background: color-mix(in srgb, var(--nps-surface) 94%, transparent); border: 1px solid var(--nps-line); border-radius: 11px; box-shadow: 0 -8px 28px rgba(0,0,0,.12); backdrop-filter: blur(12px); }
+    .server-config-field__control { min-width: 0; margin: 0; padding: 0; }
+    .server-config-field.is-disabled .server-config-field__control { opacity: .68; }
+    .server-config-field__control .form-control { width: 100%; min-width: 0; min-height: 34px; font-size: 11px; }
+    .server-config-field__control select.form-control { padding-right: 30px; }
+    .server-config-field__control .input-group { display: flex; flex-wrap: nowrap; width: 100%; }
+    .server-config-field__control .input-group .form-control { flex: 1 1 auto; }
+    .server-config-optional { display: inline-flex; align-items: center; gap: 7px; margin: 0 0 7px; color: var(--nps-muted); font-size: 9.5px; cursor: pointer; }
+    .server-config-optional input { position: relative; flex: 0 0 auto; width: 29px; height: 17px; margin: 0; appearance: none; background: var(--nps-line-strong); border: 1px solid var(--nps-line-strong); border-radius: 999px; cursor: pointer; transition: background-color .16s ease, border-color .16s ease; }
+    .server-config-optional input::after { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; content: ""; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(15,23,42,.2); transition: transform .16s ease; }
+    .server-config-optional input:checked { background: var(--nps-primary); border-color: var(--nps-primary); }
+    .server-config-optional input:checked::after { transform: translateX(12px); }
+    .server-config-readonly { min-height: 34px; padding: 8px 9px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px dashed var(--nps-line-strong); border-radius: 7px; font: 10px/1.45 "Fira Code", monospace; overflow-wrap: anywhere; }
+    .server-config-secret-note { display: block; margin-top: 5px; color: var(--nps-warning); font-size: 9px; line-height: 1.4; }
+    .server-config-secret-reveal { display: inline-flex; flex: 0 0 38px; align-items: center; justify-content: center; min-width: 38px !important; width: 38px; padding: 0 !important; white-space: nowrap; }
+    .server-config-savebar { position: sticky; bottom: 10px; z-index: 7; display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 12px; padding: 9px 11px; background: color-mix(in srgb, var(--nps-surface) 94%, transparent); border: 1px solid color-mix(in srgb, var(--nps-primary) 18%, var(--nps-line)); border-radius: 11px; box-shadow: 0 -8px 28px rgba(15,23,42,.11); backdrop-filter: blur(14px); }
     .server-config-savebar__copy { min-width: 220px; margin-right: auto; }
-    .server-config-savebar__copy strong { display: block; color: var(--nps-ink); font-size: 12px; }
-    .server-config-savebar__copy span { display: block; margin-top: 3px; color: var(--nps-muted); font-size: 10px; }
-    .server-config-restart-note { margin: 0; color: var(--nps-warning); font-size: 11px; }
-    .server-config-empty { display: none; padding: 28px; color: var(--nps-muted); text-align: center; background: var(--nps-surface); border: 1px dashed var(--nps-line-strong); border-radius: 10px; }
+    .server-config-savebar__copy strong { display: block; color: var(--nps-ink); font-size: 11.5px; }
+    .server-config-savebar__copy span { display: block; margin-top: 2px; color: var(--nps-muted); font-size: 9.5px; line-height: 1.4; }
+    .server-config-restart-note { margin: 0; color: var(--nps-warning); font-size: 10px; }
+    .server-config-empty { display: none; padding: 26px; color: var(--nps-muted); text-align: center; background: var(--nps-surface); border: 1px dashed var(--nps-line-strong); border-radius: 11px; }
     .server-config-unknown-table { margin: 0; }
     .server-config-unknown-table td, .server-config-unknown-table th { vertical-align: top !important; overflow-wrap: anywhere; }
     .server-config-ui-shell, .server-config-source-shell { display: none; }
     .server-config-source-shell.is-active, .server-config-ui-shell.is-active { display: block; }
-    .server-config-source-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 13px 15px; background: var(--nps-surface); border: 1px solid var(--nps-line); border-bottom: 0; border-radius: 11px 11px 0 0; }
+    .server-config-source-head { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 11px 13px; background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 4%, var(--nps-surface)), var(--nps-surface)); border: 1px solid var(--nps-line); border-bottom: 0; border-radius: 12px 12px 0 0; }
     .server-config-source-head__copy { min-width: 240px; margin-right: auto; }
-    .server-config-source-head__copy strong { display: block; color: var(--nps-ink); font-size: 13px; }
-    .server-config-source-head__copy span { display: block; margin-top: 3px; color: var(--nps-muted); font-size: 10px; }
-    .server-config-source-status { display: inline-flex; align-items: center; gap: 6px; color: var(--nps-muted); font-size: 10px; }
+    .server-config-source-head__copy strong { display: block; color: var(--nps-ink); font-size: 12px; }
+    .server-config-source-head__copy span { display: block; margin-top: 2px; color: var(--nps-muted); font-size: 9.5px; line-height: 1.4; }
+    .server-config-source-status { display: inline-flex; align-items: center; gap: 6px; color: var(--nps-muted); font-size: 9.5px; }
     .server-config-source-status.is-dirty { color: var(--nps-warning); }
-    .server-config-source-security { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 8px; color: var(--nps-warning); background: color-mix(in srgb, var(--nps-warning) 9%, transparent); border: 1px solid color-mix(in srgb, var(--nps-warning) 30%, var(--nps-line)); border-radius: 999px; font-size: 10px; white-space: nowrap; }
-    .server-config-source-editor { display: grid; grid-template-columns: 58px minmax(0, 1fr); height: min(66vh, 720px); min-height: 430px; overflow: hidden; background: #111827; border: 1px solid var(--nps-line); border-radius: 0 0 11px 11px; }
-    .server-config-source-lines { height: 100%; margin: 0; padding: 15px 10px; overflow: hidden; color: #64748b; background: #0b1220; border-right: 1px solid #263244; font: 12px/22px "Fira Code", monospace; text-align: right; user-select: none; }
-    .server-config-source-text { width: 100%; height: 100%; padding: 15px 18px; resize: none; color: #dbeafe; background: #111827; border: 0; outline: 0; font: 12px/22px "Fira Code", monospace; tab-size: 2; white-space: pre; overflow: auto; }
-    .server-config-source-loading { padding: 36px; color: var(--nps-muted); text-align: center; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 11px; }
-    .server-config-source-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 12px; }
-    @media (max-width: 1180px) {
+    .server-config-source-security { display: inline-flex; align-items: center; gap: 6px; min-height: 23px; padding: 0 8px; color: var(--nps-warning); background: color-mix(in srgb, var(--nps-warning) 9%, transparent); border: 1px solid color-mix(in srgb, var(--nps-warning) 30%, var(--nps-line)); border-radius: 999px; font-size: 9px; white-space: nowrap; }
+    .server-config-source-editor { display: grid; grid-template-columns: 56px minmax(0, 1fr); height: min(66vh, 720px); min-height: 420px; overflow: hidden; background: #111827; border: 1px solid var(--nps-line); border-radius: 0 0 12px 12px; }
+    .server-config-source-lines { height: 100%; margin: 0; padding: 14px 9px; overflow: hidden; color: #64748b; background: #0b1220; border-right: 1px solid #263244; font: 11.5px/21px "Fira Code", monospace; text-align: right; user-select: none; }
+    .server-config-source-text { width: 100%; height: 100%; padding: 14px 16px; resize: none; color: #dbeafe; background: #111827; border: 0; outline: 0; font: 11.5px/21px "Fira Code", monospace; tab-size: 2; white-space: pre; overflow: auto; }
+    .server-config-source-loading { padding: 34px; color: var(--nps-muted); text-align: center; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 12px; }
+    .server-config-source-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 10px; }
+    [data-theme="dark"] .server-config-hero { background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 8%, var(--nps-surface-subtle)), var(--nps-surface) 58%); }
+    [data-theme="dark"] .server-config-stat { background: color-mix(in srgb, var(--nps-surface) 88%, transparent); }
+    @media (max-width: 1280px) {
         .server-config-hero { grid-template-columns: minmax(0, 1fr); }
-        .server-config-section__body { grid-template-columns: minmax(0, 1fr); }
-        .server-config-field { min-height: 0; }
+        .server-config-hero > .server-config-notice { padding: 2px; }
     }
-    @media (max-width: 720px) {
-        .server-config-commandbar { position: static; }
+    @media (max-width: 1100px) {
+        .server-config-section__body { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 760px) {
+        .server-config-commandbar { position: static; align-items: stretch; }
+        .server-config-view-switch { width: 100%; }
+        .server-config-view-switch button { flex: 1 1 50%; justify-content: center; }
+        .server-config-search { flex-basis: 100%; }
         .server-config-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .server-config-section__header { align-items: flex-start; padding: 13px; }
-        .server-config-section__body { padding: 9px; }
-        .server-config-field { padding: 12px; }
+        .server-config-section__header { align-items: flex-start; padding: 11px; }
+        .server-config-section__toggle span { display: none; }
+        .server-config-section__body { padding: 7px; }
+        .server-config-field { padding: 10px; }
         .server-config-filter-count { width: 100%; margin-left: 0; }
         .server-config-savebar { position: static; }
-        .server-config-source-editor { grid-template-columns: 44px minmax(0, 1fr); min-height: 360px; }
-        .server-config-source-lines { padding-right: 7px; padding-left: 5px; font-size: 10px; }
-        .server-config-source-text { padding-right: 10px; padding-left: 10px; font-size: 11px; }
+        .server-config-source-editor { grid-template-columns: 42px minmax(0, 1fr); min-height: 360px; }
+        .server-config-source-lines { padding-right: 6px; padding-left: 4px; font-size: 9.5px; }
+        .server-config-source-text { padding-right: 9px; padding-left: 9px; font-size: 10.5px; }
     }
 </style>
 
@@ -107,7 +127,7 @@
         <div class="form-page-heading">
             <div class="dashboard-page-kicker" data-i18n-zh="系统配置" data-i18n-en="System settings">系统配置</div>
             <h1 id="server-config-title" data-i18n-zh="服务端配置" data-i18n-en="Server configuration">服务端配置</h1>
-            <p data-i18n-zh="通过可视化表单或完整源码维护 nps.conf。可视化表单不会回显密码和 Token；源码视图仅管理员可访问，并会显示完整原文。" data-i18n-en="Maintain nps.conf through visual fields or the complete source. The visual form never echoes passwords or tokens; source view is administrator-only and shows the complete file.">通过可视化表单或完整源码维护 nps.conf。可视化表单不会回显密码和 Token；源码视图仅管理员可访问，并会显示完整原文。</p>
+            <p data-i18n-zh="通过可视化表单或完整源码维护 nps.conf。证书、私钥和 ACME 配置已集中在“证书设置”；可视化表单不会回显密码和 Token，源码视图仅管理员可访问并显示完整原文。" data-i18n-en="Maintain nps.conf through visual fields or the complete source. Certificates, private keys and ACME settings now live under Certificate settings. The visual form never echoes passwords or tokens; source view is administrator-only and shows the complete file.">通过可视化表单或完整源码维护 nps.conf。证书、私钥和 ACME 配置已集中在“证书设置”；可视化表单不会回显密码和 Token，源码视图仅管理员可访问并显示完整原文。</p>
             <div class="server-config-path"><i class="fa fa-code" aria-hidden="true"></i><span>{{.config_path}}</span></div>
         </div>
     </header>
@@ -115,11 +135,19 @@
     <nav class="system-settings-tabs" aria-label="系统配置页面" data-aria-label-zh="系统配置页面" data-aria-label-en="System settings pages">
         <a class="system-settings-tab" href="{{.web_base_url}}/global/index" data-console-navigate>
             <span class="system-settings-tab__icon"><i class="fa fa-cog" aria-hidden="true"></i></span>
-            <span class="system-settings-tab__copy"><strong data-i18n-zh="全局参数" data-i18n-en="Global settings">全局参数</strong><small data-i18n-zh="业务设置与平台证书" data-i18n-en="Business settings and certificates">业务设置与平台证书</small></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="全局参数" data-i18n-en="Global settings">全局参数</strong><small data-i18n-zh="业务设置与内容管理" data-i18n-en="Business settings and content">业务设置与内容管理</small></span>
+        </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/registration" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-user-plus" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="用户注册" data-i18n-en="User registration">用户注册</strong><small data-i18n-zh="入口、默认权益与邮箱" data-i18n-en="Access, defaults and email">入口、默认权益与邮箱</small></span>
         </a>
         <a class="system-settings-tab is-active" href="{{.web_base_url}}/global/config" data-console-navigate aria-current="page">
             <span class="system-settings-tab__icon"><i class="fa fa-code" aria-hidden="true"></i></span>
             <span class="system-settings-tab__copy"><strong data-i18n-zh="服务端配置" data-i18n-en="Server configuration">服务端配置</strong><small data-i18n-zh="nps.conf 在线维护" data-i18n-en="Maintain nps.conf online">nps.conf 在线维护</small></span>
+        </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/certificate" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-certificate" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="证书设置" data-i18n-en="Certificate settings">证书设置</strong><small data-i18n-zh="证书、私钥与 ACME" data-i18n-en="Certificates, keys and ACME">证书、私钥与 ACME</small></span>
         </a>
     </nav>
 
@@ -140,7 +168,7 @@
             <i class="fa fa-shield" aria-hidden="true"></i>
             <div>
                 <strong data-i18n-zh="保存后需要重启 NPS" data-i18n-en="Restart NPS after saving">保存后需要重启 NPS</strong>
-                <p data-i18n-zh="关闭可选功能会从 nps.conf 移除对应键；密码、Token 和 API 密钥不会在可视化表单中回显，留空表示保持原值。私钥文件路径会正常显示，但 NPS 不读取私钥内容。源码视图会展示完整原文，请仅在可信环境使用。" data-i18n-en="Disabling an optional feature removes its key. Passwords, tokens and API keys are never echoed in the visual form; leave them blank to keep the current value. Private-key file paths remain visible, but key contents are never read. Source view shows the complete file and must only be used in a trusted environment.">关闭可选功能会从 nps.conf 移除对应键；密码、Token 和 API 密钥不会在可视化表单中回显，留空表示保持原值。私钥文件路径会正常显示，但 NPS 不读取私钥内容。源码视图会展示完整原文，请仅在可信环境使用。</p>
+                <p data-i18n-zh="关闭可选功能会从 nps.conf 移除对应键；密码、Token 和 API 密钥不会在可视化表单中回显，留空表示保持原值。证书与私钥路径在“证书设置”中核对，NPS 不读取或展示私钥内容。源码视图会展示完整原文，请仅在可信环境使用。" data-i18n-en="Disabling an optional feature removes its key. Passwords, tokens and API keys are never echoed in the visual form; leave them blank to keep the current value. Certificate and key paths are reviewed under Certificate settings, while key contents are never read or displayed. Source view shows the complete file and must only be used in a trusted environment.">关闭可选功能会从 nps.conf 移除对应键；密码、Token 和 API 密钥不会在可视化表单中回显，留空表示保持原值。证书与私钥路径在“证书设置”中核对，NPS 不读取或展示私钥内容。源码视图会展示完整原文，请仅在可信环境使用。</p>
             </div>
         </div>
         <div class="server-config-summary" aria-label="配置摘要">
@@ -169,13 +197,13 @@
     <div class="server-config-ui-shell is-active" id="server-config-ui-shell">
         <form id="server-config-form" class="server-config-stack" autocomplete="off">
             {{range $sectionIndex, $section := .config_sections}}
-            <section class="panel ibox float-e-margins nps-panel server-config-section{{if gt $sectionIndex 0}} is-collapsed{{end}}" data-config-section data-section-name="{{$section.Name}}">
+            <section class="panel ibox float-e-margins nps-panel server-config-section is-collapsed" data-config-section data-section-name="{{$section.Name}}">
                 <header class="server-config-section__header" data-config-section-toggle>
                     <div class="server-config-section__heading">
                         <div class="server-config-section__title-row"><h2>{{$section.Name}}</h2><span class="server-config-section__count">{{len $section.Fields}} <span data-i18n-zh="项" data-i18n-en="fields">项</span></span></div>
                         <p>{{$section.Description}}</p>
                     </div>
-                    <button class="server-config-section__toggle" type="button" aria-expanded="{{if eq $sectionIndex 0}}true{{else}}false{{end}}" data-config-section-button><span data-i18n-zh="展开/收起" data-i18n-en="Toggle">展开/收起</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
+                    <button class="server-config-section__toggle" type="button" aria-expanded="false" data-config-section-button><span data-config-section-toggle-label data-i18n-zh="展开配置" data-i18n-en="Expand">展开配置</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
                 </header>
                 <div class="server-config-section__body">
                     {{range $field := $section.Fields}}
@@ -185,8 +213,8 @@
                                 <label for="server-config-{{$field.Key}}">{{$field.Label}} <code>{{$field.Key}}</code></label>
                                 <p>{{$field.Description}}</p>
                                 <div class="server-config-field__badges">
-                                    {{if $field.Editable}}<span class="server-config-badge" data-i18n-zh="可编辑" data-i18n-en="Editable">可编辑</span>{{else}}<span class="server-config-badge" data-i18n-zh="只读" data-i18n-en="Read-only">只读</span>{{end}}
-                                    {{if $field.Enabled}}<span class="server-config-badge is-enabled" data-i18n-zh="已启用" data-i18n-en="Enabled">已启用</span>{{end}}
+                                    {{if not $field.Editable}}<span class="server-config-badge" data-i18n-zh="只读" data-i18n-en="Read-only">只读</span>{{end}}
+                                    {{if and $field.Optional $field.Enabled}}<span class="server-config-badge is-enabled" data-i18n-zh="已启用" data-i18n-en="Enabled">已启用</span>{{end}}
                                     {{if $field.Sensitive}}<span class="server-config-badge is-secret" data-i18n-zh="敏感值" data-i18n-en="Secret">敏感值</span>{{end}}
                                     {{if and (not $field.Present) (not $field.Optional)}}<span class="server-config-badge is-missing" data-i18n-zh="文件中缺失" data-i18n-en="Missing in file">文件中缺失</span>{{end}}
                                     {{if and (not $field.Present) $field.Optional}}<span class="server-config-badge" data-i18n-zh="未写入，使用默认值" data-i18n-en="Not set; default shown">未写入，使用默认值</span>{{end}}
@@ -223,7 +251,7 @@
                         <div class="server-config-section__title-row"><h2 data-i18n-zh="兼容与自定义字段" data-i18n-en="Compatibility and custom fields">兼容与自定义字段</h2><span class="server-config-section__count">{{len .config_unknown}} <span data-i18n-zh="项" data-i18n-en="fields">项</span></span></div>
                         <p data-i18n-zh="这些键来自历史版本或自定义部署，当前版本不会在线修改，但会在保存时原样保留。" data-i18n-en="These keys come from older releases or custom deployments. They are read-only here and are preserved verbatim when saving.">这些键来自历史版本或自定义部署，当前版本不会在线修改，但会在保存时原样保留。</p>
                     </div>
-                    <button class="server-config-section__toggle" type="button" aria-expanded="false" data-config-section-button><span data-i18n-zh="展开/收起" data-i18n-en="Toggle">展开/收起</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
+                    <button class="server-config-section__toggle" type="button" aria-expanded="false" data-config-section-button><span data-config-section-toggle-label data-i18n-zh="展开配置" data-i18n-en="Expand">展开配置</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
                 </header>
                 <div class="server-config-section__body server-config-section__body--table">
                     <div class="table-responsive"><table class="table table-striped server-config-unknown-table"><thead><tr><th data-i18n-zh="配置键" data-i18n-en="Key">配置键</th><th data-i18n-zh="当前值" data-i18n-en="Current value">当前值</th><th data-i18n-zh="状态" data-i18n-en="Status">状态</th></tr></thead><tbody>{{range .config_unknown}}<tr><td><code>{{.Key}}</code></td><td><code>{{.DisplayValue}}</code></td><td><span class="label label-default" data-i18n-zh="只读并保留" data-i18n-en="Read-only and preserved">只读并保留</span></td></tr>{{end}}</tbody></table></div>
@@ -245,7 +273,7 @@
             <div class="server-config-source-head__copy"><strong data-i18n-zh="nps.conf 完整源码" data-i18n-en="Complete nps.conf source">nps.conf 完整源码</strong><span data-i18n-zh="保留注释、空行、字段顺序和自定义内容；保存前会检查语法与关键配置关系。" data-i18n-en="Comments, blank lines, field order and custom entries are preserved. Syntax and key relationships are checked before saving.">保留注释、空行、字段顺序和自定义内容；保存前会检查语法与关键配置关系。</span></div>
             <span class="server-config-source-security"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="包含明文敏感项" data-i18n-en="May contain plaintext secrets">包含明文敏感项</span></span>
             <span class="server-config-source-status" id="server-config-source-status"><i class="fa fa-circle-o" aria-hidden="true"></i><span>尚未加载</span></span>
-            <button class="btn btn-outline" type="button" id="server-config-source-reload"><i class="fa fa-refresh" aria-hidden="true"></i><span data-i18n-zh="重新加载" data-i18n-en="Reload">重新加载</span></button>
+            <button class="btn btn-outline" type="button" id="server-config-source-reload"><i class="fa fa-sync-alt" aria-hidden="true"></i><span data-i18n-zh="重新加载" data-i18n-en="Reload">重新加载</span></button>
         </div>
         <div class="server-config-source-loading" id="server-config-source-loading"><i class="fa fa-spinner fa-spin" aria-hidden="true"></i> <span data-i18n-zh="正在读取配置源码…" data-i18n-en="Loading source…">正在读取配置源码…</span></div>
         <div class="server-config-source-editor" id="server-config-source-editor" hidden>
@@ -260,7 +288,7 @@
     </section>
 
     <div class="server-config-actions">
-        <button class="btn btn-outline btn-warning" type="button" id="server-config-restart" hidden><i class="fa fa-refresh" aria-hidden="true"></i><span data-i18n-zh="重启 NPS" data-i18n-en="Restart NPS">重启 NPS</span></button>
+        <button class="btn btn-outline btn-warning" type="button" id="server-config-restart" hidden><i class="fa fa-sync-alt" aria-hidden="true"></i><span data-i18n-zh="重启 NPS" data-i18n-en="Restart NPS">重启 NPS</span></button>
     </div>
     {{end}}
 </section>
@@ -327,12 +355,15 @@ $(function () {
         if ($(event.target).closest('button').length) return;
         $(this).closest('[data-config-section]').find('[data-config-section-button]').trigger('click');
     });
+    function setSectionOpen(section, open) {
+        section.toggleClass('is-collapsed', !open);
+        section.find('[data-config-section-button]').attr('aria-expanded', open ? 'true' : 'false');
+        section.find('[data-config-section-toggle-label]').text(open ? localText('收起配置', 'Collapse') : localText('展开配置', 'Expand'));
+    }
     form.on('click', '[data-config-section-button]', function (event) {
         event.stopPropagation();
         var section = $(this).closest('[data-config-section]');
-        var open = section.hasClass('is-collapsed');
-        section.toggleClass('is-collapsed', !open);
-        $(this).attr('aria-expanded', open ? 'true' : 'false');
+        setSectionOpen(section, section.hasClass('is-collapsed'));
     });
     form.on('click', '.server-config-reveal', function () {
         var input = document.getElementById($(this).attr('data-target'));
@@ -342,10 +373,10 @@ $(function () {
         $(this).find('i').toggleClass('fa-eye fa-eye-slash');
     });
     $('#server-config-expand-all').on('click', function () {
-        form.find('[data-config-section]').removeClass('is-collapsed').find('[data-config-section-button]').attr('aria-expanded', 'true');
+        form.find('[data-config-section]').each(function () { setSectionOpen($(this), true); });
     });
     $('#server-config-collapse-all').on('click', function () {
-        form.find('[data-config-section]').addClass('is-collapsed').find('[data-config-section-button]').attr('aria-expanded', 'false');
+        form.find('[data-config-section]').each(function () { setSectionOpen($(this), false); });
     });
     function applyFilter() {
         var query = String(searchInput.val() || '').trim().toLowerCase();
@@ -366,7 +397,7 @@ $(function () {
             visible += matched;
             section.prop('hidden', query !== '' && matched === 0);
             if (query && matched > 0) {
-                section.removeClass('is-collapsed').find('[data-config-section-button]').attr('aria-expanded', 'true');
+                setSectionOpen(section, true);
             }
         });
         $('#server-config-empty').toggle(query !== '' && visible === 0);

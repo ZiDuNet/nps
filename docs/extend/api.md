@@ -1,28 +1,25 @@
-# Web API 鉴权
+# API 鉴权与兼容说明
 
-在 `nps.conf` 中配置 `auth_key` 即可启用 API 鉴权（首次启动自动生成）。
+新集成统一使用 [`/api/v1`](../api.md)。本页说明凭据、Token 生命周期和
+旧 Web API 的兼容边界；完整端点、响应信封和分页规则以
+[对外 API v1](../api.md)为准。
 
-## 鉴权方式
+## 管理员凭据
 
-管理员签名 API 的每个请求需附带两个参数：
+服务端接受两套等价的管理员 API 密钥：
+
+1. `nps.conf` 中的 `auth_key`（首次启动自动生成）；
+2. 「系统 → API 接入」生成的网页管理密钥，前缀为 `npsa_`。
+
+每个请求携带：
 
 | 参数 | 说明 |
 | --- | --- |
-| `auth_key` | `md5(配置文件中的 auth_key + 当前时间戳)` |
-| `timestamp` | 当前 unix 时间戳（秒） |
+| `auth_key` | `md5(管理员密钥原文 + timestamp)` |
+| `timestamp` | 当前 Unix 时间戳（秒） |
 
-时间戳有效范围为 **20 秒**，每次请求须重新生成。
-
-## 对外 API v1
-
-`/api/v1` 使用同一套管理员签名和普通用户 Bearer Token，但有两处刻意收紧：
-
-- 不接受浏览器登录 Cookie，必须携带 API 凭据；
-- 管理员签名与普通用户 Token 都在请求进入业务控制器前完成校验，失败返回
-  JSON 401/403，不会跳转登录页。
-
-普通用户调用客户端、隧道、Host 和统计接口时，服务端按用户授权的客户端
-范围过滤；用户管理、全局参数、Geo、登录保护和审计只允许管理员。
+服务端允许约 **20 秒**时间偏差，每次请求都应重新计算。两套管理员密钥权限
+等价，均可覆盖全部功能和用户管理。网页管理密钥可在验证登录密码后再次查看。
 
 ```bash
 ts=$(date +%s)
@@ -30,82 +27,39 @@ sign=$(printf '%s' "your_auth_key${ts}" | md5sum | awk '{print $1}')
 curl -s "http://127.0.0.1:8081/api/v1/clients?auth_key=${sign}&timestamp=${ts}"
 ```
 
-完整端点、返回信封和分页规则见 [Web API](../api.html)。
+## 普通用户 Token
 
-## 普通用户 API Token
+普通用户使用 `npsu_` 前缀的 Bearer Token：
 
-管理员可以为每个普通用户生成独立的 Bearer Token。Token 只在生成接口的响应中显示一次，服务端仅保存 SHA-256 哈希；重新生成会立即使旧 Token 失效。普通用户 Token 不具备管理员权限，只能访问该用户拥有的客户端、隧道和 Host 规则。
-
-管理员使用现有签名 API 调用：
+```http
+Authorization: Bearer npsu_<token>
+```
 
 ```bash
-ts=$(curl -s http://127.0.0.1:8081/auth/gettime/ | sed 's/.*"time":\([0-9]*\).*/\1/')
-sign=$(echo -n "your_auth_key${ts}" | md5sum | awk '{print $1}')
-curl -s -X POST "http://127.0.0.1:8081/user/regenerateapikey/" \
-  -d "auth_key=${sign}&timestamp=${ts}&id=7"
-```
-
-响应中的 `token` 形如 `npsu_...`，之后在请求头中携带：
-
-```bash
-curl -s -X POST "http://127.0.0.1:8081/client/list/" \
-  -H "Authorization: Bearer npsu_REPLACE_WITH_TOKEN" \
-  -d "offset=0&limit=20"
-```
-
-Python：
-
-```python
-import requests
-
-host = "http://127.0.0.1:8081"
-token = "npsu_REPLACE_WITH_TOKEN"
-r = requests.post(
-    f"{host}/client/list/",
-    headers={"Authorization": f"Bearer {token}"},
-    data={"offset": 0, "limit": 20},
-)
-print(r.json())
-```
-
-JavaScript：
-
-```javascript
-const host = "http://127.0.0.1:8081";
-const token = "npsu_REPLACE_WITH_TOKEN";
-
-const response = await fetch(`${host}/client/list/`, {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/x-www-form-urlencoded",
-  },
-  body: new URLSearchParams({ offset: "0", limit: "20" }),
-});
-console.log(await response.json());
-```
-
-所有写操作仍必须使用 `POST`。也支持 `api_token` 查询参数以兼容无法设置请求头的客户端，但 URL 可能进入访问日志，生产环境应优先使用 `Authorization`。
-
-### 普通用户自助管理 Token
-
-普通用户登录面板后，在左侧账号区域打开「API 接入」即可查看状态、生成/重新生成或撤销自己的 Token。普通用户不需要填写用户 ID，服务端会从当前登录会话或当前 Bearer Token 绑定账号；提交其他用户 ID 会被拒绝。Token 只在生成成功的响应中显示一次，刷新页面后无法恢复，只能重新生成。
-
-撤销当前用户 Token：
-
-```bash
-curl -s -X POST "http://127.0.0.1:8081/user/revokeapikey/" \
+curl -s "http://127.0.0.1:8081/api/v1/clients?limit=20" \
   -H "Authorization: Bearer npsu_REPLACE_WITH_TOKEN"
 ```
 
-查询当前用户 Token 是否已启用：
+普通用户 Token 不携带时间戳，也不能访问管理员的用户管理、全局参数、Geo、
+登录保护和管理员密钥接口。服务端会按 Token 所属用户过滤客户端、隧道、
+Host、统计、审计和连接日志。
 
-```bash
-curl -s "http://127.0.0.1:8081/user/apikeystatus/" \
-  -H "Authorization: Bearer npsu_REPLACE_WITH_TOKEN"
-```
+管理员可在「用户管理」为用户生成、查看或撤销 Token；普通用户可在
+「系统 → API 接入」自助管理。Token 同时保存哈希和加密密文，因此当前版本
+生成的 Token 可再次查看；旧版本只保存哈希的 Token 无法恢复，需要重新生成。
 
-管理员仍可在「用户管理」中生成、重新生成或撤销任意普通用户 Token。管理员只能看到「未配置 / 已启用」状态，不能查看已生成的 Token 原文。
+## 接口边界
+
+- `/api/v1` 只接受 API 凭据，不接受浏览器 Session Cookie。
+- 管理员签名或普通用户 Token 在进入业务控制器前校验，失败返回 JSON
+  `401/403`，不会跳转登录页。
+- Bridge TLS 证书只允许管理员调用
+  `/api/v1/global/bridge-certificate`；保存后需重启 NPS。
+- 旧 `/auth/*`、`/client/*`、`/index/*`、`/user/*`、`/global/*` 继续兼容
+  Web 页面、NPC 和既有调用方，清单见[历史 Web API](webapi.md)。
+
+证书输入、响应字段和示例见
+[Bridge TLS 证书接口](../api.md#bridge-tls-证书接口)。
 
 ## 资源拓扑大屏快捷地址
 
@@ -123,7 +77,12 @@ https://nps.example.com/overview#access_key=npsd_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 请把快捷地址视为密码，仅通过 HTTPS 或可信内网分享。密钥仅用于读取拓扑数据，不能调用管理 API。
 
-## 获取服务端时间戳
+## 历史兼容接口
+
+以下路径和示例仅用于维护已有集成。新集成请使用 `/api/v1` 的
+`/time`、`/authkey` 与标准响应信封。
+
+### 获取服务端时间戳
 
 由于客户端与服务端时间可能不一致，可先获取服务端时间：
 
@@ -140,19 +99,20 @@ GET /auth/gettime/
 
 ### 标准格式（`/api/v1`）
 
-同一组公共能力在对外 API 中统一使用 `status`/`code`/`msg`/`data` 信封。
+同一组公共能力在对外 API 中统一使用
+`status`/`code`/`msg`/`data`/`request_id` 信封。
 旧 `/auth/*` 路径与返回格式继续保留，现有调用方无需改动：
 
-| 旧接口 | 对外 API | 说明 |
+| 接口 | 对外 API | 说明 |
 | --- | --- | --- |
 | `GET /auth/gettime/` | `GET /api/v1/time` | 服务端时间戳 |
 | `GET /auth/getauthkey/` | `GET /api/v1/authkey` | 加密后的 `auth_key` |
-| `POST /auth/ipwhiteauth` | `POST /api/v1/ipwhiteauth` | IP 白名单授权 |
+| - | `POST /api/v1/ip-register` | 新版限时 IP 登记；密钥只放请求体 |
 
 `/api/v1/time` 返回：
 
 ```json
-{"status": 1, "code": "ok", "msg": "ok", "data": {"time": 1717654321}}
+{"status": 1, "code": "ok", "msg": "ok", "data": {"time": 1717654321}, "request_id": "..."}
 ```
 
 `/api/v1/authkey` 返回：
@@ -162,13 +122,16 @@ GET /auth/gettime/
   "status": 1,
   "code": "ok",
   "msg": "ok",
-  "data": {"crypt_auth_key": "…", "crypt_type": "aes cbc"}
+  "data": {"crypt_auth_key": "…", "crypt_type": "aes cbc"},
+  "request_id": "..."
 }
 ```
 
-失败时返回 `{"status": 0, "code": "error", "error_code": "...", "msg": "错误说明"}` 并携带对应的 HTTP 状态码。
+失败时返回
+`{"status": 0, "code": "error", "error_code": "...", "msg": "错误说明", "request_id": "..."}`
+并携带对应的 HTTP 状态码。
 
-## 获取服务端 auth_key（加密）
+### 获取服务端 auth_key（加密）
 
 ```
 GET /auth/getauthkey/
@@ -187,7 +150,7 @@ GET /auth/getauthkey/
 
 ---
 
-## 接入示例
+### 历史接口接入示例
 
 ::: tabs
 
@@ -250,6 +213,6 @@ const authKey = "your_auth_key";
 
 ---
 
-## 详细接口清单
+## 兼容接口清单
 
-- [Web API 接口文档](webapi.html)
+- [历史 Web API 清单](webapi.md)

@@ -41,6 +41,7 @@ type reverseProxyState struct {
 	client         *file.Client
 	clientID       int
 	clientRate     *rate.Rate
+	userRate       *rate.Directional
 	clientFlow     *file.Flow
 	config         file.Config
 	localProxy     bool
@@ -140,12 +141,6 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		rw.Write([]byte("Unauthorized"))
 		return
 	}
-	if isIPWhiteBlocked(client, remoteAddr) {
-		// A WebSocket upgrade has no useful HTML challenge response. Reject it
-		// before reserving a client slot or opening the remote tunnel.
-		http.Error(rw, "IP address is not authorized", http.StatusForbidden)
-		return
-	}
 	targetAddr, err := target.GetRandomTarget()
 	if err != nil {
 		rw.WriteHeader(http.StatusBadGateway)
@@ -169,6 +164,7 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		client:         client,
 		clientID:       clientID,
 		clientRate:     clientRate,
+		userRate:       file.UserRateLimiterForClient(client),
 		clientFlow:     clientFlow,
 		config:         config,
 		localProxy:     localProxy,
@@ -258,7 +254,7 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 		if target == nil {
 			return nil, NewHTTPError(http.StatusBadGateway, "server returned an empty connection")
 		}
-		connClient := conn.GetConnWithLimits(target, lk.Crypt, lk.Compress, state.clientRate, true, nil, state.host)
+		connClient := conn.GetConnWithUserLimits(target, lk.Crypt, lk.Compress, state.clientRate, true, nil, state.host, state.userRate)
 		return &flowConn{ReadWriteCloser: connClient, fakeAddr: local, host: state.host, flow: state.clientFlow, track: true}, nil
 	}
 	proxy := NewReverseProxy(&httputil.ReverseProxy{
@@ -346,7 +342,7 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 		if target == nil {
 			return nil, NewHTTPError(http.StatusBadGateway, "server returned an empty connection")
 		}
-		connClient := conn.GetConnWithLimits(target, lk.Crypt, lk.Compress, state.clientRate, true, nil, state.host)
+		connClient := conn.GetConnWithUserLimits(target, lk.Crypt, lk.Compress, state.clientRate, true, nil, state.host, state.userRate)
 		state.host.RLock()
 		targetIsHTTPS := state.host.TargetIsHTTPS
 		sni := state.host.Host

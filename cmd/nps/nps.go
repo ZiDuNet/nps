@@ -22,6 +22,7 @@ import (
 	"time"
 
 	npsconf "ehang.io/nps/conf"
+	"ehang.io/nps/lib/connectionlog"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/version"
@@ -111,6 +112,7 @@ func main() {
 	file.SetConnectionHistoryLimit(beego.AppConfig.DefaultInt("client_history_limit", 5))
 	file.SetFlowLimitType(beego.AppConfig.String("flow_limit_type"))
 	audit.Configure(beego.AppConfig.String("audit_log_path"))
+	connectionlog.Configure(beego.AppConfig.String("connection_log_path"))
 	if timezone := strings.TrimSpace(beego.AppConfig.String("timezone")); timezone != "" {
 		if err := common.SetTimezone(timezone); err != nil {
 			fmt.Fprintf(os.Stderr, "invalid timezone %q: %v\n", timezone, err)

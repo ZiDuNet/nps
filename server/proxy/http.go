@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"bufio"
-	"crypto/subtle"
 	"crypto/tls"
 	"ehang.io/nps/bridge"
 	"ehang.io/nps/lib/cache"
@@ -13,12 +12,10 @@ import (
 	"ehang.io/nps/server/connection"
 	"ehang.io/nps/server/traffic"
 	"ehang.io/nps/web"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
-	"html"
 	"io"
 	"net"
 	"net/http"
@@ -31,22 +28,6 @@ import (
 
 	"golang.org/x/crypto/acme/autocert"
 )
-
-func constantTimeSecretEqual(stored, supplied string) bool {
-	return subtle.ConstantTimeCompare([]byte(html.UnescapeString(stored)), []byte(supplied)) == 1
-}
-
-// formatHTTPFailure builds a complete response for requests that are handled
-// directly on the hijacked connection (for example, the IP allowlist page).
-// writeConnFailContent intentionally prepends the legacy 404 marker for proxy
-// failures, so these responses must bypass that wrapper.
-func formatHTTPFailure(status int, contentType string, body []byte) []byte {
-	statusText := http.StatusText(status)
-	if statusText == "" {
-		statusText = "Error"
-	}
-	return []byte(fmt.Sprintf("HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", status, statusText, contentType, len(body), body))
-}
 
 type httpServer struct {
 	BaseServer
@@ -138,57 +119,16 @@ func NewHttp(bridge *bridge.Bridge, c *file.Tunnel, httpPort, httpsPort int, use
 	return httpServer
 }
 
-func (s *httpServer) ipWhiteResponse(c *conn.Conn, r *http.Request, client *file.Client) ([]byte, bool) {
-	if client == nil {
-		return nil, false
+// HTTP3Listening reports whether the shared HTTP/3/Bridge UDP listener is
+// active. Configuration alone is not enough: the listener is skipped when the
+// HTTPS entry is disabled or when binding the UDP port fails.
+func (s *httpServer) HTTP3Listening() bool {
+	if s == nil {
+		return false
 	}
-	ip := effectiveHTTPRemoteAddr(r)
-	if strings.TrimSpace(ip) == "" {
-		ip = common.GetIpByAddr(c.RemoteAddr().String())
-	}
-	if r.URL.Path == "/authIp" {
-		pass := ""
-		if r.Method == http.MethodPost {
-			if parseErr := r.ParseForm(); parseErr == nil {
-				// Read credentials from the request body only. Query-string
-				// credentials are retained by access logs and browser history.
-				pass = r.PostForm.Get("pass")
-			}
-		}
-		client.RLock()
-		whitePass := client.IpWhitePass
-		client.RUnlock()
-		var body []byte
-		if pass != "" && constantTimeSecretEqual(whitePass, pass) {
-			changed := false
-			client.Lock()
-			alreadyAllowed := false
-			for _, existingIP := range client.IpWhiteList {
-				if existingIP == ip {
-					alreadyAllowed = true
-					break
-				}
-			}
-			if !alreadyAllowed {
-				client.IpWhiteList = append(client.IpWhiteList, ip)
-				changed = true
-			}
-			client.Unlock()
-			if changed {
-				file.GetDb().JsonDb.StoreClientsToJsonFile()
-			}
-			logs.Info("客户端IP白名单认证授权成功:client_id [%d] ip [%s]", client.Id, ip)
-			body, _ = json.Marshal(map[string]interface{}{"success": true, "message": "授权成功"})
-		} else {
-			logs.Error("客户端IP白名单认证失败:client_id [%d] ip [%s]", client.Id, ip)
-			body, _ = json.Marshal(map[string]interface{}{"success": false, "message": "密码错误或请求格式错误"})
-		}
-		return formatHTTPFailure(http.StatusOK, "application/json", body), true
-	}
-
-	errorContent, _ := web.ReadStaticFile("page/auth.html")
-	authHTML := strings.ReplaceAll(string(errorContent), "${ip}", ipWhiteChallengeIP(ip))
-	return formatHTTPFailure(http.StatusUnauthorized, "text/html; charset=utf-8", []byte(authHTML)), true
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	return !s.closed && s.http3Server != nil
 }
 
 func (s *httpServer) Start() error {
@@ -417,7 +357,6 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		pathRewrite     string
 		registeredOnly  bool
 		failureContent  = s.errorContent
-		failureRaw      bool
 	)
 	responseStarted := false
 	responseWaitOnExit := false
@@ -447,8 +386,6 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		releaseClientConn()
 		if connClient != nil {
 			connClient.Close()
-		} else if failureRaw {
-			_, _ = c.Conn.Write(failureContent)
 		} else {
 			s.writeConnFailContent(c.Conn, failureContent)
 		}
@@ -510,10 +447,6 @@ reset:
 		c.Close()
 		return
 	}
-	if isIPWhiteBlocked(hostClient, remoteAddr) {
-		failureContent, failureRaw = s.ipWhiteResponse(c, r, hostClient)
-		return
-	}
 	if isClientBlackBlocked(hostClient, remoteAddr) {
 		c.Close()
 		return
@@ -558,7 +491,7 @@ reset:
 		logs.Warn("bridge returned nil HTTP target for %s", lk.Host)
 		return
 	}
-	connClient = conn.GetConnWithLimits(target, lk.Crypt, lk.Compress, clientRate, true, nil, host)
+	connClient = conn.GetConnWithUserLimits(target, lk.Crypt, lk.Compress, clientRate, true, nil, host, file.UserRateLimiterForClient(hostClient))
 	if targetIsHTTPS {
 		sni := hostName
 		if hostChange != "" {
@@ -589,7 +522,7 @@ reset:
 		}()
 
 		probe := newResponseInspector(newResponseHeaderTransform(targetConn, requestHost), traffic.Resource{Kind: "host", ID: currentHost.Id}, requestQueue, streaming)
-		if err1 := goroutine.CopyBufferWithFlowsDirection(c, probe, hostFlow, []*file.Flow{clientFlow}, nil, requestHost, "", goroutine.FlowOutbound); err1 != nil {
+		if _, err1 := goroutine.CopyBufferWithFlowsDirection(c, probe, hostFlow, []*file.Flow{clientFlow}, nil, requestHost, "", goroutine.FlowOutbound); err1 != nil {
 			return
 		}
 	}(connClient, currentHost, responseStreaming, responseDone)

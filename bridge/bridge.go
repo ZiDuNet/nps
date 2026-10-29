@@ -18,6 +18,7 @@ import (
 
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
+	"ehang.io/nps/lib/connectionlog"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/ipreg"
@@ -40,6 +41,7 @@ type Client struct {
 	file         *nps_mux.Mux
 	fileChannels map[string]*nps_mux.Mux
 	Version      string
+	Transport    string
 	retryTime    atomic.Int32 // it will be add 1 when ping not ok until to 3 will close the client
 	parent       *Client
 	sessions     []*Client
@@ -198,14 +200,12 @@ func (s *Bridge) sessionForLocked(root *Client, resource, versionText string) *C
 		return nil
 	}
 	ensureClientSessions(root)
-	if ClientSelectMode() == Primary {
-		return root
-	}
 	// MAIN and CHAN/FILE are established as separate authenticated TCP
 	// connections. There is no wire-level session identifier in the legacy
 	// protocol, so pair a data channel with the newest signal that does not yet
-	// have one. This avoids attaching a second NPC's CHAN to the first NPC when
-	// both MAIN handshakes arrive before either data connection.
+	// have one. Independent sessions must exist even in Primary mode so one
+	// VKEY can run multiple transports or multiple NPS connections at once;
+	// Primary only controls which complete session carries a new traffic link.
 	if resource == "tunnel" || resource == "file" {
 		for i := len(root.sessions) - 1; i >= 0; i-- {
 			session := root.sessions[i]
@@ -254,9 +254,6 @@ func (s *Bridge) sessionForFileChannelLocked(root *Client, key, versionText stri
 		return nil
 	}
 	ensureClientSessions(root)
-	if ClientSelectMode() == Primary {
-		return root
-	}
 	for i := len(root.sessions) - 1; i >= 0; i-- {
 		session := root.sessions[i]
 		session.mu.Lock()
@@ -321,6 +318,18 @@ func (c *Client) VersionSnapshot() string {
 	version := c.Version
 	c.mu.Unlock()
 	return version
+}
+
+// TransportSnapshot returns the concrete public listener that authenticated
+// the MAIN connection, for example tcp, tls, ws, wss, kcp or quic.
+func (c *Client) TransportSnapshot() string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	transport := strings.ToLower(strings.TrimSpace(c.Transport))
+	c.mu.Unlock()
+	return transport
 }
 
 func (c *Client) GetNode() *Node {
@@ -475,6 +484,67 @@ func (s *Bridge) SelectedClientVersion(id int) string {
 		return ""
 	}
 	return client.VersionSnapshot()
+}
+
+// SelectedClientTransport returns the transport used by the same live session
+// selected for traffic. The listener type is recorded during MAIN
+// authentication, so TCP+TLS is distinguishable from plain TCP.
+func (s *Bridge) SelectedClientTransport(id int) string {
+	if s == nil {
+		return ""
+	}
+	client := s.selectSession(id, "online")
+	if client == nil {
+		return ""
+	}
+	if transport := client.TransportSnapshot(); transport != "" {
+		return transport
+	}
+	return strings.ToLower(strings.TrimSpace(s.tunnelType))
+}
+
+// ActiveClientTransports returns every distinct transport with a live
+// signal/tunnel session. A client normally has one entry, while duplicate VKEY
+// connections can expose more than one protocol to the management console.
+func (s *Bridge) ActiveClientTransports(id int) []string {
+	if s == nil {
+		return nil
+	}
+	s.clientsMu.Lock()
+	value, ok := s.Client.Load(id)
+	if !ok {
+		s.clientsMu.Unlock()
+		return nil
+	}
+	root, ok := bridgeClient(value)
+	if !ok {
+		s.clientsMu.Unlock()
+		return nil
+	}
+	ensureClientSessions(root)
+	seen := make(map[string]struct{})
+	transports := make([]string, 0, len(root.sessions))
+	for _, session := range root.sessions {
+		if session == nil || !sessionHasResource(session, "online") {
+			continue
+		}
+		session.mu.Lock()
+		transport := strings.ToLower(strings.TrimSpace(session.Transport))
+		session.mu.Unlock()
+		if transport == "" {
+			transport = strings.ToLower(strings.TrimSpace(s.tunnelType))
+		}
+		if transport == "" {
+			continue
+		}
+		if _, exists := seen[transport]; exists {
+			continue
+		}
+		seen[transport] = struct{}{}
+		transports = append(transports, transport)
+	}
+	s.clientsMu.Unlock()
+	return transports
 }
 
 func (s *Bridge) requestClientHealthConfig(id int, db *file.DbUtils) error {
@@ -652,9 +722,9 @@ func (s *Bridge) startVirtualBridgeListeners() {
 	s.virtualWS = tool.NewVirtualListener(nil)
 	s.virtualWSS = tool.NewVirtualListener(nil)
 	go conn.Accept(s.virtualTCP, func(c net.Conn) { s.cliProcess(conn.NewConn(c), "tcp") })
-	go conn.Accept(s.virtualTLS, func(c net.Conn) { s.cliProcess(conn.NewConn(c), "tcp") })
-	go conn.Accept(s.virtualWS, func(c net.Conn) { s.cliProcess(conn.NewConn(c), "tcp") })
-	go conn.Accept(s.virtualWSS, func(c net.Conn) { s.cliProcess(conn.NewConn(c), "tcp") })
+	go conn.Accept(s.virtualTLS, func(c net.Conn) { s.cliProcess(conn.NewConn(c), "tls") })
+	go conn.Accept(s.virtualWS, func(c net.Conn) { s.cliProcess(conn.NewConn(c), "ws") })
+	go conn.Accept(s.virtualWSS, func(c net.Conn) { s.cliProcess(conn.NewConn(c), "wss") })
 }
 
 func (s *Bridge) closeVirtualBridgeListeners() {
@@ -998,6 +1068,8 @@ func (s *Bridge) cliProcess(c *conn.Conn, transport ...string) {
 	// proxy listeners and avoids spending handshake resources on denied peers.
 	if file.GetDb().GlobalIPDenied(c.Conn.RemoteAddr().String()) {
 		logs.Warn("[访问控制] 拒绝桥接来源 %s", c.Conn.RemoteAddr())
+		recordBridgeEvent(0, connectionlog.ActionBridgeAuthFailed, connectionlog.ResultFailure,
+			c.Conn.RemoteAddr().String(), "", transportType, "global access control denied")
 		_ = c.Close()
 		return
 	}
@@ -1027,6 +1099,8 @@ func (s *Bridge) cliProcess(c *conn.Conn, transport ...string) {
 	id, err := s.authenticateClient(c, clientVersion, file.GetDb())
 	if err != nil {
 		logs.Info("[验证失败] 拒绝客户端连接 %s，版本 %q，原因：%v", c.Conn.RemoteAddr(), clientVersion, err)
+		recordBridgeEvent(id, connectionlog.ActionBridgeAuthFailed, connectionlog.ResultFailure,
+			c.Conn.RemoteAddr().String(), clientVersion, transportType, err.Error())
 		_ = c.Close()
 		return
 	}
@@ -1043,7 +1117,7 @@ func (s *Bridge) cliProcess(c *conn.Conn, transport ...string) {
 // ServeQUICConn accepts one already-negotiated QUIC connection as a Bridge
 // transport. HTTP/3 sharing uses this entry point after ALPN/SNI dispatch;
 // the first bidirectional stream carries the ordinary NPS handshake.
-func (s *Bridge) ServeQUICConn(qc *quic.Conn, handshakeTimeout time.Duration) {
+func (s *Bridge) ServeQUICConn(qc *quic.Conn, handshakeTimeout time.Duration, transport ...string) {
 	if s == nil || qc == nil {
 		if qc != nil {
 			_ = qc.CloseWithError(0, "invalid bridge")
@@ -1060,7 +1134,11 @@ func (s *Bridge) ServeQUICConn(qc *quic.Conn, handshakeTimeout time.Duration) {
 		_ = qc.CloseWithError(0, "bridge stream timeout")
 		return
 	}
-	go s.cliProcess(conn.NewConn(conn.NewQuicAutoCloseConn(stream, qc)), "quic")
+	transportType := "quic"
+	if len(transport) > 0 && strings.TrimSpace(transport[0]) != "" {
+		transportType = transport[0]
+	}
+	go s.cliProcess(conn.NewConn(conn.NewQuicAutoCloseConn(stream, qc)), transportType)
 }
 
 // authenticateClient chooses the wire-compatible handshake using the NPC's
@@ -1138,12 +1216,13 @@ func (s *Bridge) secureClientHandshakeWithDB(c *conn.Conn, clientVersion string,
 		return 0, err
 	}
 	if !db.IsClientActiveWithExpiry(clientRecord, beego.AppConfig.DefaultBool("allow_time_limit", true)) {
-		return 0, errors.New("客户端已停用或已过期")
+		return clientRecord.Id, errors.New("客户端已停用或已过期")
 	}
 	clientRecord.Lock()
 	if clientRecord.VerifyKey != verifyKey || !clientRecord.Status {
+		clientID := clientRecord.Id
 		clientRecord.Unlock()
-		return 0, errors.New("client credentials changed during handshake")
+		return clientID, errors.New("client credentials changed during handshake")
 	}
 	clientID := clientRecord.Id
 	clientRecord.Addr = common.GetIpByAddr(c.Conn.RemoteAddr().String())
@@ -1528,6 +1607,64 @@ func (s *Bridge) delClient(id int, expectedSignal *conn.Conn) {
 func (s *Bridge) recordClientConnection(id int, online bool) {
 	if client, err := file.GetDb().GetClient(id); err == nil && client != nil {
 		client.RecordConnection(online, time.Now())
+		if !online {
+			client.RLock()
+			sourceIP, clientVersion := client.Addr, client.Version
+			client.RUnlock()
+			recordBridgeEvent(id, connectionlog.ActionBridgeDisconnected, connectionlog.ResultSuccess,
+				sourceIP, clientVersion, "", "")
+		}
+	}
+}
+
+func recordBridgeEvent(clientID int, action, result, sourceIP, clientVersion, transport, message string) {
+	event := connectionlog.Event{
+		Kind:          connectionlog.KindBridge,
+		Action:        action,
+		Result:        result,
+		ClientID:      clientID,
+		ResourceType:  "client",
+		ResourceID:    clientID,
+		SourceIP:      common.GetIpByAddr(sourceIP),
+		ClientVersion: strings.TrimSpace(clientVersion),
+		Error:         message,
+	}
+	if strings.TrimSpace(transport) != "" {
+		event.BridgeTransport = normalizeBridgeTransport(transport)
+	}
+	if clientID > 0 {
+		if client, err := file.GetDb().GetClient(clientID); err == nil && client != nil {
+			client.RLock()
+			event.UserID = client.UserId
+			event.UserName = client.UserName
+			event.ClientRemark = client.Remark
+			if event.SourceIP == "" {
+				event.SourceIP = client.Addr
+			}
+			if event.ClientVersion == "" {
+				event.ClientVersion = client.Version
+			}
+			client.RUnlock()
+			if event.UserID > 0 && event.UserName == "" {
+				if user, userErr := file.GetDb().GetUser(event.UserID); userErr == nil && user != nil {
+					user.RLock()
+					event.UserName = user.UserName
+					user.RUnlock()
+				}
+			}
+		}
+	}
+	if err := connectionlog.Append(event); err != nil {
+		logs.Warn("写入连接日志失败: %v", err)
+	}
+}
+
+func normalizeBridgeTransport(transport string) string {
+	switch strings.ToLower(strings.TrimSpace(transport)) {
+	case "tcp", "tls", "kcp", "ws", "wss", "quic", "http3":
+		return strings.ToLower(strings.TrimSpace(transport))
+	default:
+		return "tcp"
 	}
 }
 
@@ -1572,15 +1709,18 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 				oldSignal = selected.signal
 				selected.signal = c
 				selected.Version = vs
+				selected.Transport = normalizeBridgeTransport(transportType)
 				selected.mu.Unlock()
 			} else {
 				s.Client.Delete(id)
 				selected = NewClient(nil, nil, c, vs)
+				selected.Transport = normalizeBridgeTransport(transportType)
 				ensureClientSessions(selected)
 				s.Client.Store(id, selected)
 			}
 		} else {
 			selected = NewClient(nil, nil, c, vs)
+			selected.Transport = normalizeBridgeTransport(transportType)
 			ensureClientSessions(selected)
 			s.Client.Store(id, selected)
 		}
@@ -1588,6 +1728,8 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 			s.recordClientConnection(id, true)
 		}
 		s.clientsMu.Unlock()
+		recordBridgeEvent(id, connectionlog.ActionBridgeConnected, connectionlog.ResultSuccess,
+			c.Conn.RemoteAddr().String(), vs, transportType, "")
 		if oldSignal != nil && oldSignal != c {
 			_ = oldSignal.Close()
 		}
@@ -1612,15 +1754,20 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 				if selected.Version == "" {
 					selected.Version = vs
 				}
+				if selected.Transport == "" {
+					selected.Transport = normalizeBridgeTransport(transportType)
+				}
 				selected.mu.Unlock()
 			} else {
 				s.Client.Delete(id)
 				replacement := NewClient(muxConn, nil, nil, vs)
+				replacement.Transport = normalizeBridgeTransport(transportType)
 				ensureClientSessions(replacement)
 				s.Client.Store(id, replacement)
 			}
 		} else {
 			cl := NewClient(muxConn, nil, nil, vs)
+			cl.Transport = normalizeBridgeTransport(transportType)
 			ensureClientSessions(cl)
 			s.Client.Store(id, cl)
 		}

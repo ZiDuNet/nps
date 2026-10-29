@@ -25,7 +25,7 @@ const (
 	defaultRegistrationWindowSeconds = 60
 	defaultRegistrationRateLimit     = 5
 	defaultRegistrationIPLimit       = 3
-	defaultRegistrationExpireDays    = 7
+	defaultRegistrationExpireDays    = 0
 	defaultEmailCodeTTLSeconds       = 600
 	defaultEmailCodeCooldownSeconds  = 60
 	maxRegistrationRateRecords       = 4096
@@ -361,6 +361,18 @@ func registrationMaxClients() int {
 
 func registrationMaxTunnels() int {
 	return max(beego.AppConfig.DefaultInt("register_max_tunnels", 0), 0)
+}
+
+func registrationMaxConn() int {
+	return max(beego.AppConfig.DefaultInt("register_max_conn", 0), 0)
+}
+
+func registrationUploadLimit() int {
+	return max(beego.AppConfig.DefaultInt("register_upload_limit", 0), 0)
+}
+
+func registrationDownloadLimit() int {
+	return max(beego.AppConfig.DefaultInt("register_download_limit", 0), 0)
 }
 
 func registrationExpireDays() int {

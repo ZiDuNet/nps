@@ -437,7 +437,7 @@ func emitLegacyEnvelope(controller *beego.Controller, requestID string, recorder
 			"rows":  payload["rows"],
 			"total": payload["total"],
 		}
-		for _, key := range []string{"meta", "ip", "bridgeType", "bridgePort", "addr", "traffic"} {
+		for _, key := range []string{"meta", "ip", "bridgeType", "bridgePort", "bridgeEndpoints", "addr", "traffic"} {
 			if value, exists := payload[key]; exists {
 				response[key] = value
 			}
@@ -525,7 +525,7 @@ func (s *ApiV1InfoController) Info() {
 		"auth":        []string{"admin_md5_timestamp", "user_bearer_token"},
 		"description": "NPS 对外管理 API v1。旧 /client、/index、/user、/global、/auth 接口继续兼容。",
 		"resources": []string{
-			"clients", "tunnels", "hosts", "users", "global", "status", "overview", "audit",
+			"clients", "tunnels", "hosts", "users", "global", "status", "overview", "audit", "ip-register",
 		},
 	})
 }
@@ -571,26 +571,84 @@ func (s *ApiV1InfoController) AuthKey() {
 	})
 }
 
-// IPWhiteAuth registers the caller's public IP for a client whitelist. It is
-// intentionally unauthenticated: the client vkey plus its whitelist password
-// are the credentials.
-func (s *ApiV1InfoController) IPWhiteAuth() {
-	echoIPWhiteAuthCORS(s.Ctx)
-	if s.Ctx.Request.Method == http.MethodOptions {
-		s.Ctx.ResponseWriter.WriteHeader(http.StatusNoContent)
+// IPRegister registers the caller's source address for the short-lived,
+// in-memory registration mechanism used by RegisteredOnly resources. The
+// registration key is a body-only credential so it is not retained in query
+// strings or request URLs.
+func (s *ApiV1InfoController) IPRegister() {
+	if s.Ctx.Request.Method != http.MethodPost {
+		s.Ctx.ResponseWriter.Header().Set("Allow", http.MethodPost)
+		s.infoRespond(http.StatusMethodNotAllowed, map[string]interface{}{
+			"status": 0, "code": "error", "error_code": "method_not_allowed",
+			"msg": "IP 登记接口仅接受 POST",
+		})
 		return
 	}
-	handleIPWhiteAuth(s.Ctx, func(status int, success bool, message string) {
-		if success {
-			s.infoRespond(http.StatusOK, map[string]interface{}{
-				"status": 1, "code": "ok", "msg": message, "data": map[string]interface{}{},
-			})
-			return
+
+	key, hours, err := parseIPRegistrationBody(s.Ctx.Request, s.Ctx.ResponseWriter)
+	if err != nil {
+		s.infoRespond(http.StatusBadRequest, map[string]interface{}{
+			"status": 0, "code": "error", "error_code": "invalid_request",
+			"msg": err.Error(),
+		})
+		return
+	}
+	result := registerVisitorIP(key, hours, requestVisitorIP(s.Ctx))
+	if numeric, ok := numericStatus(result["status"]); !ok || numeric != 1 {
+		message, _ := result["msg"].(string)
+		status := http.StatusBadRequest
+		errorCode := "ip_registration_failed"
+		if message == "登记密钥不能为空" || message == "登记密钥无效" {
+			status = http.StatusUnauthorized
+			errorCode = "invalid_registration_key"
 		}
 		s.infoRespond(status, map[string]interface{}{
-			"status": 0, "code": "error", "error_code": "ip_white_auth_failed", "msg": message,
+			"status": 0, "code": "error", "error_code": errorCode, "msg": message,
 		})
+		return
+	}
+
+	data := make(map[string]interface{}, 3)
+	for _, field := range []string{"ip", "until", "client_id"} {
+		if value, ok := result[field]; ok {
+			data[field] = value
+		}
+	}
+	s.infoRespond(http.StatusOK, map[string]interface{}{
+		"status": 1, "code": "ok", "msg": "IP 登记成功", "data": data,
 	})
+}
+
+func parseIPRegistrationBody(request *http.Request, response http.ResponseWriter) (string, int, error) {
+	if request.ContentLength > 4096 {
+		return "", 0, errors.New("登记请求内容过大")
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(request.Header.Get("Content-Type"))), "application/json") {
+		request.Body = http.MaxBytesReader(response, request.Body, 4096)
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			return "", 0, errors.New("读取登记请求失败")
+		}
+		var payload struct {
+			Key   string `json:"key"`
+			Hours int    `json:"hours"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return "", 0, errors.New("登记请求 JSON 无效")
+		}
+		return payload.Key, payload.Hours, nil
+	}
+	// Beego may have parsed the form before dispatching the public controller.
+	// PostForm deliberately excludes query parameters, keeping the key out of
+	// access logs and browser history.
+	if request.PostForm == nil {
+		request.Body = http.MaxBytesReader(response, request.Body, 4096)
+		if err := request.ParseForm(); err != nil {
+			return "", 0, errors.New("登记请求表单无效")
+		}
+	}
+	hours, _ := strconv.Atoi(strings.TrimSpace(request.PostForm.Get("hours")))
+	return request.PostForm.Get("key"), hours, nil
 }
 
 // responseRecorder is a small http.ResponseWriter that keeps the optional
@@ -624,6 +682,12 @@ func (s *ApiV1Controller) Status() {
 		data = server.GetDashboardDataForClients(s.GetAllowedClientIds())
 	}
 	s.apiData(data)
+}
+
+// StatusLive returns the lightweight counters intended for high-frequency
+// polling. It is scoped to the calling user and does not sample host metrics.
+func (s *ApiV1Controller) StatusLive() {
+	s.apiData(s.liveDataSnapshot(nil, nil, true))
 }
 
 // Overview exposes the account-scoped resource topology.

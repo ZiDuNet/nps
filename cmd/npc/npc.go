@@ -6,7 +6,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"ehang.io/nps/lib/crypt"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -27,6 +26,7 @@ import (
 	"ehang.io/nps/lib/config"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/install"
+	"ehang.io/nps/lib/quickcommand"
 	"ehang.io/nps/lib/version"
 	"github.com/astaxie/beego/logs"
 	"github.com/ccding/go-stun/stun"
@@ -816,55 +816,47 @@ func inputCmd() {
 
 		// 快捷启动命令模式
 		vkeys := strings.Split(input, ",")
-		var cmdArray []string
 
-		parseOk := true
+		commands := make([]quickcommand.Command, 0, len(vkeys))
 		for _, key := range vkeys {
-			startCmd, err := crypt.Base64Decoding(key)
+			command, err := quickcommand.DecodeBase64(key)
 			if err != nil {
-				fmt.Println("快捷启动命令解析失败")
-				parseOk = false
+				fmt.Printf("快捷启动命令解析失败：%v\n", err)
+				commands = nil
 				break
 			}
-			cmdArray = append(cmdArray, startCmd)
+			commands = append(commands, command)
 		}
 
-		if !parseOk {
+		if len(commands) == 0 {
 			continue
 		}
 
-		for _, item := range cmdArray {
-			startNpcServer(item)
+		for _, command := range commands {
+			startNpcServer(command)
 		}
 		fmt.Println("隧道已启动，连接中...")
 	}
 }
 
-func startNpcServer(startCmd string) {
-	array := strings.Fields(startCmd)
-	if len(array) < 2 {
-		logs.Error("快捷启动命令格式错误")
+func startNpcServer(command quickcommand.Command) {
+	command, err := quickcommand.Normalize(command)
+	if err != nil {
+		logs.Error("快捷启动命令格式错误：%v", err)
 		return
 	}
-	serAddr := array[0]
-	vkey := array[1]
-	tlsEnable := len(array) > 2 && (array[2] == "-tls_enable=true" || array[2] == "true")
 
 	go func() {
 		registerNpcConn()
 		kicked := false
 		defer func() {
-			endNpcConn(vkey, kicked)
+			endNpcConn(command.VKey, kicked)
 		}()
 		for {
-			if tlsEnable {
-				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey + " -tls_enable=true")
-			} else {
-				logs.Info("start cmd:-server=" + serAddr + " -vkey=" + vkey)
-			}
-			logs.Info("版本: %s, 核心版本: %s, TLS: %t", version.VERSION, version.GetVersion(), tlsEnable)
-			options := currentTLSOptions()
-			c := client.NewRPClientWithTLS(serAddr, vkey, *connType, *proxyUrl, nil, *disconnectTime, tlsEnable, options)
+			logs.Info("start cmd:%s", command.CommandLine("npc"))
+			logs.Info("版本: %s, 核心版本: %s, 协议: %s, TLS: %t", version.VERSION, version.GetVersion(), command.ProtocolName(), command.TLS)
+			options := tlsOptionsForCommand(command)
+			c := client.NewRPClientWithTLS(command.Server, command.VKey, command.Transport, *proxyUrl, nil, *disconnectTime, command.TLS, options)
 			c.Start()
 			if c.Kicked() {
 				kicked = true
@@ -877,12 +869,23 @@ func startNpcServer(startCmd string) {
 	}()
 }
 
+func tlsOptionsForCommand(command quickcommand.Command) client.TLSOptions {
+	options := currentTLSOptions()
+	options.CAFile = command.TLSCAFile
+	options.ServerName = command.TLSServerName
+	options.Fingerprint = command.TLSFingerprint
+	options.InsecureSkipVerify = command.TLSInsecureSkipVerify
+	options.BridgePath = command.BridgePath
+	options.QuicALPN = command.QuicALPN
+	return options
+}
+
 func systemService(flag string) {
 	for {
 		if flag == "1" {
 			fmt.Printf("请输入[快捷启动命令]，多个用英文逗号拼接：")
 		} else {
-			fmt.Printf("请输入[VKEY]，多个用英文逗号拼接：")
+			fmt.Printf("请输入[VKEY 或完整服务名]，多个用英文逗号拼接：")
 		}
 
 		var input string
@@ -903,30 +906,41 @@ func systemService(flag string) {
 		vkeys := strings.Split(input, ",")
 
 		if flag == "1" {
-			var cmdArray []string
-			parseOk := true
+			commands := make([]quickcommand.Command, 0, len(vkeys))
 			for _, key := range vkeys {
-				startCmd, err := crypt.Base64Decoding(key)
+				command, err := quickcommand.DecodeBase64(key)
 				if err != nil {
-					fmt.Println("快捷启动命令解析失败")
-					parseOk = false
+					fmt.Printf("快捷启动命令解析失败：%v\n", err)
+					commands = nil
 					break
 				}
-				cmdArray = append(cmdArray, startCmd)
+				commands = append(commands, command)
 			}
 
-			if !parseOk {
+			if len(commands) == 0 {
 				continue
 			}
 
-			for _, item := range cmdArray {
-				array := strings.Fields(item)
-				tlsEnable := len(array) > 2 && (array[2] == "-tls_enable=true" || array[2] == "true")
-				systemPro(flag, array[0], array[1], tlsEnable)
+			for _, command := range commands {
+				systemPro(flag, npcServiceName(command), command)
 			}
 		} else {
 			for _, key := range vkeys {
-				systemPro(flag, "", key, false)
+				names, err := listNpcServiceNames()
+				if err != nil {
+					fmt.Println("获取服务列表失败：", err)
+					continue
+				}
+				serviceName, err := resolveNpcServiceName(names, key)
+				if err != nil {
+					fmt.Println("无法操作系统服务：", err)
+					continue
+				}
+				command := quickcommand.Command{
+					VKey:      strings.TrimPrefix(serviceName, "nps-client-"),
+					Transport: "tcp",
+				}
+				systemPro(flag, serviceName, command)
 			}
 		}
 
@@ -934,24 +948,29 @@ func systemService(flag string) {
 	}
 }
 
-func systemPro(flag string, serAddr string, vkey string, tls bool) {
+func npcServiceName(command quickcommand.Command) string {
+	name := "nps-client-" + strings.TrimSpace(command.VKey)
+	if suffix := command.ServiceSuffix(); suffix != "" && suffix != "invalid" {
+		name += "-" + suffix
+	}
+	return name
+}
+
+func systemPro(flag string, serviceName string, command quickcommand.Command) {
 	// init service
 	prg := &npc{
 		exit: make(chan struct{}),
 	}
+	vkey := strings.TrimSpace(command.VKey)
 	svcConfig := newNpcServiceConfig(
-		"nps-client-"+vkey,
-		"nps-client-"+vkey,
+		serviceName,
+		serviceName,
 		"NPS内网穿透客户端，支持tcp、udp流量转发，支持内网http代理，地址：https://github.com/ZiDuNet/nps",
 	)
 
 	if flag == "1" {
 		svcConfig.Arguments = append(svcConfig.Arguments, "-service_name="+svcConfig.Name)
-		svcConfig.Arguments = append(svcConfig.Arguments, "-server="+serAddr)
-		svcConfig.Arguments = append(svcConfig.Arguments, "-vkey="+vkey)
-		if tls {
-			svcConfig.Arguments = append(svcConfig.Arguments, "-tls_enable=true")
-		}
+		svcConfig.Arguments = append(svcConfig.Arguments, command.Args()...)
 		svcConfig.Arguments = append(svcConfig.Arguments, "-debug=false")
 
 		*logPath = common.GetNpcLogPath()
@@ -959,7 +978,8 @@ func systemPro(flag string, serAddr string, vkey string, tls bool) {
 			*logPath = strings.Replace(*logPath, "\\", "\\\\", -1)
 		}
 
-		*logPath = strings.Replace(*logPath, "npc.log", "npc-"+vkey+".log", -1)
+		logName := "npc-" + strings.TrimPrefix(serviceName, "nps-client-") + ".log"
+		*logPath = strings.Replace(*logPath, "npc.log", logName, -1)
 		svcConfig.Arguments = append(svcConfig.Arguments, "-log_path="+*logPath)
 
 		logs.NewLogger()
@@ -1155,6 +1175,19 @@ func resolveNpcServiceName(names []string, input string) (string, error) {
 		if wanted == name {
 			return name, nil
 		}
+	}
+	var protocolMatches []string
+	for _, name := range names {
+		if strings.HasPrefix(name, wanted+"-") {
+			protocolMatches = append(protocolMatches, name)
+		}
+	}
+	if len(protocolMatches) == 1 {
+		return protocolMatches[0], nil
+	}
+	if len(protocolMatches) > 1 {
+		sort.Strings(protocolMatches)
+		return "", fmt.Errorf("VKEY %q 存在多个协议服务，请填写完整服务名：%s", input, strings.Join(protocolMatches, ", "))
 	}
 	return "", fmt.Errorf("VKEY %q 对应的服务未注册", input)
 }

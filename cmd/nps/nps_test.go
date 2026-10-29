@@ -99,6 +99,45 @@ func TestMergeMissingConfigFieldsDoesNotReaddDisabledOptionalSettings(t *testing
 	}
 }
 
+func TestMergeMissingConfigFieldsAddsRegistrationRuntimeLimits(t *testing.T) {
+	template := strings.Join([]string{
+		"allow_user_register=false",
+		"register_max_clients=0",
+		"register_max_tunnels=0",
+		"register_max_conn=0",
+		"register_upload_limit=0",
+		"register_download_limit=0",
+		"register_expire_days=0",
+	}, "\n")
+	existing := "allow_user_register=true\nregister_max_clients=2\nregister_max_tunnels=4\nregister_expire_days=7\n"
+	merged, added := mergeMissingConfigFields(existing, template)
+	for _, key := range []string{"register_max_conn", "register_upload_limit", "register_download_limit"} {
+		if !strings.Contains(merged, key+"=0") {
+			t.Fatalf("missing registration runtime limit %q was not migrated: %q", key, merged)
+		}
+		if !containsTestString(added, key) {
+			t.Fatalf("migration did not report added key %q: %#v", key, added)
+		}
+	}
+	for _, preserved := range []string{
+		"allow_user_register=true", "register_max_clients=2",
+		"register_max_tunnels=4", "register_expire_days=7",
+	} {
+		if !strings.Contains(merged, preserved) {
+			t.Fatalf("existing registration setting %q was not preserved: %q", preserved, merged)
+		}
+	}
+}
+
+func containsTestString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 func TestMigrateConfigCompatibilityMapsUpstreamAliases(t *testing.T) {
 	config := "bridge_tcp_port=18024\r\nbridge_tls_port=18025\r\nbridge_tcp_ip=127.0.0.1\r\n"
 	merged, added := migrateConfigCompatibility(config)
@@ -341,5 +380,37 @@ func TestMigrateConfigFileSupportsLegacyBridgePortNames(t *testing.T) {
 	}
 	if changed || len(added) != 0 || len(secrets) != 0 {
 		t.Fatalf("upstream migration is not idempotent: changed=%v added=%#v secrets=%#v", changed, added, secrets)
+	}
+}
+
+func TestMigrateConfigFileAddsPersistentBridgeDisplayBooleans(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nps.conf")
+	old := "bridge_port=8024\nweb_password=custom-secret\n"
+	if err := os.WriteFile(path, []byte(old), 0600); err != nil {
+		t.Fatal(err)
+	}
+	template := "bridge_port=8024\nbridge_tcp_show=true\nbridge_tcp_show_ip=\nbridge_ws_show=true\nbridge_quic_show_alpn=\n"
+
+	changed, added, _, err := migrateConfigFile(path, template)
+	if err != nil {
+		t.Fatalf("migrate config: %v", err)
+	}
+	if !changed || strings.Join(added, ",") != "bridge_tcp_show,bridge_ws_show" {
+		t.Fatalf("persistent display booleans were not added: changed=%v added=%#v", changed, added)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"bridge_tcp_show=true", "bridge_ws_show=true"} {
+		if !strings.Contains(string(data), key) {
+			t.Fatalf("migrated config missing %q: %q", key, data)
+		}
+	}
+	for _, key := range []string{"bridge_tcp_show_ip", "bridge_quic_show_alpn"} {
+		if strings.Contains(string(data), key) {
+			t.Fatalf("optional display override %q should remain omitted: %q", key, data)
+		}
 	}
 }

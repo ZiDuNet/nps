@@ -29,6 +29,12 @@ type userListRow struct {
 	TunnelCount   int
 	MaxClientNum  int
 	MaxTunnelNum  int
+	MaxConn       int
+	UploadLimit   int
+	DownloadLimit int
+	Connections   int64
+	UploadRate    int64
+	DownloadRate  int64
 	ExpireTime    string
 	CreateTime    string
 	APIKeyEnabled bool
@@ -46,8 +52,11 @@ func newUserListRowsWithResourceCounts(users []*file.User, counts map[int]file.U
 		}
 		user.RLock()
 		id, userName, status := user.Id, user.UserName, user.Status
-		email, remark, maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash := user.Email, user.Remark, user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash
+		email, remark, maxClientNum, maxTunnelNum := user.Email, user.Remark, user.MaxClientNum, user.MaxTunnelNum
+		maxConn, uploadLimit, downloadLimit := user.MaxConn, user.UploadLimit, user.DownloadLimit
+		expireTime, createTime, apiKeyHash := user.ExpireTime, user.CreateTime, user.APIKeyHash
 		user.RUnlock()
+		connections, _, uploadRate, downloadRate := file.UserRuntimeSnapshot(id)
 		resourceCounts := counts[id]
 		rows = append(rows, &userListRow{
 			Id:            id,
@@ -60,6 +69,12 @@ func newUserListRowsWithResourceCounts(users []*file.User, counts map[int]file.U
 			TunnelCount:   resourceCounts.TunnelCount,
 			MaxClientNum:  maxClientNum,
 			MaxTunnelNum:  maxTunnelNum,
+			MaxConn:       maxConn,
+			UploadLimit:   uploadLimit,
+			DownloadLimit: downloadLimit,
+			Connections:   connections,
+			UploadRate:    uploadRate,
+			DownloadRate:  downloadRate,
 			ExpireTime:    expireTime,
 			CreateTime:    createTime,
 			APIKeyEnabled: strings.TrimSpace(apiKeyHash) != "",
@@ -105,7 +120,7 @@ func parseUserStatus(value string) (bool, error) {
 	return strconv.ParseBool(value)
 }
 
-func newUserUpdateCandidate(existing *file.User, username, password, email, remark string, maxClientNum, maxTunnelNum int, expireTime string) *file.User {
+func newUserUpdateCandidate(existing *file.User, username, password, email, remark string, maxClientNum, maxTunnelNum, maxConn, uploadLimit, downloadLimit int, expireTime string) *file.User {
 	existing.RLock()
 	id, existingPassword, existingAPIKeyHash, existingAPIKeyCiphertext, existingDashboardKeyHash, existingDashboardKeyCiphertext, status, createTime := existing.Id, existing.Password, existing.APIKeyHash, existing.APIKeyCiphertext, existing.DashboardKeyHash, existing.DashboardKeyCiphertext, existing.Status, existing.CreateTime
 	existing.RUnlock()
@@ -122,6 +137,9 @@ func newUserUpdateCandidate(existing *file.User, username, password, email, rema
 		Remark:                 remark,
 		MaxClientNum:           maxClientNum,
 		MaxTunnelNum:           maxTunnelNum,
+		MaxConn:                maxConn,
+		UploadLimit:            uploadLimit,
+		DownloadLimit:          downloadLimit,
 		ExpireTime:             expireTime,
 		CreateTime:             createTime,
 	}
@@ -181,7 +199,7 @@ func (s *UserController) RegenerateAPIKey() {
 	user.Unlock()
 	file.GetDb().JsonDb.StoreUsersToJsonFile()
 	s.auditMutation("user.api_key_rotate", "user", targetID, targetID, "", nil, map[string]string{"username": username})
-	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "API 密钥已生成，请立即保存", "token": token}
+	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "API Token 已生成，可随时在 API 接入页面再次查看", "token": token}
 	s.ServeJSON()
 	s.StopRun()
 }
@@ -333,15 +351,18 @@ func (s *UserController) Add() {
 		return
 	}
 	u := &file.User{
-		UserName:     s.getEscapeString("username"),
-		Password:     s.GetString("password"),
-		Email:        strings.TrimSpace(s.GetString("email")),
-		Status:       true,
-		Remark:       s.getEscapeString("remark"),
-		MaxClientNum: normalizeUserClientLimit(s.GetIntNoErr("max_client")),
-		MaxTunnelNum: normalizeUserTunnelLimit(s.GetIntNoErr("max_tunnel")),
-		ExpireTime:   expireTime,
-		CreateTime:   time.Now().Format("2006-01-02 15:04:05"),
+		UserName:      s.getEscapeString("username"),
+		Password:      s.GetString("password"),
+		Email:         strings.TrimSpace(s.GetString("email")),
+		Status:        true,
+		Remark:        s.getEscapeString("remark"),
+		MaxClientNum:  normalizeUserClientLimit(s.GetIntNoErr("max_client")),
+		MaxTunnelNum:  normalizeUserTunnelLimit(s.GetIntNoErr("max_tunnel")),
+		MaxConn:       normalizeUserClientLimit(s.GetIntNoErr("max_conn")),
+		UploadLimit:   normalizeUserClientLimit(s.GetIntNoErr("upload_limit")),
+		DownloadLimit: normalizeUserClientLimit(s.GetIntNoErr("download_limit")),
+		ExpireTime:    expireTime,
+		CreateTime:    time.Now().Format("2006-01-02 15:04:05"),
 	}
 	if err := file.GetDb().NewUser(u); err != nil {
 		s.AjaxErr(err.Error())
@@ -386,6 +407,9 @@ func (s *UserController) Edit() {
 		s.getEscapeString("remark"),
 		normalizeUserClientLimit(s.GetIntNoErr("max_client")),
 		normalizeUserTunnelLimit(s.GetIntNoErr("max_tunnel")),
+		normalizeUserClientLimit(s.GetIntNoErr("max_conn")),
+		normalizeUserClientLimit(s.GetIntNoErr("upload_limit")),
+		normalizeUserClientLimit(s.GetIntNoErr("download_limit")),
 		expireTime,
 	)
 	if err := file.GetDb().UpdateUser(updated); err != nil {

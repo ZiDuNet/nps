@@ -218,7 +218,8 @@ func (s *ApiV1Controller) UserTokenRevoke() {
 	s.emitLegacy(s.invokeSafe("user", "RevokeAPIKey", &UserController{}, true))
 }
 
-// UserTokenStatus reports whether the token is enabled without revealing it.
+// UserTokenStatus reports whether the token is enabled and returns the stored
+// credential when the caller still has permission to view it.
 func (s *ApiV1Controller) UserTokenStatus() {
 	s.pathFormValue("id")
 	s.emitLegacy(s.invokeSafe("user", "APIKeyStatus", &UserController{}, false))
@@ -255,6 +256,32 @@ func (s *ApiV1Controller) GlobalConfigSave() {
 		return
 	}
 	s.emitLegacy(s.invokeSafe("global", "SaveConfig", &GlobalController{}, true))
+}
+
+// BridgeCertificate reports the single active/configured Bridge certificate
+// without returning private-key material.
+func (s *ApiV1Controller) BridgeCertificate() {
+	if !s.requireAdmin() {
+		return
+	}
+	s.emitLegacy(s.invokeSafe("global", "BridgeCertificate", &GlobalController{}, false))
+}
+
+// BridgeCertificateCheck validates certificate material without saving it.
+func (s *ApiV1Controller) BridgeCertificateCheck() {
+	if !s.requireAdmin() {
+		return
+	}
+	s.emitLegacy(s.invokeSafe("global", "CheckBridgeCertificate", &GlobalController{}, true))
+}
+
+// BridgeCertificateSave atomically updates bridge_cert_file and
+// bridge_key_file in nps.conf.
+func (s *ApiV1Controller) BridgeCertificateSave() {
+	if !s.requireAdmin() {
+		return
+	}
+	s.emitLegacy(s.invokeSafe("global", "SaveBridgeCertificate", &GlobalController{}, true))
 }
 
 // GlobalRestart asks the system service manager to restart NPS.
@@ -335,12 +362,15 @@ func (s *ApiV1Controller) IPRegisterClear() {
 	s.emitLegacy(s.invokeSafe("global", "IPRegisterClear", &GlobalController{}, true))
 }
 
-// Audit lists control-plane audit events (administrator only).
+// Audit lists control-plane audit events visible to the current credential.
 func (s *ApiV1Controller) Audit() {
-	if !s.requireAdmin() {
-		return
-	}
 	s.emitLegacy(s.invokeSafe("audit", "List", &AuditController{}, true))
+}
+
+// AuditConnections lists Bridge and proxy connection records visible to the
+// current credential.
+func (s *ApiV1Controller) AuditConnections() {
+	s.emitLegacy(s.invokeSafe("audit", "Connections", &AuditController{}, true))
 }
 
 // invokeSafe converts invokeLegacy errors into the /api/v1 error envelope.

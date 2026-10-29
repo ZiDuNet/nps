@@ -14,6 +14,7 @@ import (
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/nps_mux"
 	"ehang.io/nps/lib/version"
 	"github.com/pires/go-proxyproto"
 )
@@ -593,5 +594,44 @@ func TestSessionForLockedPairsDataWithNewestSignalWithoutData(t *testing.T) {
 	b.clientsMu.Unlock()
 	if selected != second {
 		t.Fatalf("data channel paired with %p, want newest signal %p", selected, second)
+	}
+}
+
+func TestSessionForLockedKeepsIndependentSessionsInPrimaryMode(t *testing.T) {
+	if err := SetClientSelectMode("primary"); err != nil {
+		t.Fatal(err)
+	}
+	root := NewClient(nil, nil, nil, "1.1.36")
+	root.sessions = []*Client{root}
+	firstServer, firstPeer := net.Pipe()
+	defer firstPeer.Close()
+	secondServer, secondPeer := net.Pipe()
+	defer secondPeer.Close()
+	first := NewClient(nil, nil, conn.NewConn(firstServer), "1.1.36")
+	first.parent = root
+	root.sessions = []*Client{first}
+	b := &Bridge{}
+	b.clientsMu.Lock()
+	second := b.sessionForLocked(root, "signal", "1.1.36")
+	second.mu.Lock()
+	second.signal = conn.NewConn(secondServer)
+	second.mu.Unlock()
+	if second == first {
+		t.Fatal("Primary mode replaced an active session instead of adding a new one")
+	}
+	secondTunnelServer, secondTunnelPeer := net.Pipe()
+	defer secondTunnelPeer.Close()
+	secondTunnel := nps_mux.NewMux(secondTunnelServer, "ws", 60)
+	defer secondTunnel.Close()
+	second.mu.Lock()
+	second.tunnel = secondTunnel
+	second.mu.Unlock()
+	paired := b.sessionForLocked(root, "tunnel", "1.1.36")
+	b.clientsMu.Unlock()
+	if paired != first {
+		t.Fatalf("Primary mode paired a tunnel with %p, want unused session %p", paired, first)
+	}
+	if len(root.sessions) != 2 {
+		t.Fatalf("Primary mode sessions = %d, want 2", len(root.sessions))
 	}
 }

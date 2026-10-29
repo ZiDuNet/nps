@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"ehang.io/nps/client"
+	"ehang.io/nps/lib/quickcommand"
 	"ehang.io/nps/lib/version"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -30,14 +30,20 @@ type App struct {
 
 // ShortClient 与前端结构对应
 type ShortClient struct {
-	Name           string `json:"name"`
-	Addr           string `json:"addr"`
-	Key            string `json:"key"`
-	TLS            bool   `json:"tls"`
-	TLSFingerprint string `json:"tlsFingerprint,omitempty"`
-	Running        bool   `json:"running"` // 兼容旧版本，实际用Status
-	Error          string `json:"error"`   // 连接错误信息
-	Status         string `json:"status"`  // 连接状态: "stopped", "connecting", "connected"
+	Name                  string `json:"name"`
+	Addr                  string `json:"addr"`
+	Key                   string `json:"key"`
+	Transport             string `json:"transport,omitempty"`
+	TLS                   bool   `json:"tls"`
+	BridgePath            string `json:"bridgePath,omitempty"`
+	QuicALPN              string `json:"quicAlpn,omitempty"`
+	TLSServerName         string `json:"tlsServerName,omitempty"`
+	TLSFingerprint        string `json:"tlsFingerprint,omitempty"`
+	TLSCAFile             string `json:"tlsCaFile,omitempty"`
+	TLSInsecureSkipVerify bool   `json:"tlsInsecureSkipVerify,omitempty"`
+	Running               bool   `json:"running"` // 兼容旧版本，实际用Status
+	Error                 string `json:"error"`   // 连接错误信息
+	Status                string `json:"status"`  // 连接状态: "stopped", "connecting", "connected"
 }
 
 // ConnectionLog 连接日志项
@@ -61,8 +67,77 @@ var (
 	statusMu          sync.Mutex                // 状态锁
 	runningMu         sync.Mutex
 	disconnectTimeout = 60
-	connType          = "tcp"
 )
+
+func normalizeShortcut(sc *ShortClient) error {
+	if sc == nil {
+		return errors.New("客户端配置无效")
+	}
+	command, err := quickcommand.Normalize(quickcommand.Command{
+		Name:                  sc.Name,
+		Server:                sc.Addr,
+		VKey:                  sc.Key,
+		Transport:             sc.Transport,
+		TLS:                   sc.TLS,
+		BridgePath:            sc.BridgePath,
+		QuicALPN:              sc.QuicALPN,
+		TLSServerName:         sc.TLSServerName,
+		TLSFingerprint:        sc.TLSFingerprint,
+		TLSCAFile:             sc.TLSCAFile,
+		TLSInsecureSkipVerify: sc.TLSInsecureSkipVerify,
+	})
+	if err != nil {
+		return err
+	}
+	sc.Name = command.Name
+	sc.Addr = command.Server
+	sc.Key = command.VKey
+	sc.Transport = command.Transport
+	sc.TLS = command.TLS
+	sc.BridgePath = command.BridgePath
+	sc.QuicALPN = command.QuicALPN
+	sc.TLSServerName = command.TLSServerName
+	sc.TLSFingerprint = command.TLSFingerprint
+	sc.TLSCAFile = command.TLSCAFile
+	sc.TLSInsecureSkipVerify = command.TLSInsecureSkipVerify
+	return nil
+}
+
+func shortcutID(sc ShortClient) string {
+	_ = normalizeShortcut(&sc)
+	if sc.Transport == "" {
+		sc.Transport = "tcp"
+	}
+	if sc.Transport == "tcp" && !sc.TLS && sc.BridgePath == "" && sc.QuicALPN == "" && sc.TLSServerName == "" {
+		// Preserve the historical key so saved client states from older GUI
+		// releases continue to restore.
+		return sc.Addr + "|" + sc.Key
+	}
+	protocol := sc.Transport
+	if sc.Transport == "tcp" && sc.TLS {
+		protocol = "tls"
+	}
+	return strings.Join([]string{
+		sc.Addr,
+		sc.Key,
+		protocol,
+		sc.BridgePath,
+		sc.QuicALPN,
+		sc.TLSServerName,
+	}, "|")
+}
+
+func normalizeShortcutList(items []ShortClient) []ShortClient {
+	result := make([]ShortClient, 0, len(items))
+	for _, item := range items {
+		if err := normalizeShortcut(&item); err != nil {
+			slog.Warn("忽略无效的客户端快捷项", "name", item.Name, "err", err)
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
+}
 
 func NewApp(app *application.App, window *application.WebviewWindow) *App {
 	return &App{app: app, window: window}
@@ -137,10 +212,16 @@ func getLogsPath() string {
 // getClientLogFilePath 获取客户端的独立日志文件路径
 func getClientLogFilePath(vkey string) string {
 	logsDir := getLogsPath()
-	// 如果传入的是包含 addr|vkey 的 id，则提取最后一段作为 vkey
+	// 快捷项 ID 的前两段是地址和 VKey；其余协议字段也参与文件名，
+	// 这样同一 VKey 的多个协议不会写到同一个日志文件。
 	if strings.Contains(vkey, "|") {
 		parts := strings.Split(vkey, "|")
-		vkey = parts[len(parts)-1]
+		if len(parts) >= 2 {
+			vkey = parts[0] + "-" + parts[1]
+			if len(parts) >= 3 && parts[2] != "" {
+				vkey += "-" + parts[2]
+			}
+		}
 	}
 	// 进一步替换可能在 vkey 中出现的不适合作为文件名的字符
 	vkey = strings.ReplaceAll(vkey, ":", "-")
@@ -188,13 +269,14 @@ func loadPersistentStore() (PersistentStore, error) {
 		if store.Shortcuts == nil {
 			store.Shortcuts = []ShortClient{}
 		}
+		store.Shortcuts = normalizeShortcutList(store.Shortcuts)
 		return store, nil
 	}
 
 	// 兼容旧格式：直接是 ShortClient 数组
 	var arr []ShortClient
 	if err := json.Unmarshal(b, &arr); err == nil {
-		return PersistentStore{Shortcuts: arr}, nil
+		return PersistentStore{Shortcuts: normalizeShortcutList(arr)}, nil
 	}
 
 	return PersistentStore{}, errors.New("invalid storage format")
@@ -221,7 +303,7 @@ func loadShortcuts() {
 	// 先尝试解析为对象格式
 	var store PersistentStore
 	if err := json.Unmarshal(b, &store); err == nil {
-		shortcuts = store.Shortcuts
+		shortcuts = normalizeShortcutList(store.Shortcuts)
 		if shortcuts == nil {
 			shortcuts = []ShortClient{}
 		}
@@ -234,7 +316,7 @@ func loadShortcuts() {
 		shortcuts = []ShortClient{}
 		return
 	}
-	shortcuts = s
+	shortcuts = normalizeShortcutList(s)
 }
 
 func saveShortcuts() {
@@ -387,17 +469,21 @@ func (a *App) GetAppVersion() string {
 }
 
 func addShortcut(sc ShortClient) {
+	if err := normalizeShortcut(&sc); err != nil {
+		slog.Warn("拒绝无效的客户端快捷项", "err", err)
+		return
+	}
 	shortcutsMu.Lock()
 	shortcuts = append(shortcuts, sc)
 	shortcutsMu.Unlock()
 	saveShortcuts()
 }
 
-func findShortcutIndex(name, addr, key string) int {
+func findShortcutIndexByID(id string) int {
 	shortcutsMu.Lock()
 	defer shortcutsMu.Unlock()
 	for i, it := range shortcuts {
-		if it.Name == name && it.Addr == addr && it.Key == key {
+		if shortcutID(it) == id {
 			return i
 		}
 	}
@@ -410,6 +496,12 @@ func (a *App) AddShortcut(arg string) error {
 	if err := json.Unmarshal([]byte(arg), &sc); err != nil {
 		return err
 	}
+	if err := normalizeShortcut(&sc); err != nil {
+		return err
+	}
+	if findShortcutIndexByID(shortcutID(sc)) >= 0 {
+		return errors.New("该协议连接已存在")
+	}
 	addShortcut(sc)
 	return nil
 }
@@ -418,38 +510,28 @@ func (a *App) AddShortcutFromBase64(s string) error {
 	if s == "" {
 		return errors.New("无效的启动命令")
 	}
-	b, err := base64.StdEncoding.DecodeString(s)
+	command, err := quickcommand.DecodeBase64(s)
 	if err != nil {
 		return err
 	}
-	payload := string(b)
-	if !strings.HasPrefix(payload, "nps:") {
-		return errors.New("无效的启动命令")
+	sc := ShortClient{
+		Name:                  command.Name,
+		Addr:                  command.Server,
+		Key:                   command.VKey,
+		Transport:             command.Transport,
+		TLS:                   command.TLS,
+		BridgePath:            command.BridgePath,
+		QuicALPN:              command.QuicALPN,
+		TLSServerName:         command.TLSServerName,
+		TLSFingerprint:        command.TLSFingerprint,
+		TLSCAFile:             command.TLSCAFile,
+		TLSInsecureSkipVerify: command.TLSInsecureSkipVerify,
 	}
-	payload = payload[len("nps:"):]
-	parts := strings.Split(payload, "|")
-	if len(parts) < 4 || len(parts) > 5 {
-		return errors.New("无效的启动命令")
-	}
-	tls := false
-	if parts[3] == "true" {
-		tls = true
-	}
-	fingerprint := ""
-	if len(parts) == 5 {
-		fingerprint = strings.TrimSpace(parts[4])
-	}
-	sc := ShortClient{Name: parts[0], Addr: parts[1], Key: parts[2], TLS: tls, TLSFingerprint: fingerprint}
 
 	// Check if shortcut already exists
-	shortcutsMu.Lock()
-	for _, existing := range shortcuts {
-		if existing.Addr == sc.Addr && existing.Key == sc.Key {
-			shortcutsMu.Unlock()
-			return errors.New("该客户端已被添加")
-		}
+	if findShortcutIndexByID(shortcutID(sc)) >= 0 {
+		return errors.New("该协议连接已存在")
 	}
-	shortcutsMu.Unlock()
 
 	addShortcut(sc)
 	return nil
@@ -467,7 +549,7 @@ func (a *App) GetShortcuts() ([]ShortClient, error) {
 	defer statusMu.Unlock()
 
 	for i, sc := range shortcuts {
-		key := sc.Addr + "|" + sc.Key
+		key := shortcutID(sc)
 		sc.Running = false
 		sc.Status = "stopped"
 		sc.Error = ""
@@ -495,9 +577,30 @@ func (a *App) GetShortcuts() ([]ShortClient, error) {
 	return res, nil
 }
 
-func (a *App) RemoveShortcut(name, addr, key string) error {
-	// stop if running
-	id := addr + "|" + key
+func shortcutForArguments(name, addr, key string, tls bool) (ShortClient, string, bool) {
+	if strings.Contains(name, "|") {
+		id := strings.TrimSpace(name)
+		index := findShortcutIndexByID(id)
+		if index >= 0 {
+			shortcutsMu.Lock()
+			defer shortcutsMu.Unlock()
+			return shortcuts[index], id, true
+		}
+	}
+	shortcutsMu.Lock()
+	defer shortcutsMu.Unlock()
+	for _, item := range shortcuts {
+		if item.Addr == addr && item.Key == key && (name == "" || item.Name == name) {
+			if tls && !item.TLS {
+				continue
+			}
+			return item, shortcutID(item), true
+		}
+	}
+	return ShortClient{}, "", false
+}
+
+func stopShortcutByID(id string) {
 	runningMu.Lock()
 	if cancel, ok := running[id]; ok {
 		cancel()
@@ -514,13 +617,20 @@ func (a *App) RemoveShortcut(name, addr, key string) error {
 	delete(clientAttempted, id)
 	statusMu.Unlock()
 	runningMu.Unlock()
+}
 
+func (a *App) RemoveShortcut(name, addr, key string) error {
+	_, id, found := shortcutForArguments(name, addr, key, false)
+	if !found {
+		return nil
+	}
+	stopShortcutByID(id)
 	// remove from slice
 	shortcutsMu.Lock()
 	defer shortcutsMu.Unlock()
 	idx := -1
 	for i, it := range shortcuts {
-		if it.Name == name && it.Addr == addr && it.Key == key {
+		if shortcutID(it) == id {
 			idx = i
 			break
 		}
@@ -534,9 +644,11 @@ func (a *App) RemoveShortcut(name, addr, key string) error {
 }
 
 func (a *App) ToggleClient(name, addr, key string, tls bool, runningState bool) error {
-	id := addr + "|" + key
-	slog.Info("ToggleClient called", "name", name, "addr", addr, "tls", tls, "runningState", runningState)
-	fingerprint := shortcutFingerprint(addr, key)
+	shortcut, id, found := shortcutForArguments(name, addr, key, tls)
+	if !found {
+		return errors.New("客户端快捷项不存在")
+	}
+	slog.Info("ToggleClient called", "name", shortcut.Name, "id", id, "transport", shortcut.Transport, "tls", shortcut.TLS, "runningState", runningState)
 	runningMu.Lock()
 	defer runningMu.Unlock()
 	if runningState {
@@ -551,7 +663,7 @@ func (a *App) ToggleClient(name, addr, key string, tls bool, runningState bool) 
 			clientConnected[id] = false
 			delete(clientAttempted, id)
 			statusMu.Unlock()
-			go startNpcClientWithContext(ctx, id, addr, key, tls, fingerprint)
+			go startNpcClientWithShortcut(ctx, id, shortcut)
 		} else {
 			slog.Info("Client already running", "id", id)
 		}
@@ -579,34 +691,21 @@ func (a *App) ToggleClient(name, addr, key string, tls bool, runningState bool) 
 	return nil
 }
 
-// startNpcClient 在 goroutine 中启动 npc 客户端（内置，不是外部进程）
-func startNpcClient(id, server, vkey string, tlsEnable bool) {
-	ctx, cancel := context.WithCancel(context.Background())
-	runningMu.Lock()
-	running[id] = cancel
-	runningMu.Unlock()
-
-	startNpcClientWithContext(ctx, id, server, vkey, tlsEnable, "")
-}
-
-func shortcutFingerprint(addr, key string) string {
-	shortcutsMu.Lock()
-	defer shortcutsMu.Unlock()
-	for _, shortcut := range shortcuts {
-		if shortcut.Addr == addr && shortcut.Key == key {
-			return shortcut.TLSFingerprint
-		}
+// startNpcClientWithShortcut runs one saved connection with its own transport
+// and TLS settings. Multiple entries may share a VKey without sharing state.
+func startNpcClientWithShortcut(ctx context.Context, id string, shortcut ShortClient) {
+	if err := normalizeShortcut(&shortcut); err != nil {
+		slog.Error("客户端快捷项无效", "id", id, "err", err)
+		return
 	}
-	return ""
-}
-
-// startNpcClientWithContext 在给定的 context 中运行 npc 客户端
-func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tlsEnable bool, tlsFingerprint string) {
 	// 为该客户端准备日志存储（内存缓冲 + 独立日志文件）
 	store := getClientLogStore(id)
 	clientLogger := &trpcLogger{store: store}
 
-	clientLogger.Info("启动 NPC 客户端: server=%s, vkey=%s, tls=%v", server, vkey, tlsEnable)
+	clientLogger.Info(
+		"启动 NPC 客户端: server=%s, vkey=%s, transport=%s, path=%s, alpn=%s, tls=%v",
+		shortcut.Addr, shortcut.Key, shortcut.Transport, shortcut.BridgePath, shortcut.QuicALPN, shortcut.TLS,
+	)
 
 	for {
 		select {
@@ -634,7 +733,23 @@ func startNpcClientWithContext(ctx context.Context, id, server, vkey string, tls
 		clientConnected[id] = false
 		statusMu.Unlock()
 
-		rpcClient := client.NewRPClientWithTLS(server, vkey, connType, "", nil, disconnectTimeout, tlsEnable, client.TLSOptions{Fingerprint: tlsFingerprint})
+		rpcClient := client.NewRPClientWithTLS(
+			shortcut.Addr,
+			shortcut.Key,
+			shortcut.Transport,
+			"",
+			nil,
+			disconnectTimeout,
+			shortcut.TLS,
+			client.TLSOptions{
+				CAFile:             shortcut.TLSCAFile,
+				ServerName:         shortcut.TLSServerName,
+				Fingerprint:        shortcut.TLSFingerprint,
+				InsecureSkipVerify: shortcut.TLSInsecureSkipVerify,
+				BridgePath:         shortcut.BridgePath,
+				QuicALPN:           shortcut.QuicALPN,
+			},
+		)
 
 		// 设置客户端的独立 logger
 		rpcClient.SetLogger(clientLogger)

@@ -3,9 +3,13 @@ package controllers
 import (
 	"bytes"
 	"html/template"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
+
+	"ehang.io/nps/lib/file"
 )
 
 func TestTunnelSidebarMenu(t *testing.T) {
@@ -211,7 +215,7 @@ func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 	addExpected := map[string]string{
 		"tcp":      `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
 		"udp":      `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
-		"mixProxy": `mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
+		"mixProxy": `mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "proxy_auth", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
 		"secret":   `secret: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
 		"p2p":      `p2p: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
 		"file":     `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
@@ -219,7 +223,7 @@ func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 	editExpected := map[string]string{
 		"tcp":      `tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"]`,
 		"udp":      `udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
-		"mixProxy": `mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
+		"mixProxy": `mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "proxy_auth", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
 		"secret":   `secret: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
 		"p2p":      `p2p: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
 		"file":     `file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]`,
@@ -257,6 +261,56 @@ func TestTunnelFormTemplatesExposeTypeSpecificFields(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseTunnelProxyAuthRequestPreservesAndClearsExistingValue(t *testing.T) {
+	current := &file.Tunnel{ProxyAuth: "legacy:password"}
+	tests := []struct {
+		name       string
+		values     url.Values
+		wantValue  string
+		wantSubmit bool
+		wantErr    bool
+	}{
+		{name: "omitted keeps value", values: url.Values{}, wantValue: "legacy:password"},
+		{name: "blank keeps value", values: url.Values{"proxy_auth": {""}}, wantValue: "legacy:password"},
+		{name: "new value replaces value", values: url.Values{"proxy_auth": {"next:secret"}}, wantValue: "next:secret", wantSubmit: true},
+		{name: "clear restores client auth", values: url.Values{"clear_proxy_auth": {"1"}, "proxy_auth": {"next:secret"}}, wantValue: "", wantSubmit: true},
+		{name: "invalid value rejected", values: url.Values{"proxy_auth": {"missing-password"}}, wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest("POST", "/index/edit", strings.NewReader(test.values.Encode()))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			value, submitted, err := parseTunnelProxyAuthRequest(request, current)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, test.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if value != test.wantValue || submitted != test.wantSubmit {
+				t.Fatalf("value/submitted = %q/%v, want %q/%v", value, submitted, test.wantValue, test.wantSubmit)
+			}
+		})
+	}
+}
+
+func TestTunnelEditProxyAuthIsWriteOnly(t *testing.T) {
+	content := readTemplateForTest(t, "../views/index/edit.html")
+	for _, marker := range []string{
+		`name="proxy_auth"`,
+		`name="clear_proxy_auth"`,
+		`{{if .proxyAuthConfigured}}`,
+		`data-tunnel-field="proxy_auth"`,
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("edit template misses proxy auth marker %q", marker)
+		}
+	}
+	if strings.Contains(content, `{{.t.ProxyAuth}}`) {
+		t.Fatal("edit template must never render the stored proxy password")
 	}
 }
 
@@ -776,6 +830,15 @@ func TestDashboardTemplateUsesScalarLoadValues(t *testing.T) {
 	}
 	if !strings.Contains(content, `$("#overview_load").text("{{.data.load1}} / {{.data.load5}} / {{.data.load15}}");`) {
 		t.Fatal("dashboard should render load averages from scalar status fields")
+	}
+	for _, marker := range []string{
+		"{{if ne true .isAdmin}}",
+		"可连接的桥接入口",
+		"{{range .data.bridgeEndpoints}}",
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("ordinary dashboard should render enabled Bridge endpoints, missing %q", marker)
+		}
 	}
 }
 

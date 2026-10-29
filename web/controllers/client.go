@@ -10,9 +10,12 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/acl"
+	"ehang.io/nps/lib/bridgeendpoint"
 	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/install"
+	"ehang.io/nps/lib/quickcommand"
 	npsversion "ehang.io/nps/lib/version"
 	"ehang.io/nps/server"
 	"github.com/astaxie/beego"
@@ -52,14 +55,32 @@ type clientListRow struct {
 	CreateTime          string
 	LastOnlineTime      string
 	ConnectionHistory   []file.ConnectionEvent
-	IpWhite             bool
-	IpWhiteList         []string
 	RegisteredOnly      bool
 	RegisterKeySet      bool
 	RegisterMaxHours    int
 	ExpireTime          string
 	UserExpireTime      string
 	EffectiveExpireTime string
+	ConnectionProtocol  string
+	ConnectionProtocols []string
+	ConnectionCommands  []clientBridgeCommand
+}
+
+type clientBridgeCommand struct {
+	Key           string
+	Label         string
+	Protocol      string
+	Transport     string
+	Address       string
+	Path          string
+	ALPN          string
+	TLS           bool
+	Main          bool
+	RequiresUDP   bool
+	ViaHTTP3      bool
+	NormalCommand string
+	QuickCommand  string
+	QuickFormat   string
 }
 
 func supportsRemoteClientUpdate(clientVersion string) bool {
@@ -106,7 +127,9 @@ type clientListFlow struct {
 }
 
 type clientListRate struct {
-	NowRate int64
+	NowRate      int64
+	UploadRate   int64
+	DownloadRate int64
 }
 
 // clientEditSnapshot lets the controller revert an in-place edit if the
@@ -130,9 +153,6 @@ type clientEditSnapshot struct {
 	blackIPList      []string
 	whiteIPList      []string
 	ipListPriority   int
-	ipWhite          bool
-	ipWhitePass      string
-	ipWhiteList      []string
 	registerKey      string
 	registerMaxHours int
 	registeredOnly   bool
@@ -155,9 +175,6 @@ func snapshotClientForEdit(client *file.Client) clientEditSnapshot {
 		blackIPList:      append([]string(nil), client.BlackIpList...),
 		whiteIPList:      append([]string(nil), client.WhiteIpList...),
 		ipListPriority:   client.IpListPriority,
-		ipWhite:          client.IpWhite,
-		ipWhitePass:      client.IpWhitePass,
-		ipWhiteList:      append([]string(nil), client.IpWhiteList...),
 		registerKey:      client.RegisterKey,
 		registerMaxHours: client.RegisterMaxHours,
 		registeredOnly:   client.RegisteredOnly,
@@ -193,9 +210,6 @@ func (snapshot clientEditSnapshot) restore(client *file.Client) {
 	client.BlackIpList = append([]string(nil), snapshot.blackIPList...)
 	client.WhiteIpList = append([]string(nil), snapshot.whiteIPList...)
 	client.IpListPriority = snapshot.ipListPriority
-	client.IpWhite = snapshot.ipWhite
-	client.IpWhitePass = snapshot.ipWhitePass
-	client.IpWhiteList = append([]string(nil), snapshot.ipWhiteList...)
 	client.RegisterKey = snapshot.registerKey
 	client.RegisterMaxHours = snapshot.registerMaxHours
 	client.RegisteredOnly = snapshot.registeredOnly
@@ -275,9 +289,6 @@ type userClientSettings struct {
 	BasicPass        string
 	Compress         bool
 	Crypt            bool
-	IpWhite          bool
-	IpWhitePass      string
-	IpWhiteList      []string
 	BlackIPList      []string
 	WhiteIPList      []string
 	IpListPriority   int
@@ -298,9 +309,6 @@ func userClientSettingsFromRequest(s *ClientController) (userClientSettings, err
 		BasicPass:        s.getEscapeString("p"),
 		Compress:         common.GetBoolByStr(s.getEscapeString("compress")),
 		Crypt:            s.GetBoolNoErr("crypt"),
-		IpWhite:          s.GetBoolNoErr("ipwhite"),
-		IpWhitePass:      s.getEscapeString("ipwhitepass"),
-		IpWhiteList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n")),
 		BlackIPList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n")),
 		WhiteIPList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("whiteiplist"), "\r\n")),
 		IpListPriority:   s.GetIntNoErr("iplistpriority"),
@@ -324,9 +332,6 @@ func newUserOwnedClient(userID int, settings userClientSettings, createdAt time.
 	client.Cnf.P = settings.BasicPass
 	client.Cnf.Compress = settings.Compress
 	client.Cnf.Crypt = settings.Crypt
-	client.IpWhite = settings.IpWhite
-	client.IpWhitePass = settings.IpWhitePass
-	client.IpWhiteList = settings.IpWhiteList
 	client.BlackIpList = settings.BlackIPList
 	client.WhiteIpList = settings.WhiteIPList
 	client.IpListPriority = settings.IpListPriority
@@ -394,8 +399,6 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 			IpListPriority:   client.IpListPriority,
 			CreateTime:       client.CreateTime,
 			LastOnlineTime:   client.LastOnlineTime,
-			IpWhite:          client.IpWhite,
-			IpWhiteList:      append([]string(nil), client.IpWhiteList...),
 			RegisteredOnly:   client.RegisteredOnly,
 			RegisterKeySet:   strings.TrimSpace(client.RegisterKey) != "",
 			RegisterMaxHours: client.RegisterMaxHours,
@@ -411,15 +414,99 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 			}
 		}
 		row.Flow.InletFlow, row.Flow.ExportFlow, row.Flow.FlowLimit = flow.Snapshot()
+		if flow != nil {
+			row.Rate.UploadRate, row.Rate.DownloadRate = flow.RateSnapshot()
+		}
 		if clientRate != nil {
 			row.Rate.NowRate = clientRate.CurrentRate()
 		}
 		if effectiveExpireTime, err := file.GetDb().EffectiveClientExpireTime(client); err == nil {
 			row.EffectiveExpireTime = effectiveExpireTime
 		}
+		if server.Bridge != nil {
+			transports := server.Bridge.ActiveClientTransports(client.Id)
+			row.IsConnect = len(transports) > 0
+			for _, transport := range transports {
+				if label := bridgeendpoint.ProtocolName(transport); label != "" {
+					row.ConnectionProtocols = append(row.ConnectionProtocols, label)
+				}
+			}
+			if selected := server.Bridge.SelectedClientTransport(client.Id); selected != "" {
+				row.ConnectionProtocol = bridgeendpoint.ProtocolName(selected)
+			}
+			if row.ConnectionProtocol == "" && len(row.ConnectionProtocols) > 0 {
+				row.ConnectionProtocol = row.ConnectionProtocols[0]
+			}
+		}
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+func attachClientBridgeCommands(rows []*clientListRow, requestHost string) []bridgeendpoint.Endpoint {
+	serverURL := ""
+	if global := file.GetDb().GetGlobal(); global != nil {
+		serverURL = global.ServerUrl
+	}
+	endpoints := server.GetBridgeEndpoints(requestHost, serverURL)
+	available := bridgeendpoint.Available(endpoints)
+	executable := "./npc"
+	if common.IsWindows() {
+		executable = "npc.exe"
+	}
+	for _, row := range rows {
+		if row == nil || strings.TrimSpace(row.VerifyKey) == "" {
+			continue
+		}
+		row.ConnectionCommands = make([]clientBridgeCommand, 0, len(available))
+		for _, endpoint := range available {
+			fingerprint := ""
+			if endpoint.TLS && crypt.IsCertSelfSigned() {
+				fingerprint = crypt.GetCertFingerprint()
+			}
+			command, err := quickcommand.Normalize(quickcommand.Command{
+				Name:           row.Remark,
+				Server:         endpoint.Address,
+				VKey:           row.VerifyKey,
+				Endpoint:       endpoint.Key,
+				Transport:      endpoint.Transport,
+				TLS:            endpoint.TLS,
+				TLSFingerprint: fingerprint,
+				BridgePath:     endpoint.Path,
+				QuicALPN:       endpoint.ALPN,
+				TLSServerName:  endpoint.TLSServerName,
+			})
+			if err != nil {
+				continue
+			}
+			quick, err := quickcommand.Encode(command)
+			if err != nil {
+				continue
+			}
+			format := "v2"
+			if command.Transport == "tcp" && command.BridgePath == "" && command.QuicALPN == "" &&
+				command.TLSServerName == "" && command.TLSCAFile == "" && !command.TLSInsecureSkipVerify {
+				format = "v1"
+			}
+			row.ConnectionCommands = append(row.ConnectionCommands, clientBridgeCommand{
+				Key:           endpoint.Key,
+				Label:         endpoint.Label,
+				Protocol:      endpoint.Protocol,
+				Transport:     endpoint.Transport,
+				Address:       endpoint.Address,
+				Path:          endpoint.Path,
+				ALPN:          endpoint.ALPN,
+				TLS:           endpoint.TLS,
+				Main:          endpoint.Main,
+				RequiresUDP:   endpoint.UsesUDP,
+				ViaHTTP3:      endpoint.ViaHTTP3,
+				NormalCommand: command.CommandLine(executable),
+				QuickCommand:  quick,
+				QuickFormat:   format,
+			})
+		}
+	}
+	return endpoints
 }
 
 func (s *ClientController) List() {
@@ -448,6 +535,8 @@ func (s *ClientController) List() {
 		list, cnt = server.GetClientListForAllowedIds(start, length, search, sort, order, clientId, s.GetAllowedClientIds())
 	}
 	cmd := make(map[string]interface{})
+	rows := newClientListRows(list)
+	endpoints := attachClientBridgeCommands(rows, s.Ctx.Request.Host)
 	global := file.GetDb().GetGlobal()
 	serverURL := ""
 	if global != nil {
@@ -456,7 +545,8 @@ func (s *ClientController) List() {
 	cmd["ip"] = publicBridgeHost(s.Ctx.Request.Host, serverURL, beego.AppConfig.String("bridge_addr"))
 	cmd["bridgeType"] = beego.AppConfig.String("bridge_type")
 	cmd["bridgePort"] = server.Bridge.TunnelPort
-	s.AjaxTable(newClientListRows(list), cnt, cnt, cmd)
+	cmd["bridgeEndpoints"] = endpoints
+	s.AjaxTable(rows, cnt, cnt, cmd)
 }
 
 // Upgrade tells a connected, update-capable NPC to run its built-in updater.
@@ -619,9 +709,6 @@ func (s *ClientController) Add() {
 				BlackIpList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n")),
 				WhiteIpList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("whiteiplist"), "\r\n")),
 				IpListPriority:   s.GetIntNoErr("iplistpriority"),
-				IpWhite:          s.GetBoolNoErr("ipwhite"),
-				IpWhitePass:      s.getEscapeString("ipwhitepass"),
-				IpWhiteList:      RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n")),
 				RegisterKey:      strings.TrimSpace(s.getEscapeString("register_key")),
 				RegisterMaxHours: max(s.GetIntNoErr("register_max_hours"), 0),
 				RegisteredOnly:   s.GetBoolNoErr("registered_only"),
@@ -674,10 +761,11 @@ func (s *ClientController) GetClient() {
 		return
 	}
 	// Never serialize the mutable Client model directly here. It contains
-	// WebPassword, IpWhitePass and basic-auth credentials. The list DTO is
+	// WebPassword and basic-auth credentials. The list DTO is
 	// deliberately limited to fields that are safe for an authenticated
 	// management response and is also consistent with /client/list.
 	rows := newClientListRows([]*file.Client{c})
+	attachClientBridgeCommands(rows, s.Ctx.Request.Host)
 	if len(rows) != 1 {
 		s.Data["json"] = s.ajaxDetail(nil, errors.New("客户端不存在"))
 		s.ServeJSON()
@@ -708,7 +796,6 @@ func (s *ClientController) Edit() {
 			}
 			s.Data["BlackIpList"] = strings.Join(c.BlackIpList, "\r\n")
 			s.Data["WhiteIpList"] = strings.Join(c.WhiteIpList, "\r\n")
-			s.Data["IpWhiteList"] = strings.Join(c.IpWhiteList, "\r\n")
 		}
 		s.SetInfo("edit client")
 		s.display()
@@ -744,9 +831,6 @@ func (s *ClientController) Edit() {
 		cnfPassword := keepClientBasicPassword(currentBasicPassword, s.getEscapeString("p"))
 		compress := common.GetBoolByStr(s.getEscapeString("compress"))
 		cryptEnabled := s.GetBoolNoErr("crypt")
-		ipWhite := s.GetBoolNoErr("ipwhite")
-		ipWhitePass := s.getEscapeString("ipwhitepass")
-		ipWhiteList := RemoveRepeatedElement(strings.Split(s.getEscapeString("ipwhitelist"), "\r\n"))
 		blackIPList := RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n"))
 		whiteIPList := RemoveRepeatedElement(strings.Split(s.getEscapeString("whiteiplist"), "\r\n"))
 		ipListPriority := s.GetIntNoErr("iplistpriority")
@@ -866,9 +950,6 @@ func (s *ClientController) Edit() {
 		c.Cnf.P = cnfPassword
 		c.Cnf.Compress = compress
 		c.Cnf.Crypt = cryptEnabled
-		c.IpWhite = ipWhite
-		c.IpWhitePass = ipWhitePass
-		c.IpWhiteList = ipWhiteList
 		c.BlackIpList = blackIPList
 		c.WhiteIpList = whiteIPList
 		c.IpListPriority = ipListPriority

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"ehang.io/nps/lib/file"
+	"github.com/astaxie/beego"
 	beecontext "github.com/astaxie/beego/context"
 )
 
@@ -48,5 +49,29 @@ func TestNonAdminUserActionAllowList(t *testing.T) {
 		if nonAdminUserActionAllowed(action) {
 			t.Errorf("ordinary users must not be allowed to use %q", action)
 		}
+	}
+}
+
+func TestUserAPITokenCiphertextCanBeViewedAgain(t *testing.T) {
+	previous := beego.AppConfig.String("auth_key")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("auth_key", previous)
+	})
+	_ = beego.AppConfig.Set("auth_key", "view-again-test-key")
+
+	token, hash, err := generateUserAPIToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ciphertext, err := encryptUserAPIToken(token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := decryptUserAPIToken(ciphertext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored != token || !validUserAPIToken(hash, restored) {
+		t.Fatalf("restored token does not match the generated credential")
 	}
 }

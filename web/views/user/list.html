@@ -89,6 +89,12 @@
                 var limited = Number(limit) > 0;
                 return text(Number(used) || 0) + ' / ' + text(limited ? limit : (english ? 'Unlimited' : '不限'));
             };
+            var rateLimit = function (value) {
+                return Number(value) > 0 ? text(value + ' KB/s') : text(english ? 'Unlimited' : '不限');
+            };
+            var limitOnly = function (value) {
+                return text(Number(value) > 0 ? value : (english ? 'Unlimited' : '不限'));
+            };
             var statusBadge = row.Status
                 ? '<span class="badge badge-primary">' + (english ? 'Active' : '启用') + '</span>'
                 : '<span class="badge badge-danger">' + (english ? 'Disabled' : '停用') + '</span>';
@@ -103,25 +109,83 @@
                 + '<div><b data-i18n-zh="有效期" data-i18n-en="Expiration"></b><span>' + text(row.ExpireTime, english ? 'Unlimited' : '永不过期') + '</span></div>'
                 + '<div><b data-i18n-zh="客户端配额（已用 / 上限）" data-i18n-en="Clients (used / limit)"></b><span>' + quota(row.ClientCount, row.MaxClientNum) + '</span></div>'
                 + '<div><b data-i18n-zh="隧道配额（已用 / 上限）" data-i18n-en="Tunnels (used / limit)"></b><span>' + quota(row.TunnelCount, row.MaxTunnelNum) + '</span></div>'
+                + '<div><b data-i18n-zh="最大并发连接数" data-i18n-en="Maximum concurrent connections"></b><span>' + limitOnly(row.MaxConn) + '</span></div>'
+                + '<div><b data-i18n-zh="上行带宽" data-i18n-en="Upload bandwidth"></b><span>' + rateLimit(row.UploadLimit) + '</span></div>'
+                + '<div><b data-i18n-zh="下行带宽" data-i18n-en="Download bandwidth"></b><span>' + rateLimit(row.DownloadLimit) + '</span></div>'
+                + '<div data-live-user-id="' + Number(row.Id) + '"><b data-i18n-zh="实时共享连接" data-i18n-en="Live shared connections"></b><span class="live-connections" data-live-user-connections>' + text(row.Connections, 0) + ' / ' + limitOnly(row.MaxConn) + '</span></div>'
+                + '<div data-live-user-id="' + Number(row.Id) + '"><b data-i18n-zh="实时共享带宽" data-i18n-en="Live shared bandwidth"></b><span class="user-live-metrics"><span class="user-live-metrics__direction">↑</span><span class="user-live-metrics__value" data-live-user-up>' + changeunit(Number(row.UploadRate) || 0) + '/s</span><span class="user-live-metrics__direction">↓</span><span class="user-live-metrics__value" data-live-user-down>' + changeunit(Number(row.DownloadRate) || 0) + '/s</span></span></div>'
                 + '<div><b data-i18n-zh="状态" data-i18n-en="Status"></b><span>' + statusBadge + '</span></div>'
                 + '<div><b data-i18n-zh="API Token" data-i18n-en="API token"></b><span>' + tokenBadge + '</span></div>'
                 + '</div>';
         },
         columns: [
             { field: 'Id', title: 'ID', halign: 'center', class: 'user-list__id', width: '56px' },
-            { field: 'UserName', title: '<span data-i18n-zh="用户名" data-i18n-en="Username">用户名</span>', halign: 'center', escape: true },
-            { field: 'Email', title: '<span data-i18n-zh="邮箱" data-i18n-en="Email">邮箱</span>', halign: 'center', escape: true, formatter: function(value) { return userTableText(value || '-'); } },
-            { field: 'Remark', title: '<span data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', halign: 'center', escape: true },
-            { field: 'ClientCount', title: '<span data-i18n-zh="客户端数" data-i18n-en="Clients">客户端数</span>', align: 'center', halign: 'center', width: '72px', formatter: function(value) { return userTableText(Number(value) || 0); } },
-            { field: 'MaxClientNum', title: '<span data-i18n-zh="客户端上限" data-i18n-en="Client limit">客户端上限</span>', halign: 'center', formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedQuotaText()); } },
-            { field: 'TunnelCount', title: '<span data-i18n-zh="隧道数" data-i18n-en="Tunnels">隧道数</span>', align: 'center', halign: 'center', width: '72px', formatter: function(value) { return userTableText(Number(value) || 0); } },
-            { field: 'MaxTunnelNum', title: '<span data-i18n-zh="总隧道上限" data-i18n-en="Tunnel limit">总隧道上限</span>', halign: 'center', formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedQuotaText()); } },
-            { field: 'ExpireTime', title: '<span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span>', halign: 'center', formatter: function(value) { return userTableText(value || userUnlimitedText()); } },
             {
-                field: 'Status',
-                title: '<span data-i18n-zh="状态" data-i18n-en="Status">状态</span>',
+                field: 'UserName',
+                title: '<span title="用户名与账号状态" data-i18n-zh="用户" data-i18n-en="User">用户</span>',
+                halign: 'center',
+                class: 'user-list__identity',
+                width: '108px',
+                formatter: function(value, row) {
+                    var statusText = row.Status
+                        ? (npsIsEnglish() ? 'Active' : '启用')
+                        : (npsIsEnglish() ? 'Disabled' : '停用');
+                    var userName = value || '-';
+                    return '<span class="user-identity-cell"><span class="user-identity-name" title="' + userTableText(userName) + '">' + userTableText(userName) + '</span><span class="user-status-dot' + (row.Status ? ' is-active' : '') + '" title="' + statusText + '" aria-label="' + statusText + '"></span></span>';
+                }
+            },
+            { field: 'Email', title: '<span title="邮箱" data-i18n-zh="邮箱" data-i18n-en="Email">邮箱</span>', halign: 'center', class: 'user-list__email', visible: false, escape: true, formatter: function(value) { return userTableText(value || '-'); } },
+            { field: 'Remark', title: '<span title="备注" data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', halign: 'center', class: 'user-list__remark', visible: false, escape: true },
+            {
+                field: 'ClientCount',
+                title: '<span title="客户端配额（已用 / 上限）" data-i18n-zh="客户端" data-i18n-en="Clients">客户端</span>',
                 align: 'center',
                 halign: 'center',
+                class: 'user-list__quota',
+                width: '96px',
+                formatter: function(value, row) {
+                    return userTableText((Number(value) || 0) + ' / ' + (Number(row.MaxClientNum) > 0 ? row.MaxClientNum : userUnlimitedQuotaText()));
+                }
+            },
+            {
+                field: 'TunnelCount',
+                title: '<span title="总隧道配额（已用 / 上限）" data-i18n-zh="隧道" data-i18n-en="Tunnels">隧道</span>',
+                align: 'center',
+                halign: 'center',
+                class: 'user-list__quota',
+                width: '96px',
+                formatter: function(value, row) {
+                    return userTableText((Number(value) || 0) + ' / ' + (Number(row.MaxTunnelNum) > 0 ? row.MaxTunnelNum : userUnlimitedQuotaText()));
+                }
+            },
+            {
+                field: 'MaxConn',
+                title: '<span title="实时共享连接、实时共享带宽及配置上限" data-i18n-zh="实时连接 / 带宽" data-i18n-en="Live connections / bandwidth">实时连接 / 带宽</span>',
+                halign: 'center',
+                align: 'center',
+                class: 'user-list__limits',
+                width: '164px',
+                formatter: function(value, row) {
+                    var userId = Number(row.Id);
+                    var connectionLimit = Number(value) > 0 ? Number(value) : '∞';
+                    var uploadLimit = Number(row.UploadLimit) > 0 ? row.UploadLimit + ' KB/s' : (npsIsEnglish() ? 'Unlimited' : '不限');
+                    var downloadLimit = Number(row.DownloadLimit) > 0 ? row.DownloadLimit + ' KB/s' : (npsIsEnglish() ? 'Unlimited' : '不限');
+                    return '<div class="user-live-metrics" data-live-user-id="' + userId + '">'
+                        + '<span class="live-connections" title="' + userTableText((npsIsEnglish() ? 'Shared connections: used / limit; limit ' : '共享连接：已用 / 上限；上限 ') + connectionLimit) + '" data-live-user-connections>' + userTableText(Number(row.Connections) || 0) + ' / ' + userTableText(connectionLimit) + '</span>'
+                        + '<span class="user-live-metrics__direction" title="' + userTableText((npsIsEnglish() ? 'Upload: ' : '上行：') + uploadLimit) + '">↑</span><span class="user-live-metrics__value" data-live-user-up>' + changeunit(Number(row.UploadRate) || 0) + '/s</span>'
+                        + '<span class="user-live-metrics__direction" title="' + userTableText((npsIsEnglish() ? 'Download: ' : '下行：') + downloadLimit) + '">↓</span><span class="user-live-metrics__value" data-live-user-down>' + changeunit(Number(row.DownloadRate) || 0) + '/s</span>'
+                        + '</div>';
+                }
+            },
+            { field: 'ExpireTime', title: '<span title="账号有效期" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span>', halign: 'center', class: 'user-list__expiry', width: '96px', formatter: function(value) { return userTableText(value || userUnlimitedText()); } },
+            {
+                field: 'Status',
+                title: '<span title="账号状态" data-i18n-zh="状态" data-i18n-en="Status">状态</span>',
+                align: 'center',
+                halign: 'center',
+                class: 'user-list__status',
+                width: '82px',
+                visible: false,
                 formatter: function(value) {
                     return value
                         ? '<span class="badge badge-primary">' + (npsIsEnglish() ? 'Active' : '启用') + '</span>'
@@ -130,21 +194,20 @@
             },
             {
                 field: 'APIKeyEnabled',
-                title: '<span data-i18n-zh="API Token" data-i18n-en="API token">API Token</span>',
+                title: '<span title="用户 API Token 状态与操作" data-i18n-zh="API Token" data-i18n-en="API token">API Token</span>',
                 align: 'center',
                 halign: 'center',
+                class: 'user-list__api',
+                width: '104px',
                 formatter: function(value, row) {
                     var userId = Number(row && row.Id);
                     if (!isFinite(userId) || Math.floor(userId) !== userId || userId <= 0) return '';
-                    var status = value
-                        ? '<span class="badge badge-primary">' + (npsIsEnglish() ? 'Enabled' : '已启用') + '</span>'
-                        : '<span class="badge badge-default">' + (npsIsEnglish() ? 'Not set' : '未配置') + '</span>';
-                    var actions = '<span class="user-token-actions">';
+                    var actions = '<span class="user-token-actions user-token-actions--compact" title="' + (value ? (npsIsEnglish() ? 'API token enabled' : 'API Token 已启用') : (npsIsEnglish() ? 'API token not configured' : 'API Token 未配置')) + '">';
                     if (value) actions += '<button type="button" onclick="showUserAPIToken(' + userId + ', ' + npsJsonAttr(row.UserName) + ')" class="btn btn-outline btn-primary btn-xs" title="' + (npsIsEnglish() ? 'View API token' : '查看 API Token') + '" aria-label="' + (npsIsEnglish() ? 'View API token' : '查看 API Token') + '"><i class="fa fa-eye" aria-hidden="true"></i></button>';
                     actions += '<button type="button" onclick="regenerateUserAPIKey(' + userId + ', ' + npsJsonAttr(row.UserName) + ')" class="btn btn-outline btn-info btn-xs" title="' + (npsIsEnglish() ? 'Rotate API token' : (value ? '重新生成 API Token' : '生成 API Token')) + '" aria-label="' + (npsIsEnglish() ? 'Rotate API token' : (value ? '重新生成 API Token' : '生成 API Token')) + '"><i class="fa fa-key" aria-hidden="true"></i></button>';
                     if (value) actions += '<button type="button" onclick="revokeUserAPIKey(' + userId + ')" class="btn btn-outline btn-warning btn-xs" title="' + (npsIsEnglish() ? 'Revoke API token' : '撤销 API Token') + '" aria-label="' + (npsIsEnglish() ? 'Revoke API token' : '撤销 API Token') + '"><i class="fa fa-unlink" aria-hidden="true"></i></button>';
                     actions += '</span>';
-                    return '<div class="user-token-cell">' + status + actions + '</div>';
+                    return '<div class="user-token-cell">' + actions + '</div>';
                 }
             },
             {
@@ -153,7 +216,7 @@
                 align: 'center',
                 halign: 'center',
                 class: 'user-list__actions',
-                width: '132px',
+                width: '112px',
                 formatter: function(value, row) {
                     var userId = Number(row.Id);
                     if (!isFinite(userId) || Math.floor(userId) !== userId || userId <= 0) return '';

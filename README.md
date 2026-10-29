@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.36</sub>
+﻿# NPS <sub>v1.1.37</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -148,8 +148,9 @@ make lint                  # golangci-lint
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" ./cmd/nps
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" ./cmd/npc
 
-# GUI client (requires Wails)
-cd cmd/npc/npc-gui && wails build
+# GUI client (requires Wails 3)
+cd cmd/npc/npc-gui
+wails3 build --tags npcgui
 ```
 
 ## Docker
@@ -174,12 +175,17 @@ docker-compose up -d
 - 🚀 [Getting Started](docs/start.md)
 - ▶️ [Command Reference](docs/run.md)
 - 👥 [User Management](docs/user.md)
-- ⚙️ [Server Config](docs/server_config.md)
-- 📱 [Client Config](docs/client_config.md)
+- 🧭 [In-App Usage Guide Configuration](docs/usage-guide.md)
+- ⚙️ [Server Configuration Reference](docs/server/server_config.md)
+- 📱 [Client Usage](docs/client/use.md)
+- 🧾 [NPC Configuration File Reference](docs/client/config-file.md)
 - 🔧 [Tunnel Details](docs/tunnel.md)
 - 🐳 [Docker Deployment](docs/docker.md)
 - 🖥️ [GUI Client](docs/gui.md)
 - 🌐 [Platform Domains & Certificate Reload](docs/extend/platform-domain.md)
+- 🔌 [External API v1](docs/api.md)
+- 🔐 [API Authentication & Compatibility](docs/extend/api.md)
+- 🧾 [Historical Web API](docs/extend/webapi.md)
 - ⬆️ [Migration Guide](docs/migrate.md)
 
 ## Changelog
@@ -187,6 +193,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.37** (2026-10-29) - Added protocol-aware Bridge command discovery for TCP, TLS, KCP, WS, WSS, QUIC and HTTP/3, with compatible v2 quick commands and multi-protocol NPC/GUI support. Added shared user quotas, connection audit logs, an independent certificate settings page, stricter custom-domain certificate APIs, and a redesigned registration and administration experience.
 
 - **v1.1.36** (2026-10-29) - Rebuilt self-registration around the independent user model with configurable client/tunnel quotas, expiry, CAPTCHA, rate limits and optional SMTP email verification. Added the administrator registration API, account-scoped IP registration management, configurable in-app usage documentation, a searchable/source-aware server configuration editor, and automatic default Geo data loading. Existing configuration, Bridge compatibility and NPC versions remain unchanged.
 

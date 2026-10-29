@@ -12,12 +12,15 @@ import (
 func TestUserListRowsRedactPasswords(t *testing.T) {
 	rows := newUserListRows([]*file.User{
 		{
-			Id:         7,
-			UserName:   "alice",
-			Password:   "do-not-expose",
-			APIKeyHash: "stored-hash",
-			Status:     true,
-			Remark:     "<script>alert(1)</script>",
+			Id:            7,
+			UserName:      "alice",
+			Password:      "do-not-expose",
+			APIKeyHash:    "stored-hash",
+			Status:        true,
+			Remark:        "<script>alert(1)</script>",
+			MaxConn:       12,
+			UploadLimit:   128,
+			DownloadLimit: 256,
 		},
 	})
 
@@ -34,6 +37,11 @@ func TestUserListRowsRedactPasswords(t *testing.T) {
 	}
 	if !strings.Contains(got, `"APIKeyEnabled":true`) {
 		t.Fatalf("user list response did not expose only API token state: %s", got)
+	}
+	for _, marker := range []string{`"MaxConn":12`, `"UploadLimit":128`, `"DownloadLimit":256`} {
+		if !strings.Contains(got, marker) {
+			t.Fatalf("user list response did not expose runtime limit %s: %s", marker, got)
+		}
 	}
 	var roundTrip []userListRow
 	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
@@ -53,7 +61,7 @@ func TestUserListRowsExposeResourceCounts(t *testing.T) {
 	}
 
 	content := readUserTemplateForTest(t, "../views/user/list.html")
-	for _, marker := range []string{"field: 'ClientCount'", "field: 'TunnelCount'", "客户端数", "隧道数"} {
+	for _, marker := range []string{"field: 'ClientCount'", "field: 'TunnelCount'", "客户端配额（已用 / 上限）", "总隧道配额（已用 / 上限）"} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("user list template misses resource count marker: %s", marker)
 		}
@@ -74,7 +82,7 @@ func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 		CreateTime:       "2025-01-01 00:00:00",
 	}
 
-	updated := newUserUpdateCandidate(existing, "alice-updated", "", "alice@example.com", "after", 0, 6, "2027-01-01 00:00:00")
+	updated := newUserUpdateCandidate(existing, "alice-updated", "", "alice@example.com", "after", 0, 6, 12, 128, 256, "2027-01-01 00:00:00")
 	if updated == existing {
 		t.Fatal("update candidate must not mutate the stored user in place")
 	}
@@ -84,11 +92,14 @@ func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 	if updated.APIKeyHash != "api-hash" || updated.DashboardKeyHash != "dashboard-hash" {
 		t.Fatalf("credential hashes were not preserved: api=%q dashboard=%q", updated.APIKeyHash, updated.DashboardKeyHash)
 	}
+	if updated.MaxConn != 12 || updated.UploadLimit != 128 || updated.DownloadLimit != 256 {
+		t.Fatalf("user runtime limits were not copied: %#v", updated)
+	}
 	if existing.UserName != "alice" || existing.Remark != "before" || existing.MaxTunnelNum != 3 {
 		t.Fatalf("building an update candidate mutated the existing user: %#v", existing)
 	}
 
-	updated = newUserUpdateCandidate(existing, "alice", "replacement<password>&", "alice@example.com", "before", 0, 3, existing.ExpireTime)
+	updated = newUserUpdateCandidate(existing, "alice", "replacement<password>&", "alice@example.com", "before", 0, 3, 0, 0, 0, existing.ExpireTime)
 	if updated.Password != "replacement<password>&" {
 		t.Fatalf("supplied password should replace the credential, got %q", updated.Password)
 	}

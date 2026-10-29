@@ -3,8 +3,8 @@
         <div class="form-page-heading">
             <div class="dashboard-page-kicker" data-i18n-zh="系统配置" data-i18n-en="System settings">系统配置</div>
             <h1 id="global-settings-title" data-i18n-zh="全局参数" data-i18n-en="Global settings">全局参数</h1>
-            <p data-i18n-zh="集中维护对外地址、访问策略、平台域名证书、使用说明与 Geo 数据。保存后当前请求链路的可热加载配置会立即生效。"
-               data-i18n-en="Manage the public address, access policy, platform certificates, usage guide and Geo data in one place. Hot-reloadable settings take effect immediately after saving.">集中维护对外地址、访问策略、平台域名证书、使用说明与 Geo 数据。保存后当前请求链路的可热加载配置会立即生效。</p>
+            <p data-i18n-zh="集中维护对外地址、全局访问策略、使用说明与 Geo 数据。证书、私钥和 ACME 设置已统一迁移到“证书设置”。"
+               data-i18n-en="Manage the public address, global access policy, usage guide and Geo data. Certificates, private keys and ACME settings now live on the Certificate settings tab.">集中维护对外地址、全局访问策略、使用说明与 Geo 数据。证书、私钥和 ACME 设置已统一迁移到“证书设置”。</p>
         </div>
     </header>
 
@@ -13,15 +13,23 @@
             <span class="system-settings-tab__icon"><i class="fa fa-sliders-h" aria-hidden="true"></i></span>
             <span class="system-settings-tab__copy"><strong data-i18n-zh="全局参数" data-i18n-en="Global settings">全局参数</strong><small data-i18n-zh="业务设置与内容管理" data-i18n-en="Business settings and content">业务设置与内容管理</small></span>
         </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/registration" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-user-plus" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="用户注册" data-i18n-en="User registration">用户注册</strong><small data-i18n-zh="入口、默认权益与邮箱" data-i18n-en="Access, defaults and email">入口、默认权益与邮箱</small></span>
+        </a>
         <a class="system-settings-tab" href="{{.web_base_url}}/global/config" data-console-navigate>
             <span class="system-settings-tab__icon"><i class="fa fa-code" aria-hidden="true"></i></span>
             <span class="system-settings-tab__copy"><strong data-i18n-zh="服务端配置" data-i18n-en="Server configuration">服务端配置</strong><small data-i18n-zh="nps.conf 在线维护" data-i18n-en="Maintain nps.conf online">nps.conf 在线维护</small></span>
+        </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/certificate" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-certificate" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="证书设置" data-i18n-en="Certificate settings">证书设置</strong><small data-i18n-zh="证书、私钥与 ACME" data-i18n-en="Certificates, keys and ACME">证书、私钥与 ACME</small></span>
         </a>
     </nav>
 
     <form id="global-form" class="form form-horz global-settings-form nps-form" autocomplete="off">
         <div class="global-settings-grid">
-            <section class="global-settings-card" aria-labelledby="global-server-section">
+            <section class="global-settings-card global-settings-card--server" aria-labelledby="global-server-section">
                 <header class="global-settings-card__header">
                     <span class="global-settings-card__icon"><i class="fa fa-server" aria-hidden="true"></i></span>
                     <div>
@@ -49,7 +57,7 @@
                 </div>
             </section>
 
-            <section class="global-settings-card" aria-labelledby="global-access-section">
+            <section class="global-settings-card global-settings-card--access" aria-labelledby="global-access-section">
                 <header class="global-settings-card__header">
                     <span class="global-settings-card__icon"><i class="fa fa-shield-alt" aria-hidden="true"></i></span>
                     <div>
@@ -59,14 +67,14 @@
                     </div>
                 </header>
                 <div class="global-settings-card__body global-settings-fields">
-                    <label class="global-field global-field--wide" for="black-ip-list">
+                    <label class="global-field" for="black-ip-list">
                         <span class="global-field__label" data-i18n-zh="IP 黑名单" data-i18n-en="IP denylist">IP 黑名单</span>
-                        <textarea id="black-ip-list" class="form-control" rows="5" name="globalBlackIpList" placeholder="203.0.113.10&#10;10.0.0.0/8&#10;geoip:cn">{{.globalBlackIpList}}</textarea>
+                        <textarea id="black-ip-list" class="form-control" rows="4" name="globalBlackIpList" placeholder="203.0.113.10&#10;10.0.0.0/8&#10;geoip:cn">{{.globalBlackIpList}}</textarea>
                         <small class="help-block" data-i18n-zh="每行一条 IP、CIDR、IPv4 通配或 Geo 规则。全局名单同时作用于客户端连接、隧道、域名转发和 Web 面板，误配可能锁死管理入口。" data-i18n-en="One IP, CIDR, IPv4 wildcard or Geo rule per line. Global rules affect client connections, tunnels, host forwarding and the Web console; a mistake can lock out administrators.">每行一条 IP、CIDR、IPv4 通配或 Geo 规则。全局名单同时作用于客户端连接、隧道、域名转发和 Web 面板，误配可能锁死管理入口。</small>
                     </label>
-                    <label class="global-field global-field--wide" for="white-ip-list">
+                    <label class="global-field" for="white-ip-list">
                         <span class="global-field__label" data-i18n-zh="IP 白名单" data-i18n-en="IP allowlist">IP 白名单</span>
-                        <textarea id="white-ip-list" class="form-control" rows="5" name="globalWhiteIpList" placeholder="198.51.100.0/24&#10;geoip:!private">{{.globalWhiteIpList}}</textarea>
+                        <textarea id="white-ip-list" class="form-control" rows="4" name="globalWhiteIpList" placeholder="198.51.100.0/24&#10;geoip:!private">{{.globalWhiteIpList}}</textarea>
                         <small class="help-block" data-i18n-zh="配置后，未命中白名单的来源会受到全局限制；留空表示不增加全局白名单限制。" data-i18n-en="When configured, sources not matching the allowlist are restricted globally; leave empty for no global allowlist restriction.">配置后，未命中白名单的来源会受到全局限制；留空表示不增加全局白名单限制。</small>
                     </label>
                     <label class="global-field global-field--wide" for="global-ip-list-priority">
@@ -80,63 +88,7 @@
                 </div>
             </section>
 
-            <section class="global-settings-card global-settings-card--wide" aria-labelledby="global-domain-section">
-                <header class="global-settings-card__header">
-                    <span class="global-settings-card__icon"><i class="fa fa-cloud" aria-hidden="true"></i></span>
-                    <div>
-                        <h2 id="global-domain-section" data-i18n-zh="平台泛域名与证书" data-i18n-en="Platform wildcard domains and certificates">平台泛域名与证书</h2>
-                        <p data-i18n-zh="普通用户创建平台域名时只能选择这里的泛域名和一个单层前缀；证书路径与私钥不会暴露给用户。"
-                           data-i18n-en="Users choose one wildcard and a single-label prefix. Certificate and key paths are never exposed to regular users.">普通用户创建平台域名时只能选择这里的泛域名和一个单层前缀；证书路径与私钥不会暴露给用户。</p>
-                    </div>
-                </header>
-                <div class="global-settings-card__body">
-                    <div id="platform-domain-list" class="platform-domain-list">
-                        {{range .platformDomains}}
-                        <article class="platform-domain-row" data-reference-count="{{.ReferenceCount}}">
-                            <input type="hidden" data-field="id" value="{{.ID}}">
-                            <div class="platform-domain-row__header">
-                                <div><strong>{{.Wildcard}}</strong><span class="platform-domain-reference"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="被 {{.ReferenceCount}} 个主机引用" data-i18n-en="Used by {{.ReferenceCount}} host(s)">被 {{.ReferenceCount}} 个主机引用</span></span></div>
-                                <button type="button" class="btn btn-outline btn-danger platform-domain-remove"{{if gt .ReferenceCount 0}} disabled title="使用中的平台域名不能删除" data-title-zh="使用中的平台域名不能删除" data-title-en="A referenced platform domain cannot be deleted"{{end}} aria-label="删除平台域名" data-aria-label-zh="删除平台域名" data-aria-label-en="Delete platform domain"><i class="fa fa-trash" aria-hidden="true"></i></button>
-                            </div>
-                            <div class="platform-domain-row__fields">
-                                <div class="platform-domain-wildcard"><label><span data-i18n-zh="泛域名" data-i18n-en="Wildcard">泛域名</span><input class="form-control" type="text" data-field="wildcard" value="{{.Wildcard}}" placeholder="*.example.com"{{if gt .ReferenceCount 0}} readonly{{end}}><small class="help-block" data-i18n-zh="必须以 *. 开头且只能包含一个泛域名层级。" data-i18n-en="Must start with *. and contain exactly one wildcard level.">必须以 *. 开头且只能包含一个泛域名层级。</small></label></div>
-                                <div class="platform-certificate-pair certificate-pair" data-certificate-pair data-validate-url="{{$.web_base_url}}/global/checkcertificate" data-wildcard="true" data-hostname-row-selector="[data-field='wildcard']">
-                                    <div class="certificate-mode-row">
-                                        <span class="certificate-mode-label" data-i18n-zh="证书填写方式" data-i18n-en="Certificate input">证书填写方式</span>
-                                        <select class="form-control certificate-mode-select" data-cert-mode aria-label="证书填写方式" data-aria-label-zh="证书填写方式" data-aria-label-en="Certificate input method">
-                                            <option value="path" data-i18n-zh="路径" data-i18n-en="Path">路径</option>
-                                            <option value="upload" data-i18n-zh="上传" data-i18n-en="Upload">上传</option>
-                                            <option value="paste" data-i18n-zh="粘贴" data-i18n-en="Paste">粘贴</option>
-                                        </select>
-                                        <button type="button" class="btn btn-outline btn-primary certificate-validate" data-i18n-zh="校验证书" data-i18n-en="Validate">校验证书</button>
-                                    </div>
-                                    <div class="certificate-mode-pane certificate-mode-pane--path certificate-mode-pane--compact">
-                                        <label><span data-i18n-zh="证书路径（.pem，可选）" data-i18n-en="Certificate path (.pem, optional)">证书路径（.pem，可选）</span><input class="form-control" type="text" data-field="cert" data-cert-path value="{{.CertFilePath}}" placeholder="conf/webssl/fullchain.pem"><small class="help-block" data-i18n-zh="PEM 证书链路径；与私钥成对填写后平台域名可启用 HTTPS。" data-i18n-en="PEM certificate-chain path; provide it with the key to enable HTTPS.">PEM 证书链路径；与私钥成对填写后平台域名可启用 HTTPS。</small></label>
-                                        <label><span data-i18n-zh="私钥路径（.key，可选）" data-i18n-en="Key path (.key, optional)">私钥路径（.key，可选）</span><input class="form-control" type="text" data-field="key" data-key-path value="{{.KeyFilePath}}" placeholder="/certs/example.com.key"><small class="help-block" data-i18n-zh="与证书对应的私钥路径；不会展示给普通用户。" data-i18n-en="Path to the matching private key; never shown to regular users.">与证书对应的私钥路径；不会展示给普通用户。</small></label>
-                                    </div>
-                                    <div class="certificate-mode-pane certificate-mode-pane--upload certificate-mode-pane--compact" hidden>
-                                        <label><span data-i18n-zh="证书文件" data-i18n-en="Certificate file">证书文件</span><input class="form-control" type="file" accept=".pem,.crt,.cer" data-cert-upload><small class="help-block" data-i18n-zh="选择 PEM 格式的证书/公钥链，保存时校验。" data-i18n-en="Choose a PEM certificate/chain; validated on save.">选择 PEM 格式的证书/公钥链，保存时校验。</small></label>
-                                        <label><span data-i18n-zh="私钥文件" data-i18n-en="Private key file">私钥文件</span><input class="form-control" type="file" accept=".pem,.key" data-key-upload><small class="help-block" data-i18n-zh="选择与证书匹配的私钥。" data-i18n-en="Choose the matching private key.">选择与证书匹配的私钥。</small></label>
-                                    </div>
-                                    <div class="certificate-mode-pane certificate-mode-pane--paste" hidden>
-                                        <label><span data-i18n-zh="证书内容" data-i18n-en="Certificate content">证书内容</span><textarea class="form-control" rows="5" data-cert-paste placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
-                                        <label><span data-i18n-zh="私钥内容" data-i18n-en="Private key content">私钥内容</span><textarea class="form-control" rows="5" data-key-paste placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label>
-                                    </div>
-                                    <div class="certificate-validation-result" role="status" hidden></div>
-                                </div>
-                            </div>
-                            <dl class="platform-domain-health"><div><dt data-i18n-zh="证书状态" data-i18n-en="Certificate status">证书状态</dt><dd class="platform-cert-status"{{if .Detail}} title="{{.Detail}}" data-detail="{{.Detail}}"{{end}}>{{.Status}}</dd></div><div><dt data-i18n-zh="到期时间" data-i18n-en="Expires at">到期时间</dt><dd>{{if .ExpiresAt}}{{.ExpiresAt}}{{else}}-{{end}}</dd></div><div><dt data-i18n-zh="剩余天数" data-i18n-en="Days remaining">剩余天数</dt><dd>{{if .Readable}}{{.DaysRemaining}} <span data-i18n-zh="天" data-i18n-en="days">天</span>{{else}}-{{end}}</dd></div></dl>
-                            {{if .Detail}}<p class="platform-domain-error">{{.Detail}}</p>{{end}}
-                        </article>
-                        {{end}}
-                    </div>
-                    <button id="add-platform-domain" class="btn btn-outline btn-primary" type="button"><i class="fa fa-plus" aria-hidden="true"></i><span data-i18n-zh="添加泛域名" data-i18n-en="Add wildcard">添加泛域名</span></button>
-                    <p class="form-field-hint" data-i18n-zh="被主机引用的泛域名不能删除或更名；更新证书会同步关联主机。证书留空表示仅提供 HTTP。"
-                       data-i18n-en="A referenced wildcard cannot be deleted or renamed; certificate changes synchronize its hosts. Leave the pair empty for HTTP only.">被主机引用的泛域名不能删除或更名；更新证书会同步关联主机。证书留空表示仅提供 HTTP。</p>
-                </div>
-            </section>
-
-            <section class="global-settings-card" id="usage-guide-settings" aria-labelledby="global-guide-section">
+            <section class="global-settings-card global-settings-card--guide" id="usage-guide-settings" aria-labelledby="global-guide-section">
                 <header class="global-settings-card__header">
                     <span class="global-settings-card__icon"><i class="fa fa-book-open" aria-hidden="true"></i></span>
                     <div>
@@ -159,7 +111,7 @@
                 </div>
             </section>
 
-            <section class="global-settings-card" aria-labelledby="global-geo-section">
+            <section class="global-settings-card global-settings-card--geo" aria-labelledby="global-geo-section">
                 <header class="global-settings-card__header">
                     <span class="global-settings-card__icon"><i class="fa fa-globe" aria-hidden="true"></i></span>
                     <div>
@@ -197,107 +149,91 @@
             </section>
         </div>
 
-        <input id="platform-domains-input" type="hidden" name="platform_domains" value="[]">
         <div class="global-settings-savebar">
             <div>
                 <strong data-i18n-zh="保存全局参数" data-i18n-en="Save global settings">保存全局参数</strong>
-                <span data-i18n-zh="使用说明和访问规则保存后生效；平台域名证书状态会重新校验。" data-i18n-en="The guide and access rules apply after saving; platform certificate status is checked again.">使用说明和访问规则保存后生效；平台域名证书状态会重新校验。</span>
+                <span data-i18n-zh="使用说明和访问规则保存后生效。证书相关配置已迁移到“证书设置”。" data-i18n-en="The guide and access rules apply after saving. Certificate settings now live on the Certificate settings tab.">使用说明和访问规则保存后生效。证书相关配置已迁移到“证书设置”。</span>
             </div>
             <button class="btn btn-success" type="submit"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存设置" data-i18n-en="Save settings">保存设置</span></button>
         </div>
     </form>
 </section>
 
-<template id="platform-domain-template">
-    <article class="platform-domain-row" data-reference-count="0">
-        <input type="hidden" data-field="id" value="">
-        <div class="platform-domain-row__header"><div><strong data-i18n-zh="新平台泛域名" data-i18n-en="New platform wildcard">新平台泛域名</strong><span class="platform-domain-reference"><i class="fa fa-link" aria-hidden="true"></i><span data-i18n-zh="尚未被主机引用" data-i18n-en="Not referenced by any host">尚未被主机引用</span></span></div><button type="button" class="btn btn-outline btn-danger platform-domain-remove" aria-label="删除平台域名" data-aria-label-zh="删除平台域名" data-aria-label-en="Delete platform domain"><i class="fa fa-trash" aria-hidden="true"></i></button></div>
-        <div class="platform-domain-row__fields">
-            <div class="platform-domain-wildcard"><label><span data-i18n-zh="泛域名" data-i18n-en="Wildcard">泛域名</span><input class="form-control" type="text" data-field="wildcard" placeholder="*.example.com"><small class="help-block" data-i18n-zh="必须以 *. 开头；例如 *.example.com。" data-i18n-en="Must start with *.; for example, *.example.com.">必须以 *. 开头；例如 *.example.com。</small></label></div>
-            <div class="platform-certificate-pair certificate-pair" data-certificate-pair data-validate-url="{{.web_base_url}}/global/checkcertificate" data-wildcard="true" data-hostname-row-selector="[data-field='wildcard']">
-                <div class="certificate-mode-row">
-                    <span class="certificate-mode-label" data-i18n-zh="证书填写方式" data-i18n-en="Certificate input">证书填写方式</span>
-                    <select class="form-control certificate-mode-select" data-cert-mode aria-label="证书填写方式" data-aria-label-zh="证书填写方式" data-aria-label-en="Certificate input method">
-                        <option value="path" data-i18n-zh="路径" data-i18n-en="Path">路径</option>
-                        <option value="upload" data-i18n-zh="上传" data-i18n-en="Upload">上传</option>
-                        <option value="paste" data-i18n-zh="粘贴" data-i18n-en="Paste">粘贴</option>
-                    </select>
-                    <button type="button" class="btn btn-outline btn-primary certificate-validate" data-i18n-zh="校验证书" data-i18n-en="Validate">校验证书</button>
-                </div>
-                <div class="certificate-mode-pane certificate-mode-pane--path certificate-mode-pane--compact">
-                    <label><span data-i18n-zh="证书路径（.pem，可选）" data-i18n-en="Certificate path (.pem, optional)">证书路径（.pem，可选）</span><input class="form-control" type="text" data-field="cert" data-cert-path placeholder="conf/webssl/fullchain.pem"><small class="help-block" data-i18n-zh="与私钥一起填写以启用 HTTPS；相对路径以 conf_path 为基准。" data-i18n-en="Provide with the key to enable HTTPS; relative paths resolve against conf_path.">与私钥一起填写以启用 HTTPS；相对路径以 conf_path 为基准。</small></label>
-                    <label><span data-i18n-zh="私钥路径（.key，可选）" data-i18n-en="Key path (.key, optional)">私钥路径（.key，可选）</span><input class="form-control" type="text" data-field="key" data-key-path placeholder="conf/webssl/privkey.pem"><small class="help-block" data-i18n-zh="填写与证书匹配的私钥路径。" data-i18n-en="Path to the matching private key.">填写与证书匹配的私钥路径。</small></label>
-                </div>
-                <div class="certificate-mode-pane certificate-mode-pane--upload certificate-mode-pane--compact" hidden>
-                    <label><span data-i18n-zh="证书文件" data-i18n-en="Certificate file">证书文件</span><input class="form-control" type="file" accept=".pem,.crt,.cer" data-cert-upload></label>
-                    <label><span data-i18n-zh="私钥文件" data-i18n-en="Private key file">私钥文件</span><input class="form-control" type="file" accept=".pem,.key" data-key-upload></label>
-                </div>
-                <div class="certificate-mode-pane certificate-mode-pane--paste" hidden>
-                    <label><span data-i18n-zh="证书内容" data-i18n-en="Certificate content">证书内容</span><textarea class="form-control" rows="5" data-cert-paste placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
-                    <label><span data-i18n-zh="私钥内容" data-i18n-en="Private key content">私钥内容</span><textarea class="form-control" rows="5" data-key-paste placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label>
-                </div>
-                <div class="certificate-validation-result" role="status" hidden></div>
-            </div>
-        </div>
-        <dl class="platform-domain-health"><div><dt data-i18n-zh="证书状态" data-i18n-en="Certificate status">证书状态</dt><dd data-i18n-zh="保存后检查" data-i18n-en="Checked after saving">保存后检查</dd></div><div><dt data-i18n-zh="到期时间" data-i18n-en="Expires at">到期时间</dt><dd>-</dd></div><div><dt data-i18n-zh="剩余天数" data-i18n-en="Days remaining">剩余天数</dt><dd>-</dd></div></dl>
-    </article>
-</template>
-
 <style>
+    .global-settings-page { max-width: 1680px; margin: 0 auto; }
     .global-settings-form { display: block; }
-    .global-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px; }
-    .global-settings-card { min-width: 0; overflow: hidden; background: var(--nps-surface, #fff); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 12px; box-shadow: var(--nps-shadow-sm, 0 8px 24px rgba(26, 43, 68, .06)); }
+    .global-settings-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; gap: 14px; }
+    .global-settings-card { grid-column: span 6; min-width: 0; overflow: hidden; background: var(--nps-surface, #fff); border: 1px solid color-mix(in srgb, var(--nps-line, #dfe5ee) 88%, transparent); border-radius: 14px; box-shadow: 0 10px 30px rgba(15, 23, 42, .055); }
+    .global-settings-card--server { grid-column: span 5; }
+    .global-settings-card--access { grid-column: span 7; }
     .global-settings-card--wide { grid-column: 1 / -1; }
-    .global-settings-card__header { display: flex; align-items: flex-start; gap: 12px; padding: 17px 19px; border-bottom: 1px solid var(--nps-line, #dfe5ee); background: linear-gradient(180deg, color-mix(in srgb, var(--nps-surface-subtle, #f7f9fc) 86%, transparent), transparent); }
-    .global-settings-card__icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 34px; height: 34px; color: var(--nps-primary, #1769e0); background: color-mix(in srgb, var(--nps-primary, #1769e0) 10%, var(--nps-surface, #fff)); border: 1px solid color-mix(in srgb, var(--nps-primary, #1769e0) 22%, var(--nps-line, #dfe5ee)); border-radius: 9px; }
-    .global-settings-card__header h2 { margin: 0; color: var(--nps-ink, #1f2937); font-size: 14px; font-weight: 750; line-height: 1.4; }
-    .global-settings-card__header p { margin: 4px 0 0; color: var(--nps-muted, #64748b); font-size: 11px; line-height: 1.55; }
-    .global-settings-card__body { padding: 18px 19px 19px; }
-    .global-settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .global-settings-card__header { display: flex; align-items: center; gap: 11px; min-height: 66px; padding: 13px 16px; border-bottom: 1px solid var(--nps-line, #dfe5ee); background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary, #1769e0) 5%, var(--nps-surface, #fff)), var(--nps-surface, #fff) 52%); }
+    .global-settings-card__icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 34px; height: 34px; color: var(--nps-primary, #1769e0); background: color-mix(in srgb, var(--nps-primary, #1769e0) 10%, var(--nps-surface, #fff)); border: 1px solid color-mix(in srgb, var(--nps-primary, #1769e0) 22%, var(--nps-line, #dfe5ee)); border-radius: 10px; box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--nps-surface, #fff) 55%, transparent); }
+    .global-settings-card__header > div { min-width: 0; }
+    .global-settings-card__header h2 { margin: 0; color: var(--nps-ink, #1f2937); font-size: 14px; font-weight: 760; line-height: 1.35; }
+    .global-settings-card__header p { margin: 3px 0 0; color: var(--nps-muted, #64748b); font-size: 11px; line-height: 1.5; }
+    .global-settings-card__body { padding: 15px 16px 16px; }
+    .global-settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px 14px; }
+    .global-settings-card--server .global-settings-fields { grid-template-columns: minmax(0, 1fr); }
     .global-field { display: grid; align-content: start; gap: 6px; min-width: 0; margin: 0; color: var(--nps-ink, #1f2937); font-weight: 500; }
     .global-field--wide { grid-column: 1 / -1; }
     .global-field__label { color: var(--nps-ink, #1f2937); font-size: 12px; font-weight: 720; }
     .global-field .form-control { width: 100%; min-width: 0; }
-    .global-field .help-block { margin-top: 0 !important; }
-    .global-guide-editor { min-height: 190px !important; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.55; tab-size: 2; }
-    .global-guide-detection { display: inline-flex; align-items: center; gap: 7px; width: fit-content; max-width: 100%; padding: 6px 9px; color: var(--nps-muted, #64748b); background: var(--nps-surface-subtle, #f7f9fc); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 7px; font-size: 11px; }
+    .global-field textarea.form-control { min-height: 88px; resize: vertical; }
+    .global-field .help-block { margin-top: 0 !important; color: var(--nps-muted, #64748b); font-size: 10.5px; line-height: 1.5; }
+    .global-guide-editor { min-height: 164px !important; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.55; tab-size: 2; }
+    .global-guide-detection { display: inline-flex; align-items: center; gap: 7px; width: fit-content; max-width: 100%; padding: 5px 8px; color: var(--nps-muted, #64748b); background: var(--nps-surface-subtle, #f7f9fc); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 999px; font-size: 10.5px; }
     .global-guide-detection strong { color: var(--nps-ink, #1f2937); }
-    .global-guide-detection small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .global-guide-detection small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .global-guide-detection[data-mode="html"] { color: #7c3aed; background: #f5f3ff; border-color: #ddd6fe; }
     .global-guide-detection[data-mode="url"] { color: #0369a1; background: #f0f9ff; border-color: #bae6fd; }
     .global-guide-detection[data-mode="file"] { color: #047857; background: #ecfdf5; border-color: #a7f3d0; }
-    .global-settings-inline-error { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 13px; padding: 10px 12px; color: #b42318; background: #fff1f0; border: 1px solid #fecaca; border-radius: 8px; font-size: 12px; line-height: 1.55; }
-    .global-settings-card__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-    .global-settings-card__actions small { color: var(--nps-muted, #64748b); font-size: 11px; }
-    .global-settings-savebar { position: sticky; bottom: 14px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 18px; padding: 14px 17px; background: color-mix(in srgb, var(--nps-surface, #fff) 94%, transparent); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 11px; box-shadow: 0 12px 35px rgba(24, 45, 74, .13); backdrop-filter: blur(12px); }
+    .global-settings-inline-error { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; padding: 9px 11px; color: #b42318; background: #fff1f0; border: 1px solid #fecaca; border-radius: 8px; font-size: 11px; line-height: 1.5; }
+    .global-settings-card__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 12px; }
+    .global-settings-card__actions small { flex: 1 1 16rem; color: var(--nps-muted, #64748b); font-size: 10.5px; line-height: 1.45; }
+    .global-settings-savebar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 16px; padding: 12px 15px; background: color-mix(in srgb, var(--nps-surface, #fff) 96%, transparent); border: 1px solid color-mix(in srgb, var(--nps-primary, #1769e0) 18%, var(--nps-line, #dfe5ee)); border-radius: 12px; box-shadow: 0 8px 24px rgba(15, 23, 42, .08); }
     .global-settings-savebar > div { display: grid; gap: 2px; min-width: 0; }
     .global-settings-savebar strong { color: var(--nps-ink, #1f2937); font-size: 12px; }
-    .global-settings-savebar span { color: var(--nps-muted, #64748b); font-size: 11px; }
+    .global-settings-savebar span { color: var(--nps-muted, #64748b); font-size: 10.5px; line-height: 1.45; }
     .global-settings-savebar .btn { flex: 0 0 auto; min-width: 116px; }
-    .global-settings-page .platform-domain-list { margin-top: 0; }
-    .global-settings-page #add-platform-domain { margin-top: 2px; }
-    .global-settings-page .form-field-hint { margin-top: 10px !important; }
-    @media (max-width: 991px) {
-        .global-settings-grid { grid-template-columns: minmax(0, 1fr); }
-        .global-settings-card--wide { grid-column: auto; }
+    .global-settings-page .form-field-hint { margin-top: 10px !important; color: var(--nps-muted, #64748b); font-size: 10.5px; }
+
+    .global-settings-card--guide, .global-settings-card--geo { align-self: stretch; }
+    .global-settings-card--geo .geo-data-summary { margin-top: 0; }
+    .global-settings-card--geo .geo-data-files { margin-bottom: 0; }
+    .global-settings-card--geo .geo-data-metric { background: var(--nps-surface-subtle, #f7f9fc); border-color: var(--nps-line, #dfe5ee); }
+    .global-settings-card--geo .geo-data-file { background: var(--nps-surface, #fff); border-color: var(--nps-line, #dfe5ee); }
+    .is-hidden { display: none !important; }
+    [data-theme="dark"] .global-settings-card { box-shadow: 0 12px 34px rgba(0, 0, 0, .18); }
+    [data-theme="dark"] .global-settings-card--geo .geo-data-metric,
+    [data-theme="dark"] .global-settings-card--geo .geo-data-file { color: var(--nps-ink, #edf3fc); background: var(--nps-surface-subtle, #1b2a42); border-color: var(--nps-line, #2a3b54); }
+    [data-theme="dark"] .global-settings-card--geo .geo-data-metric__label { color: var(--nps-muted, #aab8cb); }
+    [data-theme="dark"] .global-settings-card--geo .geo-data-metric__value { color: var(--nps-ink, #edf3fc); }
+    [data-theme="dark"] .global-settings-card--geo .geo-data-file__meta,
+    [data-theme="dark"] .global-settings-card--geo .geo-data-file__meta .text-muted { color: var(--nps-muted, #aab8cb) !important; }
+    [data-theme="dark"] .global-guide-detection[data-mode="html"] { color: #c4b5fd; background: #2e1b50; border-color: #5b3a89; }
+    [data-theme="dark"] .global-guide-detection[data-mode="url"] { color: #7dd3fc; background: #102d43; border-color: #245d7e; }
+    [data-theme="dark"] .global-guide-detection[data-mode="file"] { color: #86efac; background: #102f26; border-color: #246447; }
+    @media (max-width: 1180px) {
+        .global-settings-card--server, .global-settings-card--access { grid-column: span 12; }
     }
-    @media (max-width: 640px) {
+    @media (max-width: 991px) {
+        .global-settings-card { grid-column: 1 / -1; }
+        .global-settings-card--guide, .global-settings-card--geo { align-self: auto; }
+    }
+    @media (max-width: 720px) {
         .global-settings-fields { grid-template-columns: minmax(0, 1fr); }
         .global-field--wide { grid-column: auto; }
         .global-settings-savebar { position: static; align-items: stretch; flex-direction: column; }
         .global-settings-savebar .btn { width: 100%; }
-        .global-guide-detection { align-items: flex-start; flex-wrap: wrap; }
+        .global-guide-detection { align-items: flex-start; flex-wrap: wrap; border-radius: 8px; }
         .global-guide-detection small { flex-basis: 100%; white-space: normal; }
     }
 </style>
 
 <script>
 $(function () {
-    var form = $('#global-form'), list = document.getElementById('platform-domain-list'), template = document.getElementById('platform-domain-template');
-    function removeRow(button) { var row = button.closest('.platform-domain-row'); if (row && Number(row.getAttribute('data-reference-count') || '0') === 0) row.remove(); }
-    function attachRow(row) { var remove = row.querySelector('.platform-domain-remove'); if (remove) remove.addEventListener('click', function () { removeRow(remove); }); var widget = row.querySelector('[data-certificate-pair]'); if (widget && window.npsCertificatePair) npsCertificatePair.attach(widget); }
-    Array.prototype.forEach.call(list.querySelectorAll('.platform-domain-row'), attachRow);
-    document.getElementById('add-platform-domain').addEventListener('click', function () { var fragment = template.content.cloneNode(true); list.appendChild(fragment); attachRow(list.lastElementChild); if (typeof $('body').setLang === 'function') $('body').setLang('#platform-domain-list'); });
+    var form = $('#global-form');
 
     var guideEditor = document.getElementById('usage-guide-source'), guideDetection = document.getElementById('usage-guide-detection');
     function detectGuide() {
@@ -318,22 +254,7 @@ $(function () {
 
     form.on('submit', function (event) {
         event.preventDefault();
-        npsCertificatePair.prepareIn(list).then(function () {
-            var domains = [];
-            Array.prototype.forEach.call(list.querySelectorAll('.platform-domain-row'), function (row) {
-                function value(field) { var input = row.querySelector('[data-field="' + field + '"]'); return input ? $.trim(input.value) : ''; }
-                var widget = row.querySelector('[data-certificate-pair]');
-                var material = widget ? widget.__npsCertificateMaterial : null;
-                var mode = material ? material.mode : 'path';
-                var wildcard = value('wildcard'), cert = value('cert'), key = value('key');
-                if (!wildcard && !cert && !key && !(material && (material.cert || material.key))) return;
-                domains.push({ID: value('id'), Wildcard: wildcard, CertFilePath: cert, KeyFilePath: key, CertMode: mode, CertData: mode === 'path' ? '' : material.cert, KeyData: mode === 'path' ? '' : material.key});
-            });
-            $('#platform-domains-input').val(JSON.stringify(domains));
-            submitform('global', '{{.web_base_url}}/global/save', form.serializeArray());
-        }).catch(function (error) {
-            npsNotify('error', (error && error.message) || '读取证书文件失败');
-        });
+        submitform('global', '{{.web_base_url}}/global/save', form.serializeArray());
     });
 
     function renderGeoData(data) {

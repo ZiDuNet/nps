@@ -376,7 +376,7 @@ func (s *socks5UDPSession) openTunnel() error {
 	if target == nil {
 		return errors.New("bridge returned nil SOCKS5 UDP stream")
 	}
-	s.target = rate.NewRateConn(target, s.snapshot.clientRate, s.snapshot.taskRate)
+	s.target = rate.NewRateConn(target, s.snapshot.clientRate, s.snapshot.taskRate, s.snapshot.userRate)
 	return nil
 }
 
@@ -541,7 +541,7 @@ func (s *socks5UDPSession) sourceAllowed(addr *net.UDPAddr) bool {
 		return false
 	}
 	remote := addr.String()
-	if SourceDeniedString(remote, s.client, s.snapshot.sourceLists, "socks5") || IsGlobalBlackIp(remote) || isClientBlackBlocked(s.client, remote) || isIPWhiteBlocked(s.client, remote) || isRegisteredOnlyBlocked(s.client, remote, s.snapshot.bridgeTask.RegisteredOnly) {
+	if SourceDeniedString(remote, s.client, s.snapshot.sourceLists, "socks5") || IsGlobalBlackIp(remote) || isClientBlackBlocked(s.client, remote) || isRegisteredOnlyBlocked(s.client, remote, s.snapshot.bridgeTask.RegisteredOnly) {
 		return false
 	}
 	return true

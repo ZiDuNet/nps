@@ -107,25 +107,25 @@ func TestDashboardUserClientAddIgnoresAdministrativeFields(t *testing.T) {
 	utils.JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Status: true})
 
 	form := url.Values{
-		"remark":            {"owned client"},
-		"u":                 {"basic-user"},
-		"p":                 {"basic-password"},
-		"compress":          {"1"},
-		"crypt":             {"true"},
-		"ipwhite":           {"true"},
-		"ipwhitepass":       {"grant-token"},
-		"ipwhitelist":       {"10.0.0.1\r\n10.0.0.2"},
-		"blackiplist":       {"192.0.2.1\r\n192.0.2.2"},
-		"user_id":           {"99"},
-		"vkey":              {"attacker-vkey"},
-		"flow_limit":        {"999"},
-		"rate_limit":        {"888"},
-		"max_conn":          {"777"},
-		"max_tunnel":        {"666"},
-		"expire_time":       {"2040-01-01 00:00:00"},
-		"web_username":      {"legacy-attacker"},
-		"web_password":      {"legacy-secret"},
-		"config_conn_allow": {"false"},
+		"remark":             {"owned client"},
+		"u":                  {"basic-user"},
+		"p":                  {"basic-password"},
+		"compress":           {"1"},
+		"crypt":              {"true"},
+		"registered_only":    {"true"},
+		"register_key":       {"grant-token"},
+		"register_max_hours": {"12"},
+		"blackiplist":        {"192.0.2.1\r\n192.0.2.2"},
+		"user_id":            {"99"},
+		"vkey":               {"attacker-vkey"},
+		"flow_limit":         {"999"},
+		"rate_limit":         {"888"},
+		"max_conn":           {"777"},
+		"max_tunnel":         {"666"},
+		"expire_time":        {"2040-01-01 00:00:00"},
+		"web_username":       {"legacy-attacker"},
+		"web_password":       {"legacy-secret"},
+		"config_conn_allow":  {"false"},
 	}
 	controller, recorder := newClientPermissionController(t, "Add", form, testUserSession(7))
 	runClientPermissionAction(t, controller.Add)
@@ -175,7 +175,7 @@ func TestDashboardUserClientAddIgnoresAdministrativeFields(t *testing.T) {
 	if created.Cnf == nil || created.Cnf.U != "basic-user" || created.Cnf.P != "basic-password" || !created.Cnf.Compress || !created.Cnf.Crypt {
 		t.Fatalf("ordinary add did not retain permitted basic-auth settings: %#v", created.Cnf)
 	}
-	if !created.IpWhite || created.IpWhitePass != "grant-token" || strings.Join(created.IpWhiteList, ",") != "10.0.0.1,10.0.0.2" || strings.Join(created.BlackIpList, ",") != "192.0.2.1,192.0.2.2" {
+	if !created.RegisteredOnly || created.RegisterKey != "grant-token" || created.RegisterMaxHours != 12 || strings.Join(created.BlackIpList, ",") != "192.0.2.1,192.0.2.2" {
 		t.Fatalf("ordinary add did not retain permitted IP controls: %#v", created)
 	}
 }
@@ -234,9 +234,9 @@ func TestDashboardUserClientEditPreservesAdministrativeFields(t *testing.T) {
 		"p":                      {"new-password"},
 		"compress":               {"1"},
 		"crypt":                  {"true"},
-		"ipwhite":                {"true"},
-		"ipwhitepass":            {"new-token"},
-		"ipwhitelist":            {"10.0.0.5"},
+		"registered_only":        {"true"},
+		"register_key":           {"new-token"},
+		"register_max_hours":     {"8"},
 		"blackiplist":            {"192.0.2.5"},
 		"vkey":                   {"attacker-vkey"},
 		"user_id":                {"99"},
@@ -280,7 +280,7 @@ func TestDashboardUserClientEditPreservesAdministrativeFields(t *testing.T) {
 	if client.Remark != "after" || client.Cnf == nil || client.Cnf.U != "new-user" || client.Cnf.P != "new-password" || !client.Cnf.Compress || !client.Cnf.Crypt {
 		t.Fatalf("ordinary edit did not apply permitted fields: %#v", client)
 	}
-	if !client.IpWhite || client.IpWhitePass != "new-token" || strings.Join(client.IpWhiteList, ",") != "10.0.0.5" || strings.Join(client.BlackIpList, ",") != "192.0.2.5" {
+	if !client.RegisteredOnly || client.RegisterKey != "new-token" || client.RegisterMaxHours != 8 || strings.Join(client.BlackIpList, ",") != "192.0.2.5" {
 		t.Fatalf("ordinary edit did not apply permitted IP controls: %#v", client)
 	}
 }

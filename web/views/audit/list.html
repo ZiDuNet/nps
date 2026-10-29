@@ -1,95 +1,187 @@
-<section class="wrapper wrapper-content animated fadeInRight management-page management-page--audit" aria-labelledby="audit-list-title">
+<style>
+    .audit-hub { max-width: 1680px; margin: 0 auto; }
+    .audit-hub__tabs { display: inline-flex; gap: 4px; margin: 0 0 14px; padding: 4px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 11px; }
+    .audit-hub__tab { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 14px; color: var(--nps-muted); background: transparent; border: 0; border-radius: 8px; font-size: 11.5px; font-weight: 720; cursor: pointer; }
+    .audit-hub__tab:hover { color: var(--nps-primary); }
+    .audit-hub__tab.is-active { color: var(--nps-primary); background: var(--nps-surface); box-shadow: 0 3px 12px rgba(15,23,42,.1); }
+    .audit-hub__view { display: none; }
+    .audit-hub__view.is-active { display: block; }
+    .audit-hub .management-table-card { margin-bottom: 0; }
+    .audit-connection-detail { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 3px 0; }
+    .audit-connection-detail__item { min-width: 0; padding: 8px 9px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 8px; }
+    .audit-connection-detail__item--wide { grid-column: span 2; }
+    .audit-connection-detail__label { display: block; margin-bottom: 3px; color: var(--nps-faint); font-size: 9px; font-weight: 650; letter-spacing: .03em; text-transform: uppercase; }
+    .audit-connection-detail__value { display: block; color: var(--nps-ink); font-size: 10.5px; line-height: 1.45; overflow-wrap: anywhere; }
+    .audit-connection-detail code { padding: 0; color: inherit; background: transparent; font: 10px/1.45 "Fira Code", monospace; }
+    @media (max-width: 1180px) { .audit-connection-detail { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 760px) {
+        .audit-hub__tabs { display: flex; }
+        .audit-hub__tab { flex: 1 1 50%; justify-content: center; }
+        .audit-connection-detail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .audit-connection-detail__item--wide { grid-column: 1 / -1; }
+    }
+</style>
+
+<section class="wrapper wrapper-content animated fadeInRight management-page management-page--audit audit-hub" aria-labelledby="audit-list-title">
     <header class="dashboard-page-header management-page-header">
         <div>
             <div class="dashboard-page-kicker" data-i18n-zh="安全与运维" data-i18n-en="Security and operations">安全与运维</div>
-            <h1 id="audit-list-title" data-i18n-zh="操作审计日志" data-i18n-en="Operation audit log">操作审计日志</h1>
-            <p data-i18n-zh="记录管理面板中的登录、配置和资源变更，不包含密码、密钥或业务流量正文。" data-i18n-en="Review management changes without storing passwords, keys, or proxied traffic bodies.">记录管理面板中的登录、配置和资源变更，不包含密码、密钥或业务流量正文。</p>
+            <h1 id="audit-list-title" data-i18n-zh="审计与连接" data-i18n-en="Audit and connections">审计与连接</h1>
+            <p data-i18n-zh="查看管理操作，以及客户端 Bridge、隧道和域名代理连接结果。日志不保存密码、密钥、请求头或业务正文。"
+               data-i18n-en="Review management actions and Bridge, tunnel, or host connection results. Passwords, keys, headers, and payloads are never stored.">查看管理操作，以及客户端 Bridge、隧道和域名代理连接结果。日志不保存密码、密钥、请求头或业务正文。</p>
         </div>
     </header>
-    <div class="management-page-grid">
-        <div class="management-page-column">
-            <section class="panel ibox float-e-margins management-table-card nps-panel">
-                <div class="ibox-content management-table-content">
-                    <div id="toolbar" class="management-table-toolbar">
-                        <label class="nps-table-filter" for="audit-action">
-                            <span class="nps-table-filter__label" data-i18n-zh="动作" data-i18n-en="Action">动作</span>
-                            <select id="audit-action" name="action" class="form-control nps-table-filter__control" data-nps-table-filter="action" aria-label="动作" data-aria-label-zh="动作" data-aria-label-en="Action">
-                                <option value="" data-i18n-zh="全部动作" data-i18n-en="All actions">全部动作</option>
-                                <optgroup label="客户端">
-                                    <option value="client.create">创建客户端</option>
-                                    <option value="client.update">修改客户端</option>
-                                    <option value="client.delete">删除客户端</option>
-                                    <option value="client.status_change">启停客户端</option>
-                                    <option value="client.remote_update">下发升级</option>
-                                </optgroup>
-                                <optgroup label="隧道与域名">
-                                    <option value="tunnel.create">创建隧道</option>
-                                    <option value="tunnel.update">修改隧道</option>
-                                    <option value="tunnel.copy">复制隧道</option>
-                                    <option value="tunnel.start">启动隧道</option>
-                                    <option value="tunnel.stop">停止隧道</option>
-                                    <option value="tunnel.delete">删除隧道</option>
-                                    <option value="host.create">新增域名反代</option>
-                                    <option value="host.update">修改域名反代</option>
-                                    <option value="host.start">启用域名反代</option>
-                                    <option value="host.stop">停用域名反代</option>
-                                    <option value="host.delete">删除域名反代</option>
-                                </optgroup>
-                                <optgroup label="用户与密钥">
-                                    <option value="user.create">创建用户</option>
-                                    <option value="user.update">修改用户</option>
-                                    <option value="user.delete">删除用户</option>
-                                    <option value="user.status_change">启停用户</option>
-                                    <option value="user.password_change">修改密码</option>
-                                    <option value="user.api_key_rotate">生成用户 Token</option>
-                                    <option value="user.api_key_revoke">撤销用户 Token</option>
-                                    <option value="admin.api_key_rotate">生成管理员密钥</option>
-                                    <option value="admin.api_key_revoke">撤销管理员密钥</option>
-                                </optgroup>
-                                <optgroup label="系统">
-                                    <option value="server_config.update">修改服务配置</option>
-                                    <option value="server.restart">重启服务</option>
-                                    <option value="global.update">修改全局参数</option>
-                                    <option value="global.geodata.update">更新 Geo 数据</option>
-                                    <option value="ip_registration.revoke">撤销 IP 登记</option>
-                                    <option value="ip_registration.clean">清理 IP 登记</option>
-                                    <option value="login_ban.remove">解除登录封禁</option>
-                                </optgroup>
-                            </select>
-                        </label>
-                        <label class="nps-table-filter" for="audit-resource">
-                            <span class="nps-table-filter__label" data-i18n-zh="资源" data-i18n-en="Resource">资源</span>
-                            <select id="audit-resource" name="resource_type" class="form-control nps-table-filter__control" data-nps-table-filter="resource_type" aria-label="资源类型" data-aria-label-zh="资源类型" data-aria-label-en="Resource type">
-                                <option value="" data-i18n-zh="全部资源" data-i18n-en="All resources">全部资源</option>
-                                <option value="client" data-i18n-zh="客户端" data-i18n-en="Client">客户端</option>
-                                <option value="tunnel" data-i18n-zh="隧道" data-i18n-en="Tunnel">隧道</option>
-                                <option value="host" data-i18n-zh="域名反代" data-i18n-en="Host">域名反代</option>
-                                <option value="user" data-i18n-zh="用户" data-i18n-en="User">用户</option>
-                                <option value="global" data-i18n-zh="全局参数" data-i18n-en="Global">全局参数</option>
-                                <option value="dashboard" data-i18n-zh="大屏密钥" data-i18n-en="Dashboard key">大屏密钥</option>
-                                <option value="ip_registration" data-i18n-zh="IP 登记" data-i18n-en="IP registration">IP 登记</option>
-                                <option value="login_ban" data-i18n-zh="登录封禁" data-i18n-en="Login ban">登录封禁</option>
-                            </select>
-                        </label>
-                        <label class="nps-table-filter" for="audit-result">
-                            <span class="nps-table-filter__label" data-i18n-zh="结果" data-i18n-en="Result">结果</span>
-                            <select id="audit-result" name="result" class="form-control nps-table-filter__control" data-nps-table-filter="result" aria-label="结果" data-aria-label-zh="结果" data-aria-label-en="Result">
-                                <option value="" data-i18n-zh="全部结果" data-i18n-en="All results">全部结果</option>
-                                <option value="success" data-i18n-zh="成功" data-i18n-en="Success">成功</option>
-                                <option value="failure" data-i18n-zh="失败" data-i18n-en="Failure">失败</option>
-                            </select>
-                        </label>
-                    </div>
-                    <table id="table"></table>
+
+    <div class="audit-hub__tabs" role="tablist" aria-label="审计内容">
+        <button type="button" class="audit-hub__tab is-active" id="audit-tab-operations" role="tab" aria-selected="true" aria-controls="audit-view-operations" data-audit-view="operations">
+            <i class="fa fa-list-alt" aria-hidden="true"></i>
+            <span data-i18n-zh="管理操作审计" data-i18n-en="Management audit">管理操作审计</span>
+        </button>
+        <button type="button" class="audit-hub__tab" id="audit-tab-connections" role="tab" aria-selected="false" aria-controls="audit-view-connections" data-audit-view="connections">
+            <i class="fa fa-plug" aria-hidden="true"></i>
+            <span data-i18n-zh="客户端连接日志" data-i18n-en="Client connections">客户端连接日志</span>
+        </button>
+    </div>
+
+    <div class="audit-hub__view is-active" id="audit-view-operations" role="tabpanel" aria-labelledby="audit-tab-operations">
+        <section class="panel ibox float-e-margins management-table-card nps-panel">
+            <div class="ibox-content management-table-content">
+                <div id="audit-toolbar" class="management-table-toolbar">
+                    <label class="nps-table-filter" for="audit-action">
+                        <span class="nps-table-filter__label" data-i18n-zh="动作" data-i18n-en="Action">动作</span>
+                        <select id="audit-action" name="action" class="form-control nps-table-filter__control" data-nps-table-filter="action" aria-label="动作">
+                            <option value="" data-i18n-zh="全部动作" data-i18n-en="All actions">全部动作</option>
+                            <optgroup label="客户端">
+                                <option value="client.create">创建客户端</option>
+                                <option value="client.update">修改客户端</option>
+                                <option value="client.delete">删除客户端</option>
+                                <option value="client.status_change">启停客户端</option>
+                                <option value="client.remote_update">下发升级</option>
+                            </optgroup>
+                            <optgroup label="隧道与域名">
+                                <option value="tunnel.create">创建隧道</option>
+                                <option value="tunnel.update">修改隧道</option>
+                                <option value="tunnel.copy">复制隧道</option>
+                                <option value="tunnel.start">启动隧道</option>
+                                <option value="tunnel.stop">停止隧道</option>
+                                <option value="tunnel.delete">删除隧道</option>
+                                <option value="host.create">新增域名反代</option>
+                                <option value="host.update">修改域名反代</option>
+                                <option value="host.start">启用域名反代</option>
+                                <option value="host.stop">停用域名反代</option>
+                                <option value="host.delete">删除域名反代</option>
+                            </optgroup>
+                            <optgroup label="用户与密钥">
+                                <option value="user.create">创建用户</option>
+                                <option value="user.update">修改用户</option>
+                                <option value="user.delete">删除用户</option>
+                                <option value="user.status_change">启停用户</option>
+                                <option value="user.password_change">修改密码</option>
+                                <option value="user.api_key_rotate">生成用户 Token</option>
+                                <option value="user.api_key_revoke">撤销用户 Token</option>
+                                <option value="admin.api_key_rotate">生成管理员密钥</option>
+                                <option value="admin.api_key_revoke">撤销管理员密钥</option>
+                            </optgroup>
+                            <optgroup label="系统">
+                                <option value="server_config.update">修改服务配置</option>
+                                <option value="server.restart">重启服务</option>
+                                <option value="global.update">修改全局参数</option>
+                                <option value="global.geodata.update">更新 Geo 数据</option>
+                                <option value="ip_registration.revoke">撤销 IP 登记</option>
+                                <option value="ip_registration.clean">清理 IP 登记</option>
+                                <option value="login_ban.remove">解除登录封禁</option>
+                            </optgroup>
+                        </select>
+                    </label>
+                    <label class="nps-table-filter" for="audit-resource">
+                        <span class="nps-table-filter__label" data-i18n-zh="资源" data-i18n-en="Resource">资源</span>
+                        <select id="audit-resource" name="resource_type" class="form-control nps-table-filter__control" data-nps-table-filter="resource_type" aria-label="资源类型">
+                            <option value="" data-i18n-zh="全部资源" data-i18n-en="All resources">全部资源</option>
+                            <option value="client" data-i18n-zh="客户端" data-i18n-en="Client">客户端</option>
+                            <option value="tunnel" data-i18n-zh="隧道" data-i18n-en="Tunnel">隧道</option>
+                            <option value="host" data-i18n-zh="域名反代" data-i18n-en="Host">域名反代</option>
+                            <option value="user" data-i18n-zh="用户" data-i18n-en="User">用户</option>
+                            <option value="global" data-i18n-zh="全局参数" data-i18n-en="Global">全局参数</option>
+                            <option value="dashboard" data-i18n-zh="大屏密钥" data-i18n-en="Dashboard key">大屏密钥</option>
+                            <option value="ip_registration" data-i18n-zh="IP 登记" data-i18n-en="IP registration">IP 登记</option>
+                            <option value="login_ban" data-i18n-zh="登录封禁" data-i18n-en="Login ban">登录封禁</option>
+                        </select>
+                    </label>
+                    <label class="nps-table-filter" for="audit-result">
+                        <span class="nps-table-filter__label" data-i18n-zh="结果" data-i18n-en="Result">结果</span>
+                        <select id="audit-result" name="result" class="form-control nps-table-filter__control" data-nps-table-filter="result" aria-label="结果">
+                            <option value="" data-i18n-zh="全部结果" data-i18n-en="All results">全部结果</option>
+                            <option value="success" data-i18n-zh="成功" data-i18n-en="Success">成功</option>
+                            <option value="failure" data-i18n-zh="失败" data-i18n-en="Failure">失败</option>
+                        </select>
+                    </label>
                 </div>
-            </section>
-        </div>
+                <table id="audit-table"></table>
+            </div>
+        </section>
+    </div>
+
+    <div class="audit-hub__view" id="audit-view-connections" role="tabpanel" aria-labelledby="audit-tab-connections">
+        <section class="panel ibox float-e-margins management-table-card nps-panel">
+            <div class="ibox-content management-table-content">
+                <div id="connection-toolbar" class="management-table-toolbar">
+                    <label class="nps-table-filter" for="connection-kind">
+                        <span class="nps-table-filter__label" data-i18n-zh="类型" data-i18n-en="Type">类型</span>
+                        <select id="connection-kind" name="kind" class="form-control nps-table-filter__control" data-nps-table-filter="kind">
+                            <option value="" data-i18n-zh="全部类型" data-i18n-en="All types">全部类型</option>
+                            <option value="bridge" data-i18n-zh="Bridge" data-i18n-en="Bridge">Bridge</option>
+                            <option value="tunnel" data-i18n-zh="隧道" data-i18n-en="Tunnel">隧道</option>
+                            <option value="host" data-i18n-zh="域名反代" data-i18n-en="Host">域名反代</option>
+                        </select>
+                    </label>
+                    <label class="nps-table-filter" for="connection-transport">
+                        <span class="nps-table-filter__label" data-i18n-zh="传输协议" data-i18n-en="Transport">传输协议</span>
+                        <select id="connection-transport" name="bridge_transport" class="form-control nps-table-filter__control" data-nps-table-filter="bridge_transport">
+                            <option value="" data-i18n-zh="全部协议" data-i18n-en="All transports">全部协议</option>
+                            <option value="tcp">TCP</option>
+                            <option value="tls">TCP + TLS</option>
+                            <option value="kcp">KCP</option>
+                            <option value="ws">WS</option>
+                            <option value="wss">WSS</option>
+                            <option value="quic">QUIC</option>
+                            <option value="http3">HTTP/3</option>
+                        </select>
+                    </label>
+                    <label class="nps-table-filter" for="connection-result">
+                        <span class="nps-table-filter__label" data-i18n-zh="结果" data-i18n-en="Result">结果</span>
+                        <select id="connection-result" name="result" class="form-control nps-table-filter__control" data-nps-table-filter="result">
+                            <option value="" data-i18n-zh="全部结果" data-i18n-en="All results">全部结果</option>
+                            <option value="success" data-i18n-zh="成功" data-i18n-en="Success">成功</option>
+                            <option value="failure" data-i18n-zh="失败" data-i18n-en="Failure">失败</option>
+                        </select>
+                    </label>
+                </div>
+                <table id="connection-table"></table>
+            </div>
+        </section>
     </div>
 </section>
 
 <script>
-    $('#table').npsTable({
-        toolbar: '#toolbar',
+$(function () {
+    var english = typeof window.npsIsEnglish === 'function' && window.npsIsEnglish();
+    var text = function (value) {
+        return typeof window.npsEscapeHtml === 'function'
+            ? window.npsEscapeHtml(value == null ? '' : String(value))
+            : $('<div>').text(value == null ? '' : String(value)).html();
+    };
+    var resultBadge = function (value) {
+        return value === 'success'
+            ? '<span class="label label-success">' + (english ? 'Success' : '成功') + '</span>'
+            : '<span class="label label-danger">' + (english ? 'Failed' : '失败') + '</span>';
+    };
+    var kindLabel = function (value) {
+        var labels = {bridge: 'Bridge', tunnel: english ? 'Tunnel' : '隧道', host: english ? 'Host' : '域名反代'};
+        return labels[value] || value || '-';
+    };
+
+    $('#audit-table').npsTable({
+        toolbar: '#audit-toolbar',
         method: 'post',
         url: '{{.web_base_url}}/audit/list',
         contentType: 'application/x-www-form-urlencoded',
@@ -102,21 +194,96 @@
         sidePagination: 'server',
         pageNumber: 1,
         pageList: [10, 20, 50, 100],
-        storageKey: 'audit',
+        storageKey: 'audit.operations',
         smartDisplay: true,
-        formatLoadingMessage: function () { return npsTableState('audit', true); },
-        formatNoMatches: function () { return npsTableState('audit', false); },
-        onPostBody: function () { $('body').setLang('#table'); npsApplyTableState(this, 'audit'); },
+        formatLoadingMessage: function () { return npsTableState('audit.operations', true); },
+        formatNoMatches: function () { return npsTableState('audit.operations', false); },
+        onPostBody: function () { $('body').setLang('#audit-table'); npsApplyTableState(this, 'audit.operations'); },
         columns: [
-            { field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', width: '154px' },
-            { field: 'Actor', title: '<span data-i18n-zh="操作者" data-i18n-en="Actor">操作者</span>', halign: 'center', escape: true },
-            { field: 'SourceIP', title: '<span data-i18n-zh="来源地址" data-i18n-en="Source">来源地址</span>', halign: 'center', escape: true },
-            { field: 'Action', title: '<span data-i18n-zh="动作" data-i18n-en="Action">动作</span>', halign: 'center', escape: true },
-            { field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', escape: true },
-            { field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', formatter: function (value) { return value === 'success' ? '<span class="label label-success">成功</span>' : '<span class="label label-danger">失败</span>'; } },
-            { field: 'Error', title: '<span data-i18n-zh="错误" data-i18n-en="Error">错误</span>', halign: 'center', escape: true },
-            { field: 'Details', title: '<span data-i18n-zh="变更摘要" data-i18n-en="Change summary">变更摘要</span>', halign: 'center', escape: true }
+            {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', width: '154px'},
+            {field: 'Actor', title: '<span data-i18n-zh="操作者" data-i18n-en="Actor">操作者</span>', halign: 'center', escape: true},
+            {field: 'SourceIP', title: '<span data-i18n-zh="来源地址" data-i18n-en="Source">来源地址</span>', halign: 'center', escape: true},
+            {field: 'Action', title: '<span data-i18n-zh="动作" data-i18n-en="Action">动作</span>', halign: 'center', escape: true},
+            {field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', escape: true},
+            {field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', formatter: resultBadge},
+            {field: 'Error', title: '<span data-i18n-zh="错误" data-i18n-en="Error">错误</span>', halign: 'center', escape: true},
+            {field: 'Details', title: '<span data-i18n-zh="变更摘要" data-i18n-en="Summary">变更摘要</span>', halign: 'center', escape: true}
         ]
     });
 
+    $('#connection-table').npsTable({
+        toolbar: '#connection-toolbar',
+        method: 'post',
+        url: '{{.web_base_url}}/audit/connections',
+        contentType: 'application/x-www-form-urlencoded',
+        striped: true,
+        search: true,
+        showHeader: true,
+        showColumns: true,
+        showRefresh: true,
+        pagination: true,
+        sidePagination: 'server',
+        pageNumber: 1,
+        pageList: [10, 20, 50, 100],
+        storageKey: 'audit.connections',
+        smartDisplay: true,
+        detailView: true,
+        formatLoadingMessage: function () { return npsTableState('audit.connections', true); },
+        formatNoMatches: function () { return npsTableState('audit.connections', false); },
+        onPostBody: function () { $('body').setLang('#connection-table'); npsApplyTableState(this, 'audit.connections'); },
+        onExpandRow: function () { $('body').setLang('.detail-view'); },
+        detailFormatter: function (index, row) {
+            var item = function (label, value, wide) {
+                return '<div class="audit-connection-detail__item' + (wide ? ' audit-connection-detail__item--wide' : '') + '">'
+                    + '<span class="audit-connection-detail__label">' + text(label) + '</span>'
+                    + '<span class="audit-connection-detail__value">' + text(value || '-') + '</span></div>';
+            };
+            var codeItem = function (label, value, wide) {
+                return '<div class="audit-connection-detail__item' + (wide ? ' audit-connection-detail__item--wide' : '') + '">'
+                    + '<span class="audit-connection-detail__label">' + text(label) + '</span>'
+                    + '<code class="audit-connection-detail__value">' + text(value || '-') + '</code></div>';
+            };
+            return '<div class="audit-connection-detail">'
+                + item('Start', row.StartedAt)
+                + item('End', row.EndedAt)
+                + item('Action', row.Action)
+                + item('Duration', row.Duration)
+                + item('Bytes in', row.BytesIn)
+                + item('Bytes out', row.BytesOut)
+                + codeItem('Target', row.Target, true)
+                + codeItem('Client version', row.ClientVer)
+                + item('Error', row.Error, true)
+                + '</div>';
+        },
+        columns: [
+            {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', width: '154px'},
+            {field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', width: '74px', formatter: resultBadge},
+            {field: 'Kind', title: '<span data-i18n-zh="类型" data-i18n-en="Type">类型</span>', halign: 'center', formatter: kindLabel},
+            {field: 'User', title: '<span data-i18n-zh="用户" data-i18n-en="User">用户</span>', halign: 'center', escape: true},
+            {field: 'Client', title: '<span data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>', halign: 'center', escape: true},
+            {field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', escape: true},
+            {field: 'Transport', title: '<span data-i18n-zh="协议" data-i18n-en="Protocol">协议</span>', halign: 'center', escape: true},
+            {field: 'SourceIP', title: '<span data-i18n-zh="来源 IP" data-i18n-en="Source IP">来源 IP</span>', halign: 'center', escape: true},
+            {field: 'Duration', title: '<span data-i18n-zh="耗时" data-i18n-en="Duration">耗时</span>', halign: 'center', escape: true},
+            {field: 'Traffic', title: '<span data-i18n-zh="上 / 下行" data-i18n-en="Up / down">上 / 下行</span>', halign: 'center', escape: true},
+            {field: 'Error', title: '<span data-i18n-zh="结果说明" data-i18n-en="Result details">结果说明</span>', halign: 'center', escape: true}
+        ]
+    });
+
+    function activateAuditView(view) {
+        if (view !== 'connections') view = 'operations';
+        $('.audit-hub__tab').removeClass('is-active').attr('aria-selected', 'false');
+        $('.audit-hub__tab[data-audit-view="' + view + '"]').addClass('is-active').attr('aria-selected', 'true');
+        $('.audit-hub__view').removeClass('is-active');
+        $('#audit-view-' + view).addClass('is-active');
+        if (view === 'connections') $('#connection-table').npsTable('refresh');
+        else $('#audit-table').npsTable('refresh');
+    }
+
+    $('.audit-hub__tab').on('click', function () {
+        activateAuditView($(this).attr('data-audit-view'));
+    });
+    activateAuditView('{{.audit_initial_tab}}' || 'operations');
+    $('body').setLang('.audit-hub');
+});
 </script>

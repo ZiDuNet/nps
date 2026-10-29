@@ -6,7 +6,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"ehang.io/nps/lib/bridgeendpoint"
 	"ehang.io/nps/lib/file"
+	"github.com/astaxie/beego"
 )
 
 type lifecycleTestService struct {
@@ -23,6 +25,77 @@ func (s *lifecycleTestService) Start() error {
 func (s *lifecycleTestService) Close() error {
 	s.closes.Add(1)
 	return nil
+}
+
+type http3LifecycleTestService struct {
+	lifecycleTestService
+	listening bool
+}
+
+func (s *http3LifecycleTestService) HTTP3Listening() bool {
+	return s != nil && s.listening
+}
+
+func TestBridgeEndpointsExposeHTTP3OnlyWhileListenerIsActive(t *testing.T) {
+	host := &http3LifecycleTestService{listening: true}
+	service := &managementService{host: host}
+	previous, previousFound := RunList.Load(managementServiceKey)
+	RunList.Store(managementServiceKey, service)
+	t.Cleanup(func() {
+		if previousFound {
+			RunList.Store(managementServiceKey, previous)
+		} else {
+			RunList.Delete(managementServiceKey)
+		}
+	})
+
+	keys := []string{
+		"bridge_type", "bridge_addr", "bridge_port", "bridge_path",
+		"tls_enable", "tls_bridge_port", "bridge_kcp_port", "bridge_ws_port",
+		"bridge_wss_port", "bridge_quic_port", "http3_proxy_port",
+		"bridge_http3", "bridge_host", "quic_alpn",
+	}
+	previousConfig := make(map[string]string, len(keys))
+	for _, key := range keys {
+		previousConfig[key] = beego.AppConfig.String(key)
+	}
+	t.Cleanup(func() {
+		for key, value := range previousConfig {
+			_ = beego.AppConfig.Set(key, value)
+		}
+	})
+	for key, value := range map[string]string{
+		"bridge_type": "tcp", "bridge_addr": "bridge.example.com", "bridge_port": "8024",
+		"bridge_path": "/ws", "tls_enable": "false", "tls_bridge_port": "0",
+		"bridge_kcp_port": "0", "bridge_ws_port": "0", "bridge_wss_port": "0",
+		"bridge_quic_port": "0", "http3_proxy_port": "8443",
+		"bridge_http3": "true", "bridge_host": "bridge.example.com", "quic_alpn": "nps",
+	} {
+		_ = beego.AppConfig.Set(key, value)
+	}
+
+	endpoints := GetBridgeEndpoints("panel.example.com", "")
+	if !hasBridgeEndpoint(endpoints, "http3") {
+		t.Fatalf("active HTTP/3 endpoint is missing: %#v", endpoints)
+	}
+
+	host.listening = false
+	endpoints = GetBridgeEndpoints("panel.example.com", "")
+	if hasBridgeEndpoint(endpoints, "http3") {
+		t.Fatalf("inactive HTTP/3 endpoint must not generate commands: %#v", endpoints)
+	}
+	if !hasBridgeEndpoint(endpoints, "tcp") {
+		t.Fatalf("TCP endpoint should remain available without HTTP/3: %#v", endpoints)
+	}
+}
+
+func hasBridgeEndpoint(endpoints []bridgeendpoint.Endpoint, key string) bool {
+	for _, endpoint := range endpoints {
+		if endpoint.Key == key {
+			return true
+		}
+	}
+	return false
 }
 
 func TestManagementServiceOwnsHostAndWebLifecycle(t *testing.T) {
@@ -139,9 +212,31 @@ func TestDashboardDataForClientsIsolatedAndClassified(t *testing.T) {
 	oldBridge := Bridge
 	dbUtils.JsonDb = db
 	Bridge = nil
+	bridgeConfig := map[string]string{
+		"bridge_type": "tcp", "bridge_addr": "bridge.example.com", "bridge_port": "8024",
+		"bridge_path": "/ws", "bridge_show_path": "", "bridge_host": "",
+		"bridge_tcp_show": "true", "bridge_tcp_show_ip": "", "bridge_tcp_show_port": "",
+		"tls_enable": "true", "tls_bridge_port": "8025",
+		"bridge_tls_show": "true", "bridge_tls_show_ip": "", "bridge_tls_show_port": "",
+		"bridge_kcp_port": "0", "bridge_kcp_show": "true",
+		"bridge_ws_port": "0", "bridge_ws_show": "true",
+		"bridge_wss_port": "0", "bridge_wss_show": "true",
+		"bridge_quic_port": "0", "bridge_quic_show": "true",
+		"http3_proxy_port": "0", "bridge_http3": "false",
+	}
+	oldBridgeConfig := make(map[string]string, len(bridgeConfig))
+	for key := range bridgeConfig {
+		oldBridgeConfig[key] = beego.AppConfig.String(key)
+	}
+	for key, value := range bridgeConfig {
+		_ = beego.AppConfig.Set(key, value)
+	}
 	t.Cleanup(func() {
 		dbUtils.JsonDb = oldDB
 		Bridge = oldBridge
+		for key, value := range oldBridgeConfig {
+			_ = beego.AppConfig.Set(key, value)
+		}
 	})
 
 	data := GetDashboardDataForClients(map[int]struct{}{owned.Id: {}})
@@ -165,6 +260,16 @@ func TestDashboardDataForClientsIsolatedAndClassified(t *testing.T) {
 	}
 	if _, exists := data["httpProxyPort"]; exists {
 		t.Fatal("ordinary dashboard must not include listener configuration")
+	}
+	endpoints, ok := data["bridgeEndpoints"].([]bridgeendpoint.Endpoint)
+	if !ok {
+		t.Fatalf("ordinary dashboard bridgeEndpoints type = %T, want []bridgeendpoint.Endpoint", data["bridgeEndpoints"])
+	}
+	if len(endpoints) != 2 || !hasBridgeEndpoint(endpoints, "tcp") || !hasBridgeEndpoint(endpoints, "tls") {
+		t.Fatalf("ordinary dashboard Bridge endpoints = %#v, want enabled TCP and TLS", endpoints)
+	}
+	if hasBridgeEndpoint(endpoints, "ws") {
+		t.Fatalf("disabled WS endpoint must not be shown to ordinary users: %#v", endpoints)
 	}
 	if got := data["systemInfoDisplay"]; got != false {
 		t.Fatalf("ordinary systemInfoDisplay = %v, want false", got)

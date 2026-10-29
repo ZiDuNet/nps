@@ -1,14 +1,12 @@
 package proxy
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 
@@ -51,29 +49,6 @@ func TestWriteConnFailContentKeepsConcurrentBodiesIndependent(t *testing.T) {
 		if item.err != nil {
 			t.Fatalf("concurrent failure response %q: %v", item.body, item.err)
 		}
-	}
-}
-
-func TestFormatHTTPFailure(t *testing.T) {
-	body := []byte(`{"success":true}`)
-	raw := formatHTTPFailure(http.StatusOK, "application/json", body)
-	response, err := http.ReadResponse(bufio.NewReader(strings.NewReader(string(raw))), nil)
-	if err != nil {
-		t.Fatalf("parse response: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
-	}
-	if got, want := response.Header.Get("Content-Type"), "application/json"; got != want {
-		t.Fatalf("content type = %q, want %q", got, want)
-	}
-	got, err := io.ReadAll(response.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	if !bytes.Equal(got, body) {
-		t.Fatalf("body = %q, want %q", got, body)
 	}
 }
 

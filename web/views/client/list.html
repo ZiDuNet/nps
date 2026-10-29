@@ -162,19 +162,51 @@
                     + '<code>' + text(code) + '</code>'
                     + '<button type="button" class="copy btn btn-outline btn-primary btn-xs client-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button></div>';
             };
+            var connectionCommands = Array.isArray(row.ConnectionCommands) ? row.ConnectionCommands : [];
+            var commandSection = '<section class="client-detail__section client-detail__connection-section">'
+                + '<h6 class="client-detail__section-title"><i class="fa fa-terminal" aria-hidden="true"></i>' + (english ? 'Connection commands' : '连接命令') + '</h6>';
+            if (connectionCommands.length) {
+                commandSection += '<div class="client-detail__protocol-tabs" role="tablist">'
+                    + connectionCommands.map(function(command, commandIndex) {
+                        var flags = [];
+                        if (command.Main) flags.push(english ? 'Main' : '主入口');
+                        if (command.QuickFormat) flags.push(String(command.QuickFormat).toUpperCase());
+                        return '<button type="button" role="tab" class="client-detail__protocol-tab' + (commandIndex === 0 ? ' active' : '') + '"'
+                            + ' data-client-protocol-tab="' + index + '-' + commandIndex + '"'
+                            + ' aria-selected="' + (commandIndex === 0 ? 'true' : 'false') + '">'
+                            + '<strong>' + text(command.Label || command.Protocol || '') + '</strong>'
+                            + (flags.length ? '<small>' + text(flags.join(' · ')) + '</small>' : '')
+                            + '</button>';
+                    }).join('')
+                    + '</div><div class="client-detail__protocol-panels">'
+                    + connectionCommands.map(function(command, commandIndex) {
+                        var chips = [];
+                        if (command.RequiresUDP) chips.push('<span class="client-detail__protocol-chip client-detail__protocol-chip--udp">UDP</span>');
+                        if (command.ViaHTTP3) chips.push('<span class="client-detail__protocol-chip">HTTP/3</span>');
+                        if (command.Path) chips.push('<span class="client-detail__protocol-chip">Path ' + text(command.Path) + '</span>');
+                        if (command.ALPN) chips.push('<span class="client-detail__protocol-chip">ALPN ' + text(command.ALPN) + '</span>');
+                        return '<div class="client-detail__protocol-panel' + (commandIndex === 0 ? ' active' : '') + '"'
+                            + ' data-client-protocol-panel="' + index + '-' + commandIndex + '" role="tabpanel">'
+                            + '<div class="client-detail__protocol-summary"><div><strong>' + text(command.Label || command.Protocol || '') + '</strong>'
+                            + '<code>' + text(command.Address || '-') + '</code></div><div class="client-detail__protocol-chips">' + chips.join('') + '</div></div>'
+                            + cmdRow((english ? 'Quick command' : '快捷命令') + ' <span class="client-detail__command-version">' + text((command.QuickFormat || '').toUpperCase()) + '</span>', command.QuickCommand || '')
+                            + cmdRow((english ? 'NPC command' : '普通命令'), command.NormalCommand || '')
+                            + '</div>';
+                    }).join('')
+                    + '</div>';
+            } else {
+                commandSection += '<div class="client-detail__history-empty">' + (english ? 'No Bridge endpoint is available for commands. Check bridge_*_show settings.' : '当前没有可用于生成命令的 Bridge 入口，请检查 bridge_*_show 展示设置。') + '</div>';
+            }
+            commandSection += '</section>';
             return '<div class="client-detail">'
-                + section('terminal', english ? 'Connection commands' : '连接命令',
-                    cmdRow('<span langtag="word-quicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.p}}|' + (row.VerifyKey || '') + '|false'))
-                    + cmdRow('<span langtag="word-tlsquicklycommand"></span>', encodeToBase64((row.Remark || '') + '|{{.ip}}:{{.tls_p}}|' + (row.VerifyKey || '') + '|true'))
-                    + cmdRow('<span langtag="word-commandclient"></span>', '{{.win}} -server={{.ip}}:{{.p}} -vkey=' + (row.VerifyKey || '') + ' -type={{.bridgeType}}')
-                    + cmdRow('<span langtag="word-commandclient-tls"></span>', '{{.win}} -server={{.ip}}:{{.tls_p}} -vkey=' + (row.VerifyKey || '') + ' -tls_enable=true'))
+                + commandSection
                 + '<div class="client-detail__cards">'
                 + '<section class="client-detail__card">'
                 + '<h6 class="client-detail__section-title"><i class="fa fa-sliders-h" aria-hidden="true"></i>' + (english ? 'Connection' : '基础配置') + '</h6>'
                 + '<div class="client-detail__grid">'
                 + kv('<span langtag="word-maxconnections"></span>', text(row.MaxConn))
-                + kv('<span langtag="word-curconnections"></span>', text(row.NowConn))
-                + kv(english ? 'Current rate' : '当前速率', changeunit((row.Rate && row.Rate.NowRate) ? row.Rate.NowRate : 0) + '/S')
+                + kv('<span langtag="word-curconnections"></span>', '<span class="live-connections" data-live-client-id="' + Number(row.Id) + '"><span data-live-client-connections>' + text(row.NowConn, 0) + ' / ' + text(Number(row.MaxConn) > 0 ? row.MaxConn : '∞') + '</span></span>')
+                + kv(english ? 'Live bandwidth' : '实时带宽', '<span class="client-live-rate" data-live-client-id="' + Number(row.Id) + '"><span class="client-live-rate__direction">↑</span><span class="client-live-rate__value" data-live-client-up>' + changeunit(Number((row.Rate || {}).UploadRate) || 0) + '/s</span><span class="client-live-rate__direction">↓</span><span class="client-live-rate__value" data-live-client-down>' + changeunit(Number((row.Rate || {}).DownloadRate) || 0) + '/s</span></span>')
                 + kv('<span langtag="word-flowlimit"></span>', text(flow.FlowLimit, 0) + ' M')
                 + kv('<span langtag="word-ratelimit"></span>', text(row.RateLimit, 0) + ' KB/s')
                 + kv('<span langtag="word-maxtunnels"></span>', text(row.MaxTunnelNum, 0))
@@ -185,7 +217,9 @@
                 + '<div class="client-detail__grid">'
                 + kv(english ? 'Owner' : '所属用户', row.UserId > 0 ? (text(row.UserName, '-') + '（ID ' + text(row.UserId) + '）') : (english ? 'Unassigned' : '未分配'))
                 + kv(english ? 'Status' : '运行状态', row.Status === true ? (english ? 'Enabled' : '已启用') : (english ? 'Disabled' : '已停用'))
-                + kv(english ? 'Online' : '在线状态', row.IsConnect === true ? (english ? 'Online' : '在线') : (english ? 'Offline' : '离线'))
+                + kv(english ? 'Online' : '在线状态', row.IsConnect === true
+                    ? (english ? 'Online' : '在线') + (row.ConnectionProtocol ? ' · ' + text(row.ConnectionProtocol) : '')
+                    : (english ? 'Offline' : '离线'))
                 + kv('<span langtag="word-version"></span>', text(row.Version, '-'))
                 + kv('<span langtag="word-verifykey"></span>', text(row.VerifyKey, '-'))
                 + kv('<span langtag="word-address"></span>', text(row.Addr, '-'))
@@ -204,7 +238,6 @@
                 + kv(english ? 'Legacy Web login' : '旧版 Web 登录', text(row.WebUserName, '-') + ' / ' + credentialStatus(!!row.WebPasswordSet))
                 + kv(english ? 'Basic auth' : 'Basic 认证', text(row.BasicUserName, '-') + ' / ' + credentialStatus(!!row.BasicPasswordSet))
                 + '</div>'
-                + chips('<span langtag="word-ipwhitelist"></span>', row.IpWhiteList)
                 + chips('<span langtag="word-blackip"></span>', row.BlackIpList)
                 + chips('<span langtag="word-whiteip"></span>', row.WhiteIpList)
                 + '</section>'
@@ -323,12 +356,29 @@
             },
             {
                 field: 'IsConnect',//域值
-                title: '<span langtag="word-speed"></span>',//内容
+                title: '<span data-i18n-zh="实时带宽 ↑ / ↓" data-i18n-en="Live bandwidth ↑ / ↓">实时带宽 ↑ / ↓</span>',
                 halign: 'center',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
-                    var nowRate = (row.Rate && row.Rate.NowRate) ? row.Rate.NowRate : 0;
-                    return changeunit(nowRate) + "/S"
+                    var rate = row.Rate || {};
+                    var upload = Number(rate.UploadRate) || 0;
+                    var download = Number(rate.DownloadRate) || 0;
+                    return '<span class="client-live-rate" data-live-client-id="' + Number(row.Id) + '">'
+                        + '<span class="client-live-rate__direction">↑</span><span class="client-live-rate__value" data-live-client-up>' + changeunit(upload) + '/s</span>'
+                        + '<span class="client-live-rate__direction">↓</span><span class="client-live-rate__value" data-live-client-down>' + changeunit(download) + '/s</span>'
+                        + '</span>';
+                }
+            },
+            {
+                field: 'NowConn',
+                title: '<span data-i18n-zh="实时连接" data-i18n-en="Live connections">实时连接</span>',
+                halign: 'center',
+                align: 'center',
+                class: 'client-list__connections',
+                visible: true,
+                formatter: function (value, row) {
+                    var limit = Number(row.MaxConn) > 0 ? Number(row.MaxConn) : '∞';
+                    return '<span class="live-connections" data-live-client-id="' + Number(row.Id) + '"><span data-live-client-connections>' + npsEscapeHtml(Number(value) || 0) + ' / ' + npsEscapeHtml(limit) + '</span></span>';
                 }
             },
             {
@@ -363,7 +413,10 @@
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
                     if (value) {
-                        return '<span class="badge badge-primary" langtag="word-online"></span>'
+                        var protocol = row.ConnectionProtocol
+                            ? '<span class="client-connection-protocol">' + npsEscapeHtml(row.ConnectionProtocol) + '</span>'
+                            : '';
+                        return '<span class="client-connection-state"><span class="badge badge-primary" langtag="word-online"></span>' + protocol + '</span>'
                     } else {
                         return '<span class="badge badge-badge" langtag="word-offline"></span>'
                     }
@@ -421,10 +474,15 @@
         ]
     });
 
-    function encodeToBase64(str){
-        const utf8Str = unescape(encodeURIComponent("nps:"+str));
-        return btoa(utf8Str);
-    }
+    $(document).on('click', '.client-detail__protocol-tab', function () {
+        var target = String($(this).attr('data-client-protocol-tab') || '');
+        if (!target) return;
+        var $section = $(this).closest('.client-detail__connection-section');
+        $section.find('.client-detail__protocol-tab').removeClass('active').attr('aria-selected', 'false');
+        $(this).addClass('active').attr('aria-selected', 'true');
+        $section.find('.client-detail__protocol-panel').removeClass('active');
+        $section.find('[data-client-protocol-panel="' + target + '"]').addClass('active');
+    });
 
     var clientUpdateState = null;
 

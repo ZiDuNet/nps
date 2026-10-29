@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"ehang.io/nps/bridge"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
+	"ehang.io/nps/lib/connectionlog"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/ipreg"
 	"github.com/astaxie/beego"
@@ -138,6 +140,21 @@ func (s *BaseServer) authHostRequest(r *http.Request, c *conn.Conn, host *file.H
 
 // proxyAuth check for HTTP forward proxy (407 + Proxy-Authenticate).
 func (s *BaseServer) proxyAuth(r *http.Request, c *conn.Conn, u, p string) error {
+	if s != nil && s.task != nil {
+		s.task.RLock()
+		authValue := strings.TrimSpace(s.task.ProxyAuth)
+		s.task.RUnlock()
+		if authValue != "" && !file.CheckBasicAuth(r, authValue) {
+			if c != nil {
+				_, _ = c.Write([]byte(common.ProxyAuthRequiredBytes))
+				_ = c.Close()
+			}
+			return errors.New("407 Proxy Authentication Required")
+		}
+		if authValue != "" {
+			return nil
+		}
+	}
 	return s.doAuth(r, c, u, p, common.ProxyAuthRequiredBytes, "407 Proxy Authentication Required")
 }
 
@@ -180,21 +197,6 @@ func in(target string, str_array []string) bool {
 	return false
 }
 
-// isIPWhiteBlocked returns whether a client must complete the IP allowlist
-// challenge before a proxy protocol is allowed to proceed. Keep the snapshot
-// under the client's lock so runtime console edits cannot race proxy workers.
-func isIPWhiteBlocked(client *file.Client, remote string) bool {
-	if client == nil {
-		return false
-	}
-	client.RLock()
-	enabled := client.IpWhite && client.IpWhitePass != ""
-	verifyKey := client.VerifyKey
-	allowlist := append([]string(nil), client.IpWhiteList...)
-	client.RUnlock()
-	return enabled && common.IsAuthIp(remote, verifyKey, allowlist)
-}
-
 // isClientBlackBlocked snapshots the mutable client policy before evaluating
 // it. Proxy workers can run concurrently with console edits to the blacklist.
 func isClientBlackBlocked(client *file.Client, remote string) bool {
@@ -208,9 +210,7 @@ func isClientBlackBlocked(client *file.Client, remote string) bool {
 	return common.IsBlackIp(remote, verifyKey, blacklist)
 }
 
-// isRegisteredOnlyBlocked is the new opt-in access gate.  It is kept
-// separate from the historical IP whitelist challenge so existing clients and
-// configurations retain their exact behaviour when RegisteredOnly is false.
+// isRegisteredOnlyBlocked enforces the short-lived IP registration policy.
 func isRegisteredOnlyBlocked(client *file.Client, remote string, required bool) bool {
 	if client == nil {
 		return required
@@ -283,10 +283,31 @@ func (s *BaseServer) DealClientDatagram(c *conn.Conn, client *file.Client, addr 
 }
 
 func (s *BaseServer) dealClient(c *conn.Conn, client *file.Client, addr string,
-	rb []byte, tp string, f func(), flow *file.Flow, localProxy bool, task *file.Tunnel, host *file.Host, datagramFramed bool) error {
+	rb []byte, tp string, f func(), flow *file.Flow, localProxy bool, task *file.Tunnel, host *file.Host, datagramFramed bool) (err error) {
 	if c == nil || c.Conn == nil {
 		return errors.New("proxy connection is nil")
 	}
+	startedAt := time.Now()
+	logResult, logError := connectionlog.ResultSuccess, ""
+	var bytesIn, bytesOut int64
+	logEvent := proxyConnectionLogEvent(client, task, host, tp, addr, c.Conn.RemoteAddr().String(), startedAt)
+	defer func() {
+		endedAt := time.Now()
+		logEvent.Time = endedAt.UTC()
+		logEvent.EndedAt = endedAt.UTC()
+		logEvent.DurationMS = endedAt.Sub(startedAt).Milliseconds()
+		logEvent.BytesIn = bytesIn
+		logEvent.BytesOut = bytesOut
+		logEvent.Result = logResult
+		logEvent.Error = logError
+		if err != nil {
+			logEvent.Result = connectionlog.ResultFailure
+			logEvent.Error = err.Error()
+		}
+		if appendErr := connectionlog.Append(logEvent); appendErr != nil {
+			logs.Warn("写入连接日志失败: %v", appendErr)
+		}
+	}()
 	if client == nil {
 		_ = c.Close()
 		return errors.New("proxy client is nil")
@@ -314,42 +335,42 @@ func (s *BaseServer) dealClient(c *conn.Conn, client *file.Client, addr string,
 		return errors.New("local proxy is disabled")
 	}
 	if task != nil && SourceDenied(c.Conn.RemoteAddr(), client, &task.SourceLists, taskName(task)) {
+		logResult, logError = connectionlog.ResultFailure, "source denied by tunnel access policy"
 		_ = c.Close()
 		return nil
 	}
 
 	// 判断访问地址是否在全局黑名单内
 	if IsGlobalBlackIp(c.RemoteAddr().String()) {
+		logResult, logError = connectionlog.ResultFailure, "source denied by global access policy"
 		c.Close()
 		return nil
 	}
 
 	// 判断访问地址是否在黑名单内
 	if isClientBlackBlocked(client, c.RemoteAddr().String()) {
-		c.Close()
-		return nil
-	}
-
-	// Enforce client IP allowlists at the shared hand-off point. Protocol
-	// specific listeners may perform an earlier check to return a useful
-	// challenge, but no unauthorized connection should reach the NPC bridge.
-	if isIPWhiteBlocked(client, c.RemoteAddr().String()) {
+		logResult, logError = connectionlog.ResultFailure, "source denied by client access policy"
 		c.Close()
 		return nil
 	}
 
 	protoVersion := ""
+	registeredOnly := false
 	if task != nil {
 		task.RLock()
 		protoVersion = task.ProtoVersion
-		registeredOnly := task.RegisteredOnly
+		registeredOnly = task.RegisteredOnly
 		task.RUnlock()
-		if isRegisteredOnlyBlocked(client, c.RemoteAddr().String(), registeredOnly) {
-			_ = c.Close()
-			return nil
-		}
 	} else if host != nil {
 		protoVersion = hostProxyProtocolVersion(host)
+		host.RLock()
+		registeredOnly = host.RegisteredOnly
+		host.RUnlock()
+	}
+	if isRegisteredOnlyBlocked(client, c.RemoteAddr().String(), registeredOnly) {
+		logResult, logError = connectionlog.ResultFailure, "source IP is not registered"
+		_ = c.Close()
+		return nil
 	}
 
 	link := conn.NewLink(tp, addr, clientConfig.Crypt, clientConfig.Compress, c.Conn.RemoteAddr().String(), localProxy, protoVersion)
@@ -379,9 +400,57 @@ func (s *BaseServer) dealClient(c *conn.Conn, client *file.Client, addr string,
 		if flow == nil {
 			flow = clientFlow
 		}
-		conn.CopyWaitGroupWithLimits(target, c.Conn, link.Crypt, link.Compress, clientRate, flow, true, rb, task, host)
+		userRate := file.UserRateLimiterForClient(client)
+		bytesIn, bytesOut = conn.CopyWaitGroupWithUserLimits(target, c.Conn, link.Crypt, link.Compress, clientRate, flow, true, rb, task, host, userRate)
 	}
 	return nil
+}
+
+func proxyConnectionLogEvent(client *file.Client, task *file.Tunnel, host *file.Host, protocol, target, sourceIP string, startedAt time.Time) connectionlog.Event {
+	event := connectionlog.Event{
+		Time:          startedAt.UTC(),
+		StartedAt:     startedAt.UTC(),
+		Kind:          connectionlog.KindTunnel,
+		Action:        connectionlog.ActionProxyConnection,
+		Result:        connectionlog.ResultSuccess,
+		ProxyProtocol: strings.TrimSpace(protocol),
+		SourceIP:      common.GetIpByAddr(sourceIP),
+		Target:        strings.TrimSpace(target),
+	}
+	if host != nil {
+		host.RLock()
+		event.Kind = connectionlog.KindHost
+		event.ResourceType = "host"
+		event.ResourceID = host.Id
+		event.ResourceRemark = strings.TrimSpace(host.Host)
+		host.RUnlock()
+	} else if task != nil {
+		task.RLock()
+		event.ResourceType = "tunnel"
+		event.ResourceID = task.Id
+		event.ResourceRemark = strings.TrimSpace(task.Remark)
+		if event.ProxyProtocol == "" {
+			event.ProxyProtocol = strings.TrimSpace(task.Mode)
+		}
+		task.RUnlock()
+	}
+	if client != nil {
+		client.RLock()
+		event.UserID = client.UserId
+		event.UserName = client.UserName
+		event.ClientID = client.Id
+		event.ClientRemark = strings.TrimSpace(client.Remark)
+		event.ClientVersion = strings.TrimSpace(client.Version)
+		client.RUnlock()
+		if event.UserID > 0 && event.UserName == "" {
+			if user, err := file.GetDb().GetUser(event.UserID); err == nil && user != nil {
+				user.RLock()
+				event.UserName = user.UserName
+				user.RUnlock()
+			}
+		}
+	}
+	return event
 }
 
 // localProxyAllowedForClient applies both the historical global switch and

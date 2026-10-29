@@ -64,7 +64,7 @@ func TestHostBasicAuthRejectsBeforeOpeningTunnel(t *testing.T) {
 		Client:   client,
 		Target:   &file.Target{TargetStr: "127.0.0.1:8080"},
 	}
-	installWhitelistTestHost(t, host)
+	installRegisteredIPTestHost(t, host)
 	bridge := &hostAuthBridge{}
 	proxy := NewHttpReverseProxy(&httpServer{BaseServer: BaseServer{bridge: bridge}})
 	response := httptest.NewRecorder()
@@ -96,7 +96,7 @@ func TestHostBasicAuthOverridesClientAuthForStandardHTTP(t *testing.T) {
 		Client:   client,
 		Target:   &file.Target{TargetStr: "127.0.0.1:8080"},
 	}
-	installWhitelistTestHost(t, host)
+	installRegisteredIPTestHost(t, host)
 	bridge := &hostAuthBridge{}
 	proxy := NewHttpReverseProxy(&httpServer{BaseServer: BaseServer{bridge: bridge}})
 	response := httptest.NewRecorder()

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"ehang.io/nps/lib/connectionlog"
 	"ehang.io/nps/web/audit"
 )
 
@@ -17,6 +18,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	audit.Configure(filepath.Join(dir, "audit.log"))
+	connectionlog.Configure("")
 	code := m.Run()
 	_ = os.RemoveAll(dir)
 	os.Exit(code)

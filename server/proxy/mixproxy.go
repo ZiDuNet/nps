@@ -38,7 +38,7 @@ func ProcessMix(c *conn.Conn, server *TunnelModeServer) error {
 	}
 
 	remote := c.Conn.RemoteAddr()
-	if remote == nil || SourceDenied(remote, client, &task.SourceLists, taskName(task)) || isIPWhiteBlocked(client, remote.String()) || isRegisteredOnlyBlocked(client, remote.String(), registeredOnly) {
+	if remote == nil || SourceDenied(remote, client, &task.SourceLists, taskName(task)) || isRegisteredOnlyBlocked(client, remote.String(), registeredOnly) {
 		_ = c.Close()
 		return nil
 	}

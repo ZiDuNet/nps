@@ -1,0 +1,218 @@
+<style>
+    .registration-settings-page { max-width: 1680px; margin: 0 auto; }
+    .registration-settings-page .system-settings-tabs { margin-bottom: 14px; }
+    .registration-settings-page .server-config-path { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; margin-top: 9px; padding: 4px 8px; color: var(--nps-faint); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 6px; font: 10.5px/1.4 "Fira Code", monospace; overflow-wrap: anywhere; }
+    .registration-settings-page .server-config-path i { color: var(--nps-primary); }
+    .registration-overview { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(420px, .8fr); gap: 14px; margin-bottom: 14px; padding: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 5%, var(--nps-surface-subtle)), var(--nps-surface) 58%); border: 1px solid color-mix(in srgb, var(--nps-primary) 16%, var(--nps-line)); border-radius: 14px; }
+    .registration-overview__copy { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .registration-overview__icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 38px; height: 38px; color: var(--nps-primary); background: color-mix(in srgb, var(--nps-primary) 10%, var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-primary) 24%, var(--nps-line)); border-radius: 11px; font-size: 16px; }
+    .registration-overview__copy strong { display: block; color: var(--nps-ink); font-size: 12.5px; }
+    .registration-overview__copy p { margin: 4px 0 0; color: var(--nps-muted); font-size: 10.5px; line-height: 1.55; }
+    .registration-overview__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+    .registration-stat { min-width: 0; padding: 9px 10px; background: color-mix(in srgb, var(--nps-surface) 88%, transparent); border: 1px solid var(--nps-line); border-radius: 9px; }
+    .registration-stat strong { display: block; color: var(--nps-ink); font-size: 17px; line-height: 1.08; }
+    .registration-stat span { display: block; margin-top: 4px; color: var(--nps-muted); font-size: 9.5px; line-height: 1.35; }
+    .registration-card { margin-bottom: 14px; overflow: hidden; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 14px; box-shadow: 0 8px 28px rgba(15, 23, 42, .055); }
+    .registration-card__header { display: flex; align-items: center; gap: 11px; min-height: 66px; padding: 13px 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 5%, var(--nps-surface)), var(--nps-surface) 52%); border-bottom: 1px solid var(--nps-line); }
+    .registration-card__icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 34px; height: 34px; color: var(--nps-primary); background: color-mix(in srgb, var(--nps-primary) 10%, var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-primary) 22%, var(--nps-line)); border-radius: 10px; }
+    .registration-card__header > div { min-width: 0; }
+    .registration-card__header h2 { margin: 0; color: var(--nps-ink); font-size: 14px; font-weight: 760; }
+    .registration-card__header p { margin: 3px 0 0; color: var(--nps-muted); font-size: 11px; line-height: 1.5; }
+    .registration-card__body { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 14px 16px 16px; }
+    .registration-field { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 11px 12px; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 10px; }
+    .registration-field:focus-within { border-color: color-mix(in srgb, var(--nps-primary) 42%, var(--nps-line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nps-primary) 10%, transparent); }
+    .registration-field.is-disabled { background: var(--nps-surface-subtle); }
+    .registration-field__head { display: grid; gap: 4px; min-width: 0; }
+    .registration-field__head label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0; color: var(--nps-ink); font-size: 11.5px; font-weight: 730; }
+    .registration-field__head code { padding: 2px 5px; color: var(--nps-faint); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 5px; font: 9px/1.3 "Fira Code", monospace; font-weight: 500; }
+    .registration-field__head p { margin: 0; color: var(--nps-muted); font-size: 10px; line-height: 1.45; }
+    .registration-field__control { min-width: 0; }
+    .registration-field__control .form-control { width: 100%; min-height: 34px; font-size: 11px; }
+    .registration-field__control .input-group { display: flex; flex-wrap: nowrap; width: 100%; }
+    .registration-field__control .input-group .form-control { flex: 1 1 auto; min-width: 0; }
+    .registration-field__control .btn { flex: 0 0 auto; white-space: nowrap; }
+    .registration-optional { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 7px; color: var(--nps-muted); font-size: 10px; font-weight: 620; cursor: pointer; }
+    .registration-optional input { margin: 0; }
+    .registration-secret-note { display: block; margin-top: 5px; color: var(--nps-muted); font-size: 9.5px; line-height: 1.45; }
+    .registration-badge { display: inline-flex; align-items: center; padding: 2px 6px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 999px; font-size: 9px; }
+    .registration-badge--secret { color: var(--nps-warning); background: color-mix(in srgb, var(--nps-warning) 8%, var(--nps-surface)); border-color: color-mix(in srgb, var(--nps-warning) 28%, var(--nps-line)); }
+    .registration-notice { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 13px; padding: 10px 12px; color: var(--nps-info); background: color-mix(in srgb, var(--nps-info-soft) 74%, var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-info) 24%, var(--nps-line)); border-radius: 10px; font-size: 10.5px; line-height: 1.55; }
+    .registration-notice.is-error { color: var(--nps-danger); background: color-mix(in srgb, var(--nps-danger) 8%, var(--nps-surface)); border-color: color-mix(in srgb, var(--nps-danger) 28%, var(--nps-line)); }
+    .registration-savebar { position: sticky; bottom: 10px; z-index: 8; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 14px; padding: 12px 14px; background: color-mix(in srgb, var(--nps-surface) 95%, transparent); border: 1px solid color-mix(in srgb, var(--nps-primary) 20%, var(--nps-line)); border-radius: 12px; box-shadow: 0 12px 32px rgba(15, 23, 42, .12); backdrop-filter: blur(14px); }
+    .registration-savebar > div { min-width: 0; }
+    .registration-savebar strong { display: block; color: var(--nps-ink); font-size: 11.5px; }
+    .registration-savebar span { display: block; margin-top: 2px; color: var(--nps-muted); font-size: 10px; line-height: 1.45; }
+    .registration-savebar .btn { flex: 0 0 auto; min-width: 122px; }
+    @media (max-width: 1100px) {
+        .registration-overview { grid-template-columns: minmax(0, 1fr); }
+        .registration-card__body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+        .registration-overview__stats, .registration-card__body { grid-template-columns: minmax(0, 1fr); }
+        .registration-savebar { position: static; align-items: stretch; flex-direction: column; }
+        .registration-savebar .btn { width: 100%; }
+    }
+</style>
+
+<section class="wrapper wrapper-content animated fadeInRight form-page registration-settings-page" aria-labelledby="registration-settings-title">
+    <header class="dashboard-page-header form-page-header">
+        <div class="form-page-heading">
+            <div class="dashboard-page-kicker" data-i18n-zh="系统配置" data-i18n-en="System settings">系统配置</div>
+            <h1 id="registration-settings-title" data-i18n-zh="用户注册" data-i18n-en="User registration">用户注册</h1>
+            <p data-i18n-zh="管理自助注册入口、新账号默认权益、限频以及邮箱验证。所有默认额度与带宽数值使用 0 表示不限。"
+               data-i18n-en="Manage self-registration, default account limits, abuse controls and email verification. Zero means unlimited for quotas and bandwidth.">管理自助注册入口、新账号默认权益、限频以及邮箱验证。所有默认额度与带宽数值使用 0 表示不限。</p>
+            <div class="server-config-path"><i class="fa fa-code" aria-hidden="true"></i><span>{{.config_path}}</span></div>
+        </div>
+    </header>
+
+    <nav class="system-settings-tabs" aria-label="系统配置页面" data-aria-label-zh="系统配置页面" data-aria-label-en="System settings pages">
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/index" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-sliders-h" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="全局参数" data-i18n-en="Global settings">全局参数</strong><small data-i18n-zh="业务设置与内容管理" data-i18n-en="Business settings and content">业务设置与内容管理</small></span>
+        </a>
+        <a class="system-settings-tab is-active" href="{{.web_base_url}}/global/registration" data-console-navigate aria-current="page">
+            <span class="system-settings-tab__icon"><i class="fa fa-user-plus" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="用户注册" data-i18n-en="User registration">用户注册</strong><small data-i18n-zh="入口、默认权益与邮箱" data-i18n-en="Access, defaults and email">入口、默认权益与邮箱</small></span>
+        </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/config" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-code" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="服务端配置" data-i18n-en="Server configuration">服务端配置</strong><small data-i18n-zh="nps.conf 在线维护" data-i18n-en="Maintain nps.conf online">nps.conf 在线维护</small></span>
+        </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/certificate" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-certificate" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="证书设置" data-i18n-en="Certificate settings">证书设置</strong><small data-i18n-zh="证书、私钥与 ACME" data-i18n-en="Certificates, keys and ACME">证书、私钥与 ACME</small></span>
+        </a>
+    </nav>
+
+    <div class="registration-overview">
+        <div class="registration-overview__copy">
+            <span class="registration-overview__icon"><i class="fa fa-id-card" aria-hidden="true"></i></span>
+            <div>
+                <strong data-i18n-zh="注册默认权益可以全部不限" data-i18n-en="Every registration default can be unlimited">注册默认权益可以全部不限</strong>
+                <p data-i18n-zh="客户端、隧道、并发连接、上下行带宽和有效期均支持 0 值。保存后会写入现有 nps.conf 并保留注释与自定义项。"
+                   data-i18n-en="Clients, tunnels, concurrent connections, directional bandwidth and validity all support zero. Saving updates the existing nps.conf while preserving comments and custom entries.">客户端、隧道、并发连接、上下行带宽和有效期均支持 0 值。保存后会写入现有 nps.conf 并保留注释与自定义项。</p>
+            </div>
+        </div>
+        <div class="registration-overview__stats" aria-label="注册配置摘要">
+            <div class="registration-stat"><strong>{{.registration_config_summary.Fields}}</strong><span data-i18n-zh="配置项" data-i18n-en="Settings">配置项</span></div>
+            <div class="registration-stat"><strong>{{.registration_config_summary.Enabled}}</strong><span data-i18n-zh="当前启用" data-i18n-en="Enabled">当前启用</span></div>
+            <div class="registration-stat"><strong>{{.registration_config_summary.Sensitive}}</strong><span data-i18n-zh="敏感项" data-i18n-en="Sensitive">敏感项</span></div>
+        </div>
+    </div>
+
+    {{if .registration_config_error}}
+    <div class="registration-notice is-error" role="alert">
+        <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+        <div><strong data-i18n-zh="无法读取用户注册配置" data-i18n-en="Unable to read registration settings">无法读取用户注册配置</strong><br>{{.registration_config_error}}</div>
+    </div>
+    {{else}}
+    <div class="registration-notice" role="status">
+        <i class="fa fa-info-circle" aria-hidden="true"></i>
+        <div data-i18n-zh="保存只更新本页字段，不会覆盖 nps.conf 中的其他配置。注册开关、默认额度、限频和 SMTP 修改均需要重启 NPS 后生效。"
+             data-i18n-en="Saving updates only this page's fields and leaves the rest of nps.conf untouched. Registration, defaults, rate limits and SMTP changes take effect after NPS restarts.">保存只更新本页字段，不会覆盖 nps.conf 中的其他配置。注册开关、默认额度、限频和 SMTP 修改均需要重启 NPS 后生效。</div>
+    </div>
+
+    <form id="registration-settings-form" class="form form-horz nps-form" autocomplete="off">
+        {{range $sectionIndex, $section := .registration_config_sections}}
+        <section class="registration-card" aria-labelledby="registration-section-{{$sectionIndex}}">
+            <header class="registration-card__header">
+                <span class="registration-card__icon"><i class="fa {{if eq $sectionIndex 0}}fa-user-plus{{else if eq $sectionIndex 1}}fa-shield-alt{{else}}fa-envelope{{end}}" aria-hidden="true"></i></span>
+                <div>
+                    <h2 id="registration-section-{{$sectionIndex}}">{{$section.Name}}</h2>
+                    <p>{{$section.Description}}</p>
+                </div>
+            </header>
+            <div class="registration-card__body">
+                {{range $field := $section.Fields}}
+                <article class="registration-field{{if not $field.Enabled}} is-disabled{{end}}" data-registration-field>
+                    <div class="registration-field__head">
+                        <label for="registration-config-{{$field.Key}}">{{$field.Label}} <code>{{$field.Key}}</code>{{if $field.Sensitive}}<span class="registration-badge registration-badge--secret" data-i18n-zh="敏感" data-i18n-en="Secret">敏感</span>{{end}}</label>
+                        <p>{{$field.Description}}</p>
+                    </div>
+                    <div class="registration-field__control">
+                        {{if $field.Optional}}<label class="registration-optional"><input type="checkbox" name="config_enabled_{{$field.Key}}" value="1" data-registration-enabled="{{$field.Key}}"{{if $field.Enabled}} checked{{end}}><span data-i18n-zh="启用并写入此项" data-i18n-en="Enable and write this setting">启用并写入此项</span></label>{{end}}
+                        {{if eq $field.Type "bool"}}
+                        <select id="registration-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-registration-input="{{$field.Key}}">
+                            <option value="true"{{if eq $field.Value "true"}} selected{{end}}>true / 启用</option>
+                            <option value="false"{{if eq $field.Value "false"}} selected{{end}}>false / 关闭</option>
+                        </select>
+                        {{else if eq $field.Type "select"}}
+                        <select id="registration-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-registration-input="{{$field.Key}}">{{range $option := $field.Options}}<option value="{{$option}}"{{if eq $field.Value $option}} selected{{end}}>{{$option}}</option>{{end}}</select>
+                        {{else if eq $field.Type "secret"}}
+                        <div class="input-group">
+                            <input id="registration-config-{{$field.Key}}" class="form-control" type="password" name="config_{{$field.Key}}" data-registration-input="{{$field.Key}}" placeholder="{{if $field.Present}}已配置，留空保持{{else}}未配置{{end}}" autocomplete="new-password">
+                            <button type="button" class="btn btn-outline registration-secret-reveal" data-target="registration-config-{{$field.Key}}" aria-label="显示或隐藏值" title="显示或隐藏值"><i class="fa fa-eye" aria-hidden="true"></i></button>
+                        </div>
+                        <span class="registration-secret-note" data-i18n-zh="敏感值不会回显；留空保持当前值。" data-i18n-en="Secret values are never echoed; leave blank to keep the current value.">敏感值不会回显；留空保持当前值。</span>
+                        {{else}}
+                        <input id="registration-config-{{$field.Key}}" class="form-control" type="{{if eq $field.Type "int"}}number{{else}}text{{end}}" name="config_{{$field.Key}}" value="{{$field.Value}}" data-registration-input="{{$field.Key}}"{{if eq $field.Type "int"}} min="0" step="1"{{end}}>
+                        {{end}}
+                    </div>
+                </article>
+                {{end}}
+            </div>
+        </section>
+        {{end}}
+
+        <div class="registration-savebar">
+            <div>
+                <strong data-i18n-zh="保存用户注册配置" data-i18n-en="Save registration settings">保存用户注册配置</strong>
+                <span id="registration-save-note" data-i18n-zh="保存后重启 NPS 才会生效。" data-i18n-en="Restart NPS after saving to apply the changes.">保存后重启 NPS 才会生效。</span>
+            </div>
+            <button class="btn btn-primary" type="submit"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存配置" data-i18n-en="Save settings">保存配置</span></button>
+        </div>
+    </form>
+    {{end}}
+</section>
+
+<script>
+$(function () {
+    var form = $('#registration-settings-form');
+    if (!form.length) return;
+
+    function syncOptional(key) {
+        var checkbox = form.find('[data-registration-enabled="' + key + '"]');
+        var enabled = checkbox.prop('checked');
+        form.find('[data-registration-input="' + key + '"]').prop('disabled', !enabled);
+        checkbox.closest('[data-registration-field]').toggleClass('is-disabled', !enabled);
+    }
+    form.find('[data-registration-enabled]').each(function () {
+        syncOptional($(this).attr('data-registration-enabled'));
+    }).on('change', function () {
+        syncOptional($(this).attr('data-registration-enabled'));
+    });
+
+    form.on('click', '.registration-secret-reveal', function () {
+        var input = document.getElementById($(this).attr('data-target'));
+        if (!input) return;
+        var visible = input.type === 'text';
+        input.type = visible ? 'password' : 'text';
+        $(this).find('i').toggleClass('fa-eye fa-eye-slash');
+    });
+
+    form.on('submit', function (event) {
+        event.preventDefault();
+        if (!validateNpsForm(this, true)) return;
+        var submit = form.find('button[type="submit"]').prop('disabled', true);
+        $.ajax({
+            type: 'POST',
+            url: '{{.web_base_url}}/global/registration/save',
+            data: form.serializeArray(),
+            success: function (res) {
+                npsNotify(res.status ? 'success' : 'error', langreply(res.msg));
+                if (res.status) {
+                    $('#registration-save-note').text(npsIsEnglish()
+                        ? 'Saved. Restart NPS to apply the changes.'
+                        : '配置已保存，重启 NPS 后生效。');
+                }
+            },
+            error: function () {
+                npsNotify('error', npsRequestErrorMessage());
+            },
+            complete: function () {
+                submit.prop('disabled', false);
+            }
+        });
+    });
+});
+</script>

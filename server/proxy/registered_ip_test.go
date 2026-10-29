@@ -5,38 +5,38 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/ipreg"
 	"github.com/astaxie/beego"
 )
 
-type whitelistTestBridge struct {
+type registeredIPTestBridge struct {
 	calls atomic.Int32
 }
 
-func (b *whitelistTestBridge) SendLinkInfo(int, *conn.Link, *file.Tunnel) (net.Conn, error) {
+func (b *registeredIPTestBridge) SendLinkInfo(int, *conn.Link, *file.Tunnel) (net.Conn, error) {
 	b.calls.Add(1)
 	return nil, errors.New("unexpected upstream connection")
 }
 
-type whitelistRemoteConn struct {
+type registeredIPRemoteConn struct {
 	net.Conn
 	remote net.Addr
 }
 
-func (c *whitelistRemoteConn) RemoteAddr() net.Addr {
+func (c *registeredIPRemoteConn) RemoteAddr() net.Addr {
 	return c.remote
 }
 
-// installWhitelistTestHost replaces only the in-memory JsonDb used by this
-// package test. Tests in this package are serial, so restoring the pointer is
+// installRegisteredIPTestHost replaces only the in-memory JsonDb used by these
+// package tests. Tests in this package are serial, so restoring the pointer is
 // sufficient and avoids writing to the repository's runtime data files.
-func installWhitelistTestHost(t *testing.T, host *file.Host) {
+func installRegisteredIPTestHost(t *testing.T, host *file.Host) {
 	t.Helper()
 	db := file.GetDb()
 	old := db.JsonDb
@@ -48,84 +48,28 @@ func installWhitelistTestHost(t *testing.T, host *file.Host) {
 	})
 }
 
-func newWhitelistTestClient() *file.Client {
+func newRegisteredOnlyTestClient() *file.Client {
 	client := file.NewClient("test-vkey", true, true)
 	client.Id = 1
-	client.IpWhite = true
-	client.IpWhitePass = "secret"
-	client.IpWhiteList = []string{"203.0.113.7"}
+	client.RegisteredOnly = true
 	return client
 }
 
-func TestIPWhiteBlockDecision(t *testing.T) {
-	client := file.NewClient("test-vkey", false, false)
-	client.IpWhite = true
-	client.IpWhitePass = "secret"
-	client.IpWhiteList = []string{"203.0.113.7"}
+func TestDealClientBlocksUnregisteredIPBeforeBridge(t *testing.T) {
+	ipreg.Reset()
+	t.Cleanup(ipreg.Reset)
 
-	if !isIPWhiteBlocked(client, "203.0.113.8:443") {
-		t.Fatal("an address outside the allowlist must be blocked")
-	}
-	if isIPWhiteBlocked(client, "203.0.113.7:443") {
-		t.Fatal("an address in the allowlist must be accepted")
-	}
-	client.IpWhite = false
-	if isIPWhiteBlocked(client, "203.0.113.8:443") {
-		t.Fatal("a disabled allowlist must not block traffic")
-	}
-}
-
-func TestIPWhiteBlockDecisionSupportsIPv6(t *testing.T) {
-	client := file.NewClient("test-vkey", false, false)
-	client.IpWhite = true
-	client.IpWhitePass = "secret"
-	client.IpWhiteList = []string{"2001:db8::7"}
-
-	if !isIPWhiteBlocked(client, "[2001:db8::8]:443") {
-		t.Fatal("an IPv6 address outside the allowlist must be blocked")
-	}
-	if isIPWhiteBlocked(client, "[2001:db8::7]:443") {
-		t.Fatal("an IPv6 address in the allowlist must be accepted")
-	}
-}
-
-func TestIPWhiteSnapshotIsSafeDuringConcurrentUpdates(t *testing.T) {
-	client := newWhitelistTestClient()
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 1000; i++ {
-			_ = isIPWhiteBlocked(client, "203.0.113.8:443")
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 1000; i++ {
-			client.Lock()
-			if i%2 == 0 {
-				client.IpWhiteList = []string{"203.0.113.7"}
-			} else {
-				client.IpWhiteList = []string{"203.0.113.8"}
-			}
-			client.Unlock()
-		}
-	}()
-	wg.Wait()
-}
-
-func TestDealClientBlocksUnauthorizedIPBeforeBridge(t *testing.T) {
 	db := file.GetDb()
 	oldDB := db.JsonDb
 	db.JsonDb = file.NewJsonDb(t.TempDir())
 	t.Cleanup(func() { db.JsonDb = oldDB })
 
-	client := newWhitelistTestClient()
-	bridge := &whitelistTestBridge{}
+	client := newRegisteredOnlyTestClient()
+	bridge := &registeredIPTestBridge{}
 	server := &BaseServer{bridge: bridge}
 	peer, handler := net.Pipe()
 	defer peer.Close()
-	handlerConn := &whitelistRemoteConn{
+	handlerConn := &registeredIPRemoteConn{
 		Conn:   handler,
 		remote: &net.TCPAddr{IP: net.ParseIP("203.0.113.8"), Port: 4321},
 	}
@@ -134,7 +78,7 @@ func TestDealClientBlocksUnauthorizedIPBeforeBridge(t *testing.T) {
 		t.Fatalf("DealClient returned unexpected error: %v", err)
 	}
 	if calls := bridge.calls.Load(); calls != 0 {
-		t.Fatalf("blocked TCP opened %d upstream connections", calls)
+		t.Fatalf("unregistered TCP opened %d upstream connections", calls)
 	}
 }
 
@@ -146,11 +90,11 @@ func TestDealClientRejectsDisabledLocalProxyBeforeBridge(t *testing.T) {
 	t.Cleanup(func() { _ = beego.AppConfig.Set("allow_local_proxy", previous) })
 
 	client := file.NewClient("test-vkey", false, false)
-	bridge := &whitelistTestBridge{}
+	bridge := &registeredIPTestBridge{}
 	server := &BaseServer{bridge: bridge}
 	peer, handler := net.Pipe()
 	defer peer.Close()
-	handlerConn := &whitelistRemoteConn{Conn: handler, remote: &net.TCPAddr{IP: net.ParseIP("203.0.113.7"), Port: 4321}}
+	handlerConn := &registeredIPRemoteConn{Conn: handler, remote: &net.TCPAddr{IP: net.ParseIP("203.0.113.7"), Port: 4321}}
 
 	err := server.DealClient(conn.NewConn(handlerConn), client, "127.0.0.1:22", nil, "tcp", nil, nil, true, nil, nil)
 	if err == nil || err.Error() != "local proxy is disabled" {
@@ -161,16 +105,11 @@ func TestDealClientRejectsDisabledLocalProxyBeforeBridge(t *testing.T) {
 	}
 }
 
-func TestIPWhiteChallengeEscapesRemoteAddress(t *testing.T) {
-	got := ipWhiteChallengeIP("<script>alert(1)</script>:443")
-	want := "&lt;script&gt;alert(1)&lt;/script&gt;"
-	if got != want {
-		t.Fatalf("escaped challenge IP = %q, want %q", got, want)
-	}
-}
+func TestHTTPReverseProxyBlocksUnregisteredWebSocketBeforeUpstream(t *testing.T) {
+	ipreg.Reset()
+	t.Cleanup(ipreg.Reset)
 
-func TestHTTPReverseProxyBlocksWebSocketBeforeUpstream(t *testing.T) {
-	client := newWhitelistTestClient()
+	client := newRegisteredOnlyTestClient()
 	host := &file.Host{
 		Id:       1,
 		Host:     "socket.example.test",
@@ -179,9 +118,9 @@ func TestHTTPReverseProxyBlocksWebSocketBeforeUpstream(t *testing.T) {
 		Client:   client,
 		Target:   &file.Target{TargetStr: "127.0.0.1:8080"},
 	}
-	installWhitelistTestHost(t, host)
+	installRegisteredIPTestHost(t, host)
 
-	bridge := &whitelistTestBridge{}
+	bridge := &registeredIPTestBridge{}
 	server := &httpServer{BaseServer: BaseServer{bridge: bridge}}
 	proxy := NewHttpReverseProxy(server)
 	req := httptest.NewRequest(http.MethodGet, "http://socket.example.test/socket", nil)
@@ -203,8 +142,11 @@ func TestHTTPReverseProxyBlocksWebSocketBeforeUpstream(t *testing.T) {
 	}
 }
 
-func TestHTTPSProxyBlocksBeforeUpstream(t *testing.T) {
-	client := newWhitelistTestClient()
+func TestHTTPSProxyBlocksUnregisteredIPBeforeUpstream(t *testing.T) {
+	ipreg.Reset()
+	t.Cleanup(ipreg.Reset)
+
+	client := newRegisteredOnlyTestClient()
 	host := &file.Host{
 		Id:       1,
 		Host:     "secure.example.test",
@@ -213,13 +155,13 @@ func TestHTTPSProxyBlocksBeforeUpstream(t *testing.T) {
 		Client:   client,
 		Target:   &file.Target{TargetStr: "127.0.0.1:8443"},
 	}
-	installWhitelistTestHost(t, host)
+	installRegisteredIPTestHost(t, host)
 
-	bridge := &whitelistTestBridge{}
+	bridge := &registeredIPTestBridge{}
 	server := &HttpsServer{httpServer: httpServer{BaseServer: BaseServer{bridge: bridge}}}
 	peer, handler := net.Pipe()
 	defer peer.Close()
-	handlerConn := &whitelistRemoteConn{
+	handlerConn := &registeredIPRemoteConn{
 		Conn:   handler,
 		remote: &net.TCPAddr{IP: net.ParseIP("203.0.113.8"), Port: 4321},
 	}
@@ -234,6 +176,6 @@ func TestHTTPSProxyBlocksBeforeUpstream(t *testing.T) {
 	}
 	buf := make([]byte, 1)
 	if n, err := peer.Read(buf); n != 0 || err == nil {
-		t.Fatalf("HTTPS peer was not closed after allowlist rejection: n=%d err=%v", n, err)
+		t.Fatalf("HTTPS peer was not closed after registration rejection: n=%d err=%v", n, err)
 	}
 }

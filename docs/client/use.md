@@ -1,108 +1,123 @@
 # 客户端使用
 
-## 直接运行
+`npc` 运行在内网设备上，主动连接公网 NPS。常规部署推荐无配置文件模式：
+客户端、隧道和域名规则都由 NPS Web 面板管理，NPC 只保存服务端地址和 VKey。
 
-直接双击 `npc`/`npc.exe`，无任何参数，按提示输入即可：
+命令参数、配置文件字段、交互菜单和系统服务的完整口径见
+[客户端配置与启动](../client_config.md)与
+[NPC 配置文件参考](config-file.md)。
 
-| 菜单项 | 输入内容 |
+## 最短连接流程
+
+1. 在 Web 面板「客户端」新增客户端，取得 `VerifyKey`。
+2. 展开客户端详情，选择实际启用的 Bridge 入口。
+3. 复制该入口的普通命令或快捷启动命令。
+4. 在内网主机运行 NPC。
+
+TCP 示例：
+
+```bash
+./npc -server=<NPS地址>:8024 -vkey=<VerifyKey>
+```
+
+TCP + TLS 示例：
+
+```bash
+./npc -server=<NPS地址>:8025 -vkey=<VerifyKey> -tls_enable=true
+```
+
+也可直接运行 `./npc`，粘贴 Web 面板生成的快捷启动命令。
+
+## Bridge 协议
+
+当前 NPC 支持：
+
+| 面板入口 | 命令行要点 | 网络要求 |
+| --- | --- | --- |
+| TCP | `-type=tcp` | TCP |
+| TCP + TLS | `-tls_enable=true` | TCP，使用 Bridge TLS 端口 |
+| KCP | `-type=kcp` | UDP |
+| WS | `-type=ws -bridge_path=/ws` | TCP 与 WebSocket Upgrade |
+| WSS | `-type=wss -bridge_path=/ws` | TCP、TLS 与 WebSocket Upgrade |
+| QUIC | `-type=quic -quic_alpn=nps` | UDP |
+| HTTP/3 Bridge | `-type=quic -quic_alpn=<ALPN>` | HTTP/3 UDP 共用入口，需 `bridge_http3=true` |
+
+只应使用 Web 面板实际展示、服务端实际监听的入口。`bridge_*_show=false`
+只是隐藏命令，不会关闭监听。
+
+快捷启动命令是 Base64：
+
+- TCP 和 TCP + TLS 使用历史 v1 格式，旧 NPC 继续兼容。
+- KCP、WS、WSS、QUIC 和 HTTP/3 使用 v2 JSON，需要 NPC/GUI `1.1.37`
+  或更高版本。
+
+TLS 客户端默认校验证书。自签名证书应使用 `-tls_fingerprint`；CA 证书链
+应使用 `-tls_ca_file`，必要时配合 `-tls_server_name`。生产环境不要启用
+`-tls_insecure_skip_verify=true`。
+
+## 交互菜单与系统服务
+
+在没有参数且未找到本地配置时，直接运行 `npc` 会进入菜单。菜单支持注册、
+启动、停止、卸载、查看状态、查看日志、远程更新和直接粘贴快捷启动命令。
+
+交互菜单注册的系统服务按协议区分：
+
+```text
+nps-client-<vkey>
+nps-client-<vkey>-tls
+nps-client-<vkey>-kcp
+nps-client-<vkey>-ws
+nps-client-<vkey>-wss
+nps-client-<vkey>-quic
+nps-client-<vkey>-http3
+```
+
+普通 TCP 保留无后缀的历史服务名。同一 VKey 安装多个协议时，服务名互不
+覆盖；启动、停止或卸载时只填 VKey 且存在多个匹配项，程序会要求选择完整
+服务名。
+
+命令行安装仍可注册通用 `Npc` 服务：
+
+```bash
+sudo ./npc install -server=<NPS地址>:8024 -vkey=<VerifyKey>
+sudo npc start
+```
+
+Windows 请在管理员 CMD 或 PowerShell 中执行 `npc.exe install`、`start`、
+`stop` 和 `uninstall`。安装后程序使用稳定安装路径，不依赖当前解压目录。
+
+## 删除客户端后的行为
+
+管理员在 Web 面板删除客户端后，新版 NPS 会向在线 NPC 下发“注册已删除”
+指令。NPC 停止被删除的连接和重连；旧版 NPC 不认识该指令，会继续尝试连接，
+直到手动停止或升级。
+
+系统服务模式只停止受影响的那条连接。仅当该进程内最后一条连接也因删除而
+结束时，NPC 才尽力停止本机服务进程，但不会卸载服务注册。同一进程同时连接
+多个 NPS 或使用多个协议时，删除其中一个客户端不会中断其他连接。
+
+## GUI
+
+桌面用户可使用 [NPC GUI 客户端](../gui.md)。GUI 在程序内直接调用客户端
+核心，不是简单启动外部 `npc` 进程；它支持粘贴快捷命令、手动选择协议、查看
+状态和用户级开机自启动。
+
+## 日志与更新
+
+系统服务日志按服务分别保存：
+
+| 系统 | 默认位置 |
 | --- | --- |
-| 注册系统服务 | 【快捷启动命令】或【TLS 快捷启动命令】|
-| 卸载系统服务 |  隧道密钥 `vkey` |
-| 启动 |  隧道密钥 `vkey` |
-| 停止 |  隧道密钥 `vkey` |
-| 更新客户端 | — |
-| 查看 NPC 服务日志 | 选择服务名或 `vkey`，按 `Ctrl+C` 返回 |
-| 重启所有 NPC 服务 | 输入 `y` 确认；会短暂中断所有已注册隧道 |
+| Linux/macOS | `/var/log/npc-<vkey>[-协议].log` |
+| Windows | `npc.exe` 所在目录 |
 
-【快捷启动命令】在 web 后台 → 客户端列表 → 客户端前的小图标里复制，本质是 `服务端地址 + vkey` 的 base64 编码。TLS 模式有独立的【TLS 快捷启动命令】。
+手动更新：
 
-服务以 `nps-client-<vkey>` 命名注册，可在同一台机器并存多个客户端实例。
-
-![image](/image/new/cmd.png)
-
-## 直接命令行
-
-```shell
-./npc -server=ip:port -vkey=web界面中显示的密钥         # 标准
-./npc -server=ip:8025 -vkey=xxx -tls_enable=true       # TLS 桥接
-./npc -server=ip:8024 -vkey=ytkpyr0er676m0r7,iwnbjfbvygvzyzzt  # 同时拉起多个隧道 ID（逗号拼接）
-./npc -server=nps-a:8024,nps-b:8025 -vkey=key-a,key-b -type=tcp,tls  # 同时连接多个服务端
+```bash
+./npc update
+./npc update-force
 ```
 
-## 配置文件模式
-
-无配置文件模式适合由 Web 管理面板统一维护客户端、隧道和域名规则；配置文件模式则适合批量部署、将规则纳入基础设施代码，或使用健康检查、端口范围映射等进阶能力。
-
-```shell
-./npc -config=conf/npc.conf
-```
-
-一个配置文件使用 `[common]` 定义 `server_addr`、`vkey`、TLS 和日志等公共参数，再用多个规则节定义 TCP、UDP、Host、Secret、P2P 或文件访问。完整字段、模板环境变量和可运行示例见 [NPC 配置文件参考](config-file.md)。
-
-## 服务端删除客户端
-
-管理员在 Web 面板删除客户端后，NPS 会向在线 NPC 下发「注册已删除」指令：NPC 记录该状态、关闭连接并停止重连，不再每 5 秒重复尝试。停用、到期或所属用户被禁用不发送该指令，NPC 恢复后仍会自动重连。
-
-如果 NPC 是以系统服务方式注册运行的，收到删除指令后只停止被删除的那条连接；当该服务进程内的最后一条连接也因删除而结束时，才会自动停止本机的 NPC 服务，但不会卸载服务注册（支持 Windows、Linux systemd/sysv/upstart、macOS launchd 等）。之后仍可用 npc 命令菜单重新启动或停止对应客户端服务。同一 NPC 进程同时连接多个服务端时，删除其中一个客户端不会中断其他连接。停止操作在后台尽力完成，失败只会保留一个仍在运行的服务，不会阻塞 Web 面板的删除操作。前台直接运行、GUI 和 SDK 场景只停止连接，不会操作系统服务。
-
-只有新版本 NPC 认识该指令；旧版 NPC 会像网络断开一样继续重连，并在服务端日志中留下反复的 `not found` 拒绝记录，直到手动停止客户端服务或升级 NPC。
-
-
-## GUI 客户端
-
-> 基于 Wails 开发的桌面 GUI，体积只有 5M，免安装，解压即用。
-
-支持两种添加客户端方式：
-
-1. 粘贴 web 后台的【快捷启动命令】
-2. 手动填写 `-server`、`-vkey` 等参数
-
-详细说明请参考 [GUI 客户端 README](https://github.com/ZiDuNet/nps/blob/master/cmd/npc/npc-gui/README.md)。
-
-![img](/image/new/gui.png)
-
-
-## 注册到系统服务
-> 实现开机启动、守护进程
-
-```shell
-./npc          # linux/darwin（需 sudo）
-npc.exe        # windows（管理员 cmd）
-```
-
-按菜单选「注册系统服务」并粘贴【快捷启动命令】或【TLS 快捷启动命令】即可，服务名为 `nps-client-<vkey>`。
-
-> Windows 如果需要当客户端退出时自动重启客户端，请按照如图所示配置
-
-![img](/image/windows_client_service_configuration.png)
-
-
-## 系统服务日志
-注册系统服务后日志按 **每个 vkey 一个文件** 保存，命名为 `npc-<vkey>.log`：
-
-- windows：与 `npc.exe` 同级目录
-- linux / darwin：`/var/log/`
-
-日志文件默认权限为 `0644`，普通用户可以使用菜单的日志查看功能。升级 NPC 后请至少重启一次对应系统服务，使旧日志文件应用新的权限；如果仍提示 `permission denied`，请使用 root/管理员运行菜单，或检查 `/var/log` 的目录权限。
-
-
-## 客户端更新
-> 运行客户端，会显示当前客户端版本号。
-```shell
-./npc          # 选择菜单 [5] 更新客户端
-./npc update   # 非交互更新命令
-./npc update-force  # 强制重新安装最新正式 Release
-```
-
-如果当前设备不允许服务端远程下发升级，可以在直接启动命令中增加
-`-disable_remote_update=true`；配置文件模式则在 `[common]` 中设置同名字段。
-
-自动从 GitHub 最新正式 Release 下载当前平台的 `npc` 压缩包，校验 `checksums.txt` 后替换二进制。菜单更新完成后需要重新启动对应客户端服务；服务端下发的升级指令会在校验成功后自动重启客户端。
-
-更新需要对当前 NPC 安装目录和可执行文件具有写权限。Linux/macOS 的系统服务通常由 root 运行，建议使用 `sudo` 执行手动更新，或让服务账户具备安装目录写权限；Windows 请使用管理员终端。GitHub API 返回 `403/429` 时表示触发了接口限流，稍后重试即可。
-
-如果无法成功更新，可以直接下载 releases 压缩包覆盖原有的 `npc` 二进制。
-
-### 服务端下发升级
-
-管理员可以在 Web 面板的「客户端」列表中点击升级图标，向在线客户端发送升级指令。只有启用、在线且版本不低于 `v1.1.23` 的客户端支持该功能；旧版本需要先在客户端主机手动更新一次。客户端会在后台下载并校验 Release，不会阻塞隧道转发；下载完成后自动重启，服务管理器会继续守护服务。
+更新程序从 GitHub 最新正式 Release 下载当前平台产物，并校验 `checksums.txt`。
+服务端也可在管理员允许时下发远程更新。更新需要当前 NPC 安装目录和可执行
+文件具备写权限；系统服务通常应使用 `sudo` 或管理员终端执行。

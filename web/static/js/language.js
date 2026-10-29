@@ -275,8 +275,6 @@ var npsFieldHints = {
     crypt: ['加密客户端与服务端之间的代理数据。', 'Encrypt proxy data between the client and server.'],
     web_username: ['客户端 Web 服务使用的认证用户名。', 'Authentication username for the client Web service.'],
     web_password: ['客户端 Web 服务使用的认证密码。', 'Authentication password for the client Web service.'],
-    ipwhitepass: ['启用 IP 白名单时使用的访问口令。', 'Access password used when IP allowlist is enabled.'],
-    ipwhitelist: ['每行填写一个允许访问的精确 IP。', 'Enter one exact allowed IP per line.'],
     blackiplist: ['每行填写一个禁止访问的精确 IP。', 'Enter one exact blocked IP per line.'],
     expire_time: ['到期后配置将不可用；留空表示永不过期。', 'The configuration expires at this time; blank means no expiry.'],
     type: ['选择此隧道要使用的代理协议。', 'Select the proxy protocol for this tunnel.'],

@@ -33,23 +33,24 @@
     <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/flatpickr.min.css?v={{.version}}" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261029-1" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261029-8" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261029-2" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261026-3" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/nps-certificate.css?v={{.version}}&ui=20261026-1" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-certificate.css?v={{.version}}&ui=20261029-3" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/bootstrap-5.3.3.bundle.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/clipboard.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/flatpickr.min.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/flatpickr-l10n-zh.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/nps-table.js?v={{.version}}&ui=20260908-1"></script>
-    <script src="{{.web_base_url}}/static/js/traffic-debug.js?v={{.version}}&ui=20260919-1"></script>
+	    <script src="{{.web_base_url}}/static/js/flatpickr-l10n-zh.js?v={{.version}}"></script>
+	    <script src="{{.web_base_url}}/static/js/nps-table.js?v={{.version}}&ui=20260908-1"></script>
+	    <script src="{{.web_base_url}}/static/js/nps-live.js?v={{.version}}&ui=20261029-1"></script>
+	    <script src="{{.web_base_url}}/static/js/traffic-debug.js?v={{.version}}&ui=20260919-1"></script>
     <script src="{{.web_base_url}}/static/js/echarts.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/inspinia.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20261026-1" type="text/javascript"></script>
-    <script src="{{.web_base_url}}/static/js/nps-certificate.js?v={{.version}}&ui=20261026-1"></script>
+    <script src="{{.web_base_url}}/static/js/nps-certificate.js?v={{.version}}&ui=20261029-3"></script>
 
 </head>
 
@@ -115,15 +116,15 @@
                 <a href="{{.web_base_url}}/global/index"><i class="fa fa-cog" aria-hidden="true"></i>
                     <span class="nav-label" langtag="word-globalparam">全局参数</span></a>
                 </li>
-                <li class="{{if eq "audit" .menu}}active{{end}}">
-                <a href="{{.web_base_url}}/audit/list"><i class="fa fa-list-alt" aria-hidden="true"></i>
-                    <span class="nav-label" data-i18n-zh="操作审计" data-i18n-en="Audit log">操作审计</span></a>
-                </li>
                 <li class="{{if eq "banlist" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/global/banlist"><i class="fa fa-shield-alt" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="登录封禁" data-i18n-en="Login bans">登录封禁</span></a>
                 </li>
                 {{end}}
+                <li class="{{if eq "audit" .menu}}active{{end}}">
+                <a href="{{.web_base_url}}/audit/list"><i class="fa fa-list-alt" aria-hidden="true"></i>
+                    <span class="nav-label" data-i18n-zh="审计与连接" data-i18n-en="Audit and connections">审计与连接</span></a>
+                </li>
                 <li class="{{if eq "ipregister" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/global/ipregister"><i class="fa fa-map-marker-alt" aria-hidden="true"></i>
                     <span class="nav-label" data-i18n-zh="IP 登记" data-i18n-en="IP registrations">IP 登记</span></a>
@@ -157,6 +158,17 @@
                     <div class="nav-account-quota" role="status" aria-label="资源配额" data-aria-label-zh="资源配额" data-aria-label-en="Resource quota">
                         <span class="nav-account-quota__item"><i class="fa fa-desktop" aria-hidden="true"></i><span data-i18n-zh="客户端" data-i18n-en="Clients">客户端</span><strong>{{.accountQuota.ClientUsed}} / {{if .accountQuota.ClientLimit}}{{.accountQuota.ClientLimit}}{{else}}<span data-i18n-zh="不限" data-i18n-en="Unlimited">不限</span>{{end}}</strong></span>
                         <span class="nav-account-quota__item"><i class="fa fa-random" aria-hidden="true"></i><span data-i18n-zh="隧道" data-i18n-en="Tunnels">隧道</span><strong>{{.accountQuota.TunnelUsed}} / {{if .accountQuota.TunnelLimit}}{{.accountQuota.TunnelLimit}}{{else}}<span data-i18n-zh="不限" data-i18n-en="Unlimited">不限</span>{{end}}</strong></span>
+                    </div>
+                    <div class="nav-account-live" role="status" aria-label="实时连接与带宽" data-aria-label-zh="实时连接与带宽" data-aria-label-en="Live connections and bandwidth">
+                        <span class="nav-account-live__item" title="共享连接数：已用 / 上限" data-title-zh="共享连接数：已用 / 上限" data-title-en="Shared connections: used / limit">
+                            <i class="fa fa-plug" aria-hidden="true"></i>
+                            <span data-i18n-zh="连接" data-i18n-en="Connections">连接</span>
+                            <strong data-live-self-connections>--</strong>
+                        </span>
+                        <span class="nav-account-live__item" title="实时共享带宽：上传 / 下载" data-title-zh="实时共享带宽：上传 / 下载" data-title-en="Live shared bandwidth: upload / download">
+                            <i class="fa fa-exchange-alt" aria-hidden="true"></i>
+                            <span class="nav-account-live__rates"><span data-live-self-up>--</span><span aria-hidden="true"> / </span><span data-live-self-down>--</span></span>
+                        </span>
                     </div>
                     {{end}}
                     <a class="nav-logout-link" href="{{.web_base_url}}/login/out">
@@ -791,9 +803,10 @@
                 var active = extracted.document.querySelector('#side-menu > li.active > a[href]');
                 setActiveMenu(active ? active.href : url.href);
                 if (pushHistory) history.pushState({ npsConsole: true }, '', url.href);
-                refreshLanguage();
-                focusNewPage();
-            }).catch(function (error) {
+	                refreshLanguage();
+	                focusNewPage();
+	                document.dispatchEvent(new CustomEvent('nps:content-loaded', { detail: { url: url.href } }));
+	            }).catch(function (error) {
                 if (serial !== navigationSerial || (error && error.name === 'AbortError')) return;
                 // Keep the current page usable when the asynchronous request
                 // fails; a full navigation is the reliable fallback.

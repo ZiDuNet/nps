@@ -1,14 +1,26 @@
 package controllers
 
 import (
-	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"html/template"
+	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"ehang.io/nps/lib/bridgeendpoint"
+	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/quickcommand"
+	"github.com/astaxie/beego"
 )
 
 func TestClientRemoteUpdateVersionGate(t *testing.T) {
@@ -37,7 +49,6 @@ func TestClientListRowsExposeUserName(t *testing.T) {
 			UserName:    "alice",
 			VerifyKey:   "client-vkey",
 			WebPassword: "web-secret",
-			IpWhitePass: "allowlist-secret",
 			Cnf: &file.Config{
 				U: "basic-user",
 				P: "basic-secret",
@@ -59,7 +70,7 @@ func TestClientListRowsExposeUserName(t *testing.T) {
 			t.Fatalf("expected client list row to expose safe credential metadata %s, got %s", expected, got)
 		}
 	}
-	for _, secret := range []string{"web-secret", "allowlist-secret", "basic-user", "basic-secret"} {
+	for _, secret := range []string{"web-secret", "basic-user", "basic-secret"} {
 		if secret != "basic-user" && strings.Contains(got, secret) {
 			t.Fatalf("client list row must not expose credential %q: %s", secret, got)
 		}
@@ -189,7 +200,7 @@ func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
 			t.Fatalf("client list misses safety/accessibility marker: %s", marker)
 		}
 	}
-	for _, credentialField := range []string{"row.WebPassword,", "row.IpWhitePass", "config.U", "config.P"} {
+	for _, credentialField := range []string{"row.WebPassword,", "config.U", "config.P"} {
 		if strings.Contains(content, credentialField) {
 			t.Fatalf("client list must not render credential field: %s", credentialField)
 		}
@@ -201,24 +212,221 @@ func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
 	}
 }
 
-func TestClientListTemplateQuotesBridgeType(t *testing.T) {
-	tpl := template.Must(template.ParseFiles("../views/client/list.html"))
-	data := map[string]interface{}{
-		"ip":           "127.0.0.1",
-		"p":            8024,
-		"tls_p":        8025,
-		"win":          "./npc",
-		"bridgeType":   "kcp",
-		"isAdmin":      true,
-		"web_base_url": "",
+func TestClientListTemplateUsesServerGeneratedProtocolCommands(t *testing.T) {
+	content := readClientTemplateForTest(t, "../views/client/list.html")
+	for _, marker := range []string{
+		"row.ConnectionCommands",
+		"data-client-protocol-tab",
+		"data-client-protocol-panel",
+		"command.NormalCommand",
+		"command.QuickCommand",
+		"ConnectionProtocol",
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("client list misses data-driven protocol marker %q", marker)
+		}
 	}
-	var rendered bytes.Buffer
-	if err := tpl.Execute(&rendered, data); err != nil {
-		t.Fatalf("execute client list template: %v", err)
+	if strings.Contains(content, "-type={{.bridgeType}}") {
+		t.Fatal("client list must not hard-code Bridge commands in the template")
 	}
-	if !strings.Contains(rendered.String(), "-type=kcp'") {
-		t.Fatalf("rendered client list must keep bridge type inside the command string: %s", rendered.String())
+}
+
+func TestAttachClientBridgeCommandsProducesCompatibleFormats(t *testing.T) {
+	keys := []string{
+		"bridge_type", "bridge_addr", "bridge_port", "bridge_path",
+		"bridge_tcp_show", "bridge_tcp_show_ip", "bridge_tcp_show_port",
+		"bridge_tls_show", "bridge_tls_show_ip", "bridge_tls_show_port",
+		"bridge_ws_show", "bridge_ws_show_ip", "bridge_ws_show_port",
+		"tls_enable", "tls_bridge_port", "bridge_ws_port", "bridge_kcp_port",
+		"bridge_wss_port", "bridge_quic_port", "http3_proxy_port", "bridge_http3",
 	}
+	previous := make(map[string]string, len(keys))
+	for _, key := range keys {
+		previous[key] = beego.AppConfig.String(key)
+	}
+	t.Cleanup(func() {
+		for key, value := range previous {
+			beego.AppConfig.Set(key, value)
+		}
+	})
+	for key, value := range map[string]string{
+		"bridge_type": "tcp", "bridge_addr": "bridge.example.com", "bridge_port": "8024",
+		"bridge_path": "/ws", "bridge_tcp_show": "true", "bridge_tcp_show_port": "8024",
+		"bridge_tls_show": "true", "bridge_tls_show_port": "8025",
+		"bridge_ws_show": "true", "bridge_ws_show_port": "443",
+		"tls_enable": "true", "tls_bridge_port": "8025", "bridge_ws_port": "8027",
+		"bridge_kcp_port": "0", "bridge_wss_port": "0", "bridge_quic_port": "0",
+		"http3_proxy_port": "0", "bridge_http3": "false",
+	} {
+		beego.AppConfig.Set(key, value)
+	}
+	rows := []*clientListRow{{Remark: "兼容测试", VerifyKey: "test-vkey"}}
+	endpoints := attachClientBridgeCommands(rows, "panel.example.com")
+	if len(endpoints) < 2 || len(rows[0].ConnectionCommands) < 2 {
+		t.Fatalf("expected TCP and TLS commands, endpoints=%#v rows=%#v", endpoints, rows[0].ConnectionCommands)
+	}
+	byKey := make(map[string]clientBridgeCommand)
+	for _, command := range rows[0].ConnectionCommands {
+		byKey[command.Key] = command
+	}
+	for _, key := range []string{"tcp", "tls"} {
+		command, ok := byKey[key]
+		if !ok {
+			t.Fatalf("missing %s command: %#v", key, rows[0].ConnectionCommands)
+		}
+		if command.QuickFormat != "v1" {
+			t.Fatalf("%s quick command must stay v1 for old clients: %#v", key, command)
+		}
+		decoded, err := quickcommand.DecodeBase64(command.QuickCommand)
+		if err != nil {
+			t.Fatalf("decode %s quick command: %v", key, err)
+		}
+		if decoded.Server != "bridge.example.com:"+map[string]string{"tcp": "8024", "tls": "8025"}[key] {
+			t.Fatalf("unexpected %s server: %#v", key, decoded)
+		}
+	}
+	if byKey["tls"].TLS != true || !strings.Contains(byKey["tls"].NormalCommand, "-tls_enable=true") {
+		t.Fatalf("TLS command is incomplete: %#v", byKey["tls"])
+	}
+	if byKey["ws"].QuickFormat != "v2" {
+		t.Fatalf("WS quick command must use v2: %#v", byKey["ws"])
+	}
+	if protocol := bridgeendpoint.ProtocolName("tls"); protocol != "TCP + TLS" {
+		t.Fatalf("unexpected TLS protocol label %q", protocol)
+	}
+}
+
+func TestAttachClientBridgeCommandsOnlyPinsSelfSignedTLS(t *testing.T) {
+	keys := []string{
+		"bridge_type", "bridge_addr", "bridge_port", "bridge_path",
+		"bridge_tcp_show", "bridge_tcp_show_ip", "bridge_tcp_show_port",
+		"bridge_tls_show", "bridge_tls_show_ip", "bridge_tls_show_port",
+		"bridge_ws_show", "bridge_ws_show_ip", "bridge_ws_show_port",
+		"tls_enable", "tls_bridge_port", "bridge_ws_port", "bridge_kcp_port",
+		"bridge_wss_port", "bridge_quic_port", "http3_proxy_port", "bridge_http3",
+	}
+	previous := make(map[string]string, len(keys))
+	for _, key := range keys {
+		previous[key] = beego.AppConfig.String(key)
+	}
+	t.Cleanup(func() {
+		for key, value := range previous {
+			_ = beego.AppConfig.Set(key, value)
+		}
+	})
+	for key, value := range map[string]string{
+		"bridge_type": "tcp", "bridge_addr": "bridge.example.com", "bridge_port": "8024",
+		"bridge_path": "/ws", "bridge_tcp_show": "true", "bridge_tcp_show_port": "8024",
+		"bridge_tls_show": "true", "bridge_tls_show_port": "8025",
+		"bridge_ws_show": "true", "bridge_ws_show_port": "8027",
+		"tls_enable": "true", "tls_bridge_port": "8025", "bridge_ws_port": "8027",
+		"bridge_kcp_port": "0", "bridge_wss_port": "0", "bridge_quic_port": "0",
+		"http3_proxy_port": "0", "bridge_http3": "false",
+	} {
+		_ = beego.AppConfig.Set(key, value)
+	}
+
+	crypt.InitTls()
+	t.Cleanup(crypt.InitTls)
+	selfSignedRows := []*clientListRow{{Remark: "自签证书", VerifyKey: "self-signed-vkey"}}
+	attachClientBridgeCommands(selfSignedRows, "panel.example.com")
+	selfSignedTLS := findClientBridgeCommand(selfSignedRows[0].ConnectionCommands, "tls")
+	selfSignedCommand, err := quickcommand.DecodeBase64(selfSignedTLS.QuickCommand)
+	if err != nil {
+		t.Fatalf("decode self-signed TLS command: %v", err)
+	}
+	if selfSignedCommand.TLSFingerprint == "" {
+		t.Fatal("self-signed TLS command must include a certificate fingerprint")
+	}
+
+	certPath, keyPath := writeCASignedBridgeTestPair(t)
+	if err := crypt.InitTlsFromFiles(certPath, keyPath); err != nil {
+		t.Fatalf("load CA-signed Bridge certificate: %v", err)
+	}
+	caRows := []*clientListRow{{Remark: "CA 证书", VerifyKey: "ca-signed-vkey"}}
+	attachClientBridgeCommands(caRows, "panel.example.com")
+	caTLS := findClientBridgeCommand(caRows[0].ConnectionCommands, "tls")
+	caCommand, err := quickcommand.DecodeBase64(caTLS.QuickCommand)
+	if err != nil {
+		t.Fatalf("decode CA-signed TLS command: %v", err)
+	}
+	if caCommand.TLSFingerprint != "" {
+		t.Fatalf("CA-signed TLS command must rely on system trust instead of pinning: %#v", caCommand)
+	}
+	if caTLS.QuickFormat != "v1" {
+		t.Fatalf("CA-signed TLS quick command should remain v1-compatible: %#v", caTLS)
+	}
+}
+
+func findClientBridgeCommand(commands []clientBridgeCommand, key string) clientBridgeCommand {
+	for _, command := range commands {
+		if command.Key == key {
+			return command
+		}
+	}
+	return clientBridgeCommand{}
+}
+
+func writeCASignedBridgeTestPair(t *testing.T) (string, string) {
+	t.Helper()
+	now := time.Now()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "NPS Test CA"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(24 * time.Hour),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caCertificate, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(2),
+		Subject:               pkix.Name{CommonName: "bridge.example.com"},
+		DNSNames:              []string{"bridge.example.com"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, caCertificate, &leafKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(leafKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	certPath := filepath.Join(directory, "bridge.pem")
+	keyPath := filepath.Join(directory, "bridge.key")
+	certPEM := append(
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leafDER}),
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER})...,
+	)
+	if err := os.WriteFile(certPath, certPEM, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return certPath, keyPath
 }
 
 func readClientTemplateForTest(t *testing.T, path string) string {

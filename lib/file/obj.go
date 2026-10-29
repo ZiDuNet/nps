@@ -226,9 +226,6 @@ type Client struct {
 	ConnectionHistory *ConnectionHistory `json:",omitempty"`
 	CreateTime        string
 	LastOnlineTime    string
-	IpWhite           bool     // 是否启用ip白名单
-	IpWhitePass       string   // ip授权密码
-	IpWhiteList       []string // ip白名单
 	// BlackIpList remains a direct field for source compatibility with older
 	// embedders. The unified ACL mirrors it into SourceLists when records are
 	// loaded or edited.
@@ -246,6 +243,8 @@ type Client struct {
 	RegisteredOnly bool
 	ExpireTime     string // 到期时间,留空表示永不过期,格式 2006-01-02 15:04:05
 	sync.RWMutex
+	userConnMu     sync.Mutex
+	userConnOwners []int
 }
 
 // LocalProxyAllowed reports whether this client may ask the server to connect
@@ -290,8 +289,14 @@ type User struct {
 	// versions remain compatible when decoded from JSON.
 	MaxClientNum int
 	MaxTunnelNum int
-	ExpireTime   string
-	CreateTime   string
+	// MaxConn, UploadLimit and DownloadLimit apply across every client owned
+	// by this user. Zero means unlimited. Rate limits use KB/s and share the
+	// same directional semantics as client, tunnel and host limits.
+	MaxConn       int
+	UploadLimit   int
+	DownloadLimit int
+	ExpireTime    string
+	CreateTime    string
 	sync.RWMutex
 }
 
@@ -320,35 +325,82 @@ func (s *Client) CutConn() {
 }
 
 func (s *Client) AddConn() {
-	atomic.AddInt32(&s.NowConn, -1)
-	releaseGlobalConn()
+	released := false
+	for {
+		current := atomic.LoadInt32(&s.NowConn)
+		if current <= 0 {
+			break
+		}
+		if atomic.CompareAndSwapInt32(&s.NowConn, current, current-1) {
+			released = true
+			break
+		}
+	}
+	if released {
+		releaseGlobalConn()
+	}
+	s.userConnMu.Lock()
+	ownerCount := len(s.userConnOwners)
+	if ownerCount > 0 {
+		userID := s.userConnOwners[ownerCount-1]
+		s.userConnOwners = s.userConnOwners[:ownerCount-1]
+		s.userConnMu.Unlock()
+		releaseUserConnection(userID)
+		return
+	}
+	s.userConnMu.Unlock()
 }
 
 func (s *Client) GetConn() bool {
 	s.RLock()
 	maxConn := int64(s.MaxConn)
+	userID := s.UserId
 	s.RUnlock()
+	accountedUserID, userAccounted, userAllowed := acquireUserConnection(userID)
+	if !userAllowed {
+		return false
+	}
 	if maxConn <= 0 {
 		s.CutConn()
 		if acquireGlobalConn() {
+			s.rememberUserConn(accountedUserID, userAccounted)
 			return true
 		}
 		atomic.AddInt32(&s.NowConn, -1)
+		if userAccounted {
+			releaseUserConnection(accountedUserID)
+		}
 		return false
 	}
 	for {
 		current := atomic.LoadInt32(&s.NowConn)
 		if int64(current) >= maxConn {
+			if userAccounted {
+				releaseUserConnection(accountedUserID)
+			}
 			return false
 		}
 		if atomic.CompareAndSwapInt32(&s.NowConn, current, current+1) {
 			if acquireGlobalConn() {
+				s.rememberUserConn(accountedUserID, userAccounted)
 				return true
 			}
 			atomic.AddInt32(&s.NowConn, -1)
+			if userAccounted {
+				releaseUserConnection(accountedUserID)
+			}
 			return false
 		}
 	}
+}
+
+func (s *Client) rememberUserConn(userID int, accounted bool) {
+	if !accounted {
+		return
+	}
+	s.userConnMu.Lock()
+	s.userConnOwners = append(s.userConnOwners, userID)
+	s.userConnMu.Unlock()
 }
 
 func (s *Client) HasTunnel(t *Tunnel) (exist bool) {
@@ -485,7 +537,11 @@ type Tunnel struct {
 	// means unlimited and matches historical records without the field.
 	MaxConn  int
 	Password string
-	Remark   string
+	// ProxyAuth optionally overrides the owning client's Basic credentials for
+	// this HTTP forward proxy or SOCKS5 listener. It is stored as newline-
+	// separated username:password entries, matching Host.Auth.
+	ProxyAuth string
+	Remark    string
 	// TargetType selects the protocol for secret/P2P visitors: tcp (default),
 	// udp, or all. TCP targets use stream forwarding while UDP targets use
 	// length-framed datagrams so packet boundaries survive the Bridge.

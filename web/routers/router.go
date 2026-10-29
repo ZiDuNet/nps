@@ -27,11 +27,17 @@ func Init() {
 			beego.NSAutoRouter(&controllers.ClientController{}),
 			beego.NSAutoRouter(&controllers.UserController{}),
 			beego.NSAutoRouter(&controllers.AuthController{}),
-			beego.NSRouter("/auth/ipwhiteauth", &controllers.AuthController{}, "*:IpWhiteAuth"),
 			beego.NSRouter("/global/config", &controllers.GlobalController{}, "GET:Config"),
 			beego.NSRouter("/global/config/save", &controllers.GlobalController{}, "POST:SaveConfig"),
 			beego.NSRouter("/global/config/source", &controllers.GlobalController{}, "GET:ConfigSource;POST:SaveConfigSource"),
 			beego.NSRouter("/global/config/restart", &controllers.GlobalController{}, "POST:Restart"),
+			beego.NSRouter("/global/registration", &controllers.GlobalController{}, "GET:Registration"),
+			beego.NSRouter("/global/registration/save", &controllers.GlobalController{}, "POST:SaveRegistration"),
+			beego.NSRouter("/global/certificate", &controllers.GlobalController{}, "GET:Certificate"),
+			beego.NSRouter("/global/certificate/config", &controllers.GlobalController{}, "POST:SaveCertificateConfig"),
+			beego.NSRouter("/global/certificate/platform-domains", &controllers.GlobalController{}, "POST:SaveCertificatePlatformDomains"),
+			beego.NSRouter("/global/bridgecertificate", &controllers.GlobalController{}, "GET:BridgeCertificate;POST:SaveBridgeCertificate"),
+			beego.NSRouter("/global/bridgecertificate/check", &controllers.GlobalController{}, "POST:CheckBridgeCertificate"),
 			beego.NSRouter("/global/banlist", &controllers.GlobalController{}, "GET:Banlist;POST:Banlist"),
 			beego.NSRouter("/global/unban", &controllers.GlobalController{}, "POST:Unban"),
 			beego.NSRouter("/global/unbanall", &controllers.GlobalController{}, "POST:Unbanall"),
@@ -65,11 +71,17 @@ func Init() {
 		beego.AutoRouter(&controllers.ClientController{})
 		beego.AutoRouter(&controllers.UserController{})
 		beego.AutoRouter(&controllers.AuthController{})
-		beego.Router("/auth/ipwhiteauth", &controllers.AuthController{}, "*:IpWhiteAuth")
 		beego.Router("/global/config", &controllers.GlobalController{}, "GET:Config")
 		beego.Router("/global/config/save", &controllers.GlobalController{}, "POST:SaveConfig")
 		beego.Router("/global/config/source", &controllers.GlobalController{}, "GET:ConfigSource;POST:SaveConfigSource")
 		beego.Router("/global/config/restart", &controllers.GlobalController{}, "POST:Restart")
+		beego.Router("/global/registration", &controllers.GlobalController{}, "GET:Registration")
+		beego.Router("/global/registration/save", &controllers.GlobalController{}, "POST:SaveRegistration")
+		beego.Router("/global/certificate", &controllers.GlobalController{}, "GET:Certificate")
+		beego.Router("/global/certificate/config", &controllers.GlobalController{}, "POST:SaveCertificateConfig")
+		beego.Router("/global/certificate/platform-domains", &controllers.GlobalController{}, "POST:SaveCertificatePlatformDomains")
+		beego.Router("/global/bridgecertificate", &controllers.GlobalController{}, "GET:BridgeCertificate;POST:SaveBridgeCertificate")
+		beego.Router("/global/bridgecertificate/check", &controllers.GlobalController{}, "POST:CheckBridgeCertificate")
 		beego.Router("/global/banlist", &controllers.GlobalController{}, "GET:Banlist;POST:Banlist")
 		beego.Router("/global/unban", &controllers.GlobalController{}, "POST:Unban")
 		beego.Router("/global/unbanall", &controllers.GlobalController{}, "POST:Unbanall")
@@ -96,10 +108,11 @@ func apiV1Routers() []beego.LinkNamespace {
 		beego.NSRouter("/", &controllers.ApiV1InfoController{}, "GET:Info"),
 		beego.NSRouter("/time", &controllers.ApiV1InfoController{}, "GET:Time"),
 		beego.NSRouter("/authkey", &controllers.ApiV1InfoController{}, "GET:AuthKey"),
-		beego.NSRouter("/ipwhiteauth", &controllers.ApiV1InfoController{}, "*:IPWhiteAuth"),
+		beego.NSRouter("/ip-register", &controllers.ApiV1InfoController{}, "POST:IPRegister"),
 
 		// Account-scoped dashboard snapshots.
 		beego.NSRouter("/status", &controllers.ApiV1Controller{}, "GET:Status"),
+		beego.NSRouter("/status/live", &controllers.ApiV1Controller{}, "GET:StatusLive"),
 		beego.NSRouter("/overview", &controllers.ApiV1Controller{}, "GET:Overview"),
 
 		// Clients.
@@ -137,6 +150,8 @@ func apiV1Routers() []beego.LinkNamespace {
 		// Global configuration and operational endpoints.
 		beego.NSRouter("/global/config", &controllers.ApiV1Controller{}, "GET:GlobalConfig;POST:GlobalConfigSave"),
 		beego.NSRouter("/global/config/restart", &controllers.ApiV1Controller{}, "POST:GlobalRestart"),
+		beego.NSRouter("/global/bridge-certificate", &controllers.ApiV1Controller{}, "GET:BridgeCertificate;POST:BridgeCertificateSave"),
+		beego.NSRouter("/global/bridge-certificate/check", &controllers.ApiV1Controller{}, "POST:BridgeCertificateCheck"),
 		beego.NSRouter("/global/geo", &controllers.ApiV1Controller{}, "GET:GeoStatus"),
 		beego.NSRouter("/global/geo/update", &controllers.ApiV1Controller{}, "POST:GeoUpdate"),
 		beego.NSRouter("/global/banlist", &controllers.ApiV1Controller{}, "GET,POST:BanList"),
@@ -150,5 +165,6 @@ func apiV1Routers() []beego.LinkNamespace {
 
 		// Control-plane audit journal.
 		beego.NSRouter("/audit", &controllers.ApiV1Controller{}, "GET,POST:Audit"),
+		beego.NSRouter("/audit/connections", &controllers.ApiV1Controller{}, "GET,POST:AuditConnections"),
 	}
 }

@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.36</sub>
+﻿# NPS <sub>v1.1.37</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -159,8 +159,9 @@ make lint                  # golangci-lint
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" ./cmd/nps
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" ./cmd/npc
 
-# GUI 客户端（需安装 Wails）
-cd cmd/npc/npc-gui && wails build
+# GUI 客户端（需安装 Wails 3）
+cd cmd/npc/npc-gui
+wails3 build --tags npcgui
 ```
 
 ## Docker
@@ -189,12 +190,17 @@ docker-compose up -d
 - 🚀 [快速开始](docs/start.md)
 - ▶️ [运行命令速查](docs/run.md)
 - 👥 [用户体系](docs/user.md)
-- ⚙️ [服务端配置](docs/server_config.md)
-- 📱 [客户端配置](docs/client_config.md)
+- 🧭 [使用说明页面配置](docs/usage-guide.md)
+- ⚙️ [服务端配置文件参考](docs/server/server_config.md)
+- 📱 [客户端使用](docs/client/use.md)
+- 🧾 [NPC 配置文件参考](docs/client/config-file.md)
 - 🔧 [隧道详解](docs/tunnel.md)
 - 🐳 [Docker 部署](docs/docker.md)
 - 🖥️ [GUI 客户端](docs/gui.md)
 - 🌐 [平台泛域名与证书热更新](docs/extend/platform-domain.md)
+- 🔌 [对外 API v1](docs/api.md)
+- 🔐 [API 鉴权与兼容](docs/extend/api.md)
+- 🧾 [历史 Web API](docs/extend/webapi.md)
 - ⬆️ [升级迁移](docs/migrate.md)
 
 ## 更新日志
@@ -202,6 +208,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.37** (2026-10-29) - 新增 TCP、TLS、KCP、WS、WSS、QUIC 和 HTTP/3 的多 Bridge 连接命令展示与兼容 v2 快捷命令，完善多协议 NPC/GUI 与系统服务；新增用户共享并发和带宽额度、连接审计、独立证书设置页、自定义域名证书 API 约束，并重新设计注册与后台管理体验。
 
 - **v1.1.36** (2026-10-29) - 自助注册改为独立用户体系，支持配置默认客户端/隧道配额、有效期、图片验证码、注册限频和可选 SMTP 邮箱验证；新增管理员注册 API、普通用户自有客户端 IP 登记管理、可配置使用说明页面、支持搜索与源码视图的服务端配置页，以及默认 Geo 数据自动加载。现有配置、Bridge 协议和 NPC 版本保持兼容。
 

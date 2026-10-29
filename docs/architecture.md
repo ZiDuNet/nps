@@ -57,7 +57,7 @@ NPS 由服务端 `nps`、内网客户端 `npc` 和可选的 NPC GUI 组成。服
 
 ## 安全边界
 
-Bridge 端口使用 VerifyKey 认证，Web 管理使用 `web_username`/`web_password`，HTTP/SOCKS5 代理认证使用客户端的 Basic 认证配置。公网部署建议：
+Bridge 端口使用 VerifyKey，并对新版 NPC 使用挑战响应认证；Web 管理使用管理员会话或普通用户会话；HTTP/SOCKS5 优先使用混合代理规则级 Basic，未配置时回退到客户端公共 Basic；域名反代优先使用 Host 级认证。公网部署建议：
 
 1. 只开放实际使用的端口。
 2. 为管理面板、代理和客户端设置强密码或密钥。

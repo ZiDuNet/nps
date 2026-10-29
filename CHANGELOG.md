@@ -2,6 +2,62 @@
 
 所有重要变更记录在此。
 
+## [1.1.37] - 2026-10-29
+
+### Added
+
+- 用户模型新增全部所属客户端共享的最大并发连接数、上行带宽和下行带宽；`0` 表示不限，P2P 直连不纳入用户级连接和带宽计量。
+- 「全局参数 → 用户注册」新增独立 Tab，集中维护注册开关、新账号默认客户端/隧道/并发连接/上下行带宽/有效期、限频和 SMTP；服务端配置可视化页不再重复显示这些字段。
+- 管理员 `POST /api/v1/users/register` 新增 `max_conn`、`upload_limit`、`download_limit` 覆盖参数，别名 `max_connection`、`upload_rate`、`download_rate` 同样可用。
+- 客户端详情新增多 Bridge 连接方式页签，按实际监听状态展示 TCP、TCP + TLS、KCP、WS、WSS、QUIC 和 HTTP/3 共用入口的普通命令与快捷启动命令。
+- 快捷启动命令新增版本化 v2 JSON 格式，携带 Bridge 入口、协议、WS Path、QUIC ALPN、TLS Server Name 和证书指纹；TCP/TCP + TLS 继续生成永久兼容的 v1 格式。
+- NPC CLI、NPC GUI 和系统服务完整支持结构化协议参数；同一 VKey 可在不同进程或不同协议服务中并行连接，系统服务名按 `-tls`、`-kcp`、`-ws`、`-wss`、`-quic`、`-http3` 区分。
+- `nps.conf` 新增 `bridge_show_path`、各入口 `bridge_*_show`、`bridge_*_show_ip`、`bridge_*_show_port` 和 `bridge_quic_show_alpn`，用于分别控制命令展示地址、端口、Path 与 ALPN。
+- 系统配置新增独立的「证书设置」页面，集中维护 Bridge TLS 证书、平台泛域名与证书、HTTPS 默认证书与 ACME、管理面板 HTTPS、IP 登记 HTTPS 和 Bridge TLS 入口配置；Bridge 证书支持路径、上传、粘贴、校验、状态与到期信息展示。
+- 新增管理员 API `GET/POST /api/v1/global/bridge-certificate` 与 `POST /api/v1/global/bridge-certificate/check`，用于查看、校验和保存 Bridge 证书配置。
+- 新增 `connection_log_path` 和客户端连接日志：记录 Bridge 上下线、认证失败、隧道与域名代理协议、来源、目标、耗时及双向字节数，普通用户可查看所属客户端记录。
+- 新增 `GET/POST /api/v1/audit/connections`，并按登录主体限制 `/api/v1/audit` 与连接日志的可见范围。
+
+### Changed
+
+- 自定义域名的证书录入只保留“上传”和“粘贴”，不再向用户暴露或允许新增服务器路径；历史路径证书继续生效，并在编辑页以只读详情回显。平台泛域名和 Bridge 证书仍由管理员使用路径、上传或粘贴维护。
+- 上传或粘贴的证书必须先在页面通过有效性、私钥匹配和域名覆盖校验才能保存；保存后会持续展示来源、文件名、有效期、SAN、主题、颁发者和指纹等具体信息。
+- 新注册账号默认不限制客户端、隧道、并发连接、上下行带宽和有效期；旧配置中的显式值继续保留，升级只补齐缺失的三个新字段。
+- 用户级带宽由同一用户所有客户端共享，修改后已有连接即时采用新限额；降低并发连接上限只拒绝新连接，不主动切断已有连接。
+- 旧版 IP 白名单授权功能已彻底移除：客户端不再保存 `IpWhite`、`IpWhitePass`、`IpWhiteList`，代理链路不再拦截 `/authIp`，客户端表单不再显示旧授权项；统一使用 `RegisteredOnly`、`RegisterKey`、`RegisterMaxHours`、`/ip/register` 和内存登记。
+- 客户端列表“连接”列在在线状态后显示实际承载新连接的协议；展开详情将连接命令放在最前，并以协议页签组织，避免同时堆叠全部入口。
+- 仪表盘 Bridge 配置改为展示所有实际启用入口，并标记主入口、UDP、Path、ALPN 与 HTTP/3 共用入口；普通用户仪表盘也会展示当前允许其客户端使用的 Bridge 入口，但不会返回监听配置或宿主机信息。
+- 客户端列表和管理 API 新增 `ConnectionProtocol`、`ConnectionProtocols`、`ConnectionCommands` 与 `bridgeEndpoints`；原 `bridgeType`、`bridgePort` 字段继续保留。
+- v2 快捷命令可区分直连 QUIC 与 HTTP/3 共用入口，避免同一 VKey 安装两个系统服务时名称冲突。
+- Bridge 证书页面区分“当前运行证书”和“nps.conf 配置证书”，通过 SHA-256 指纹标记待重启状态；保存不会热加载或主动断开已有 TLS 连接。
+- 上传或粘贴的证书仅落盘到 `conf/bridgessl/bridge_server.pem`、`conf/bridgessl/bridge_server.key`，配置仍只使用 `nps.conf`，不新增第二套存储。
+- TLS 连接命令仅在当前 Bridge 证书为自签名证书时附带 `tls_fingerprint`；公网 CA 签发证书改用 NPC 的系统信任链和主机名校验，避免证书自动续期后旧固定指纹失效。
+
+### Fixed
+
+- 修复域名反代新增和编辑页在上传或粘贴证书时提交字段名与后端不一致，导致页面提示保存成功但证书未落盘的问题；现统一提交 `cert`/`key`，保存后生成并复用 `conf/certs/host_<ID>.pem/.key`。平台泛域名配置同时明确说明：未被主机引用时可更名或删除，已被引用时锁定名称但仍可更新证书。
+- `/api/v1/hosts` 新增和修改接口与 Web 表单执行同一套自定义域名证书规则：只接受上传或粘贴，拒绝新增服务器路径；历史路径仅可原样保留，Host 查询响应不返回服务器证书和私钥路径。
+- 修复用户级并发连接计数达到上限后仍继续放行的问题；现在按用户共享额度原子拒绝超额连接。
+- 修复 `audit_log_path` 留空仍回退写入 `audit.log` 的问题；空值现在真正关闭独立操作审计文件。
+- HTTP/3 配置存在但 HTTPS 入口关闭或 UDP 绑定失败时，不再生成无法连接的客户端命令。
+- HTTP/3 共用入口按 `bridge_host` 使用 Bridge 证书，避免浏览器站点证书与 Bridge 证书不一致导致 `CRYPTO_ERROR`。
+- HTTP/3 共用入口的认证连接会记录为 HTTP/3，不再误显示为普通 QUIC。
+- 同一 VKey 的独立 Bridge 会话在 Primary 模式下可以并行存在；Primary 仅决定新转发选择哪个完整会话，不再覆盖另一协议或另一服务端连接。
+- `bridge_*_show=false` 作为显式布尔值持久化，保存和重启后不会恢复为默认 `true`；旧配置升级会自动补齐这些持久开关。
+- 普通用户 API Token 的文档和生成提示改为“可再次查看”；由旧版本创建且没有加密密文的 Token 仍需重新生成一次。
+
+### Removed
+
+- 删除 `/auth/ipwhiteauth`、`/api/v1/ipwhiteauth`、`/authIp`、`web/static/page/auth.html` 及旧版持久化 IP 授权逻辑。
+- 新增公开的新版登记接口 `POST /api/v1/ip-register`，登记密钥只接受请求体，访问 IP 由服务端识别。
+
+### Compatibility
+
+- 历史 v1 快捷命令永久兼容；`1.1.28` 及以下 NPC 继续使用原有 TCP/KCP 握手和连接方式。
+- TCP、TCP + TLS 普通命令可继续由旧 NPC 使用；v2 快捷命令和新增协议页签需要 NPC/GUI `1.1.37` 或更高版本。
+- 现有 `bridge_type`、`bridge_port`、`bridge_ip`、`bridge_addr` 和客户端/API 历史字段不删除。新增展示覆盖只影响生成的命令，不改变实际监听。
+- 现有部署可继续留空 Bridge 证书字段并使用启动时生成的临时证书；证书配置方式不改变。
+
 ## [1.1.36] - 2026-10-29
 
 ### Added
@@ -89,7 +145,7 @@
 - 管理员可使用 `auth_key + timestamp` 签名或等价的网页管理密钥；普通用户可使用按授权范围生效的 `npsu_` Bearer Token。`/api/v1` 不接受浏览器 Session。
 - 所有 `/api/v1` 响应统一使用 `status`、`code`、`msg`、`request_id` 信封；失败响应额外提供 `error_code`，并同步返回 `X-Request-ID` 响应头。
 - 写接口支持 `application/json`，同时兼容表单和查询参数；列表接口支持 `offset`/`limit` 与 `page`/`page_size`，默认每页 20 条、最大 500 条。
-- 新增公开的对时、密钥发现和 IP 登记接口：`/api/v1/time`、`/api/v1/authkey`、`/api/v1/ipwhiteauth`。
+- 新增公开的对时、密钥发现和 IP 登记接口：`/api/v1/time`、`/api/v1/authkey`、`/api/v1/ipwhiteauth`。（其中旧 `/api/v1/ipwhiteauth` 已在后续版本删除，现使用 `/api/v1/ip-register`。）
 
 ### Compatibility
 

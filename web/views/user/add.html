@@ -64,9 +64,30 @@
                             <span id="user-max-tunnel-hint" class="help-block" data-i18n-zh="所有名下客户端共享此上限，普通隧道和域名规则都会计入。" data-i18n-en="All owned clients share this limit. Both tunnels and host rules count toward it.">所有名下客户端共享此上限，普通隧道和域名规则都会计入。</span>
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label class="form-label font-bold" for="user-max-conn" data-i18n-zh="最大并发连接数" data-i18n-en="Maximum concurrent connections">最大并发连接数</label>
+                        <div class="form-group-wrapper">
+                            <input id="user-max-conn" class="form-control" type="number" min="0" step="1" name="max_conn" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-max-conn-hint">
+                            <span id="user-max-conn-hint" class="help-block" data-i18n-zh="该用户所有客户端共享的 NPS 转发并发数；0 表示不限。P2P 直连不计入。" data-i18n-en="Shared NPS forwarding connections across all clients owned by this user; 0 means unlimited. Direct P2P traffic is not counted.">该用户所有客户端共享的 NPS 转发并发数；0 表示不限。P2P 直连不计入。</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-bold" for="user-upload-limit" data-i18n-zh="上行带宽（KB/s）" data-i18n-en="Upload bandwidth (KB/s)">上行带宽（KB/s）</label>
+                        <div class="form-group-wrapper">
+                            <input id="user-upload-limit" class="form-control" type="number" min="0" step="1" name="upload_limit" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-upload-limit-hint">
+                            <span id="user-upload-limit-hint" class="help-block" data-i18n-zh="访问者发往后端方向的总带宽，由该用户所有客户端和资源共享；0 表示不限。" data-i18n-en="Aggregate visitor-to-backend bandwidth shared by all of this user's clients and resources; 0 means unlimited.">访问者发往后端方向的总带宽，由该用户所有客户端和资源共享；0 表示不限。</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-bold" for="user-download-limit" data-i18n-zh="下行带宽（KB/s）" data-i18n-en="Download bandwidth (KB/s)">下行带宽（KB/s）</label>
+                        <div class="form-group-wrapper">
+                            <input id="user-download-limit" class="form-control" type="number" min="0" step="1" name="download_limit" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-download-limit-hint">
+                            <span id="user-download-limit-hint" class="help-block" data-i18n-zh="后端返回访问者方向的总带宽，由该用户所有客户端和资源共享；0 表示不限。" data-i18n-en="Aggregate backend-to-visitor bandwidth shared by all of this user's clients and resources; 0 means unlimited.">后端返回访问者方向的总带宽，由该用户所有客户端和资源共享；0 表示不限。</span>
+                        </div>
+                    </div>
 
                     <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="用户到期后停止访问资源" data-section-summary-en="Stop access after user expiry"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span></div>
-                    <div class="form-group">
+                    <div class="form-group form-group--wide">
                         <label class="form-label font-bold" for="user-expire-picker" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</label>
                         <div class="form-group-wrapper">
                             <div id="user-expire-time-picker" class="nps-datetime-picker" aria-describedby="user-expire-time-hint"></div>

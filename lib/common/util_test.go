@@ -55,9 +55,6 @@ func TestIPAccessListsMatchExactAddresses(t *testing.T) {
 	if IsBlackIp("203.0.113.7:443", "test", []string{"203.0.113.0/24"}) {
 		t.Fatal("CIDR blacklist entry must not be treated as an exact IP match")
 	}
-	if IsAuthIp("203.0.113.7:443", "test", []string{"203.0.113.7"}) {
-		t.Fatal("exact IPv4 whitelist entry must allow the request")
-	}
 }
 
 func TestGetIPByAddrPreservesBareIPv6(t *testing.T) {

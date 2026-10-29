@@ -139,8 +139,16 @@
                 <span class="value mono">{{ client.key }}</span>
               </div>
               <div class="info-row">
-                <span class="label">TLS</span>
-                <span class="value">{{ client.tls ? '已启用' : '未启用' }}</span>
+                <span class="label">协议</span>
+                <span class="value">{{ protocolLabel(client) }}</span>
+              </div>
+              <div v-if="client.bridgePath" class="info-row">
+                <span class="label">路径</span>
+                <span class="value mono">{{ client.bridgePath }}</span>
+              </div>
+              <div v-if="client.quicAlpn" class="info-row">
+                <span class="label">ALPN</span>
+                <span class="value mono">{{ client.quicAlpn }}</span>
               </div>
               <div v-if="client.error && client.running" class="info-row error-row">
                 <span class="label">错误</span>
@@ -177,7 +185,7 @@
           <div class="logs-toolbar">
             <select v-model="selectedClientId" class="select logs-select">
               <option value="">全部客户端</option>
-              <option v-for="client in clients" :key="`${client.addr}|${client.key}`" :value="`${client.addr}|${client.key}`">
+              <option v-for="client in clients" :key="clientIdentity(client)" :value="clientIdentity(client)">
                 {{ client.name }} ({{ client.addr }})
               </option>
             </select>
@@ -327,14 +335,41 @@
               <input v-model="manualForm.key" type="text" class="input" placeholder="例如: 6237ed8d52" />
             </div>
             <div class="form-group">
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="manualForm.tls" />
-                <span>启用 TLS</span>
-              </label>
+              <label class="form-label">Bridge 协议</label>
+              <select v-model="manualForm.transport" class="input">
+                <option value="tcp">TCP</option>
+                <option value="tcp+tls">TCP + TLS</option>
+                <option value="kcp">KCP（UDP）</option>
+                <option value="ws">WebSocket</option>
+                <option value="wss">WebSocket TLS</option>
+                <option value="quic">QUIC（UDP）</option>
+              </select>
             </div>
-            <div v-if="manualForm.tls" class="form-group">
+            <div v-if="manualTransportUsesPath" class="form-group">
+              <label class="form-label">WebSocket 路径</label>
+              <input v-model="manualForm.bridgePath" type="text" class="input" placeholder="/ws" />
+            </div>
+            <div v-if="manualForm.transport === 'quic'" class="form-group">
+              <label class="form-label">QUIC ALPN</label>
+              <input v-model="manualForm.quicAlpn" type="text" class="input" placeholder="nps" />
+            </div>
+            <div v-if="manualTransportUsesTLS" class="form-group">
+              <label class="form-label">TLS Server Name（可选）</label>
+              <input v-model="manualForm.tlsServerName" type="text" class="input" placeholder="证书域名，留空时使用连接地址" />
+            </div>
+            <div v-if="manualTransportUsesTLS" class="form-group">
               <label class="form-label">服务端证书指纹</label>
               <input v-model="manualForm.tlsFingerprint" type="text" class="input" placeholder="SHA-256 fingerprint（可选）" />
+            </div>
+            <div v-if="manualTransportUsesTLS" class="form-group">
+              <label class="form-label">自定义 CA 文件（可选）</label>
+              <input v-model="manualForm.tlsCaFile" type="text" class="input" placeholder="PEM 文件绝对路径" />
+            </div>
+            <div v-if="manualTransportUsesTLS" class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="manualForm.tlsInsecureSkipVerify" />
+                <span>跳过证书校验（仅用于临时测试）</span>
+              </label>
             </div>
             <div v-if="manualFormError" class="form-error">
               {{ manualFormError }}
@@ -412,10 +447,42 @@ export default {
       name: '',
       addr: '',
       key: '',
-      tls: false,
-      tlsFingerprint: ''
+      transport: 'tcp',
+      bridgePath: '',
+      quicAlpn: '',
+      tlsServerName: '',
+      tlsFingerprint: '',
+      tlsCaFile: '',
+      tlsInsecureSkipVerify: false
     })
     const manualFormError = ref('')
+    const manualTransportUsesPath = computed(() => ['ws', 'wss'].includes(manualForm.value.transport))
+    const manualTransportUsesTLS = computed(() => ['tcp+tls', 'wss', 'quic'].includes(manualForm.value.transport))
+
+    const clientIdentity = (client) => {
+      const addr = String(client?.addr || '')
+      const key = String(client?.key || '')
+      const transport = String(client?.transport || (client?.tls ? 'tcp' : 'tcp')).toLowerCase()
+      const tls = !!client?.tls || transport === 'wss' || transport === 'quic'
+      const path = String(client?.bridgePath || '')
+      const alpn = String(client?.quicAlpn || '')
+      const serverName = String(client?.tlsServerName || '')
+      if (transport === 'tcp' && !tls && !path && !alpn && !serverName) {
+        return `${addr}|${key}`
+      }
+      const protocol = transport === 'tcp' && tls ? 'tls' : transport
+      return [addr, key, protocol, path, alpn, serverName].join('|')
+    }
+
+    const protocolLabel = (client) => {
+      const transport = String(client?.transport || 'tcp').toLowerCase()
+      if (transport === 'tcp') return client?.tls ? 'TCP + TLS' : 'TCP'
+      if (transport === 'kcp') return 'KCP'
+      if (transport === 'ws') return 'WS'
+      if (transport === 'wss') return 'WSS'
+      if (transport === 'quic') return 'QUIC'
+      return transport.toUpperCase()
+    }
 
     // Theme
     const isDarkTheme = ref(true)
@@ -571,7 +638,7 @@ export default {
         if (rememberClientState.value) {
           const map = {}
           clients.value.forEach(c => {
-            const id = `${c.addr}|${c.key}`
+            const id = clientIdentity(c)
             map[id] = c.status || 'stopped'
           })
           if (typeof SaveClientStates === 'function') {
@@ -641,7 +708,7 @@ export default {
       console.warn('Wails App API not available — using mock implementations for browser debugging')
       GetShortcuts = async () => {
         return [
-          { name: 'MyServer', addr: '127.0.0.1:8024', key: 'alefa114df', tls: false, running: false },
+          { name: 'MyServer', addr: '127.0.0.1:8024', key: 'alefa114df', transport: 'tcp', tls: false, running: false },
         ]
       }
       AddShortcut = async (jsonStr) => {
@@ -727,11 +794,12 @@ export default {
 
             if (map) {
               for (const c of clients.value) {
-                const id = `${c.addr}|${c.key}`
-                if (map[id] === 'connected' && c.status !== 'connected') {
+                const id = clientIdentity(c)
+                const legacyId = `${c.addr}|${c.key}`
+                if ((map[id] === 'connected' || map[legacyId] === 'connected') && c.status !== 'connected') {
                   console.log('恢复客户端连接:', c.name)
                   try {
-                    await ToggleClient(c.name, c.addr, c.key, c.tls, true)
+                    await ToggleClient(id, '', '', c.tls, true)
                     await new Promise(r => setTimeout(r, 300))
                   } catch (e) {
                     console.warn('恢复客户端状态失败', id, e)
@@ -837,8 +905,13 @@ export default {
         name: '',
         addr: '',
         key: '',
-        tls: false,
-        tlsFingerprint: ''
+        transport: 'tcp',
+        bridgePath: '',
+        quicAlpn: '',
+        tlsServerName: '',
+        tlsFingerprint: '',
+        tlsCaFile: '',
+        tlsInsecureSkipVerify: false
       }
       manualFormError.value = ''
       showManualDialog.value = true
@@ -854,7 +927,7 @@ export default {
       manualFormError.value = ''
 
       // 验证必填字段
-      const { name, addr, key, tls, tlsFingerprint } = manualForm.value
+      const { name, addr, key, tlsFingerprint } = manualForm.value
 
       if (!addr || !addr.trim()) {
         manualFormError.value = '请输入连接地址'
@@ -867,8 +940,20 @@ export default {
       }
 
       // 检查是否已存在相同的客户端
-      const clientId = `${addr.trim()}|${key.trim()}`
-      const existingClient = clients.value.find(c => `${c.addr}|${c.key}` === clientId)
+      const selectedTransport = manualForm.value.transport
+      const transport = selectedTransport === 'tcp+tls' ? 'tcp' : selectedTransport
+      const tls = ['tcp+tls', 'wss', 'quic'].includes(selectedTransport)
+      const candidate = {
+        addr: addr.trim(),
+        key: key.trim(),
+        transport,
+        tls,
+        bridgePath: manualForm.value.bridgePath.trim(),
+        quicAlpn: manualForm.value.quicAlpn.trim(),
+        tlsServerName: manualForm.value.tlsServerName.trim()
+      }
+      const clientId = clientIdentity(candidate)
+      const existingClient = clients.value.find(c => clientIdentity(c) === clientId)
       if (existingClient) {
         manualFormError.value = '该客户端已存在，不能重复添加'
         return
@@ -880,8 +965,14 @@ export default {
           name: name.trim(),
           addr: addr.trim(),
           key: key.trim(),
-          tls: tls,
-          tlsFingerprint: tlsFingerprint.trim()
+          transport,
+          tls,
+          bridgePath: manualForm.value.bridgePath.trim(),
+          quicAlpn: manualForm.value.quicAlpn.trim(),
+          tlsServerName: manualForm.value.tlsServerName.trim(),
+          tlsFingerprint: tlsFingerprint.trim(),
+          tlsCaFile: manualForm.value.tlsCaFile.trim(),
+          tlsInsecureSkipVerify: !!manualForm.value.tlsInsecureSkipVerify
         }
 
         // 调用 AddShortcut API，传递 JSON 字符串
@@ -902,7 +993,7 @@ export default {
       if (!confirmed) return
 
       try {
-        await RemoveShortcut(client.name, client.addr, client.key)
+        await RemoveShortcut(clientIdentity(client), '', '')
         await loadClients()
         showMessage('已删除', 'success')
       } catch (error) {
@@ -913,7 +1004,7 @@ export default {
     }
 
     const toggleClient = async (client) => {
-      const clientId = `${client.addr}|${client.key}`
+      const clientId = clientIdentity(client)
       
       // 如果正在切换中，忽略这次点击
       if (toggleStates.value[clientId]) {
@@ -930,7 +1021,7 @@ export default {
       toggleStates.value[clientId] = true
       
       try {
-        await ToggleClient(client.name, client.addr, client.key, client.tls, newState)
+        await ToggleClient(clientId, '', '', client.tls, newState)
         console.log('ToggleClient succeeded')
         
         // 稍后重新加载状态，让后端返回最新的状态
@@ -942,7 +1033,7 @@ export default {
           if (rememberClientState.value) {
             const map = {}
             clients.value.forEach(c => {
-              const id = `${c.addr}|${c.key}`
+              const id = clientIdentity(c)
               map[id] = c.status || 'stopped'
             })
             // 保存到后端
@@ -1080,7 +1171,7 @@ export default {
           console.log('加载所有客户端日志，总共', clients.value.length, '个客户端')
           let allClientLogs = []
           for (const client of clients.value) {
-            const clientId = `${client.addr}|${client.key}`
+            const clientId = clientIdentity(client)
             console.log('加载客户端日志:', clientId)
             const logs = await GetConnectionLogs(clientId)
             console.log('该客户端返回:', logs ? logs.length + ' 条日志' : '0 条日志')
@@ -1161,7 +1252,7 @@ export default {
         } else {
           // 清空所有客户端的日志
           for (const client of clients.value) {
-            const clientId = `${client.addr}|${client.key}`
+            const clientId = clientIdentity(client)
             await ClearConnectionLogs(clientId)
           }
         }
@@ -1344,6 +1435,8 @@ export default {
       showManualDialog,
       manualForm,
       manualFormError,
+      manualTransportUsesPath,
+      manualTransportUsesTLS,
       showManualAddDialog,
       closeManualAddDialog,
       submitManualAdd,
@@ -1353,6 +1446,8 @@ export default {
       addConnection,
       removeClient,
       toggleClient,
+      clientIdentity,
+      protocolLabel,
       getStatusLabel,
       statusBadgeClass,
       clearLogs,

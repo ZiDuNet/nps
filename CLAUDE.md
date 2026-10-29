@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-NPS（内网穿透代理服务器）是一个轻量级、高性能的内网穿透工具，当前版本 1.1.0。基于原版 nps 0.26.10 二次开发。模块路径 `ehang.io/nps`，Go 1.24+。
+NPS（内网穿透代理服务器）是一个轻量级、高性能的内网穿透工具，当前源码版本以 `lib/version/version.go` 为准。基于原版 nps 0.26.10 二次开发。模块路径 `ehang.io/nps`，Go 1.26.0。
 
 ## 构建命令
 
@@ -31,7 +31,7 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w" ./cmd/npc
 
 # GUI 客户端（Wails）
 cd cmd/npc/npc-gui && wails dev   # 开发
-cd cmd/npc/npc-gui && wails build # 构建
+cd cmd/npc/npc-gui && wails3 build --tags npcgui # 构建（要求 Wails 3）
 
 # Docker
 docker build -f Dockerfile.nps -t nps .
@@ -45,10 +45,10 @@ C/S 架构，服务端（NPS）和客户端（NPC）通过 Bridge 层通信。�
 ### 通信协议
 
 连接建立流程（`bridge/bridge.go` → `cliProcess`）：
-1. 客户端发送 3 字节测试标志 + 版本字符串
-2. 服务端回复版本哈希
-3. 客户端发送 32 字节 vKey（验证密钥）
-4. 验证成功后发送 4 字节连接类型标志，分发到对应处理器
+1. 客户端发送 3 字节测试标志 `TST`，随后发送核心版本和产品版本
+2. NPC `1.1.29` 及以上使用时间戳和一次性随机挑战的双向证明；NPC `1.1.28` 及以下继续使用历史 32 字节验证流程
+3. 验证成功后发送 4 字节连接类型标志，分发到对应处理器
+4. 新版握手还会下发 Bridge 证书指纹及密钥绑定的指纹证明，供现代 P2P 等后续链路校验
 
 连接类型常量（定义在 `lib/common/const.go`）：
 - `WORK_MAIN`（main）→ 信号/控制连接，长连接 + 心跳
@@ -57,7 +57,7 @@ C/S 架构，服务端（NPS）和客户端（NPC）通过 Bridge 层通信。�
 - `WORK_REGISTER`（rgst）→ IP 注册
 - `WORK_SECRET`（sert）→ 私密代理连接
 - `WORK_FILE`（file）→ 文件传输通道
-- `WORK_P2P`（p2pm）→ P2P 中继
+- `WORK_P2P`（p2pm）→ 历史 P2P 中继；`p2sj`、`p2pv`、`p2pp` 等值用于新版 P2P 会话、访客、提供端及控制帧
 
 结构化消息的线协议格式（`lib/conn/conn.go` → `SendInfo`）：
 ```
@@ -86,18 +86,18 @@ Service 接口（`server/proxy/base.go`）：`Start() error` + `Close() error`�
 
 ### 数据模型（`lib/file/obj.go`）
 
-- `Client`：客户端（Id, VerifyKey, RateLimit, Flow, MaxConn, NowConn, WebUserName/Password, IpWhite, BlackIpList）
+- `Client`：客户端（Id, VerifyKey, RateLimit, Flow, MaxConn, NowConn, WebUserName/Password, BlackIpList, RegisteredOnly）
 - `Tunnel`：隧道（Id, Port, Mode, Client, Target, Health 健康检查配置）
 - `Host`：HTTP 虚拟主机（Host 域名, Location, Scheme, CertFilePath, AutoHttps）
 - `Target`：负载均衡后端（TargetStr 换行分隔多目标，`GetRandomTarget()` 轮询选择）
 - `Flow`：流量计量（ExportFlow, InletFlow, FlowLimit）
-- `Glob`：全局设置（BlackIpList, ServerUrl）
+- `Glob`：全局参数（全局名单、默认配额、ServerUrl、使用说明、平台泛域名和 API 密钥元数据）
 
 ### Web 管理面板
 
-Beego 框架，路由在 `web/routers/router.go`。AutoRouter 映射：`ClientController.Add` → `/client/add`。
+Beego + Bootstrap 5 管理面板，路由在 `web/routers/router.go`。AutoRouter 映射：`ClientController.Add` → `/client/add`。
 
-控制器（`web/controllers/`）：IndexController（仪表盘）、LoginController（认证+验证码）、ClientController（客户端 CRUD）、AuthController（IP 白名单授权）、GlobalController（全局设置）。
+控制器（`web/controllers/`）：BaseController（会话、管理员/用户/API 鉴权与权限过滤）、IndexController（仪表盘、普通隧道与 Host）、ClientController（客户端）、UserController（用户与 API Token）、AuthController（历史对时和 auth_key 发现）、GlobalController（全局参数、nps.conf、证书、IP 登记、Geo 与封禁）、AuditController（审计），并提供 `/api/v1` 控制器。
 
 静态文件通过 `go:embed` 嵌入可执行文件（`web/embed.go`），启动时按需释放到临时目录。
 
@@ -105,11 +105,11 @@ Beego 框架，路由在 `web/routers/router.go`。AutoRouter 映射：`ClientCo
 
 - 服务端：`conf/nps.conf`（INI 格式，beego 加载），首次启动自动生成随机密码
 - 客户端：无需配置文件，通过命令行参数或交互式输入启动
-- 关键端口：Bridge TCP 8024、Bridge TLS 8025、Web 面板 8080、HTTP 代理 80、HTTPS 代理 443
+- 关键端口：Bridge TCP 8024、Bridge TLS 8025、Web 面板 8081、HTTP 代理 80、HTTPS 代理 443；KCP、WS、WSS、QUIC 和 HTTP/3 使用按需启用的独立监听
 
 ### 测试模式
 
-5 个测试文件，分布在 `lib/config/`、`lib/conn/`、`lib/nps_mux/`、`lib/pmux/`、`server/proxy/`。使用 `net.Pipe()` 模拟连接、`t.TempDir()` 管理临时配置、`t.Cleanup()` 恢复全局状态。
+测试文件分布在整个根模块及 `cmd/npc/npc-gui` 子模块，覆盖配置解析、握手、代理、Web 控制器、审计、快捷命令和 GUI 绑定。测试使用 `net.Pipe()`/`httptest` 模拟连接与请求、`t.TempDir()` 管理临时配置、`t.Cleanup()` 恢复全局状态；不要依赖固定测试文件数量，直接执行 `go test ./...` 和 GUI 子模块测试。
 
 ### 目录概览
 

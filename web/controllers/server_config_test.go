@@ -5,6 +5,7 @@ import (
 	"errors"
 	"html"
 	"html/template"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -127,7 +128,12 @@ func TestServerConfigTemplateRendersEveryConfiguredField(t *testing.T) {
 }
 
 func TestSystemSettingsPagesExposeSharedContentTabs(t *testing.T) {
-	for _, path := range []string{"../views/global/index.html", "../views/global/config.html"} {
+	for _, path := range []string{
+		"../views/global/index.html",
+		"../views/global/registration.html",
+		"../views/global/config.html",
+		"../views/global/certificate.html",
+	} {
 		content, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)
@@ -138,12 +144,228 @@ func TestSystemSettingsPagesExposeSharedContentTabs(t *testing.T) {
 			`class="system-settings-tab is-active"`,
 			`data-console-navigate`,
 			`/global/index`,
+			`/global/registration`,
 			`/global/config`,
+			`/global/certificate`,
 		} {
 			if !strings.Contains(template, marker) {
 				t.Fatalf("%s misses shared settings tab marker %q", path, marker)
 			}
 		}
+	}
+}
+
+func TestRegistrationSettingsTemplateRendersBenefitControls(t *testing.T) {
+	content := strings.Join([]string{
+		"allow_user_register=true",
+		"register_captcha=true",
+		"register_email_verify=true",
+		"register_max_clients=1",
+		"register_max_tunnels=2",
+		"register_max_conn=3",
+		"register_upload_limit=128",
+		"register_download_limit=256",
+		"register_expire_days=0",
+		"register_rate_window=60",
+		"register_rate_limit=5",
+		"register_ip_rate_limit=3",
+		"register_email_code_ttl=600",
+		"register_email_code_cooldown=60",
+		"smtp_host=smtp.example.com",
+		"smtp_port=587",
+		"smtp_security=starttls",
+		"smtp_username=nps@example.com",
+		"smtp_password=secret-password",
+		"smtp_from=nps@example.com",
+	}, "\n")
+	sections, summary, err := registrationConfigSections(content)
+	if err != nil {
+		t.Fatalf("registrationConfigSections() error = %v", err)
+	}
+	tpl, err := template.ParseFiles("../views/global/registration.html")
+	if err != nil {
+		t.Fatalf("registration template does not parse: %v", err)
+	}
+	var output bytes.Buffer
+	err = tpl.Execute(&output, map[string]interface{}{
+		"web_base_url":                         "",
+		"config_path":                          "/tmp/nps/conf/nps.conf",
+		"registration_config_sections":         sections,
+		"registration_config_summary":          summary,
+		"registration_config_error":            "",
+		"registration_config_validation_error": "",
+	})
+	if err != nil {
+		t.Fatalf("execute registration template: %v", err)
+	}
+	page := output.String()
+	for _, marker := range []string{
+		"/global/index", "/global/registration", "/global/config", "/global/certificate",
+		`name="config_allow_user_register"`,
+		`name="config_register_max_clients" value="1"`,
+		`name="config_register_max_tunnels" value="2"`,
+		`name="config_register_max_conn" value="3"`,
+		`name="config_register_upload_limit" value="128"`,
+		`name="config_register_download_limit" value="256"`,
+		`name="config_register_expire_days" value="0"`,
+		`name="config_smtp_password"`,
+		`data-registration-field`,
+		"/global/registration/save",
+	} {
+		if !strings.Contains(page, marker) {
+			t.Fatalf("registration settings page is missing %q", marker)
+		}
+	}
+	if strings.Contains(page, "secret-password") {
+		t.Fatal("SMTP password must not be rendered into the registration page")
+	}
+}
+
+func TestRegistrationScopedUpdatesPreserveUnrelatedSettings(t *testing.T) {
+	content := strings.Join([]string{
+		"web_port=8081",
+		"allow_user_register=false",
+		"register_captcha=true",
+		"register_email_verify=false",
+		"register_max_clients=0",
+		"register_max_tunnels=0",
+		"register_max_conn=0",
+		"register_upload_limit=0",
+		"register_download_limit=0",
+		"register_expire_days=0",
+		"register_rate_window=60",
+		"register_rate_limit=5",
+		"register_ip_rate_limit=3",
+		"register_email_code_ttl=600",
+		"register_email_code_cooldown=60",
+		"smtp_password=existing-secret",
+		"custom_deployment_flag=keep-me",
+	}, "\n")
+	form := url.Values{
+		"config_allow_user_register":          {"true"},
+		"config_register_captcha":             {"true"},
+		"config_register_email_verify":        {"false"},
+		"config_register_max_clients":         {"0"},
+		"config_register_max_tunnels":         {"0"},
+		"config_register_max_conn":            {"12"},
+		"config_register_upload_limit":        {"128"},
+		"config_register_download_limit":      {"256"},
+		"config_register_expire_days":         {"30"},
+		"config_register_rate_window":         {"60"},
+		"config_register_rate_limit":          {"5"},
+		"config_register_ip_rate_limit":       {"3"},
+		"config_register_email_code_ttl":      {"600"},
+		"config_register_email_code_cooldown": {"60"},
+		"config_enabled_smtp_password":        {"1"},
+		"config_smtp_password":                {""},
+		"config_web_port":                     {"9999"},
+	}
+	request := httptest.NewRequest(http.MethodPost, "/global/registration/save", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	updates, err := parseServerConfigUpdatesForKeys(request, content, registrationConfigKeys())
+	if err != nil {
+		t.Fatal(err)
+	}
+	effective := effectiveServerConfigValues(serverConfigKeyValues(content), updates)
+	if effective["allow_user_register"] != "true" ||
+		effective["register_max_conn"] != "12" ||
+		effective["register_upload_limit"] != "128" ||
+		effective["register_download_limit"] != "256" ||
+		effective["register_expire_days"] != "30" {
+		t.Fatalf("registration updates were not applied: %#v", effective)
+	}
+	if effective["smtp_password"] != "existing-secret" {
+		t.Fatal("leaving an enabled masked SMTP password blank should preserve the current value")
+	}
+	if effective["web_port"] != "8081" || effective["custom_deployment_flag"] != "keep-me" {
+		t.Fatalf("registration-scoped save modified unrelated settings: %#v", effective)
+	}
+}
+
+func TestServerConfigVisualSectionsExcludeCertificateSettings(t *testing.T) {
+	sections, _, err := serverConfigSections(npsconf.DefaultNpsConf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filtered := filterServerConfigSections(sections, certificateConfigKeySet)
+	fields := make(map[string]serverConfigFieldView)
+	for _, section := range filtered {
+		for _, field := range section.Fields {
+			fields[field.Key] = field
+		}
+	}
+	for _, key := range []string{
+		"https_default_cert_file", "https_default_key_file", "force_auto_ssl",
+		"ssl_path", "ssl_email", "ssl_ca", "ssl_zerossl_api",
+		"ssl_cache_max", "ssl_cache_reload", "ssl_cache_idle",
+		"bridge_cert_file", "bridge_key_file",
+		"web_open_ssl", "web_cert_file", "web_key_file",
+		"ip_register_cert_file", "ip_register_key_file",
+		"tls_enable", "tls_bridge_port",
+	} {
+		if _, exists := fields[key]; exists {
+			t.Fatalf("server configuration visual editor still contains certificate setting %q", key)
+		}
+	}
+	for _, key := range []string{"http_proxy_port", "bridge_port", "web_password", "allow_ports"} {
+		if _, exists := fields[key]; !exists {
+			t.Fatalf("server configuration visual editor unexpectedly lost %q", key)
+		}
+	}
+	filtered = filterServerConfigSections(sections, generalServerConfigExcludedKeys())
+	fields = make(map[string]serverConfigFieldView)
+	for _, section := range filtered {
+		for _, field := range section.Fields {
+			fields[field.Key] = field
+		}
+	}
+	for _, key := range registrationConfigKeys() {
+		if _, exists := fields[key]; exists {
+			t.Fatalf("server configuration visual editor still contains registration setting %q", key)
+		}
+	}
+	for _, key := range []string{"http_proxy_port", "bridge_port", "web_password", "allow_ports"} {
+		if _, exists := fields[key]; !exists {
+			t.Fatalf("general server configuration unexpectedly lost %q after registration filtering", key)
+		}
+	}
+}
+
+func TestCertificateScopedUpdatesDoNotRemoveUnrelatedOptionalSettings(t *testing.T) {
+	content := strings.Join([]string{
+		"http_proxy_port=30111",
+		"force_auto_ssl=false",
+		"web_open_ssl=false",
+		"web_cert_file=conf/server.pem",
+		"web_key_file=conf/server.key",
+		"custom_deployment_flag=keep-me",
+	}, "\n")
+	form := url.Values{
+		"config_force_auto_ssl":         {"true"},
+		"config_enabled_force_auto_ssl": {"1"},
+		"config_web_open_ssl":           {"false"},
+		"config_tls_enable":             {"false"},
+		"config_http_proxy_port":        {"9999"},
+	}
+	request := httptest.NewRequest(http.MethodPost, "/global/certificate/config", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	keys := make([]string, 0)
+	for _, group := range certificateConfigGroups {
+		keys = append(keys, group.Keys...)
+	}
+	updates, err := parseServerConfigUpdatesForKeys(request, content, keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	effective := effectiveServerConfigValues(serverConfigKeyValues(content), updates)
+	if effective["force_auto_ssl"] != "true" {
+		t.Fatalf("certificate update did not apply force_auto_ssl: %#v", effective)
+	}
+	if effective["http_proxy_port"] != "30111" {
+		t.Fatalf("certificate-scoped save modified unrelated http_proxy_port: %#v", effective)
+	}
+	if effective["custom_deployment_flag"] != "keep-me" {
+		t.Fatalf("certificate-scoped save modified custom setting: %#v", effective)
 	}
 }
 
@@ -175,6 +397,22 @@ func TestServerConfigSectionsExposeAllTemplateAndCompatibilityKeys(t *testing.T)
 	for _, key := range []string{"bridge_kcp_port", "bridge_ws_port", "bridge_quic_port", "ip_register_port"} {
 		if fields[key].Type != "int" {
 			t.Fatalf("%s should be represented as an integer port, got %q", key, fields[key].Type)
+		}
+	}
+	for _, key := range []string{
+		"bridge_tcp_show", "bridge_tls_show", "bridge_kcp_show",
+		"bridge_ws_show", "bridge_wss_show", "bridge_quic_show",
+	} {
+		if fields[key].Type != "bool" || fields[key].Optional {
+			t.Fatalf("%s should be a persistent boolean display switch: %+v", key, fields[key])
+		}
+	}
+	for _, key := range []string{
+		"bridge_tcp_show_ip", "bridge_tls_show_port", "bridge_ws_show_ip",
+		"bridge_wss_show_port", "bridge_quic_show_alpn", "bridge_show_path",
+	} {
+		if _, ok := fields[key]; !ok {
+			t.Fatalf("Bridge command display setting %q is missing", key)
 		}
 	}
 	compatibilityVisible := false
@@ -314,6 +552,27 @@ func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
 			t.Fatal("enabled optional setting was unexpectedly omitted")
 		}
 	}
+
+	form.Set("config_bridge_tcp_show", "false")
+	request = httptest.NewRequest("POST", "/global/config/save", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	updates, err = parseServerConfigUpdates(request, npsconf.DefaultNpsConf)
+	if err != nil {
+		t.Fatalf("parseServerConfigUpdates(display=false) error = %v", err)
+	}
+	foundDisabledDisplay := false
+	for _, update := range updates {
+		if update.Key != "bridge_tcp_show" {
+			continue
+		}
+		if update.Omit || update.Value != "false" {
+			t.Fatalf("bridge_tcp_show=false was not persisted: %+v", update)
+		}
+		foundDisabledDisplay = true
+	}
+	if !foundDisabledDisplay {
+		t.Fatal("bridge_tcp_show=false update is missing")
+	}
 }
 
 func TestWriteServerConfigPreservesCustomEntriesAndRemovesOmittedKeys(t *testing.T) {
@@ -351,6 +610,16 @@ func TestValidateServerConfigUpdateSetRequiresCertificatePairs(t *testing.T) {
 		"web_open_ssl": "true", "web_cert_file": "server.pem", "web_key_file": "",
 	}, nil); err == nil {
 		t.Fatal("expected HTTPS certificate pair validation error")
+	}
+	if err := validateServerConfigUpdateSet(map[string]string{
+		"bridge_cert_file": "bridge.pem",
+	}, nil); err == nil {
+		t.Fatal("expected Bridge TLS certificate pair validation error")
+	}
+	if err := validateServerConfigUpdateSet(map[string]string{
+		"bridge_cert_file": "bridge.pem", "bridge_key_file": "bridge.key",
+	}, nil); err != nil {
+		t.Fatalf("valid Bridge TLS certificate pair rejected: %v", err)
 	}
 	if err := validateServerConfigUpdateSet(map[string]string{
 		"ip_register_port": "9443", "ip_register_cert_file": "cert.pem", "ip_register_key_file": "key.pem",

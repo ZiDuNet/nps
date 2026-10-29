@@ -142,6 +142,13 @@ export class ShortClient {
              */
             this["key"] = "";
         }
+        if (!("transport" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["transport"] = "";
+        }
         if (!("tls" in $$source)) {
             /**
              * @member
@@ -156,6 +163,41 @@ export class ShortClient {
              * @type {string}
              */
             this["tlsFingerprint"] = "";
+        }
+        if (!("bridgePath" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["bridgePath"] = "";
+        }
+        if (!("quicAlpn" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["quicAlpn"] = "";
+        }
+        if (!("tlsServerName" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["tlsServerName"] = "";
+        }
+        if (!("tlsCaFile" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["tlsCaFile"] = "";
+        }
+        if (!("tlsInsecureSkipVerify" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["tlsInsecureSkipVerify"] = false;
         }
         if (!("running" in $$source)) {
             /**

@@ -168,6 +168,59 @@ type tunnelListRow struct {
 	DownloadRate  int64 `json:"DownloadRate"`
 }
 
+// MarshalJSON keeps write-only mixed-proxy credentials out of every list and
+// detail response while preserving the historical flattened Tunnel shape.
+func (r *tunnelListRow) MarshalJSON() ([]byte, error) {
+	if r == nil {
+		return []byte("null"), nil
+	}
+	proxyAuthConfigured := false
+	if r.Tunnel != nil {
+		r.Tunnel.RLock()
+		proxyAuthConfigured = file.BasicAuthConfigured(r.Tunnel.ProxyAuth)
+		r.Tunnel.RUnlock()
+	}
+	tunnelJSON, err := json.Marshal(r.Tunnel)
+	if err != nil {
+		return nil, err
+	}
+	payload := make(map[string]json.RawMessage)
+	if len(tunnelJSON) > 0 && string(tunnelJSON) != "null" {
+		if err := json.Unmarshal(tunnelJSON, &payload); err != nil {
+			return nil, err
+		}
+	}
+	delete(payload, "ProxyAuth")
+	extras, err := json.Marshal(struct {
+		AccessHost          string `json:"AccessHost,omitempty"`
+		AccessAddr          string `json:"AccessAddr,omitempty"`
+		AccessAddress       string `json:"AccessAddress,omitempty"`
+		AccessURL           string `json:"AccessURL,omitempty"`
+		UploadLimit         int    `json:"UploadLimit"`
+		DownloadLimit       int    `json:"DownloadLimit"`
+		UploadRate          int64  `json:"UploadRate"`
+		DownloadRate        int64  `json:"DownloadRate"`
+		ProxyAuthConfigured bool   `json:"ProxyAuthConfigured"`
+	}{
+		AccessHost:          r.AccessHost,
+		AccessAddr:          r.AccessAddr,
+		AccessAddress:       r.AccessAddress,
+		AccessURL:           r.AccessURL,
+		UploadLimit:         r.UploadLimit,
+		DownloadLimit:       r.DownloadLimit,
+		UploadRate:          r.UploadRate,
+		DownloadRate:        r.DownloadRate,
+		ProxyAuthConfigured: proxyAuthConfigured,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(extras, &payload); err != nil {
+		return nil, err
+	}
+	return json.Marshal(payload)
+}
+
 type platformDomainOption struct {
 	ID                    string
 	Wildcard              string
@@ -770,6 +823,53 @@ func parseMixProxySettings(s *IndexController, current *file.Tunnel) (httpEnable
 	return httpEnabled, socksEnabled, aclMode, aclRules, submitted, nil
 }
 
+// parseTunnelProxyAuth keeps a configured mixed-proxy account set private on
+// edit. A blank textarea preserves the current value unless the explicit clear
+// checkbox is submitted, while a non-empty value is normalized and validated.
+func parseTunnelProxyAuth(s *IndexController, current *file.Tunnel) (value string, submitted bool, err error) {
+	if s == nil || s.Ctx == nil || s.Ctx.Request == nil {
+		if current != nil {
+			current.RLock()
+			value = current.ProxyAuth
+			current.RUnlock()
+		}
+		return value, false, nil
+	}
+	return parseTunnelProxyAuthRequest(s.Ctx.Request, current)
+}
+
+func parseTunnelProxyAuthRequest(request *http.Request, current *file.Tunnel) (value string, submitted bool, err error) {
+	if current != nil {
+		current.RLock()
+		value = current.ProxyAuth
+		current.RUnlock()
+	}
+	if request == nil {
+		return value, false, nil
+	}
+	if parseErr := request.ParseForm(); parseErr != nil {
+		return "", false, errors.New("读取混合代理认证设置失败")
+	}
+	_, fieldSubmitted := request.Form["proxy_auth"]
+	clear := strings.EqualFold(strings.TrimSpace(request.FormValue("clear_proxy_auth")), "1") ||
+		strings.EqualFold(strings.TrimSpace(request.FormValue("clear_proxy_auth")), "true")
+	if clear {
+		return "", true, nil
+	}
+	if !fieldSubmitted {
+		return value, false, nil
+	}
+	candidate := strings.TrimSpace(request.FormValue("proxy_auth"))
+	if candidate == "" {
+		return value, false, nil
+	}
+	candidate = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(candidate, "\r\n", "\n"), "\r", "\n"))
+	if _, err = file.ParseBasicAuth(candidate); err != nil {
+		return "", false, err
+	}
+	return candidate, true, nil
+}
+
 func copyHealthConfig(dst *file.Health, src *file.Health) {
 	if dst == nil {
 		return
@@ -1234,6 +1334,11 @@ func (s *IndexController) Add() {
 				return
 			}
 		}
+		proxyAuth, _, proxyAuthErr := parseTunnelProxyAuth(s, nil)
+		if proxyAuthErr != nil {
+			s.AjaxErr("混合代理 Basic 认证无效: " + proxyAuthErr.Error())
+			return
+		}
 		if file.HealthConfigEnabled(&health) && tunnelMode != "tcp" {
 			s.AjaxErr("健康检查目前仅支持 TCP 隧道")
 			return
@@ -1253,6 +1358,7 @@ func (s *IndexController) Add() {
 			Status:         true,
 			Remark:         s.getEscapeString("remark"),
 			Password:       s.getEscapeString("password"),
+			ProxyAuth:      proxyAuth,
 			TargetType:     normalizeTargetType(s.GetString("target_type")),
 			LocalPath:      s.getEscapeString("local_path"),
 			StripPre:       s.getEscapeString("strip_pre"),
@@ -1331,6 +1437,7 @@ func (s *IndexController) Copy() {
 	oldServerIP := oldTask.ServerIp
 	oldRemark := oldTask.Remark
 	oldPassword := oldTask.Password
+	oldProxyAuth := oldTask.ProxyAuth
 	oldLocalPath := oldTask.LocalPath
 	oldStripPre := oldTask.StripPre
 	oldProtoVersion := oldTask.ProtoVersion
@@ -1372,6 +1479,7 @@ func (s *IndexController) Copy() {
 			Status:         true,
 			Remark:         oldRemark,
 			Password:       oldPassword,
+			ProxyAuth:      oldProxyAuth,
 			LocalPath:      oldLocalPath,
 			StripPre:       oldStripPre,
 			ProtoVersion:   oldProtoVersion,
@@ -1459,6 +1567,7 @@ func (s *IndexController) Edit() {
 			t.RLock()
 			s.Data["BlackIpList"] = strings.Join(t.BlackIpList, "\r\n")
 			s.Data["WhiteIpList"] = strings.Join(t.WhiteIpList, "\r\n")
+			s.Data["proxyAuthConfigured"] = file.BasicAuthConfigured(t.ProxyAuth)
 			tunnelMode = normalizedTunnelMode(t.Mode)
 			if tunnelMode == "httpProxy" || tunnelMode == "socks5" {
 				// Legacy proxy records are edited through the unified form. Saving
@@ -1604,6 +1713,11 @@ func (s *IndexController) Edit() {
 					return
 				}
 			}
+			desiredProxyAuth, _, proxyAuthErr := parseTunnelProxyAuth(s, t)
+			if proxyAuthErr != nil {
+				s.AjaxErr("混合代理 Basic 认证无效: " + proxyAuthErr.Error())
+				return
+			}
 			desiredTargetValue := s.getEscapeString("target")
 			if err := validateBridgeTargetPermission(s.IsAdmin(), desiredTargetValue); err != nil {
 				s.AjaxErr(err.Error())
@@ -1627,6 +1741,7 @@ func (s *IndexController) Edit() {
 			t.Mode = desiredMode
 			t.Target = desiredTarget
 			t.Password = s.getEscapeString("password")
+			t.ProxyAuth = desiredProxyAuth
 			t.TargetType = desiredTargetType
 			t.Id = id
 			t.LocalPath = s.getEscapeString("local_path")
@@ -1983,7 +2098,14 @@ func (s *IndexController) AddHost() {
 			return
 		}
 		id := int(file.GetDb().JsonDb.GetHostId())
-		certFilePath, keyFilePath, certErr := s.resolveHostCertificatePaths(id, hostName, s.Ctx.Request)
+		certFilePath, keyFilePath, certErr := s.resolveHostCertificatePaths(
+			id,
+			hostName,
+			s.Ctx.Request,
+			"",
+			"",
+			platformDomainID != "",
+		)
 		if certErr != nil {
 			s.AjaxErr("add fail, " + certErr.Error())
 			return
@@ -2090,6 +2212,8 @@ func (s *IndexController) EditHost() {
 			currentClient := storedHost.Client
 			currentAuth := storedHost.Auth
 			currentRegisteredOnly := storedHost.RegisteredOnly
+			currentCertFilePath := storedHost.CertFilePath
+			currentKeyFilePath := storedHost.KeyFilePath
 			storedHost.RUnlock()
 			aclPriority, aclBlack, aclWhite, aclSubmitted, aclErr := parseSourceListsFromRequest(s, &storedHost.SourceLists)
 			if aclErr != nil {
@@ -2208,7 +2332,14 @@ func (s *IndexController) EditHost() {
 				s.AjaxErr("modified error," + err.Error())
 				return
 			}
-			desiredCertFilePath, desiredKeyFilePath, certErr := s.resolveHostCertificatePaths(id, desiredHost, s.Ctx.Request)
+			desiredCertFilePath, desiredKeyFilePath, certErr := s.resolveHostCertificatePaths(
+				id,
+				desiredHost,
+				s.Ctx.Request,
+				currentCertFilePath,
+				currentKeyFilePath,
+				platformDomainID != "",
+			)
 			if certErr != nil {
 				s.AjaxErr("modified error," + certErr.Error())
 				return

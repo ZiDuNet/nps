@@ -272,6 +272,10 @@ func NewConnWithTLS(tp string, vkey string, server string, connType string, prox
 	if len(tlsOptions) > 0 {
 		options = tlsOptions[0]
 	}
+	if transport == "tls" || transport == "tcp+tls" || transport == "tcp-tls" {
+		transport = "tcp"
+		tlsEnabled = true
+	}
 	switch transport {
 	case "tcp":
 		ctx, cancel := context.WithTimeout(context.Background(), clientDialTimeout)

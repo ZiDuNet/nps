@@ -15,6 +15,7 @@ import (
 	"ehang.io/nps/bridge"
 
 	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/connectionlog"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/version"
@@ -64,6 +65,7 @@ func (s *BaseController) Prepare() {
 		s.Ctx.ResponseWriter.Header().Set("X-Request-ID", s.requestID)
 	}
 	audit.Configure(beego.AppConfig.String("audit_log_path"))
+	connectionlog.Configure(beego.AppConfig.String("connection_log_path"))
 	controllerName, actionName := s.GetControllerAndAction()
 	if len(controllerName) > len("Controller") {
 		s.controllerName = strings.ToLower(controllerName[0 : len(controllerName)-len("Controller")])

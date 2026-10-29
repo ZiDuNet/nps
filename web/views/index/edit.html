@@ -187,6 +187,24 @@
                         <label class="form-label font-bold" data-i18n-zh="仅允许已登记 IP" data-i18n-en="Registered IPs only">仅允许已登记 IP</label>
                         <div class="form-group-wrapper"><div class="toggle-field"><input type="hidden" name="registered_only" value="{{if .t.RegisteredOnly}}1{{else}}0{{end}}"><label class="toggle-switch"><input type="checkbox"{{if .t.RegisteredOnly}} checked{{end}}><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="{{if .t.RegisteredOnly}}yes{{else}}no{{end}}">{{if .t.RegisteredOnly}}是{{else}}否{{end}}</span></div><span class="help-block" data-i18n-zh="开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用客户端登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。" data-i18n-en="When enabled, visitors must pass the lists and register their IP first with npc register or the client's registration key/VKEY. Registrations stay in memory and end when NPS restarts.">开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用客户端登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。</span></div>
                     </div>
+                    <div class="form-group form-group--wide" data-tunnel-field="proxy_auth">
+                        <label class="form-label font-bold" for="tunnel-proxy-auth" data-i18n-zh="混合代理 Basic 认证" data-i18n-en="Mixed proxy Basic authentication">混合代理 Basic 认证</label>
+                        <div class="form-group-wrapper">
+                            <textarea id="tunnel-proxy-auth" class="form-control" name="proxy_auth" rows="3" autocomplete="new-password" spellcheck="false" placeholder="proxy-user:strong-password"></textarea>
+                            {{if .proxyAuthConfigured}}
+                            <div class="proxy-auth-state">
+                                <span class="status-pill is-success"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="已配置独立认证" data-i18n-en="Dedicated authentication configured">已配置独立认证</span></span>
+                                <label class="checkbox-inline proxy-auth-clear">
+                                    <input type="checkbox" name="clear_proxy_auth" value="1">
+                                    <span data-i18n-zh="清除独立认证并回退到客户端 Basic" data-i18n-en="Clear dedicated authentication and fall back to client Basic">清除独立认证并回退到客户端 Basic</span>
+                                </label>
+                            </div>
+                            <span class="help-block" data-i18n-zh="为避免泄露，已有密码不会显示。输入新的“用户名:密码”会整体替换现有账号；保持留空则不修改。" data-i18n-en="Existing passwords are hidden. Entering new username:password lines replaces the whole account set; leave blank to keep it unchanged.">为避免泄露，已有密码不会显示。输入新的“用户名:密码”会整体替换现有账号；保持留空则不修改。</span>
+                            {{else}}
+                            <span class="help-block" data-i18n-zh="每行填写一个“用户名:密码”，可配置多个账号。此处配置后会覆盖所属客户端的 Basic 账号；留空则继承客户端账号。HTTP 与 SOCKS5 共用此认证。" data-i18n-en="Enter one username:password per line; multiple accounts are supported. A value here overrides the owning client's Basic accounts. Leave empty to inherit the client accounts. HTTP and SOCKS5 share this authentication.">每行填写一个“用户名:密码”，可配置多个账号。此处配置后会覆盖所属客户端的 Basic 账号；留空则继承客户端账号。HTTP 与 SOCKS5 共用此认证。</span>
+                            {{end}}
+                        </div>
+                    </div>
                     <div class="form-group" data-tunnel-field="dest_acl_mode">
                         <label class="form-label font-bold" for="tunnel-dest-acl-mode" langtag="word-destacl"></label>
                         <div class="form-group-wrapper"><select id="tunnel-dest-acl-mode" class="form-control" name="dest_acl_mode"><option value="0" {{if eq .t.DestAclMode 0}}selected{{end}} langtag="word-disable"></option><option value="1" {{if eq .t.DestAclMode 1}}selected{{end}} langtag="word-whitelist"></option><option value="2" {{if eq .t.DestAclMode 2}}selected{{end}} langtag="word-blacklist"></option></select><span class="help-block" langtag="info-destacl"></span></div>
@@ -248,7 +266,7 @@
     var fieldMap = {
         tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
         udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"],
-        mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"],
+        mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "proxy_auth", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"],
         secret: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"],
         p2p: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"],
         file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]
@@ -256,7 +274,7 @@
     var tunnelTypeClasses = "tunnel-type-tcp tunnel-type-udp tunnel-type-httpProxy tunnel-type-socks5 tunnel-type-mixProxy tunnel-type-secret tunnel-type-p2p tunnel-type-file";
     var tunnelSectionFields = {
         listen: ["mix_proxy", "server_ip", "port", "local_proxy", "target", "local_path", "strip_pre", "password"],
-        access: ["registered_only", "dest_acl_mode", "dest_acl_rules", "acl"],
+        access: ["registered_only", "proxy_auth", "dest_acl_mode", "dest_acl_rules", "acl"],
         limits: ["max_conn", "flow_limit", "upload_limit", "download_limit", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
         transport: ["proto_version"]
     };

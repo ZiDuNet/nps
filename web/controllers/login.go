@@ -1113,6 +1113,9 @@ func (self *LoginController) Register() {
 		self.Data["register_expire_days"] = registrationExpireDays()
 		self.Data["register_max_clients"] = registrationMaxClients()
 		self.Data["register_max_tunnels"] = registrationMaxTunnels()
+		self.Data["register_max_conn"] = registrationMaxConn()
+		self.Data["register_upload_limit"] = registrationUploadLimit()
+		self.Data["register_download_limit"] = registrationDownloadLimit()
 		if self.Data["email_verify"] == true {
 			_, smtpErr := configuredRegistrationSMTP()
 			self.Data["email_ready"] = smtpErr == nil
@@ -1217,14 +1220,17 @@ func (self *LoginController) Register() {
 	// if err := file.GetDb().NewClient(t); err != nil { ... }
 	// else { appendAuthAudit(...); register success }
 	user := &file.User{
-		UserName:     username,
-		Password:     password,
-		Email:        emailAddress,
-		Status:       true,
-		MaxClientNum: registrationMaxClients(),
-		MaxTunnelNum: registrationMaxTunnels(),
-		ExpireTime:   registrationExpireTime(now, registrationExpireDays()),
-		CreateTime:   now.Format("2006-01-02 15:04:05"),
+		UserName:      username,
+		Password:      password,
+		Email:         emailAddress,
+		Status:        true,
+		MaxClientNum:  registrationMaxClients(),
+		MaxTunnelNum:  registrationMaxTunnels(),
+		MaxConn:       registrationMaxConn(),
+		UploadLimit:   registrationUploadLimit(),
+		DownloadLimit: registrationDownloadLimit(),
+		ExpireTime:    registrationExpireTime(now, registrationExpireDays()),
+		CreateTime:    now.Format("2006-01-02 15:04:05"),
 	}
 	if err := file.GetDb().NewUser(user); err != nil {
 		registrationAttempts.releaseSuccess(ip)

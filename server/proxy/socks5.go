@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,9 +71,11 @@ type socksTaskSnapshot struct {
 	taskFlow     *file.Flow
 	taskRate     *rate.Directional
 	clientRate   *rate.Rate
+	userRate     *rate.Directional
 	localProxy   bool
 	serverIP     string
 	multiAccount map[string]string
+	proxyAuth    map[string]string
 }
 
 func (s *Sock5ModeServer) snapshotTask() (socksTaskSnapshot, error) {
@@ -93,6 +96,7 @@ func (s *Sock5ModeServer) snapshotTask() (socksTaskSnapshot, error) {
 	}
 	snapshot.sourceLists = &s.task.SourceLists
 	target := s.task.Target
+	proxyAuthValue := s.task.ProxyAuth
 	if s.task.MultiAccount != nil {
 		snapshot.multiAccount = make(map[string]string, len(s.task.MultiAccount.AccountMap))
 		for username, password := range s.task.MultiAccount.AccountMap {
@@ -100,6 +104,11 @@ func (s *Sock5ModeServer) snapshotTask() (socksTaskSnapshot, error) {
 		}
 	}
 	s.task.RUnlock()
+	if strings.TrimSpace(proxyAuthValue) != "" {
+		if accounts, err := file.ParseBasicAuth(proxyAuthValue); err == nil {
+			snapshot.proxyAuth = accounts
+		}
+	}
 	if target != nil {
 		target.RLock()
 		snapshot.localProxy = target.LocalProxy
@@ -117,6 +126,7 @@ func (s *Sock5ModeServer) snapshotTask() (socksTaskSnapshot, error) {
 	snapshot.clientFlow = snapshot.client.Flow
 	snapshot.clientRate = snapshot.client.Rate
 	snapshot.client.RUnlock()
+	snapshot.userRate = file.UserRateLimiterForClient(snapshot.client)
 	if snapshot.serverIP == "" {
 		snapshot.serverIP = "0.0.0.0"
 	}
@@ -142,7 +152,7 @@ func (s *Sock5ModeServer) reserveClientForSnapshot(c net.Conn, snapshot socksTas
 
 	client := snapshot.client
 	remoteAddr := c.RemoteAddr().String()
-	if SourceDeniedString(remoteAddr, client, snapshot.sourceLists, "socks5") || IsGlobalBlackIp(remoteAddr) || isClientBlackBlocked(client, remoteAddr) || isIPWhiteBlocked(client, remoteAddr) || isRegisteredOnlyBlocked(client, remoteAddr, snapshot.bridgeTask.RegisteredOnly) {
+	if SourceDeniedString(remoteAddr, client, snapshot.sourceLists, "socks5") || IsGlobalBlackIp(remoteAddr) || isClientBlackBlocked(client, remoteAddr) || isRegisteredOnlyBlocked(client, remoteAddr, snapshot.bridgeTask.RegisteredOnly) {
 		return nil, errors.New("socks5 client IP is not authorized")
 	}
 	if err := s.CheckFlowAndConnNum(client); err != nil {
@@ -458,7 +468,7 @@ func (s *Sock5ModeServer) handleUDPWithSnapshot(c net.Conn, snapshot socksTaskSn
 		logs.Warn("get nil connection from client id %d", client.Id)
 		return
 	}
-	targetStream := rate.NewRateConn(target, snapshot.clientRate, snapshot.taskRate)
+	targetStream := rate.NewRateConn(target, snapshot.clientRate, snapshot.taskRate, snapshot.userRate)
 	defer targetStream.Close()
 
 	// A SOCKS success reply means the bridge is already available.  Sending it
@@ -599,7 +609,7 @@ func (s *Sock5ModeServer) handleConn(c net.Conn) {
 		c.Close()
 		return
 	}
-	needAuth := (clientConfig.U != "" && clientConfig.P != "") || len(taskSnapshot.multiAccount) > 0
+	needAuth := (clientConfig.U != "" && clientConfig.P != "") || len(taskSnapshot.multiAccount) > 0 || len(taskSnapshot.proxyAuth) > 0
 	if needAuth {
 		offered := false
 		for _, method := range methods {
@@ -669,23 +679,32 @@ func (s *Sock5ModeServer) authWithSnapshot(c net.Conn, taskSnapshot socksTaskSna
 	}
 
 	var U, P string
-	if len(taskSnapshot.multiAccount) > 0 {
+	accountFound := true
+	if len(taskSnapshot.proxyAuth) > 0 {
+		U = string(user)
+		var ok bool
+		P, ok = taskSnapshot.proxyAuth[U]
+		if !ok {
+			accountFound = false
+		}
+	} else if len(taskSnapshot.multiAccount) > 0 {
 		// enable multi user auth
 		U = string(user)
 		if len(U) == 0 {
-			return errors.New("验证不通过")
-		}
-		var ok bool
-		P, ok = taskSnapshot.multiAccount[U]
-		if !ok {
-			return errors.New("验证不通过")
+			accountFound = false
+		} else {
+			var ok bool
+			P, ok = taskSnapshot.multiAccount[U]
+			if !ok {
+				accountFound = false
+			}
 		}
 	} else {
 		U = taskSnapshot.clientConfig.U
 		P = taskSnapshot.clientConfig.P
 	}
 
-	if string(user) == U && string(pass) == P {
+	if accountFound && string(user) == U && string(pass) == P {
 		if _, err := c.Write([]byte{userAuthVersion, authSuccess}); err != nil {
 			return err
 		}

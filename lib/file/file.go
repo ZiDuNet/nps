@@ -130,6 +130,7 @@ func (s *JsonDb) LoadUserFromJsonFile() {
 			return
 		}
 		s.Users.Store(post.Id, post)
+		SetUserRuntimeLimits(post.Id, post.MaxConn, post.UploadLimit, post.DownloadLimit)
 		if post.Id > int(s.UserIncreaseId) {
 			s.UserIncreaseId = int32(post.Id)
 		}

@@ -132,6 +132,7 @@ type udpTaskSnapshot struct {
 	clientFlow   *file.Flow
 	taskFlow     *file.Flow
 	clientRate   *rate.Rate
+	userRate     *rate.Directional
 	targetStr    string
 	localProxy   bool
 	serverIP     string
@@ -175,6 +176,7 @@ func (s *UdpModeServer) snapshotTask() (udpTaskSnapshot, error) {
 	snapshot.clientFlow = snapshot.client.Flow
 	snapshot.clientRate = snapshot.client.Rate
 	snapshot.client.RUnlock()
+	snapshot.userRate = file.UserRateLimiterForClient(snapshot.client)
 	target.RLock()
 	snapshot.targetStr = target.TargetStr
 	snapshot.localProxy = target.LocalProxy
@@ -225,12 +227,6 @@ func (s *UdpModeServer) Start() error {
 		}
 
 		if SourceDenied(addr, snapshot.client, snapshot.sourceLists, "udp") || IsGlobalBlackIp(addr.String()) {
-			common.BufPoolUdp.Put(buf)
-			continue
-		}
-		if isIPWhiteBlocked(snapshot.client, addr.String()) {
-			// UDP has no HTTP challenge channel; unauthorized datagrams are
-			// dropped before a mux stream or connection quota is allocated.
 			common.BufPoolUdp.Put(buf)
 			continue
 		}
@@ -370,7 +366,7 @@ func (s *UdpModeServer) runSession(addr *net.UDPAddr, key string, sess *udpSessi
 		return
 	}
 
-	target := conn.GetConnWithLimits(clientConn, snapshot.clientConfig.Crypt, snapshot.clientConfig.Compress, snapshot.clientRate, true, s.task, nil)
+	target := conn.GetConnWithUserLimits(clientConn, snapshot.clientConfig.Crypt, snapshot.clientConfig.Compress, snapshot.clientRate, true, s.task, nil, snapshot.userRate)
 	if !sess.installTarget(target) {
 		close(sess.ready)
 		common.BufPoolUdp.Put(buf)

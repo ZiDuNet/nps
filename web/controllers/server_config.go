@@ -90,7 +90,7 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"force_auto_ssl":          {Label: "自动申请 HTTPS 证书", Category: "HTTP(S) 入口", Description: "按 Host 自动申请/续期 ACME 证书；需要公网 80/443 和 DNS 解析。", Type: "bool", Optional: true},
 	"ssl_path":                {Label: "证书缓存目录", Category: "HTTP(S) 入口", Description: "ACME 证书和缓存的存储目录。", Optional: true},
 	"ssl_email":               {Label: "ACME 联系邮箱", Category: "HTTP(S) 入口", Description: "ACME 注册邮箱，用于续期失败通知。", Optional: true},
-	"ssl_ca":                  {Label: "ACME 服务", Category: "HTTP(S) 入口", Description: "证书颁发服务，例如 LetsEncrypt 或 ZeroSSL。", Optional: true},
+	"ssl_ca":                  {Label: "ACME 服务", Category: "HTTP(S) 入口", Description: "证书颁发服务；选择 ZeroSSL 时还需要填写 ZeroSSL API 密钥。", Type: "select", Options: []string{"LetsEncrypt", "ZeroSSL"}, Optional: true},
 	"ssl_zerossl_api":         {Label: "ZeroSSL API 密钥", Category: "HTTP(S) 入口", Description: "ssl_ca=ZeroSSL 时使用的 API 密钥。", Optional: true, Sensitive: true},
 	"ssl_cache_max":           {Label: "证书缓存上限", Category: "HTTP(S) 入口", Description: "缓存证书数量上限，0 表示不限制。", Type: "int", Optional: true},
 	"ssl_cache_reload":        {Label: "证书重载周期", Category: "HTTP(S) 入口", Description: "检查证书更新的周期，单位秒。", Type: "int", Optional: true},
@@ -110,14 +110,34 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"quic_max_idle_timeout":     {Label: "QUIC 最大空闲超时", Category: "Bridge 与传输", Description: "QUIC 连接最大空闲时间，单位秒。", Optional: true},
 	"quic_max_incoming_streams": {Label: "QUIC 最大并发流", Category: "Bridge 与传输", Description: "单个 QUIC 连接允许的最大并发流数。", Optional: true},
 	"bridge_path":               {Label: "WebSocket 路径", Category: "Bridge 与传输", Description: "WebSocket Bridge 使用的 HTTP 路径；启用 WebSocket Bridge 时填写。", Optional: true},
+	"bridge_show_path":          {Label: "命令展示 Path", Category: "Bridge 与传输", Description: "管理面板生成 WS/WSS 客户端命令时展示的路径；留空跟随 bridge_path。", Optional: true},
+	"bridge_tcp_show":           {Label: "展示 TCP 命令", Category: "Bridge 与传输", Description: "是否在客户端详情中生成 TCP 连接命令；关闭只隐藏命令，不停止监听。", Type: "bool"},
+	"bridge_tcp_show_ip":        {Label: "TCP 对外主机名", Category: "Bridge 与传输", Description: "TCP 命令中使用的公网域名或 IP；留空使用 bridge_addr、服务器地址或当前面板地址。", Optional: true},
+	"bridge_tcp_show_port":      {Label: "TCP 对外端口", Category: "Bridge 与传输", Description: "TCP 命令中使用的对外端口；留空使用实际 bridge_port。", Type: "int", Optional: true},
+	"bridge_tls_show":           {Label: "展示 TCP + TLS 命令", Category: "Bridge 与传输", Description: "是否生成 TCP + TLS 连接命令；关闭只隐藏命令，不停止 TLS 监听。", Type: "bool"},
+	"bridge_tls_show_ip":        {Label: "TLS 对外主机名", Category: "Bridge 与传输", Description: "TCP + TLS 命令中使用的公网域名或 IP；留空使用自动地址。", Optional: true},
+	"bridge_tls_show_port":      {Label: "TLS 对外端口", Category: "Bridge 与传输", Description: "TCP + TLS 命令中使用的对外端口；留空使用实际 tls_bridge_port。", Type: "int", Optional: true},
+	"bridge_kcp_show":           {Label: "展示 KCP 命令", Category: "Bridge 与传输", Description: "是否生成 KCP 连接命令；关闭只隐藏命令，不停止 UDP 监听。", Type: "bool"},
+	"bridge_kcp_show_ip":        {Label: "KCP 对外主机名", Category: "Bridge 与传输", Description: "KCP 命令中使用的公网域名或 IP；留空使用自动地址。", Optional: true},
+	"bridge_kcp_show_port":      {Label: "KCP 对外端口", Category: "Bridge 与传输", Description: "KCP 命令中使用的对外 UDP 端口；留空使用实际监听端口。", Type: "int", Optional: true},
+	"bridge_ws_show":            {Label: "展示 WS 命令", Category: "Bridge 与传输", Description: "是否生成 WebSocket 连接命令；关闭只隐藏命令，不停止监听。", Type: "bool"},
+	"bridge_ws_show_ip":         {Label: "WS 对外主机名", Category: "Bridge 与传输", Description: "WS 命令中使用的公网域名或 IP；CDN 场景填写 CDN 主机名。", Optional: true},
+	"bridge_ws_show_port":       {Label: "WS 对外端口", Category: "Bridge 与传输", Description: "WS 命令中使用的对外端口；留空使用实际 bridge_ws_port。", Type: "int", Optional: true},
+	"bridge_wss_show":           {Label: "展示 WSS 命令", Category: "Bridge 与传输", Description: "是否生成 WebSocket TLS 连接命令；关闭只隐藏命令，不停止监听。", Type: "bool"},
+	"bridge_wss_show_ip":        {Label: "WSS 对外主机名", Category: "Bridge 与传输", Description: "WSS 命令中使用的公网域名或 IP；CDN 场景填写 CDN 主机名。", Optional: true},
+	"bridge_wss_show_port":      {Label: "WSS 对外端口", Category: "Bridge 与传输", Description: "WSS 命令中使用的对外端口；留空使用实际 bridge_wss_port。", Type: "int", Optional: true},
+	"bridge_quic_show":          {Label: "展示 QUIC 命令", Category: "Bridge 与传输", Description: "是否生成 QUIC 连接命令；关闭只隐藏命令，不停止 UDP 监听。", Type: "bool"},
+	"bridge_quic_show_ip":       {Label: "QUIC 对外主机名", Category: "Bridge 与传输", Description: "QUIC 命令中使用的公网域名或 IP；留空使用自动地址。", Optional: true},
+	"bridge_quic_show_port":     {Label: "QUIC 对外端口", Category: "Bridge 与传输", Description: "QUIC 命令中使用的对外 UDP 端口；留空使用实际 bridge_quic_port。", Type: "int", Optional: true},
+	"bridge_quic_show_alpn":     {Label: "QUIC 命令展示 ALPN", Category: "Bridge 与传输", Description: "QUIC 客户端命令中的 ALPN；留空跟随 quic_alpn。", Optional: true},
 	"bridge_real_ip_header":     {Label: "Bridge 真实 IP 请求头", Category: "Bridge 与传输", Description: "可信反向代理转发客户端地址时使用的请求头，例如 X-Real-IP。", Optional: true},
 	"bridge_trusted_ips":        {Label: "Bridge 可信代理地址", Category: "Bridge 与传输", Description: "允许使用真实 IP 请求头的前置代理 IP/CIDR，逗号或换行分隔。", Optional: true},
 	"bridge_addr":               {Label: "Bridge 对外地址", Category: "Bridge 与传输", Description: "用于多入口或反向代理场景展示给 NPC 的连接地址。", Optional: true},
 	"bridge_host":               {Label: "Bridge 复用 Host", Category: "Bridge 与传输", Description: "端口复用时用于分流 Bridge 流量的 Host。", Optional: true},
 	"bridge_select_mode":        {Label: "同密钥选主策略", Category: "Bridge 与传输", Description: "同一 VKEY 存在多个连接时的选择策略。", Type: "select", Options: []string{"Primary", "RoundRobin", "Random"}, Optional: true},
 	"bridge_http3":              {Label: "HTTP/3 Bridge", Category: "Bridge 与传输", Description: "允许通过 HTTP/3/QUIC 入口承载新版 Bridge。", Type: "bool", Optional: true},
-	"bridge_cert_file":          {Label: "Bridge 证书", Category: "Bridge 与传输", Description: "Bridge 独立 TLS 证书路径；留空使用默认证书。", Optional: true},
-	"bridge_key_file":           {Label: "Bridge 私钥", Category: "Bridge 与传输", Description: "Bridge 独立 TLS 私钥路径；路径本身会正常回显，私钥内容不会读取。", Optional: true},
+	"bridge_cert_file":          {Label: "Bridge 证书", Category: "Bridge 与传输", Description: "Bridge 全协议共用 TLS 证书路径；请在“证书设置 → Bridge TLS 证书”中维护，留空时重启后使用临时证书。", Optional: true},
+	"bridge_key_file":           {Label: "Bridge 私钥", Category: "Bridge 与传输", Description: "Bridge 全协议共用 TLS 私钥路径；路径会正常回显，私钥内容不会读取，修改后需要重启。", Optional: true},
 	"client_history_limit":      {Label: "客户端连接历史条数", Category: "Bridge 与传输", Description: "每个客户端保留的最近连接历史数量，0 表示关闭。"},
 
 	"public_vkey":           {Label: "公共验证密钥", Category: "客户端认证与 IP 登记", Description: "允许使用公共密钥连接的客户端；留空表示关闭。", Optional: true, Sensitive: true},
@@ -139,6 +159,7 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"log_compress":        {Label: "压缩日志归档", Category: "日志与审计", Description: "是否压缩轮转后的日志归档。", Optional: true},
 	"log_rotate_daily":    {Label: "按日期轮转日志", Category: "日志与审计", Description: "日期变化时是否轮转日志。", Optional: true},
 	"audit_log_path":      {Label: "审计日志路径", Category: "日志与审计", Description: "管理操作审计日志路径；留空时关闭独立审计文件。", Optional: true},
+	"connection_log_path": {Label: "连接日志路径", Category: "日志与审计", Description: "客户端与代理连接的 JSONL 日志路径；留空关闭连接日志。", Optional: true},
 
 	"p2p_ip":                    {Label: "P2P 监听地址", Category: "P2P 与调试", Description: "P2P 中继监听地址；留空表示关闭。", Optional: true},
 	"p2p_port":                  {Label: "P2P 监听端口", Category: "P2P 与调试", Description: "配置后启用 P2P 中继；留空或 0 表示关闭。", Type: "int", Optional: true},
@@ -176,6 +197,9 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"register_captcha":             {Label: "注册图片验证码", Category: "注册配置", Description: "注册提交时是否必须填写图片验证码。建议保持开启，防止自动化批量注册。", Type: "bool"},
 	"register_max_clients":         {Label: "默认客户端配额", Category: "注册配置", Description: "新注册用户默认最多可拥有的客户端数；0 表示不限制。", Type: "int"},
 	"register_max_tunnels":         {Label: "默认隧道配额", Category: "注册配置", Description: "新注册用户默认最多可创建的总隧道数，域名反代也计入；0 表示不限制。", Type: "int"},
+	"register_max_conn":            {Label: "默认最大并发连接数", Category: "注册配置", Description: "新注册用户所有客户端共享的 NPS 转发并发上限；0 表示不限制。P2P 直连不计入。", Type: "int"},
+	"register_upload_limit":        {Label: "默认上行带宽", Category: "注册配置", Description: "新注册用户所有客户端共享的访问者到后端方向带宽，单位 KB/s；0 表示不限制。", Type: "int"},
+	"register_download_limit":      {Label: "默认下行带宽", Category: "注册配置", Description: "新注册用户所有客户端共享的后端到访问者方向带宽，单位 KB/s；0 表示不限制。", Type: "int"},
 	"register_expire_days":         {Label: "默认注册有效期", Category: "注册配置", Description: "新注册用户从注册成功时起默认有效天数；0 表示永久有效。", Type: "int"},
 	"register_rate_window":         {Label: "注册限频窗口", Category: "注册配置", Description: "注册提交次数和同 IP 成功注册数的统计窗口，单位秒。", Type: "int"},
 	"register_rate_limit":          {Label: "注册提交次数上限", Category: "注册配置", Description: "同一 IP 或同一用户名在一个窗口内允许提交的注册次数；0 表示不限制。", Type: "int"},
@@ -235,23 +259,116 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"allow_ports": {Label: "允许映射端口范围", Category: "运行与安全", Description: "限制客户端可映射的服务端端口，例如 9001-9009,10001；留空表示不限制。", Optional: true},
 }
 
+// Certificate settings have a dedicated administrator page. The source editor
+// still exposes the complete nps.conf; only the visual editor is split so a
+// single setting is not maintained in two places.
+var certificateConfigGroups = []struct {
+	Name        string
+	Description string
+	Keys        []string
+}{
+	{
+		Name:        "HTTPS 默认证书与 ACME",
+		Description: "域名反向代理的默认证书、自动签发参数和证书缓存。未单独配置证书的 Host 会使用这里的默认证书。",
+		Keys: []string{
+			"https_default_cert_file", "https_default_key_file", "force_auto_ssl",
+			"ssl_path", "ssl_email", "ssl_ca", "ssl_zerossl_api",
+			"ssl_cache_max", "ssl_cache_reload", "ssl_cache_idle",
+		},
+	},
+	{
+		Name:        "管理面板 HTTPS",
+		Description: "直接为 NPS Web 管理面板启用 HTTPS。若管理面板由前置 Nginx、Caddy 或容器网关终止 TLS，这里保持关闭即可。",
+		Keys:        []string{"web_open_ssl", "web_cert_file", "web_key_file"},
+	},
+	{
+		Name:        "IP 登记 HTTPS",
+		Description: "独立 IP 登记监听使用的证书与私钥。登记端口和监听地址仍属于“服务端配置 → 客户端认证与 IP 登记”。",
+		Keys:        []string{"ip_register_cert_file", "ip_register_key_file"},
+	},
+	{
+		Name:        "Bridge TLS 入口",
+		Description: "控制 TCP TLS Bridge 是否监听及监听端口。证书本身由上方 Bridge TLS 证书卡片单独维护。",
+		Keys:        []string{"tls_enable", "tls_bridge_port"},
+	},
+}
+
+var certificateConfigKeySet = func() map[string]struct{} {
+	keys := make(map[string]struct{})
+	for _, group := range certificateConfigGroups {
+		for _, key := range group.Keys {
+			keys[key] = struct{}{}
+		}
+	}
+	// The pair is configured through the richer Bridge certificate widget and
+	// must still be excluded from the general visual editor.
+	keys["bridge_cert_file"] = struct{}{}
+	keys["bridge_key_file"] = struct{}{}
+	return keys
+}()
+
+// Registration settings have a dedicated business-facing tab. The complete
+// source editor still exposes nps.conf, but the general visual editor no longer
+// duplicates these fields in a separate "注册配置" section.
+var registrationConfigGroups = []struct {
+	Name        string
+	Description string
+	Keys        []string
+}{
+	{
+		Name:        "注册入口与默认权益",
+		Description: "控制登录页注册入口，并设置新账号默认获得的客户端、隧道、并发连接、带宽和有效期。所有数值为 0 时表示不限。",
+		Keys: []string{
+			"allow_user_register", "register_captcha", "register_email_verify",
+			"register_max_clients", "register_max_tunnels", "register_max_conn",
+			"register_upload_limit", "register_download_limit", "register_expire_days",
+		},
+	},
+	{
+		Name:        "注册频率限制",
+		Description: "限制重复提交和单 IP 批量注册。数值 0 可关闭对应维度；验证码和邮箱验证仍会同时生效。",
+		Keys: []string{
+			"register_rate_window", "register_rate_limit", "register_ip_rate_limit",
+		},
+	},
+	{
+		Name:        "邮箱验证与 SMTP",
+		Description: "仅在启用邮箱验证时需要完整配置。密码不会在页面回显，留空表示保持现有值。",
+		Keys: []string{
+			"register_email_code_ttl", "register_email_code_cooldown",
+			"smtp_host", "smtp_port", "smtp_security", "smtp_username",
+			"smtp_password", "smtp_from",
+		},
+	},
+}
+
+var registrationConfigKeySet = func() map[string]struct{} {
+	keys := make(map[string]struct{})
+	for _, group := range registrationConfigGroups {
+		for _, key := range group.Keys {
+			keys[key] = struct{}{}
+		}
+	}
+	return keys
+}()
+
 var serverConfigCategoryOrder = []string{
 	"HTTP(S) 入口", "Bridge 与传输", "客户端认证与 IP 登记", "日志与审计", "P2P 与调试",
 	"Web 管理面板", "Web API 认证", "注册配置", "用户与资源权限", "HTTP 转发与缓存", "运行与安全", "兼容/自定义",
 }
 
 var serverConfigCategoryDescriptions = map[string]string{
-	"HTTP(S) 入口":   "域名反代监听端口、证书、HTTP/3 与来源请求头。",
-	"Bridge 与传输":   "NPC 接入端口、传输协议、多入口和连接复用。",
+	"HTTP(S) 入口":   "域名反代监听端口、HTTP/3 与来源请求头；证书统一在“证书设置”维护。",
+	"Bridge 与传输":   "NPC 接入端口、传输协议、多入口和连接复用；TLS 证书统一在“证书设置”维护。",
 	"客户端认证与 IP 登记": "客户端接入密钥、来源限制和公网 IP 登记入口。",
 	"日志与审计":        "运行日志、轮转策略和操作审计文件。",
 	"P2P 与调试":      "P2P 中继、STUN、端口映射和性能调试端点。",
-	"Web 管理面板":     "管理面板监听、HTTPS、登录账号和安全选项。",
+	"Web 管理面板":     "管理面板监听、登录账号和安全选项；HTTPS 证书统一在“证书设置”维护。",
 	"Web API 认证":   "管理 API 的签名密钥和本地加密密钥。",
 	"注册配置":         "自助注册开关、默认配额、限频、邮箱验证和 SMTP。",
 	"用户与资源权限":      "普通用户登录、配额能力以及代理资源限制。",
 	"HTTP 转发与缓存":   "反向代理请求头、超时和响应缓存。",
-	"运行与安全":        "登录保护、TLS、校时、Geo 数据、DNS 和端口权限。",
+	"运行与安全":        "登录保护、校时、Geo 数据、DNS 和端口权限；TLS 入口与证书统一在“证书设置”维护。",
 	"兼容/自定义":       "历史版本或自定义部署中的只读配置，会在保存时原样保留。",
 }
 
@@ -265,15 +382,23 @@ var serverConfigKeyPriority = map[string]int{
 	"bridge_ip": 10, "bridge_port": 20, "bridge_type": 30, "bridge_select_mode": 40,
 	"bridge_kcp_port": 50, "bridge_ws_port": 60, "bridge_wss_port": 70,
 	"bridge_quic_port": 80, "bridge_quic_ip": 90, "bridge_path": 100,
-	"bridge_addr": 110, "bridge_host": 120, "bridge_real_ip_header": 130,
-	"bridge_trusted_ips": 140, "bridge_cert_file": 150, "bridge_key_file": 160,
+	"bridge_show_path": 110, "bridge_tcp_show": 120, "bridge_tcp_show_ip": 121,
+	"bridge_tcp_show_port": 122, "bridge_tls_show": 130, "bridge_tls_show_ip": 131,
+	"bridge_tls_show_port": 132, "bridge_kcp_show": 140, "bridge_kcp_show_ip": 141,
+	"bridge_kcp_show_port": 142, "bridge_ws_show": 150, "bridge_ws_show_ip": 151,
+	"bridge_ws_show_port": 152, "bridge_wss_show": 160, "bridge_wss_show_ip": 161,
+	"bridge_wss_show_port": 162, "bridge_quic_show": 170,
+	"bridge_quic_show_ip": 171, "bridge_quic_show_port": 172,
+	"bridge_quic_show_alpn": 173, "bridge_addr": 190, "bridge_host": 200,
+	"bridge_real_ip_header": 210, "bridge_trusted_ips": 220,
+	"bridge_cert_file": 230, "bridge_key_file": 240,
 
 	"public_register_key": 10, "ip_limit": 20, "public_vkey": 30,
 	"ip_register_max_hours": 40, "ip_register_ip": 50, "ip_register_port": 60,
 	"ip_register_cert_file": 70, "ip_register_key_file": 80, "auth_time_window": 90,
 
-	"log_level": 10, "log_path": 20, "audit_log_path": 30, "log_max_size": 40,
-	"log_max_files": 50, "log_max_days": 60, "log_compress": 70,
+	"log_level": 10, "log_path": 20, "audit_log_path": 30, "connection_log_path": 35,
+	"log_max_size": 40, "log_max_files": 50, "log_max_days": 60, "log_compress": 70,
 	"log_rotate_daily": 80, "flow_store_interval": 90,
 
 	"p2p_ip": 10, "p2p_port": 20, "p2p_stun_servers": 30,
@@ -290,11 +415,12 @@ var serverConfigKeyPriority = map[string]int{
 	"auth_key": 10, "auth_crypt_key": 20,
 
 	"allow_user_register": 10, "register_email_verify": 20, "register_captcha": 30,
-	"register_max_clients": 40, "register_max_tunnels": 50, "register_expire_days": 60,
-	"register_rate_window": 70, "register_rate_limit": 80, "register_ip_rate_limit": 90,
-	"register_email_code_ttl": 100, "register_email_code_cooldown": 110,
-	"smtp_host": 120, "smtp_port": 130, "smtp_security": 140,
-	"smtp_username": 150, "smtp_password": 160, "smtp_from": 170,
+	"register_max_clients": 40, "register_max_tunnels": 50, "register_max_conn": 60,
+	"register_upload_limit": 70, "register_download_limit": 80, "register_expire_days": 90,
+	"register_rate_window": 100, "register_rate_limit": 110, "register_ip_rate_limit": 120,
+	"register_email_code_ttl": 130, "register_email_code_cooldown": 140,
+	"smtp_host": 150, "smtp_port": 160, "smtp_security": 170,
+	"smtp_username": 180, "smtp_password": 190, "smtp_from": 200,
 
 	"allow_user_login": 10, "allow_user_vkey_login": 20, "allow_user_change_username": 30,
 	"allow_user_local": 40, "allow_secret_link": 50, "allow_secret_local": 60,
@@ -555,6 +681,101 @@ func serverConfigSections(content string) ([]serverConfigSectionView, []serverCo
 	return result, unknown, nil
 }
 
+func filterServerConfigSections(sections []serverConfigSectionView, excluded map[string]struct{}) []serverConfigSectionView {
+	if len(excluded) == 0 {
+		return sections
+	}
+	result := make([]serverConfigSectionView, 0, len(sections))
+	for _, section := range sections {
+		fields := make([]serverConfigFieldView, 0, len(section.Fields))
+		for _, field := range section.Fields {
+			if _, skip := excluded[field.Key]; skip {
+				continue
+			}
+			fields = append(fields, field)
+		}
+		if len(fields) == 0 {
+			continue
+		}
+		section.Fields = fields
+		result = append(result, section)
+	}
+	return result
+}
+
+func certificateConfigSections(content string) ([]serverConfigSectionView, serverConfigSummary, error) {
+	sections, _, err := serverConfigSections(content)
+	if err != nil {
+		return nil, serverConfigSummary{}, err
+	}
+	fields := make(map[string]serverConfigFieldView)
+	for _, section := range sections {
+		for _, field := range section.Fields {
+			fields[field.Key] = field
+		}
+	}
+	result := make([]serverConfigSectionView, 0, len(certificateConfigGroups))
+	for _, group := range certificateConfigGroups {
+		groupFields := make([]serverConfigFieldView, 0, len(group.Keys))
+		for _, key := range group.Keys {
+			if field, ok := fields[key]; ok {
+				groupFields = append(groupFields, field)
+			}
+		}
+		if len(groupFields) == 0 {
+			continue
+		}
+		result = append(result, serverConfigSectionView{
+			Name:        group.Name,
+			Description: group.Description,
+			Fields:      groupFields,
+		})
+	}
+	return result, summarizeServerConfigSections(result, nil), nil
+}
+
+func registrationConfigSections(content string) ([]serverConfigSectionView, serverConfigSummary, error) {
+	sections, _, err := serverConfigSections(content)
+	if err != nil {
+		return nil, serverConfigSummary{}, err
+	}
+	fields := make(map[string]serverConfigFieldView)
+	for _, section := range sections {
+		for _, field := range section.Fields {
+			fields[field.Key] = field
+		}
+	}
+	result := make([]serverConfigSectionView, 0, len(registrationConfigGroups))
+	for _, group := range registrationConfigGroups {
+		groupFields := make([]serverConfigFieldView, 0, len(group.Keys))
+		for _, key := range group.Keys {
+			if field, ok := fields[key]; ok {
+				groupFields = append(groupFields, field)
+			}
+		}
+		if len(groupFields) == 0 {
+			continue
+		}
+		result = append(result, serverConfigSectionView{
+			Name:        group.Name,
+			Description: group.Description,
+			Fields:      groupFields,
+		})
+	}
+	return result, summarizeServerConfigSections(result, nil), nil
+}
+
+func generalServerConfigExcludedKeys() map[string]struct{} {
+	excluded := make(map[string]struct{}, len(certificateConfigKeySet)+len(registrationConfigKeySet))
+	for key := range certificateConfigKeySet {
+		excluded[key] = struct{}{}
+	}
+	for key := range registrationConfigKeySet {
+		excluded[key] = struct{}{}
+	}
+	return excluded
+}
+
 func summarizeServerConfigSections(sections []serverConfigSectionView, unknown []serverConfigUnknownView) serverConfigSummary {
 	summary := serverConfigSummary{Sections: len(sections), ReadOnly: len(unknown)}
 	for _, section := range sections {
@@ -589,6 +810,7 @@ func (s *GlobalController) Config() {
 		s.Data["config_error"] = err.Error()
 	} else {
 		sections, unknown, _ := serverConfigSections(string(content))
+		sections = filterServerConfigSections(sections, generalServerConfigExcludedKeys())
 		s.Data["config_sections"] = sections
 		s.Data["config_unknown"] = unknown
 		s.Data["config_summary"] = summarizeServerConfigSections(sections, unknown)
@@ -602,7 +824,80 @@ func (s *GlobalController) Config() {
 	s.display("global/config")
 }
 
+// Registration presents the registration and new-user default limits as a
+// dedicated business settings page while continuing to store every value in
+// nps.conf.
+func (s *GlobalController) Registration() {
+	if !s.RequireAdmin() {
+		return
+	}
+	s.Data["menu"] = "global"
+	s.SetInfo("registration settings")
+	s.Data["config_path"] = serverConfigPath()
+	content, err := os.ReadFile(serverConfigPath())
+	if err != nil {
+		s.Data["registration_config_error"] = err.Error()
+		s.Data["registration_config_sections"] = []serverConfigSectionView{}
+		s.Data["registration_config_summary"] = serverConfigSummary{}
+	} else {
+		sections, summary, sectionErr := registrationConfigSections(string(content))
+		if sectionErr != nil {
+			s.Data["registration_config_error"] = sectionErr.Error()
+		}
+		s.Data["registration_config_sections"] = sections
+		s.Data["registration_config_summary"] = summary
+	}
+	s.display("global/registration")
+}
+
+func registrationConfigKeys() []string {
+	keys := make([]string, 0, len(registrationConfigKeySet))
+	for _, group := range registrationConfigGroups {
+		keys = append(keys, group.Keys...)
+	}
+	return keys
+}
+
+// SaveRegistration updates only fields owned by the registration tab.
+func (s *GlobalController) SaveRegistration() {
+	if !s.RequirePost() || !s.RequireAdmin() {
+		return
+	}
+	path := serverConfigPath()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		s.AjaxErr("读取 nps.conf 失败: " + err.Error())
+		return
+	}
+	updates, err := parseServerConfigUpdatesForKeys(s.Ctx.Request, string(content), registrationConfigKeys())
+	if err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
+	changed, err := writeServerConfig(path, updates)
+	if err != nil {
+		s.AjaxErr("保存用户注册配置失败: " + err.Error())
+		return
+	}
+	s.auditMutation("global.registration_config.update", "nps.conf", 0, 0, "", nil, map[string]string{"changed": strconv.Itoa(len(changed))})
+	s.Data["json"] = s.withRequestMeta(map[string]interface{}{
+		"status":           1,
+		"msg":              "用户注册配置已保存，需要重启 NPS 才会生效",
+		"changed":          changed,
+		"restart_required": len(changed) > 0,
+	})
+	s.ServeJSON()
+}
+
 func parseServerConfigUpdates(request *http.Request, content string) ([]serverConfigUpdate, error) {
+	keys := make([]string, 0, len(serverConfigMetaByKey))
+	for key := range serverConfigMetaByKey {
+		keys = append(keys, key)
+	}
+	return parseServerConfigUpdatesForKeys(request, content, keys)
+}
+
+func parseServerConfigUpdatesForKeys(request *http.Request, content string, keys []string) ([]serverConfigUpdate, error) {
 	if request == nil {
 		return nil, errors.New("请求无效")
 	}
@@ -612,8 +907,11 @@ func parseServerConfigUpdates(request *http.Request, content string) ([]serverCo
 	current := serverConfigKeyValues(content)
 	defaults := serverConfigKeyValues(npsconf.DefaultNpsConf)
 	updates := make([]serverConfigUpdate, 0)
-	for key, meta := range serverConfigMetaByKey {
-		meta = serverConfigMetaFor(key, defaults[key])
+	for _, key := range keys {
+		if _, supported := serverConfigMetaByKey[key]; !supported {
+			continue
+		}
+		meta := serverConfigMetaFor(key, defaults[key])
 		// Entries in serverConfigMetaByKey are the explicitly supported
 		// editable catalog. The zero value of Meta.Editable keeps the metadata
 		// concise, so mark it here before parsing the submitted form.
@@ -687,6 +985,11 @@ func validateServerConfigUpdateSet(current map[string]string, updates []serverCo
 		if strings.TrimSpace(values["web_cert_file"]) == "" || strings.TrimSpace(values["web_key_file"]) == "" {
 			return errors.New("启用管理面板 HTTPS 时，证书路径和私钥路径必须同时填写")
 		}
+	}
+	bridgeCertSet := strings.TrimSpace(values["bridge_cert_file"]) != ""
+	bridgeKeySet := strings.TrimSpace(values["bridge_key_file"]) != ""
+	if bridgeCertSet != bridgeKeySet {
+		return errors.New("Bridge TLS 证书和私钥必须成对配置")
 	}
 	registerPort := strings.TrimSpace(values["ip_register_port"])
 	if registerPort != "" {
@@ -767,8 +1070,8 @@ func validateServerConfigValue(key string, meta serverConfigMeta, value string) 
 	if key == "auth_crypt_key" && len(value) != 16 {
 		return errors.New("auth_crypt_key 必须恰好为 16 个字符")
 	}
-	if key == "bridge_path" && !strings.HasPrefix(value, "/") {
-		return errors.New("bridge_path 必须以 / 开头")
+	if (key == "bridge_path" || key == "bridge_show_path") && !strings.HasPrefix(value, "/") {
+		return fmt.Errorf("%s 必须以 / 开头", key)
 	}
 	if key == "web_base_url" && value != "" && !strings.HasPrefix(value, "/") {
 		return errors.New("web_base_url 必须为空或以 / 开头")
@@ -937,6 +1240,43 @@ func (s *GlobalController) SaveConfig() {
 		"changed":          changed,
 		"restart_required": len(changed) > 0,
 	}
+	s.ServeJSON()
+}
+
+// SaveCertificateConfig updates only fields owned by the certificate settings
+// page. Restricting the key set prevents an isolated form submission from
+// removing unrelated optional keys that were never rendered on that page.
+func (s *GlobalController) SaveCertificateConfig() {
+	if !s.RequirePost() || !s.RequireAdmin() {
+		return
+	}
+	path := serverConfigPath()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		s.AjaxErr("读取 nps.conf 失败: " + err.Error())
+		return
+	}
+	keys := make([]string, 0)
+	for _, group := range certificateConfigGroups {
+		keys = append(keys, group.Keys...)
+	}
+	updates, err := parseServerConfigUpdatesForKeys(s.Ctx.Request, string(content), keys)
+	if err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
+	changed, err := writeServerConfig(path, updates)
+	if err != nil {
+		s.AjaxErr("保存证书配置失败: " + err.Error())
+		return
+	}
+	s.auditMutation("global.certificate_config.update", "nps.conf", 0, 0, "", nil, map[string]string{"changed": strconv.Itoa(len(changed))})
+	s.Data["json"] = s.withRequestMeta(map[string]interface{}{
+		"status":           1,
+		"msg":              "证书设置已保存，需要重启 NPS 才会生效",
+		"changed":          changed,
+		"restart_required": len(changed) > 0,
+	})
 	s.ServeJSON()
 }
 

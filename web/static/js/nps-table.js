@@ -109,7 +109,7 @@
         // the desktop sidebar is open. Switch to labelled cards early enough
         // to keep a 1024px workspace readable instead of compressing every
         // column into unreadable slivers.
-        if (this.options.smartDisplay && window.matchMedia && window.matchMedia('(max-width: 1199px)').matches) {
+        if (this.options.smartDisplay && window.matchMedia && window.matchMedia('(max-width: 991px)').matches) {
             this.options.cardView = true;
         }
         this.pageNumber = Number(this.options.pageNumber) > 0 ? Number(this.options.pageNumber) : 1;

@@ -13,6 +13,7 @@ import (
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/ipreg"
 )
 
 type socks5TestBridge struct {
@@ -74,17 +75,17 @@ func TestSock5UDPAssociateRejectsIPPoliciesBeforeBridge(t *testing.T) {
 			},
 		},
 		{
-			name: "client IP allowlist",
+			name: "registered-only client",
 			setup: func(client *file.Client) {
-				client.IpWhite = true
-				client.IpWhitePass = "allowlist-secret"
-				client.IpWhiteList = []string{"203.0.113.7"}
+				client.RegisteredOnly = true
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			ipreg.Reset()
+			t.Cleanup(ipreg.Reset)
 			withSocks5TestDB(t, test.global)
 			client := file.NewClient("vkey", false, false)
 			client.Id = 7

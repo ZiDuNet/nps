@@ -54,6 +54,21 @@ func (s *ApiV1Controller) UsersRegister() {
 		s.apiFail(http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
+	maxConn, err := registrationAPIIntParameter(s, registrationMaxConn(), "max_conn", "max_connection")
+	if err != nil {
+		s.apiFail(http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+	uploadLimit, err := registrationAPIIntParameter(s, registrationUploadLimit(), "upload_limit", "upload_rate")
+	if err != nil {
+		s.apiFail(http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
+	downloadLimit, err := registrationAPIIntParameter(s, registrationDownloadLimit(), "download_limit", "download_rate")
+	if err != nil {
+		s.apiFail(http.StatusBadRequest, "validation_error", err.Error())
+		return
+	}
 
 	now := time.Now()
 	expireTime := registrationExpireTime(now, registrationExpireDays())
@@ -73,15 +88,18 @@ func (s *ApiV1Controller) UsersRegister() {
 	}
 
 	user := &file.User{
-		UserName:     username,
-		Password:     password,
-		Email:        emailAddress,
-		Status:       true,
-		Remark:       remark,
-		MaxClientNum: maxClients,
-		MaxTunnelNum: maxTunnels,
-		ExpireTime:   expireTime,
-		CreateTime:   now.Format("2006-01-02 15:04:05"),
+		UserName:      username,
+		Password:      password,
+		Email:         emailAddress,
+		Status:        true,
+		Remark:        remark,
+		MaxClientNum:  maxClients,
+		MaxTunnelNum:  maxTunnels,
+		MaxConn:       maxConn,
+		UploadLimit:   uploadLimit,
+		DownloadLimit: downloadLimit,
+		ExpireTime:    expireTime,
+		CreateTime:    now.Format("2006-01-02 15:04:05"),
 	}
 	if err := file.GetDb().NewUser(user); err != nil {
 		s.apiFail(http.StatusBadRequest, "registration_failed", err.Error())

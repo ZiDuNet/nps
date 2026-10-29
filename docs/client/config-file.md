@@ -50,8 +50,8 @@ server_port=9001
 | `basic_username` / `basic_password` | HTTP 正向代理、SOCKS5 和域名代理共用的 Basic 认证账号。 |
 | `web_username` / `web_password` | 旧版客户端 Web 登录兼容账号。当前面板应优先使用客户端的“所属用户”；配置文件模式只有在需要兼容旧客户端账号登录时才填写这两个字段，二者必须成对出现。 |
 | `max_conn` | 此客户端最大数据连接数。 |
-| `rate_limit` | 此客户端带宽上限，单位 KiB/s。 |
-| `flow_limit` | 此客户端累计流量上限，单位 MiB，入口与出口相加计算。 |
+| `rate_limit` | 此客户端带宽上限，单位 KB/s。 |
+| `flow_limit` | 此客户端累计流量上限，单位 MB，入口与出口相加计算。 |
 | `disconnect_timeout` | 未收到心跳回包的最大检查次数；检查间隔为 5 秒，默认 `60`，约为 5 分钟。 |
 | `local_ip` / `local_ip_forward` | 指定 NPC 出站绑定地址；启用 `local_ip_forward=true` 后，对公网 IP/域名目标的 TCP、UDP、SOCKS5 UDP 转发也使用该地址，私网目标保持系统路由。不填写时由系统自动探测或由内核选择。 |
 | `dns_server` | NPC 目标解析和 NAT 探测使用的 DNS 服务器，多个地址用逗号分隔；未配置时使用操作系统解析器。 |
@@ -86,18 +86,24 @@ header_X-Proxy-Source=nps
 | `host` | 精确域名或泛域名，例如 `app.example.com`、`*.example.com`。DNS 必须解析到 NPS。 |
 | `target_addr` | 后端目标，多个地址以英文逗号分隔。 |
 | `scheme` | `http`、`https` 或 `all`。 |
+| `auto_https` | 开启后，HTTP 请求以 301 跳转到该规则的 HTTPS 入口；规则必须同时支持 HTTPS。 |
 | `location` | 路径匹配前缀，例如 `/api`。 |
 | `host_change` | 转发给后端时替换 HTTP Host。 |
 | `header_名称` | 新增或替换请求 Header，例如 `header_X-Env=prod`。 |
 | `response_名称` | 新增或替换后端响应 Header，例如 `response_Cache-Control=no-cache`；不改变响应正文。 |
 | `proxy_protocol` | 后端支持时传递 PROXY Protocol：`0` 关闭、`1` v1、`2` v2。普通 HTTP 服务不要开启。 |
+| `target_is_https` | 让 NPS 到内网目标这一段使用 HTTPS；公网入口协议仍由 `scheme` 决定。 |
+| `https_just_proxy` | 不终止公网 TLS，将加密流原样转给后端；路径重写、Header、CORS、Basic 等七层能力不可用。 |
+| `tls_offload` | NPS 终止公网 TLS 后，把解密后的原始 TCP 流交给后端；不执行 HTTP 路由和改写。 |
+| `auto_ssl` | 该 Host 是否参与自动 ACME 申请；还需服务端 `force_auto_ssl=true` 和可用的公网验证条件。平台域名证书由管理员托管，不能自动申请。 |
 | `path_rewrite` | 每行一条路径替换规则，例如 `/api => /v1/api`；查询参数保持不变。 |
 | `redirect_url` | 可选 307 重定向地址，`{path}` 会替换为原始请求路径和查询参数。填写后该 Host 不再转发到后端。 |
 | `auto_cors` | 是否自动追加宽松 CORS 响应头；不会代替后端处理 OPTIONS 预检。 |
 | `compat_mode` | 是否让普通 HTTP 请求走标准反向代理兼容链路，适用于 SSE、流式响应或复杂 Header。 |
+| `auth` | Host 级 Basic 认证账号，格式 `用户名:密码`；密码可以包含冒号。配置后优先于客户端公共 Basic。 |
 | `multi_account` | Host 独立 Basic 认证账号文件；每行 `用户名=密码`，路径按 NPC 当前工作目录解析。该规则认证优先于客户端公共 Basic 账号。 |
-| `upload_limit` | 此 Host 规则上行限速，单位 KiB/s；访问者到内网服务，`0` 或留空表示不限速。 |
-| `download_limit` | 此 Host 规则下行限速，单位 KiB/s；内网服务到访问者，`0` 或留空表示不限速。 |
+| `upload_limit` | 此 Host 规则上行限速，单位 KB/s；访问者到内网服务，`0` 或留空表示不限速。 |
+| `download_limit` | 此 Host 规则下行限速，单位 KB/s；内网服务到访问者，`0` 或留空表示不限速。 |
 
 `proxy_protocol` 同时接受本项目旧配置中的 `proto_version=V1` / `proto_version=V2` 写法。省略时保持关闭，因此旧配置的转发行为不变。只有当后端明确配置为接收 PROXY Protocol 时才启用，否则后端通常会把 PROXY 头当作错误的 HTTP 数据。
 
@@ -123,16 +129,21 @@ server_port=5353
 | `server_port` | NPS 对公网监听的端口；云安全组和系统防火墙也必须放行。 |
 | `target_addr` | NPC 所在网络可访问的目标地址。 |
 | `server_ip` | 可选。服务端开启 `allow_multi_ip=true` 后，将规则绑定到指定 NPS 网卡地址。 |
-| `upload_limit` | 此隧道上行限速，单位 KiB/s；访问者到内网服务，`0` 或留空表示不限速。 |
-| `download_limit` | 此隧道下行限速，单位 KiB/s；内网服务到访问者，`0` 或留空表示不限速。 |
+| `upload_limit` | 此隧道上行限速，单位 KB/s；访问者到内网服务，`0` 或留空表示不限速。 |
+| `download_limit` | 此隧道下行限速，单位 KB/s；内网服务到访问者，`0` 或留空表示不限速。 |
 | `proxy_protocol` | TCP 隧道可配置 `0`（关闭）、`1`（v1）或 `2`（v2）；只有目标服务显式支持时才开启。兼容旧键 `proto_version=V1` / `V2`。 |
+| `target_type` | Secret/P2P 任务的目标协议：`tcp`（默认）、`udp` 或 `all`。UDP 使用带长度前缀的数据报帧。 |
 
 ## HTTP 正向代理、SOCKS5 与文件访问
 
 ~~~ini
-[http_forward]
-mode=httpProxy
+[mixed_proxy]
+mode=mixProxy
 server_port=18080
+http_proxy=true
+socks5_proxy=true
+dest_acl_mode=1
+dest_acl_rules=10.0.0.0/8,geosite:private
 
 [socks_outbound]
 mode=socks5
@@ -146,7 +157,18 @@ local_path=/srv/share
 strip_pre=/files/
 ~~~
 
-HTTP/SOCKS5 默认使用 `[common]` 的 `basic_username` 和 `basic_password`。若 SOCKS5 配置了 `multi_account`，账号文件一行一个 `用户名=密码`，用于多账号认证。文件服务中，访问 `http://<NPS>:19008/files/` 会由 NPC 从 `/srv/share` 提供内容。公网开放这些服务前必须设置认证并限制来源。
+`mixProxy` 在同一端口按客户端首包自动分流 HTTP 正向代理与 SOCKS5。`http_proxy` 和 `socks5_proxy` 至少开启一种；两项都省略或都为 `false` 时，兼容逻辑会按两种都开启处理，因此需要单协议监听时应显式写成一项 `true`、另一项 `false`。
+
+| 配置项 | 说明 |
+| --- | --- |
+| `mode` | `mixProxy` 为混合代理；历史 `httpProxy`、`socks5` 仍可单独使用。 |
+| `http_proxy` / `socks5_proxy` | `mixProxy` 内分别控制 HTTP 与 SOCKS5 开关。 |
+| `dest_acl_mode` | 混合代理目标 ACL：`0` 关闭、`1` 白名单、`2` 黑名单；只对 `mixProxy` 生效。 |
+| `dest_acl_rules` | 目标规则，逗号或换行分隔；支持 IP/CIDR、`full:`、`domain:`、`keyword:`、`geoip:`、`geosite:`。 |
+| `multi_account` | SOCKS5 独立账号文件，一行一个 `用户名=密码`。 |
+| `local_path` / `strip_pre` | 文件访问的本地根目录和对外路径前缀；访问 `http://<NPS>:19008/files/` 时映射到该目录。 |
+
+HTTP/SOCKS5 默认使用 `[common]` 的 `basic_username` 和 `basic_password`。在 Web/API 创建的混合代理规则还可以配置独立 `proxy_auth`，此时该规则优先使用独立账号，不回退客户端 Basic；NPC 配置文件当前没有对应的 `proxy_auth` 键。文件服务、SOCKS5 和 HTTP 正向代理暴露到公网前必须设置强认证并限制来源。
 
 ## Secret 与 P2P
 
@@ -174,6 +196,16 @@ local_port=2002
 password=replace-with-p2p-secret
 target_addr=127.0.0.1:22
 ~~~
+
+| 配置项 | 说明 |
+| --- | --- |
+| `local_port` | 访问端在 NPC 所在机器监听的端口。 |
+| `local_ip` | 访问端监听地址；留空为 `0.0.0.0`。 |
+| `password` | 对应的 Secret 或 P2P 任务密钥。 |
+| `target_addr` | P2P 本地访问端使用的目标；Secret Link 模式也用它生成 Link 元数据。 |
+| `target_type` | `tcp`（默认）、`udp` 或 `all`。 |
+| `fallback_secret` | P2P 直连失败时是否回退 Secret；Secret 类型始终使用 Secret。 |
+| `local_proxy` | Secret Link 是否允许目标指向 NPS 主机本地地址；还受服务端 `allow_secret_link` 和 `allow_secret_local` 限制。 |
 
 节名称必须以 `secret` 或 `p2p` 开头，NPC 才会把它识别为本地访问端。Secret/P2P 的命令和 NAT 限制见[客户端配置](../client_config.md#p2p-和-secret-本地访问端)。
 
@@ -205,6 +237,8 @@ health_check_target=127.0.0.1:8080,127.0.0.1:8082
 | `health_check_timeout` | 单次检查超时秒数。 |
 | `health_check_max_failed` | 连续失败次数达到该值后摘除目标。 |
 | `health_check_interval` | 检查间隔秒数。 |
+
+`health_check_target` 为空时整组健康检查关闭，检查类型、超时、失败阈值等参数都会被忽略，也不会自动复用任务原本的 `target_addr`。只填写一个目标时仍会执行检查；该目标达到连续失败阈值后会被摘除，任务可能暂时没有可用后端。
 
 ## 端口范围映射
 
@@ -242,4 +276,4 @@ export NPC_SERVER_VKEY=replace-with-verify-key
 
 ## 参考模板
 
-仓库中的 [conf/npc.conf](https://github.com/ZiDuNet/nps/blob/master/conf/npc.conf) 保留了当前版本的完整示例。升级时请以它和[服务端配置](../server_config.md)为准，避免直接复制其他 NPS 分支的旧字段。
+仓库中的 [conf/npc.conf](https://github.com/ZiDuNet/nps/blob/master/conf/npc.conf) 保留了当前版本的完整示例。升级时请以它和[服务端配置文件参考](../server/server_config.md)为准，避免直接复制其他 NPS 分支的旧字段。

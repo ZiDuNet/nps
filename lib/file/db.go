@@ -181,8 +181,8 @@ func (s *DbUtils) NewUser(u *User) error {
 		return err
 	}
 	u.Email = email
-	if u.MaxClientNum < 0 || u.MaxTunnelNum < 0 {
-		return errors.New("最大客户端数和隧道数不能小于 0")
+	if u.MaxClientNum < 0 || u.MaxTunnelNum < 0 || u.MaxConn < 0 || u.UploadLimit < 0 || u.DownloadLimit < 0 {
+		return errors.New("用户配额、连接数和带宽限制不能小于 0")
 	}
 	expireTime, err := NormalizeExpiryTime(u.ExpireTime)
 	if err != nil {
@@ -207,6 +207,7 @@ func (s *DbUtils) NewUser(u *User) error {
 	u.Status = true
 	s.JsonDb.Users.Store(u.Id, u)
 	s.JsonDb.StoreUsersToJsonFile()
+	SetUserRuntimeLimits(u.Id, u.MaxConn, u.UploadLimit, u.DownloadLimit)
 	return nil
 }
 
@@ -225,8 +226,8 @@ func (s *DbUtils) UpdateUser(u *User) error {
 		return err
 	}
 	u.Email = email
-	if u.MaxClientNum < 0 || u.MaxTunnelNum < 0 {
-		return errors.New("最大客户端数和隧道数不能小于 0")
+	if u.MaxClientNum < 0 || u.MaxTunnelNum < 0 || u.MaxConn < 0 || u.UploadLimit < 0 || u.DownloadLimit < 0 {
+		return errors.New("用户配额、连接数和带宽限制不能小于 0")
 	}
 	expireTime, err := NormalizeExpiryTime(u.ExpireTime)
 	if err != nil {
@@ -257,6 +258,7 @@ func (s *DbUtils) UpdateUser(u *User) error {
 	}
 	s.JsonDb.Users.Store(u.Id, u)
 	s.JsonDb.StoreUsersToJsonFile()
+	SetUserRuntimeLimits(u.Id, u.MaxConn, u.UploadLimit, u.DownloadLimit)
 	return nil
 }
 
@@ -291,6 +293,7 @@ func (s *DbUtils) DelUser(id int) error {
 	s.JsonDb.Users.Delete(id)
 	s.JsonDb.StoreUsersToJsonFile()
 	s.JsonDb.StoreClientsToJsonFile()
+	CleanupUserRuntime(id)
 	return nil
 }
 
@@ -1036,6 +1039,9 @@ func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error)
 		if common.Getverifyval(verifyKey) != vKey {
 			return true
 		}
+		// Keep the matched ID available even when authentication is rejected
+		// so Bridge connection logs can identify the account and client.
+		id = clientID
 		if !status {
 			rejectReason = errors.New("client disabled")
 			return true
@@ -1057,7 +1063,7 @@ func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error)
 		return
 	}
 	if rejectReason != nil {
-		return 0, rejectReason
+		return id, rejectReason
 	}
 	return 0, errors.New("not found")
 }
@@ -1099,6 +1105,9 @@ func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 	if err := NormalizeHealth(&t.Health); err != nil {
 		return err
 	}
+	if err := normalizeTunnelProxyAuth(t); err != nil {
+		return err
+	}
 	if t.Mode == "mixProxy" && !t.HttpProxy && !t.Socks5Proxy {
 		t.HttpProxy, t.Socks5Proxy = true, true
 	}
@@ -1134,6 +1143,9 @@ func (s *DbUtils) UpdateTask(t *Tunnel) error {
 	if err := NormalizeHealth(&t.Health); err != nil {
 		return err
 	}
+	if err := normalizeTunnelProxyAuth(t); err != nil {
+		return err
+	}
 	t.CompileDestinationACL()
 	if old, ok := s.JsonDb.Tasks.Load(t.Id); ok {
 		if previous, valid := old.(*Tunnel); valid && previous != nil && previous != t {
@@ -1143,6 +1155,24 @@ func (s *DbUtils) UpdateTask(t *Tunnel) error {
 	t.SetRateLimits(t.UploadLimit, t.DownloadLimit)
 	s.JsonDb.Tasks.Store(t.Id, t)
 	s.JsonDb.StoreTasksToJsonFile()
+	return nil
+}
+
+func normalizeTunnelProxyAuth(t *Tunnel) error {
+	if t == nil {
+		return nil
+	}
+	t.Lock()
+	defer t.Unlock()
+	value := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(t.ProxyAuth, "\r\n", "\n"), "\r", "\n"))
+	if value == "" {
+		t.ProxyAuth = ""
+		return nil
+	}
+	if _, err := ParseBasicAuth(value); err != nil {
+		return err
+	}
+	t.ProxyAuth = value
 	return nil
 }
 

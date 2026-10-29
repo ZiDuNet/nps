@@ -220,6 +220,31 @@ func TestTunnelListRowsAlwaysExposeResourceRateFields(t *testing.T) {
 	}
 }
 
+func TestTunnelListRowsNeverExposeMixedProxyCredentials(t *testing.T) {
+	tunnel := &file.Tunnel{
+		Id:        11,
+		Port:      19003,
+		Mode:      "mixProxy",
+		ProxyAuth: "proxy-user:super-secret",
+	}
+	row := newTunnelListRows([]*file.Tunnel{tunnel}, "nps.example.com")[0]
+	encoded, err := json.Marshal(row)
+	if err != nil {
+		t.Fatalf("marshal tunnel row: %v", err)
+	}
+	if bytes.Contains(encoded, []byte(`"ProxyAuth":`)) ||
+		bytes.Contains(encoded, []byte("proxy-user:super-secret")) {
+		t.Fatalf("mixed proxy credentials leaked through tunnel API row: %s", encoded)
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("decode tunnel row: %v", err)
+	}
+	if payload["ProxyAuthConfigured"] != true {
+		t.Fatalf("ProxyAuthConfigured = %#v, want true", payload["ProxyAuthConfigured"])
+	}
+}
+
 func TestIsAdminAuthorizedKeepsAPICredentialsRequestScoped(t *testing.T) {
 	if !isAdminAuthorized(true, false) {
 		t.Fatal("signed API authorization should be effective for its request")

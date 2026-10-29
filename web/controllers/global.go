@@ -510,9 +510,68 @@ func (s *GlobalController) Index() {
 		s.Data["helpSourceInput"] = ""
 		s.Data["helpConfigError"] = ""
 	}
-	s.Data["platformDomains"] = platformDomainStatuses()
 	s.Data["geo"] = geoStatusSnapshot()
 	s.display("global/index")
+}
+
+// Certificate centralizes every certificate-related setting while preserving
+// the complete nps.conf source editor on the server configuration page.
+func (s *GlobalController) Certificate() {
+	if !s.RequireAdmin() {
+		return
+	}
+	s.Data["menu"] = "global"
+	s.SetInfo("certificate settings")
+	s.Data["config_path"] = serverConfigPath()
+	s.Data["bridgeCertificate"] = bridgeCertificateStatusSnapshot("")
+	s.Data["platformDomains"] = platformDomainStatuses()
+
+	content, err := os.ReadFile(serverConfigPath())
+	if err != nil {
+		s.Data["certificate_config_error"] = err.Error()
+		s.Data["certificate_config_sections"] = []serverConfigSectionView{}
+		s.Data["certificate_config_summary"] = serverConfigSummary{}
+	} else {
+		sections, summary, sectionErr := certificateConfigSections(string(content))
+		if sectionErr != nil {
+			s.Data["certificate_config_error"] = sectionErr.Error()
+		}
+		s.Data["certificate_config_sections"] = sections
+		s.Data["certificate_config_summary"] = summary
+		if validationErr := validateServerConfigSource(string(content)); validationErr != nil {
+			s.Data["certificate_config_validation_error"] = validationErr.Error()
+		}
+	}
+	s.display("global/certificate")
+}
+
+func materializeRequestedPlatformDomains(requestedDomains []requestedPlatformDomain) ([]file.PlatformDomain, error) {
+	platformDomains := make([]file.PlatformDomain, 0, len(requestedDomains))
+	for _, domain := range requestedDomains {
+		certData := strings.TrimSpace(domain.CertData)
+		keyData := strings.TrimSpace(domain.KeyData)
+		if certData != "" || keyData != "" {
+			certPEM, certErr := decodeCertificateData(certData)
+			if certErr != nil {
+				return nil, fmt.Errorf("平台域名证书无效: %w", certErr)
+			}
+			keyPEM, keyErr := decodeCertificateData(keyData)
+			if keyErr != nil {
+				return nil, fmt.Errorf("平台域名私钥无效: %w", keyErr)
+			}
+			if _, inspectErr := inspectCertificatePair(certPEM, keyPEM, domain.Wildcard, true); inspectErr != nil {
+				return nil, fmt.Errorf("平台域名证书无效: %w", inspectErr)
+			}
+			certPath, keyPath, persistErr := persistCertificatePair("platform", domain.ID, certPEM, keyPEM)
+			if persistErr != nil {
+				return nil, fmt.Errorf("平台域名证书保存失败: %w", persistErr)
+			}
+			domain.CertFilePath = certPath
+			domain.KeyFilePath = keyPath
+		}
+		platformDomains = append(platformDomains, domain.PlatformDomain)
+	}
+	return platformDomains, nil
 }
 
 // 添加全局参数
@@ -533,34 +592,11 @@ func (s *GlobalController) Save() {
 	if !submitted {
 		platformDomains = file.GetDb().GetPlatformDomains()
 	} else {
-		platformDomains = make([]file.PlatformDomain, 0, len(requestedDomains))
-		for _, domain := range requestedDomains {
-			certData := strings.TrimSpace(domain.CertData)
-			keyData := strings.TrimSpace(domain.KeyData)
-			if certData != "" || keyData != "" {
-				certPEM, certErr := decodeCertificateData(certData)
-				if certErr != nil {
-					s.AjaxErr("平台域名证书无效: " + certErr.Error())
-					return
-				}
-				keyPEM, keyErr := decodeCertificateData(keyData)
-				if keyErr != nil {
-					s.AjaxErr("平台域名私钥无效: " + keyErr.Error())
-					return
-				}
-				if _, inspectErr := inspectCertificatePair(certPEM, keyPEM, domain.Wildcard, true); inspectErr != nil {
-					s.AjaxErr("平台域名证书无效: " + inspectErr.Error())
-					return
-				}
-				certPath, keyPath, persistErr := persistCertificatePair("platform", domain.ID, certPEM, keyPEM)
-				if persistErr != nil {
-					s.AjaxErr("平台域名证书保存失败: " + persistErr.Error())
-					return
-				}
-				domain.CertFilePath = certPath
-				domain.KeyFilePath = keyPath
-			}
-			platformDomains = append(platformDomains, domain.PlatformDomain)
+		var materializeErr error
+		platformDomains, materializeErr = materializeRequestedPlatformDomains(requestedDomains)
+		if materializeErr != nil {
+			s.AjaxErr(materializeErr.Error())
+			return
 		}
 	}
 
@@ -619,6 +655,44 @@ func (s *GlobalController) Save() {
 	}
 	s.auditMutation("global.update", "global", 0, 0, "", nil, map[string]string{"server_url": t.ServerUrl, "platform_domains": fmt.Sprintf("%d", len(t.PlatformDomains))})
 	s.AjaxOk("save success")
+}
+
+// SaveCertificatePlatformDomains updates the platform wildcard certificate
+// pool without touching the unrelated global access and content settings.
+func (s *GlobalController) SaveCertificatePlatformDomains() {
+	if !s.RequirePost() || !s.RequireAdmin() {
+		return
+	}
+	requestedDomains, submitted, err := requestedPlatformDomains(s.Ctx.Request)
+	if err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
+	if !submitted {
+		s.AjaxErr("缺少平台泛域名配置")
+		return
+	}
+	domains, err := materializeRequestedPlatformDomains(requestedDomains)
+	if err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
+	global := file.GetDb().GetGlobal()
+	if global == nil {
+		global = &file.Glob{}
+	}
+	global.PlatformDomains = domains
+	if err := file.GetDb().SaveGlobal(global); err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
+	s.auditMutation("global.platform_certificates.update", "global", 0, 0, "", nil, map[string]string{"platform_domains": strconv.Itoa(len(domains))})
+	s.Data["json"] = s.withRequestMeta(map[string]interface{}{
+		"status": 1,
+		"msg":    "平台泛域名与证书已保存",
+		"data":   platformDomainStatuses(),
+	})
+	s.ServeJSON()
 }
 
 func parseIPRules(raw string) []string {

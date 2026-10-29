@@ -21,7 +21,7 @@ import (
 	"ehang.io/nps/lib/file"
 )
 
-func TestGlobalIndexRendersWithPlatformDomainsAndGeoData(t *testing.T) {
+func TestGlobalIndexKeepsCertificateSettingsOnDedicatedTab(t *testing.T) {
 	tpl := template.Must(template.ParseFiles("../views/global/index.html"))
 	data := map[string]interface{}{
 		"web_base_url":         "",
@@ -31,11 +31,6 @@ func TestGlobalIndexRendersWithPlatformDomainsAndGeoData(t *testing.T) {
 		"globalIpListPriority": 0,
 		"globalMaxConn":        0,
 		"globalRateLimit":      0,
-		"platformDomains": []platformDomainStatus{{
-			ID:       "platform-example",
-			Wildcard: "*.example.com",
-			Status:   "未配置证书（仅 HTTP）",
-		}},
 		"geo": geoDataStatus{
 			Files: []geoFileStatus{{Name: "geoip.dat", Path: "/tmp/geoip.dat"}},
 		},
@@ -44,8 +39,61 @@ func TestGlobalIndexRendersWithPlatformDomainsAndGeoData(t *testing.T) {
 	if err := tpl.Execute(&rendered, data); err != nil {
 		t.Fatalf("execute global index template: %v", err)
 	}
-	if !strings.Contains(rendered.String(), "/global/checkcertificate") {
-		t.Fatal("global index must render the certificate validation URL inside platform domain rows")
+	page := rendered.String()
+	if !strings.Contains(page, "/global/certificate") {
+		t.Fatal("global index must link to the certificate settings tab")
+	}
+	for _, marker := range []string{"bridge-certificate-card", `id="platform-domain-list"`, `id="platform-domains-input"`} {
+		if strings.Contains(page, marker) {
+			t.Fatalf("global index must not render certificate editor marker %q", marker)
+		}
+	}
+}
+
+func TestCertificateSettingsTemplateRendersCertificateEditorsAndScopedConfig(t *testing.T) {
+	content := strings.Join([]string{
+		"https_default_cert_file=conf/server.pem",
+		"https_default_key_file=conf/server.key",
+		"force_auto_ssl=false",
+		"web_open_ssl=false",
+		"tls_enable=true",
+		"tls_bridge_port=8025",
+	}, "\n")
+	sections, summary, err := certificateConfigSections(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tpl, err := template.ParseFiles("../views/global/certificate.html")
+	if err != nil {
+		t.Fatalf("certificate template does not parse: %v", err)
+	}
+	data := map[string]interface{}{
+		"web_base_url":                        "",
+		"config_path":                         "/tmp/nps/conf/nps.conf",
+		"bridgeCertificate":                   bridgeCertificateStatus{Status: "证书有效", RuntimeStatus: "运行中", Tone: "success", RuntimeTone: "success"},
+		"platformDomains":                     []platformDomainStatus{{ID: "platform-example", Wildcard: "*.example.com", Status: "证书有效"}},
+		"certificate_config_sections":         sections,
+		"certificate_config_summary":          summary,
+		"certificate_config_error":            "",
+		"certificate_config_validation_error": "",
+	}
+	var output bytes.Buffer
+	if err := tpl.Execute(&output, data); err != nil {
+		t.Fatalf("execute certificate template: %v", err)
+	}
+	page := output.String()
+	for _, marker := range []string{
+		"/global/index", "/global/registration", "/global/config", "/global/certificate",
+		"bridge-certificate-card", "/global/bridgecertificate/check",
+		"platform-domain-list", "/global/certificate/platform-domains",
+		"https_default_cert_file", "config_force_auto_ssl",
+		"config_web_open_ssl", "config_tls_bridge_port",
+		`data-cert-depends-match="ssl_ca:ZeroSSL"`,
+		"/global/certificate/config",
+	} {
+		if !strings.Contains(page, marker) {
+			t.Fatalf("certificate settings page is missing %q", marker)
+		}
 	}
 }
 

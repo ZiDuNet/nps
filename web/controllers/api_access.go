@@ -96,7 +96,7 @@ func (s *UserController) AdminAPIKeyGenerate() {
 		return
 	}
 	s.auditMutation("admin.api_key_rotate", "global", 0, 0, "", nil, map[string]string{"source": "web"})
-	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "管理员 API 密钥已生成，请立即保存", "token": token}
+	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "管理员 API 密钥已生成，可随时在 API 接入页面再次查看", "token": token}
 	s.ServeJSON()
 	s.StopRun()
 }

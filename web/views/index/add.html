@@ -187,6 +187,13 @@
                         <label class="form-label font-bold" data-i18n-zh="仅允许已登记 IP" data-i18n-en="Registered IPs only">仅允许已登记 IP</label>
                         <div class="form-group-wrapper"><div class="toggle-field"><input type="hidden" name="registered_only" value="0"><label class="toggle-switch"><input type="checkbox"><span class="toggle-slider"></span></label><span class="toggle-label" data-toggle-state="no">否</span></div><span class="help-block" data-i18n-zh="开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用客户端登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。" data-i18n-en="When enabled, visitors must pass the lists and register their IP first with npc register or the client's registration key/VKEY. Registrations stay in memory and end when NPS restarts.">开启后，访问者除了要通过名单，还必须先登记 IP：可在访问者设备上执行 npc register，或用客户端登记口令、VKEY 在登记页面登记。登记只保存在内存中，NPS 重启后需要重新登记。</span></div>
                     </div>
+                    <div class="form-group form-group--wide" data-tunnel-field="proxy_auth">
+                        <label class="form-label font-bold" for="tunnel-proxy-auth" data-i18n-zh="混合代理 Basic 认证" data-i18n-en="Mixed proxy Basic authentication">混合代理 Basic 认证</label>
+                        <div class="form-group-wrapper">
+                            <textarea id="tunnel-proxy-auth" class="form-control" name="proxy_auth" rows="3" autocomplete="new-password" spellcheck="false" placeholder="proxy-user:strong-password"></textarea>
+                            <span class="help-block" data-i18n-zh="每行填写一个“用户名:密码”，可配置多个账号。此处配置后会覆盖所属客户端的 Basic 账号；留空则继承客户端账号。HTTP 与 SOCKS5 共用此认证。" data-i18n-en="Enter one username:password per line; multiple accounts are supported. A value here overrides the owning client's Basic accounts. Leave empty to inherit the client accounts. HTTP and SOCKS5 share this authentication.">每行填写一个“用户名:密码”，可配置多个账号。此处配置后会覆盖所属客户端的 Basic 账号；留空则继承客户端账号。HTTP 与 SOCKS5 共用此认证。</span>
+                        </div>
+                    </div>
                     <div class="form-group" data-tunnel-field="dest_acl_mode">
                         <label class="form-label font-bold" for="tunnel-dest-acl-mode" langtag="word-destacl"></label>
                         <div class="form-group-wrapper"><select id="tunnel-dest-acl-mode" class="form-control" name="dest_acl_mode"><option value="0" langtag="word-disable"></option><option value="1" langtag="word-whitelist"></option><option value="2" langtag="word-blacklist"></option></select><span class="help-block" langtag="info-destacl"></span></div>
@@ -272,7 +279,7 @@
     var fieldMap = {
         tcp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit", "proto_version", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
         udp: ["client_id", "server_ip", "port", "target", "local_proxy", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"],
-        mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"],
+        mixProxy: ["client_id", "server_ip", "port", "registered_only", "acl", "mix_proxy", "proxy_auth", "dest_acl_mode", "dest_acl_rules", "max_conn", "flow_limit", "upload_limit", "download_limit"],
         secret: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"],
         p2p: ["client_id", "server_ip", "target_type", "target", "password", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"],
         file: ["client_id", "server_ip", "port", "local_path", "strip_pre", "registered_only", "acl", "max_conn", "flow_limit", "upload_limit", "download_limit"]
@@ -280,7 +287,7 @@
     var tunnelTypeClasses = "tunnel-type-tcp tunnel-type-udp tunnel-type-httpProxy tunnel-type-socks5 tunnel-type-mixProxy tunnel-type-secret tunnel-type-p2p tunnel-type-file";
     var tunnelSectionFields = {
         listen: ["mix_proxy", "server_ip", "port", "local_proxy", "target", "local_path", "strip_pre", "password"],
-        access: ["registered_only", "dest_acl_mode", "dest_acl_rules", "acl"],
+        access: ["registered_only", "proxy_auth", "dest_acl_mode", "dest_acl_rules", "acl"],
         limits: ["upload_limit", "download_limit", "health_check_type", "health_check_target", "health_check_timeout", "health_max_failed", "health_check_interval", "health_http_url"],
         transport: ["proto_version"]
     };

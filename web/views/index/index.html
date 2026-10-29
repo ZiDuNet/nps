@@ -79,7 +79,7 @@
             <h5 data-i18n-zh="运行状态" data-i18n-en="Runtime status">运行状态</h5>
             <div class="dashboard-runtime-toolbar">
                 <span id="dashboard-last-updated" class="dashboard-last-updated" data-i18n-zh="正在更新" data-i18n-en="Updating">正在更新</span>
-                <button id="dashboard-refresh" class="dashboard-refresh-button" type="button" aria-label="刷新运行状态" data-aria-label-zh="刷新运行状态" data-aria-label-en="Refresh runtime status" data-title-zh="刷新运行状态" data-title-en="Refresh runtime status"><i class="fa fa-refresh" aria-hidden="true"></i></button>
+                <button id="dashboard-refresh" class="dashboard-refresh-button" type="button" aria-label="刷新运行状态" data-aria-label-zh="刷新运行状态" data-aria-label-en="Refresh runtime status" data-title-zh="刷新运行状态" data-title-en="Refresh runtime status"><i class="fa fa-sync-alt" aria-hidden="true"></i></button>
             </div>
         </div>
         <div class="ibox-content">
@@ -119,82 +119,210 @@
         </div>
     </div>
 
+{{if ne true .isAdmin}}
+    <div class="panel ibox float-e-margins nps-panel dashboard-user-bridge-panel">
+        <div class="ibox-title dashboard-config-title">
+            <div class="dashboard-config-heading">
+                <span class="dashboard-config-heading__icon" aria-hidden="true"><i class="fa fa-network-wired"></i></span>
+                <div class="dashboard-config-heading__copy">
+                    <h5 data-i18n-zh="可连接的桥接入口" data-i18n-en="Available Bridge endpoints">可连接的桥接入口</h5>
+                    <p data-i18n-zh="用于配置本账号客户端的 NPC 连接地址与协议" data-i18n-en="NPC addresses and protocols available for your clients">用于配置本账号客户端的 NPC 连接地址与协议</p>
+                </div>
+            </div>
+            <span class="dashboard-config-count"><strong>{{len .data.bridgeEndpoints}}</strong><span data-i18n-zh="个入口" data-i18n-en="endpoints">个入口</span></span>
+        </div>
+        <div class="ibox-content dashboard-config-content">
+            <div class="dashboard-config-bridge-grid">
+                {{range .data.bridgeEndpoints}}
+                <article class="dashboard-config-endpoint{{if .Main}} is-main{{end}}">
+                    <div class="dashboard-config-endpoint__top">
+                        <span class="dashboard-config-endpoint__dot" aria-hidden="true"></span>
+                        <strong>{{.Label}}</strong>
+                        <div class="dashboard-config-endpoint__meta">
+                            {{if .UsesUDP}}<span>UDP</span>{{end}}
+                            {{if .Path}}<span>{{.Path}}</span>{{end}}
+                            {{if .ALPN}}<span>ALPN {{.ALPN}}</span>{{end}}
+                        </div>
+                        {{if .Main}}<span class="dashboard-config-endpoint__badge" data-i18n-zh="主入口" data-i18n-en="Main">主入口</span>{{end}}
+                    </div>
+                    <code class="dashboard-config-endpoint__address" title="{{.Host}}{{if .Port}}:{{.Port}}{{end}}">{{if .Host}}{{.Host}}{{end}}{{if .Port}}:{{.Port}}{{else}}:-{{end}}</code>
+                </article>
+                {{else}}
+                <div class="dashboard-config-empty" data-i18n-zh="当前没有向客户端开放且可用的 Bridge 入口，请联系管理员检查入口展示设置。" data-i18n-en="No Bridge endpoint is currently exposed to clients. Ask an administrator to check the endpoint display settings.">当前没有向客户端开放且可用的 Bridge 入口，请联系管理员检查入口展示设置。</div>
+                {{end}}
+            </div>
+        </div>
+    </div>
+{{end}}
+
 {{if eq true .isAdmin}}
-    <div class="dashboard-information-grid">
+    <div class="dashboard-information-grid dashboard-information-grid--balanced">
         <div class="dashboard-half-column">
             <div class="panel ibox float-e-margins nps-panel">
-                <div class="ibox-title">
-                    <h5 langtag="word-configurationinformation"></h5>
+                <div class="ibox-title dashboard-config-title">
+                    <div class="dashboard-config-heading">
+                        <span class="dashboard-config-heading__icon" aria-hidden="true"><i class="fa fa-sliders-h"></i></span>
+                        <div class="dashboard-config-heading__copy">
+                            <h5 langtag="word-configurationinformation"></h5>
+                            <p data-i18n-zh="Bridge、监听与运行参数" data-i18n-en="Bridge, listeners, and runtime settings">Bridge、监听与运行参数</p>
+                        </div>
+                    </div>
                     <div class="ibox-tools">
                         <button type="button" class="collapse-link" aria-label="折叠配置信息" data-aria-label-zh="折叠配置信息" data-aria-label-en="Collapse configuration information" data-title-zh="折叠配置信息" data-title-en="Collapse configuration information"><i class="fa fa-chevron-up" aria-hidden="true"></i></button>
                         <button type="button" class="close-link" aria-label="关闭配置信息" data-aria-label-zh="关闭配置信息" data-aria-label-en="Close configuration information" data-title-zh="关闭配置信息" data-title-en="Close configuration information"><i class="fa fa-times" aria-hidden="true"></i></button>
                     </div>
                 </div>
-                <div class="ibox-content no-padding">
-                    <ul class="list-group list-group-sm dashboard-data-list">
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-bridgingmode"></strong></div><div class="dashboard-data-value text-right"><strong>TCP {{or .data.bridgeTCPPort "0"}}{{if and .data.bridgeKCPPort (ne .data.bridgeKCPPort "0")}} · KCP {{.data.bridgeKCPPort}}{{end}}{{if and .data.bridgeTLSPort (ne .data.bridgeTLSPort "0")}} · TLS {{.data.bridgeTLSPort}}{{end}}{{if and .data.bridgeWSPort (ne .data.bridgeWSPort "0")}} · WS {{.data.bridgeWSPort}}{{end}}{{if and .data.bridgeWSSPort (ne .data.bridgeWSSPort "0")}} · WSS {{.data.bridgeWSSPort}}{{end}}{{if and .data.bridgeQUICPort (ne .data.bridgeQUICPort "0")}} · QUIC {{.data.bridgeQUICPort}}{{end}}{{if .data.bridgeWSPath}} · Path {{.data.bridgeWSPath}}{{end}}</strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-httpports"></strong></div><div class="dashboard-data-value text-right"><strong>{{or .data.httpProxyPort "0"}} / {{or .data.httpsProxyPort "0"}}</strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-registeredips"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.registeredIps}}</strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-trafficdatapersistence"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.flowStoreInterval}} 分钟</strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-loglevel"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.logLevel}}</strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-p2paddr"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.p2pAddr}}</strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-serveriP"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.p2pIp}} | {{.data.serverIpv4}} | {{.data.serverIpv6}}</strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-serverversion"></strong></div><div class="dashboard-data-value text-right"><strong>{{.data.version}} <span class="dashboard-data-sub">(安全握手 ≥ {{.data.minVersion}})</span></strong></div></div>
-                        </li>
-                    </ul>
+                <div class="ibox-content dashboard-config-content">
+                    <section class="dashboard-config-section dashboard-config-bridge" aria-labelledby="dashboard-config-bridge-title">
+                        <div class="dashboard-config-section-heading">
+                            <div>
+                                <span class="dashboard-config-eyebrow">BRIDGE</span>
+                                <h6 id="dashboard-config-bridge-title" data-i18n-zh="桥接入口" data-i18n-en="Bridge endpoints">桥接入口</h6>
+                            </div>
+                            <span class="dashboard-config-count"><strong>{{len .data.bridgeEndpoints}}</strong><span data-i18n-zh="个入口" data-i18n-en="endpoints">个入口</span></span>
+                        </div>
+                        <div class="dashboard-config-bridge-grid">
+                            {{range .data.bridgeEndpoints}}
+                            <article class="dashboard-config-endpoint{{if .Main}} is-main{{end}}">
+                                <div class="dashboard-config-endpoint__top">
+                                    <span class="dashboard-config-endpoint__dot" aria-hidden="true"></span>
+                                    <strong>{{.Label}}</strong>
+                                    <div class="dashboard-config-endpoint__meta">
+                                        {{if .UsesUDP}}<span>UDP</span>{{end}}
+                                        {{if .Path}}<span>{{.Path}}</span>{{end}}
+                                        {{if .ALPN}}<span>ALPN {{.ALPN}}</span>{{end}}
+                                    </div>
+                                    {{if .Main}}<span class="dashboard-config-endpoint__badge" data-i18n-zh="主入口" data-i18n-en="Main">主入口</span>{{end}}
+                                </div>
+                                <code class="dashboard-config-endpoint__address" title="{{.Host}}{{if .Port}}:{{.Port}}{{end}}">{{if .Host}}{{.Host}}{{end}}{{if .Port}}:{{.Port}}{{else}}:-{{end}}</code>
+                            </article>
+                            {{else}}
+                            <div class="dashboard-config-empty" data-i18n-zh="当前没有启用的 Bridge 入口" data-i18n-en="No Bridge endpoint is enabled">当前没有启用的 Bridge 入口</div>
+                            {{end}}
+                        </div>
+                    </section>
+
+                    <div class="dashboard-config-lower">
+                        <section class="dashboard-config-section" aria-labelledby="dashboard-config-runtime-title">
+                            <div class="dashboard-config-section-heading">
+                                <div>
+                                    <span class="dashboard-config-eyebrow">RUNTIME</span>
+                                    <h6 id="dashboard-config-runtime-title" data-i18n-zh="运行参数" data-i18n-en="Runtime">运行参数</h6>
+                                </div>
+                            </div>
+                            <div class="dashboard-config-metrics">
+                                <article class="dashboard-config-metric">
+                                    <span class="dashboard-config-metric__icon" aria-hidden="true"><i class="fa fa-exchange"></i></span>
+                                    <div>
+                                        <span class="dashboard-config-metric__label" langtag="word-httpports"></span>
+                                        <strong>{{or .data.httpProxyPort "0"}}<span class="dashboard-config-metric__separator">/</span>{{or .data.httpsProxyPort "0"}}</strong>
+                                    </div>
+                                </article>
+                                <article class="dashboard-config-metric">
+                                    <span class="dashboard-config-metric__icon" aria-hidden="true"><i class="fa fa-map-marker"></i></span>
+                                    <div>
+                                        <span class="dashboard-config-metric__label" langtag="word-registeredips"></span>
+                                        <strong>{{.data.registeredIps}}</strong>
+                                    </div>
+                                </article>
+                                <article class="dashboard-config-metric">
+                                    <span class="dashboard-config-metric__icon" aria-hidden="true"><i class="fa fa-database"></i></span>
+                                    <div>
+                                        <span class="dashboard-config-metric__label" langtag="word-trafficdatapersistence"></span>
+                                        <strong>{{.data.flowStoreInterval}}<span class="dashboard-config-metric__unit" data-i18n-zh="分钟" data-i18n-en="min">分钟</span></strong>
+                                    </div>
+                                </article>
+                                <article class="dashboard-config-metric">
+                                    <span class="dashboard-config-metric__icon" aria-hidden="true"><i class="fa fa-bars"></i></span>
+                                    <div>
+                                        <span class="dashboard-config-metric__label" langtag="word-loglevel"></span>
+                                        <strong>{{.data.logLevel}}</strong>
+                                    </div>
+                                </article>
+                            </div>
+                        </section>
+
+                        <section class="dashboard-config-section" aria-labelledby="dashboard-config-service-title">
+                            <div class="dashboard-config-section-heading">
+                                <div>
+                                    <span class="dashboard-config-eyebrow">SERVICE</span>
+                                    <h6 id="dashboard-config-service-title" data-i18n-zh="服务信息" data-i18n-en="Service">服务信息</h6>
+                                </div>
+                            </div>
+                            <div class="dashboard-config-details">
+                                <div class="dashboard-config-detail">
+                                    <span class="dashboard-config-detail__label"><i class="fa fa-link" aria-hidden="true"></i><span langtag="word-p2paddr"></span></span>
+                                    <code title="{{.data.p2pAddr}}">{{or .data.p2pAddr "-"}}</code>
+                                </div>
+                                <div class="dashboard-config-detail">
+                                    <span class="dashboard-config-detail__label"><i class="fa fa-server" aria-hidden="true"></i><span langtag="word-serveriP"></span></span>
+                                    <div class="dashboard-config-ip-list">
+                                        {{if .data.p2pIp}}<span>{{.data.p2pIp}}</span>{{end}}
+                                        {{if .data.serverIpv4}}<span>{{.data.serverIpv4}}</span>{{end}}
+                                        {{if .data.serverIpv6}}<span>{{.data.serverIpv6}}</span>{{end}}
+                                    </div>
+                                </div>
+                                <div class="dashboard-config-detail">
+                                    <span class="dashboard-config-detail__label"><i class="fa fa-code-branch" aria-hidden="true"></i><span langtag="word-serverversion"></span></span>
+                                    <div class="dashboard-config-version">
+                                        <strong>{{.data.version}}</strong>
+                                        <span><span data-i18n-zh="安全握手" data-i18n-en="Secure handshake">安全握手</span> ≥ {{.data.minVersion}}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="dashboard-half-column">
             <div class="panel ibox float-e-margins nps-panel">
-                <div class="ibox-title">
-                    <h5 langtag="word-systeminformation"></h5>
+                <div class="ibox-title dashboard-system-title">
+                    <div class="dashboard-config-heading">
+                        <span class="dashboard-config-heading__icon" aria-hidden="true"><i class="fa fa-server"></i></span>
+                        <div class="dashboard-config-heading__copy">
+                            <h5 langtag="word-systeminformation"></h5>
+                            <p data-i18n-zh="性能、连接与实时吞吐" data-i18n-en="Performance, connections, and live throughput">性能、连接与实时吞吐</p>
+                        </div>
+                    </div>
                     <div class="ibox-tools">
                         <button type="button" class="collapse-link" aria-label="折叠系统信息" data-aria-label-zh="折叠系统信息" data-aria-label-en="Collapse system information" data-title-zh="折叠系统信息" data-title-en="Collapse system information"><i class="fa fa-chevron-up" aria-hidden="true"></i></button>
                         <button type="button" class="close-link" aria-label="关闭系统信息" data-aria-label-zh="关闭系统信息" data-aria-label-en="Close system information" data-title-zh="关闭系统信息" data-title-en="Close system information"><i class="fa fa-times" aria-hidden="true"></i></button>
                     </div>
                 </div>
-                <div class="ibox-content no-padding">
-                    <ul class="list-group list-group-sm dashboard-data-list">
-                        <li class="list-group-item dashboard-data-item dashboard-meter-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-cpu"></strong></div><div class="dashboard-data-value text-right"><strong id="overview_cpu"></strong></div></div>
+                <div class="ibox-content dashboard-system-content">
+                    <div class="dashboard-system-grid">
+                        <article class="dashboard-system-metric dashboard-system-metric--meter">
+                            <div class="dashboard-system-metric__label"><i class="fa fa-microchip" aria-hidden="true"></i><span langtag="word-cpu"></span></div>
+                            <strong id="overview_cpu" class="dashboard-system-metric__value">--</strong>
                             <div class="progress progress-small"><div id="overview_cpu_bar" class="progress-bar"></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item dashboard-meter-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-memory"></strong></div><div class="dashboard-data-value text-right"><strong id="overview_memory"></strong></div></div>
+                        </article>
+                        <article class="dashboard-system-metric dashboard-system-metric--meter">
+                            <div class="dashboard-system-metric__label"><i class="fa fa-memory" aria-hidden="true"></i><span langtag="word-memory"></span></div>
+                            <strong id="overview_memory" class="dashboard-system-metric__value">--</strong>
                             <div class="progress progress-small"><div id="overview_memory_bar" class="progress-bar"></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-load"></strong></div><div class="dashboard-data-value text-right"><strong id="overview_load"></strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-tcpconnections_established"></strong></div><div class="dashboard-data-value text-right"><strong id="overview_tcp"></strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-udpconnections_established"></strong></div><div class="dashboard-data-value text-right"><strong id="overview_udp"></strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-outbandwidth"></strong></div><div class="dashboard-data-value text-right"><strong id="overview_send"></strong></div></div>
-                        </li>
-                        <li class="list-group-item dashboard-data-item">
-                            <div class="dashboard-data-row"><div class="dashboard-data-label"><strong langtag="word-inbandwidth"></strong></div><div class="dashboard-data-value text-right"><strong id="overview_recv"></strong></div></div>
-                        </li>
-                    </ul>
+                        </article>
+                        <article class="dashboard-system-metric">
+                            <div class="dashboard-system-metric__label"><i class="fa fa-tachometer-alt" aria-hidden="true"></i><span langtag="word-load"></span></div>
+                            <strong id="overview_load" class="dashboard-system-metric__value dashboard-system-metric__value--wrap">--</strong>
+                        </article>
+                        <article class="dashboard-system-metric">
+                            <div class="dashboard-system-metric__label"><i class="fa fa-plug" aria-hidden="true"></i><span langtag="word-tcpconnections_established"></span></div>
+                            <strong id="overview_tcp" class="dashboard-system-metric__value">--</strong>
+                        </article>
+                        <article class="dashboard-system-metric">
+                            <div class="dashboard-system-metric__label"><i class="fa fa-exchange-alt" aria-hidden="true"></i><span langtag="word-udpconnections_established"></span></div>
+                            <strong id="overview_udp" class="dashboard-system-metric__value">--</strong>
+                        </article>
+                        <article class="dashboard-system-metric">
+                            <div class="dashboard-system-metric__label"><i class="fa fa-arrow-up" aria-hidden="true"></i><span langtag="word-outbandwidth"></span></div>
+                            <strong id="overview_send" class="dashboard-system-metric__value">--</strong>
+                        </article>
+                        <article class="dashboard-system-metric">
+                            <div class="dashboard-system-metric__label"><i class="fa fa-arrow-down" aria-hidden="true"></i><span langtag="word-inbandwidth"></span></div>
+                            <strong id="overview_recv" class="dashboard-system-metric__value">--</strong>
+                        </article>
+                    </div>
                 </div>
             </div>
         </div>

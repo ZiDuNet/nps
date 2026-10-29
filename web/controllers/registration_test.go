@@ -25,27 +25,40 @@ func TestRegistrationPageShowsUnlimitedOnlyForZeroQuota(t *testing.T) {
 		"create_captcha": func() template.HTML { return "" },
 	}).ParseFiles("../views/login/register.html"))
 	tests := []struct {
-		name      string
-		clients   int
-		tunnels   int
-		days      int
-		required  []string
-		forbidden []string
+		name          string
+		clients       int
+		tunnels       int
+		maxConn       int
+		uploadLimit   int
+		downloadLimit int
+		days          int
+		required      []string
+		forbidden     []string
 	}{
 		{
-			name:     "zero means unlimited",
-			clients:  0,
-			tunnels:  0,
-			days:     0,
-			required: []string{"0 个客户端（不限）", "0 个隧道（不限）", "有效期：永久"},
+			name:    "zero means unlimited",
+			clients: 0,
+			tunnels: 0,
+			days:    0,
+			required: []string{
+				"客户端 不限", "隧道 不限", "并发连接 不限",
+				"上行带宽 不限", "下行带宽 不限", "有效期：永久",
+				"P2P 直连不占用 NPS 转发带宽和并发连接额度",
+			},
 		},
 		{
-			name:      "positive values omit unlimited note",
-			clients:   1,
-			tunnels:   2,
-			days:      7,
-			required:  []string{"1 个客户端、2 个隧道", "有效期：7 天"},
-			forbidden: []string{"1 个客户端（不限）", "2 个隧道（不限）"},
+			name:          "positive values render configured benefits",
+			clients:       1,
+			tunnels:       2,
+			maxConn:       3,
+			uploadLimit:   128,
+			downloadLimit: 256,
+			days:          7,
+			required: []string{
+				"客户端 1", "隧道 2", "并发连接 3",
+				"上行带宽 128 KB/s", "下行带宽 256 KB/s", "有效期：7 天",
+			},
+			forbidden: []string{"有效期：永久"},
 		},
 	}
 
@@ -53,11 +66,14 @@ func TestRegistrationPageShowsUnlimitedOnlyForZeroQuota(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var output bytes.Buffer
 			err := tpl.ExecuteTemplate(&output, "register.html", map[string]interface{}{
-				"register_max_clients": tt.clients,
-				"register_max_tunnels": tt.tunnels,
-				"register_expire_days": tt.days,
-				"web_base_url":         "",
-				"version":              "test",
+				"register_max_clients":    tt.clients,
+				"register_max_tunnels":    tt.tunnels,
+				"register_max_conn":       tt.maxConn,
+				"register_upload_limit":   tt.uploadLimit,
+				"register_download_limit": tt.downloadLimit,
+				"register_expire_days":    tt.days,
+				"web_base_url":            "",
+				"version":                 "test",
 			})
 			if err != nil {
 				t.Fatalf("render registration page: %v", err)

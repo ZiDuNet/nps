@@ -71,16 +71,18 @@ type Page struct {
 var journal = struct {
 	sync.RWMutex
 	path string
-}{
-	path: filepath.Join(common.GetRunPath(), "audit.log"),
-}
+}{}
 
-// Configure changes the journal location. Relative paths are resolved against
-// the NPS run directory, matching the behavior of the other local files.
+// Configure changes the journal location. An empty path disables the separate
+// audit journal. Relative paths are resolved against the NPS run directory,
+// matching the behavior of the other local files.
 func Configure(path string) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		path = filepath.Join(common.GetRunPath(), "audit.log")
+		journal.Lock()
+		journal.path = ""
+		journal.Unlock()
+		return
 	} else if !filepath.IsAbs(path) {
 		path = filepath.Join(common.GetRunPath(), path)
 	}
@@ -89,8 +91,9 @@ func Configure(path string) {
 	journal.Unlock()
 }
 
-// Path returns the current journal path. It is mainly useful for diagnostics
-// and tests; callers should not write the file directly.
+// Path returns the current journal path. An empty result means the journal is
+// disabled. It is mainly useful for diagnostics and tests; callers should not
+// write the file directly.
 func Path() string {
 	journal.RLock()
 	defer journal.RUnlock()
@@ -104,6 +107,12 @@ func Path() string {
 func Append(event Event) error {
 	if strings.TrimSpace(event.Action) == "" {
 		return errors.New("audit action is required")
+	}
+	journal.RLock()
+	path := journal.path
+	journal.RUnlock()
+	if path == "" {
+		return nil
 	}
 	if event.Time.IsZero() {
 		event.Time = time.Now().UTC()
@@ -126,6 +135,9 @@ func Append(event Event) error {
 
 	journal.Lock()
 	defer journal.Unlock()
+	if journal.path == "" {
+		return nil
+	}
 	if err := os.MkdirAll(filepath.Dir(journal.path), 0700); err != nil {
 		return fmt.Errorf("create audit directory: %w", err)
 	}
@@ -161,6 +173,9 @@ func List(filter Filter) (Page, error) {
 	journal.RLock()
 	path := journal.path
 	journal.RUnlock()
+	if path == "" {
+		return Page{Events: []*Event{}, Total: 0}, nil
+	}
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return Page{Events: []*Event{}, Total: 0}, nil

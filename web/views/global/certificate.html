@@ -1,0 +1,715 @@
+<style>
+    .certificate-settings-page { max-width: 1680px; margin: 0 auto; }
+    .certificate-settings-page .system-settings-tabs { margin-bottom: 14px; }
+    .certificate-overview { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(420px, .8fr); gap: 14px; margin-bottom: 14px; padding: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 5%, var(--nps-surface-subtle)), var(--nps-surface) 58%); border: 1px solid color-mix(in srgb, var(--nps-primary) 16%, var(--nps-line)); border-radius: 14px; }
+    .certificate-overview__copy { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .certificate-overview__icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 38px; height: 38px; color: var(--nps-primary); background: color-mix(in srgb, var(--nps-primary) 10%, var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-primary) 24%, var(--nps-line)); border-radius: 11px; font-size: 16px; }
+    .certificate-overview__copy strong { display: block; color: var(--nps-ink); font-size: 12.5px; }
+    .certificate-overview__copy p { margin: 4px 0 0; color: var(--nps-muted); font-size: 10.5px; line-height: 1.55; }
+    .certificate-overview__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+    .certificate-stat { min-width: 0; padding: 9px 10px; background: color-mix(in srgb, var(--nps-surface) 88%, transparent); border: 1px solid var(--nps-line); border-radius: 9px; }
+    .certificate-stat strong { display: block; color: var(--nps-ink); font-size: 17px; line-height: 1.08; }
+    .certificate-stat span { display: block; margin-top: 4px; color: var(--nps-muted); font-size: 9.5px; }
+    .certificate-notice { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 13px; padding: 10px 12px; color: var(--nps-info); background: color-mix(in srgb, var(--nps-info-soft) 74%, var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-info) 24%, var(--nps-line)); border-radius: 10px; font-size: 10.5px; line-height: 1.55; }
+    .certificate-notice.is-warning { color: var(--nps-warning); background: color-mix(in srgb, var(--nps-warning) 8%, var(--nps-surface)); border-color: color-mix(in srgb, var(--nps-warning) 28%, var(--nps-line)); }
+    .certificate-card { margin-bottom: 14px; overflow: hidden; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 14px; box-shadow: 0 8px 28px rgba(15, 23, 42, .055); }
+    .certificate-card__header { display: flex; align-items: center; gap: 11px; min-height: 66px; padding: 13px 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 5%, var(--nps-surface)), var(--nps-surface) 52%); border-bottom: 1px solid var(--nps-line); }
+    .certificate-card__icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 34px; height: 34px; color: var(--nps-primary); background: color-mix(in srgb, var(--nps-primary) 10%, var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-primary) 22%, var(--nps-line)); border-radius: 10px; }
+    .certificate-card__header > div { min-width: 0; }
+    .certificate-card__header h2 { margin: 0; color: var(--nps-ink); font-size: 14px; font-weight: 760; }
+    .certificate-card__header p { margin: 3px 0 0; color: var(--nps-muted); font-size: 11px; line-height: 1.5; }
+    .certificate-card__body { padding: 15px 16px 16px; }
+    .certificate-savebar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 13px; padding: 11px 13px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 10px; }
+    .certificate-savebar > div { min-width: 0; }
+    .certificate-savebar strong { display: block; color: var(--nps-ink); font-size: 11.5px; }
+    .certificate-savebar span { display: block; margin-top: 2px; color: var(--nps-muted); font-size: 10px; line-height: 1.45; }
+    .certificate-savebar .btn { flex: 0 0 auto; }
+    .certificate-field-note { margin: 0; color: var(--nps-muted); font-size: 10px; line-height: 1.5; }
+    .bridge-certificate-layout { display: grid; grid-template-columns: minmax(16rem, .72fr) minmax(0, 1.28fr); gap: 12px; align-items: start; }
+    .bridge-certificate-runtime, .bridge-certificate-configuration { min-width: 0; padding: 13px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 11px; }
+    .bridge-certificate-configuration { background: var(--nps-surface); }
+    .bridge-certificate-status-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .bridge-certificate-status-head > div { display: grid; gap: 5px; min-width: 0; }
+    .bridge-certificate-eyebrow { color: var(--nps-muted); font-size: 10px; font-weight: 680; }
+    .bridge-certificate-status { display: inline-flex; align-items: center; width: fit-content; max-width: 100%; padding: 3px 8px; border: 1px solid transparent; border-radius: 999px; font-size: 10.5px; font-weight: 720; }
+    .bridge-certificate-status--success { color: #067647; background: #ecfdf3; border-color: #abefc6; }
+    .bridge-certificate-status--warning { color: #b54708; background: #fffaeb; border-color: #fedf89; }
+    .bridge-certificate-status--danger { color: #b42318; background: #fef3f2; border-color: #fecdca; }
+    .bridge-certificate-status--muted { color: #475467; background: #f2f4f7; border-color: #d0d5dd; }
+    .bridge-certificate-pending { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; padding: 3px 7px; color: #175cd3; background: #eff8ff; border: 1px solid #b2ddff; border-radius: 999px; font-size: 10px; font-weight: 700; }
+    .bridge-certificate-hash { max-width: 44%; overflow: hidden; color: var(--nps-muted); font: 9.5px/1.4 "Fira Code", monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .bridge-certificate-metrics, .bridge-certificate-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 11px 0 0; overflow: hidden; background: var(--nps-line); border: 1px solid var(--nps-line); border-radius: 8px; }
+    .bridge-certificate-details { margin-top: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 0; border-radius: 0; }
+    .bridge-certificate-metrics > div, .bridge-certificate-details > div { min-width: 0; padding: 8px 9px; background: var(--nps-surface); }
+    .bridge-certificate-metric--wide { grid-column: 1 / -1; }
+    .bridge-certificate-metrics dt, .bridge-certificate-details dt { margin: 0 0 3px; color: var(--nps-muted); font-size: 9.5px; font-weight: 620; }
+    .bridge-certificate-metrics dd, .bridge-certificate-details dd { min-height: 15px; margin: 0; overflow-wrap: anywhere; color: var(--nps-ink); font-size: 10.5px; font-weight: 650; line-height: 1.4; }
+    .bridge-certificate-bindings { display: grid; gap: 6px; margin-top: 10px; }
+    .bridge-certificate-bindings > span { color: var(--nps-muted); font-size: 9.5px; font-weight: 650; }
+    #bridge-tls-bindings { display: flex; flex-wrap: wrap; gap: 5px; }
+    .bridge-certificate-binding { display: inline-flex; align-items: center; padding: 3px 7px; color: #175cd3; background: #eff8ff; border: 1px solid #b2ddff; border-radius: 999px; font-size: 9.5px; font-weight: 650; }
+    .bridge-certificate-binding.is-muted { color: #667085; background: #f2f4f7; border-color: #d0d5dd; }
+    .bridge-certificate-restart-hint { margin: 9px 0 0; padding: 7px 9px; color: #175cd3; background: #eff8ff; border: 1px solid #b2ddff; border-radius: 7px; font-size: 10px; line-height: 1.45; }
+    .bridge-certificate-error { display: flex; align-items: flex-start; gap: 7px; margin-top: 9px; padding: 7px 9px; color: #b42318; background: #fef3f2; border: 1px solid #fecdca; border-radius: 7px; font-size: 10px; line-height: 1.45; }
+    .bridge-certificate-hostname { display: grid; gap: 6px; margin-top: 11px; }
+    .bridge-certificate-pair { margin-top: 10px; }
+    .certificate-mode-row { gap: 7px; }
+    .certificate-mode-row .certificate-mode-select { flex: 0 1 118px; width: 118px; min-width: 96px; min-height: 34px; }
+    .certificate-mode-row .certificate-validate { flex: 0 0 auto; min-height: 34px; white-space: nowrap; }
+    .bridge-certificate-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 10px; }
+    .bridge-certificate-actions small { flex: 1 1 15rem; color: var(--nps-muted); font-size: 10px; line-height: 1.45; }
+    .bridge-certificate-more { margin-top: 10px; border: 1px solid var(--nps-line); border-radius: 8px; }
+    .bridge-certificate-more summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; color: var(--nps-muted); font-size: 10.5px; font-weight: 650; cursor: pointer; list-style: none; }
+    .bridge-certificate-more summary::-webkit-details-marker { display: none; }
+    .bridge-certificate-more summary i { transition: transform .16s ease; }
+    .bridge-certificate-more[open] summary { border-bottom: 1px solid var(--nps-line); }
+    .bridge-certificate-more[open] summary i { transform: rotate(180deg); }
+    body.nps-bootstrap .certificate-settings-page .platform-domain-list { display: grid; gap: 8px; margin: 0; }
+    body.nps-bootstrap .certificate-settings-page .platform-domain-row { padding: 0; overflow: hidden; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 11px; box-shadow: none; }
+    body.nps-bootstrap .certificate-settings-page .platform-domain-row__header { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(390px, auto) auto; align-items: center; gap: 12px; margin: 0; padding: 11px 12px; background: color-mix(in srgb, var(--nps-surface-subtle) 72%, var(--nps-surface)); }
+    .platform-domain-row__identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .platform-domain-row__mark { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 31px; height: 31px; color: var(--nps-primary); background: var(--nps-primary-soft); border: 1px solid color-mix(in srgb, var(--nps-primary) 18%, var(--nps-line)); border-radius: 9px; }
+    .platform-domain-row__title { display: grid; min-width: 0; gap: 4px; }
+    .platform-domain-row__header strong { overflow-wrap: anywhere; color: var(--nps-ink); font-size: 12.5px; }
+    .platform-domain-reference { display: inline-flex; align-items: center; gap: 5px; color: var(--nps-muted); font-size: 9.5px; }
+    .platform-domain-health { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 0; }
+    .platform-domain-health > div { min-width: 0; padding: 6px 8px; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 7px; }
+    .platform-domain-health dt { margin: 0 0 2px; color: var(--nps-faint); font-size: 9px; }
+    .platform-domain-health dd { margin: 0; overflow-wrap: anywhere; color: var(--nps-ink); font-size: 10.5px; font-weight: 620; line-height: 1.35; }
+    .platform-domain-row__actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+    .platform-domain-row__actions .btn { min-height: 32px; }
+    .platform-domain-toggle i:last-child { transition: transform .16s ease; }
+    .platform-domain-toggle[aria-expanded="true"] i:last-child { transform: rotate(180deg); }
+    .platform-domain-remove { width: 34px; min-width: 34px; padding: 0 !important; }
+    .platform-domain-row__editor { display: none; padding: 13px 14px 14px; border-top: 1px solid var(--nps-line); }
+    .platform-domain-row.is-expanded .platform-domain-row__editor { display: grid; gap: 12px; }
+    .platform-domain-row__editor-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .platform-domain-row__editor-head strong { color: var(--nps-ink); font-size: 11px; }
+    .platform-domain-row__editor-head span { color: var(--nps-muted); font-size: 10px; }
+    .platform-domain-row__fields { display: grid; grid-template-columns: minmax(190px, .34fr) minmax(0, 1.66fr); gap: 12px; }
+    .platform-domain-error { margin: 0; color: var(--nps-danger); font-size: 10px; }
+    .certificate-config-stack { display: grid; gap: 9px; }
+    .certificate-config-section { overflow: hidden; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 11px; }
+    .certificate-config-section__header { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 58px; padding: 10px 12px; cursor: pointer; }
+    .certificate-config-section__header h3 { margin: 0; color: var(--nps-ink); font-size: 12.5px; font-weight: 750; }
+    .certificate-config-section__header p { margin: 3px 0 0; color: var(--nps-muted); font-size: 10px; line-height: 1.45; }
+    .certificate-config-section__toggle { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; min-height: 29px; padding: 0 8px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 7px; font-size: 9.5px; }
+    .certificate-config-section__toggle i { transition: transform .16s ease; }
+    .certificate-config-section.is-collapsed .certificate-config-section__toggle i { transform: rotate(-90deg); }
+    .certificate-config-section.is-collapsed .certificate-config-section__body { display: none; }
+    .certificate-config-section__body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 9px; background: color-mix(in srgb, var(--nps-surface-subtle) 52%, var(--nps-surface)); border-top: 1px solid var(--nps-line); }
+    .certificate-config-field { min-width: 0; padding: 10px 11px; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 9px; }
+    .certificate-config-field.is-disabled { background: color-mix(in srgb, var(--nps-surface-subtle) 58%, var(--nps-surface)); }
+    .certificate-config-field.is-context-hidden { display: none; }
+    .certificate-config-field label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; color: var(--nps-ink); font-size: 11.5px; font-weight: 720; }
+    .certificate-config-field code { padding: 2px 5px; color: var(--nps-faint); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 5px; font: 9px/1.3 "Fira Code", monospace; font-weight: 500; }
+    .certificate-config-field p { margin: 4px 0 8px; color: var(--nps-muted); font-size: 10px; line-height: 1.45; }
+    .certificate-config-field .form-control { width: 100%; min-width: 0; min-height: 34px; font-size: 11px; }
+    .certificate-config-field.is-disabled .form-control { opacity: .68; }
+    .certificate-config-optional { display: inline-flex; align-items: center; gap: 7px; margin: 0 0 7px; color: var(--nps-muted); font-size: 9.5px; cursor: pointer; }
+    .certificate-config-optional input { position: relative; flex: 0 0 auto; width: 29px; height: 17px; margin: 0; appearance: none; background: var(--nps-line-strong); border: 1px solid var(--nps-line-strong); border-radius: 999px; cursor: pointer; }
+    .certificate-config-optional input::after { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; content: ""; background: #fff; border-radius: 50%; transition: transform .16s ease; }
+    .certificate-config-optional input:checked { background: var(--nps-primary); border-color: var(--nps-primary); }
+    .certificate-config-optional input:checked::after { transform: translateX(12px); }
+    .certificate-secret-note { display: block; margin-top: 5px; color: var(--nps-warning); font-size: 9px; }
+    .certificate-context-hint { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0 0; padding: 7px 9px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px dashed var(--nps-line-strong); border-radius: 7px; font-size: 9.5px; line-height: 1.45; }
+    .is-hidden { display: none !important; }
+    [data-theme="dark"] .bridge-certificate-status--success { color: #86efac; background: #052e16; border-color: #166534; }
+    [data-theme="dark"] .bridge-certificate-status--warning { color: #fde68a; background: #451a03; border-color: #92400e; }
+    [data-theme="dark"] .bridge-certificate-status--danger { color: #fca5a5; background: #450a0a; border-color: #991b1b; }
+    [data-theme="dark"] .bridge-certificate-pending,
+    [data-theme="dark"] .bridge-certificate-binding,
+    [data-theme="dark"] .bridge-certificate-restart-hint { color: #93c5fd; background: #172554; border-color: #1d4ed8; }
+    @media (max-width: 1180px) {
+        .certificate-overview { grid-template-columns: minmax(0, 1fr); }
+        body.nps-bootstrap .certificate-settings-page .platform-domain-row__header { grid-template-columns: minmax(220px, 1fr) auto; }
+        body.nps-bootstrap .certificate-settings-page .platform-domain-health { grid-column: 1 / -1; grid-row: 2; }
+    }
+    @media (max-width: 991px) {
+        .bridge-certificate-layout { grid-template-columns: minmax(0, 1fr); }
+        .certificate-config-section__body { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 720px) {
+        .certificate-overview__stats { grid-template-columns: minmax(0, 1fr); }
+        .certificate-savebar { align-items: stretch; flex-direction: column; }
+        .certificate-savebar .btn { width: 100%; }
+        .certificate-config-section__header { align-items: flex-start; }
+        .certificate-config-section__toggle span { display: none; }
+        .certificate-card__body { padding: 12px; }
+        .bridge-certificate-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        body.nps-bootstrap .certificate-settings-page .platform-domain-row__header { grid-template-columns: minmax(0, 1fr); }
+        body.nps-bootstrap .certificate-settings-page .platform-domain-health { grid-column: auto; grid-row: auto; grid-template-columns: minmax(0, 1fr); }
+        .platform-domain-row__actions { justify-content: flex-end; }
+        .platform-domain-row__editor-head { align-items: flex-start; flex-direction: column; gap: 3px; }
+        .platform-domain-row__fields { grid-template-columns: minmax(0, 1fr); }
+    }
+</style>
+
+<section class="form-page form-page-global certificate-settings-page" aria-labelledby="certificate-settings-title">
+    <header class="dashboard-page-header form-page-header">
+        <div class="form-page-heading">
+            <div class="dashboard-page-kicker" data-i18n-zh="系统配置" data-i18n-en="System settings">系统配置</div>
+            <h1 id="certificate-settings-title" data-i18n-zh="证书设置" data-i18n-en="Certificate settings">证书设置</h1>
+            <p data-i18n-zh="集中维护 Bridge、平台泛域名、HTTPS 反代、管理面板和 IP 登记证书。证书文件路径会正常回显，私钥内容不会读取或展示。"
+               data-i18n-en="Manage Bridge, platform wildcard, HTTPS proxy, admin console and IP registration certificates in one place. Certificate paths are visible; private-key contents are never read or displayed.">集中维护 Bridge、平台泛域名、HTTPS 反代、管理面板和 IP 登记证书。证书文件路径会正常回显，私钥内容不会读取或展示。</p>
+        </div>
+    </header>
+
+    <nav class="system-settings-tabs" aria-label="系统配置页面" data-aria-label-zh="系统配置页面" data-aria-label-en="System settings pages">
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/index" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-sliders-h" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="全局参数" data-i18n-en="Global settings">全局参数</strong><small data-i18n-zh="业务设置与内容管理" data-i18n-en="Business settings and content">业务设置与内容管理</small></span>
+        </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/registration" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-user-plus" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="用户注册" data-i18n-en="User registration">用户注册</strong><small data-i18n-zh="入口、默认权益与邮箱" data-i18n-en="Access, defaults and email">入口、默认权益与邮箱</small></span>
+        </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/config" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-code" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="服务端配置" data-i18n-en="Server configuration">服务端配置</strong><small data-i18n-zh="nps.conf 在线维护" data-i18n-en="Maintain nps.conf online">nps.conf 在线维护</small></span>
+        </a>
+        <a class="system-settings-tab is-active" href="{{.web_base_url}}/global/certificate" data-console-navigate aria-current="page">
+            <span class="system-settings-tab__icon"><i class="fa fa-certificate" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="证书设置" data-i18n-en="Certificate settings">证书设置</strong><small data-i18n-zh="证书、私钥与 ACME" data-i18n-en="Certificates, keys and ACME">证书、私钥与 ACME</small></span>
+        </a>
+    </nav>
+
+    <div class="certificate-overview">
+        <div class="certificate-overview__copy">
+            <span class="certificate-overview__icon"><i class="fa fa-shield-alt" aria-hidden="true"></i></span>
+            <div>
+                <strong data-i18n-zh="证书配置统一入口" data-i18n-en="One place for certificate configuration">证书配置统一入口</strong>
+                <p data-i18n-zh="可视化表单仅维护证书相关字段；完整 nps.conf 仍可在“服务端配置 → 源码视图”查看和维护。证书更新通常需要重启 NPS 才会加载。"
+                   data-i18n-en="The visual form only edits certificate-related fields. The complete nps.conf remains available in Server configuration → Source view. Certificate changes normally require an NPS restart.">可视化表单仅维护证书相关字段；完整 nps.conf 仍可在“服务端配置 → 源码视图”查看和维护。证书更新通常需要重启 NPS 才会加载。</p>
+            </div>
+        </div>
+        <div class="certificate-overview__stats">
+            <div class="certificate-stat"><strong>{{.certificate_config_summary.Fields}}</strong><span data-i18n-zh="证书配置项" data-i18n-en="Certificate settings">证书配置项</span></div>
+            <div class="certificate-stat"><strong>{{len .platformDomains}}</strong><span data-i18n-zh="平台泛域名" data-i18n-en="Platform wildcards">平台泛域名</span></div>
+            <div class="certificate-stat"><strong>{{if .bridgeCertificate.ShortHash}}1{{else}}0{{end}}</strong><span data-i18n-zh="Bridge 证书" data-i18n-en="Bridge certificates">Bridge 证书</span></div>
+        </div>
+    </div>
+
+    {{if .certificate_config_error}}
+    <div class="certificate-notice is-warning" role="alert"><i class="fa fa-exclamation-triangle" aria-hidden="true"></i><span>无法读取 nps.conf：{{.certificate_config_error}}</span></div>
+    {{else if .certificate_config_validation_error}}
+    <div class="certificate-notice is-warning" role="alert"><i class="fa fa-exclamation-triangle" aria-hidden="true"></i><span>当前 nps.conf 存在关联校验问题：{{.certificate_config_validation_error}}。建议先在“服务端配置”中修正。</span></div>
+    {{end}}
+
+    <section class="certificate-card bridge-certificate-card" aria-labelledby="certificate-bridge-title">
+        {{$bridge := .bridgeCertificate}}
+        <header class="certificate-card__header">
+            <span class="certificate-card__icon"><i class="fa fa-lock" aria-hidden="true"></i></span>
+            <div>
+                <h2 id="certificate-bridge-title" data-i18n-zh="Bridge TLS 证书" data-i18n-en="Bridge TLS certificate">Bridge TLS 证书</h2>
+                <p data-i18n-zh="TCP TLS、WSS、QUIC 和加密内层链路共用这一套证书。配置写入 nps.conf，保存后需要重启 NPS。"
+                   data-i18n-en="TCP TLS, WSS, QUIC and encrypted inner links share this certificate. Configuration is stored in nps.conf and takes effect after restarting NPS.">TCP TLS、WSS、QUIC 和加密内层链路共用这一套证书。配置写入 nps.conf，保存后需要重启 NPS。</p>
+            </div>
+        </header>
+        <div class="certificate-card__body">
+            <div class="bridge-certificate-layout">
+                <div class="bridge-certificate-runtime">
+                    <div class="bridge-certificate-status-head">
+                        <div><span class="bridge-certificate-eyebrow" data-i18n-zh="当前运行证书" data-i18n-en="Active runtime certificate">当前运行证书</span><strong id="bridge-runtime-status" class="bridge-certificate-status bridge-certificate-status--{{$bridge.RuntimeTone}}">{{$bridge.RuntimeStatus}}</strong></div>
+                        <span id="bridge-certificate-pending" class="bridge-certificate-pending{{if not $bridge.PendingRestart}} is-hidden{{end}}"><i class="fa fa-clock" aria-hidden="true"></i><span data-i18n-zh="待重启" data-i18n-en="Restart required">待重启</span></span>
+                    </div>
+                    <dl class="bridge-certificate-metrics">
+                        <div><dt data-i18n-zh="到期时间" data-i18n-en="Expires">到期时间</dt><dd id="bridge-runtime-expiry">{{if $bridge.RuntimeExpiresAt}}{{$bridge.RuntimeExpiresAt}}{{else}}-{{end}}</dd></div>
+                        <div><dt data-i18n-zh="剩余天数" data-i18n-en="Days left">剩余天数</dt><dd id="bridge-runtime-days">{{if $bridge.RuntimeExpiresAt}}{{$bridge.RuntimeDaysRemaining}}{{else}}-{{end}}</dd></div>
+                        <div class="bridge-certificate-metric--wide"><dt data-i18n-zh="运行指纹" data-i18n-en="Runtime fingerprint">运行指纹</dt><dd id="bridge-runtime-fingerprint" class="bridge-certificate-hash" title="{{$bridge.RuntimeFingerprint}}">{{if $bridge.RuntimeShortHash}}{{$bridge.RuntimeShortHash}}{{else}}-{{end}}</dd></div>
+                    </dl>
+                    <div class="bridge-certificate-bindings">
+                        <span data-i18n-zh="受影响的 TLS 入口" data-i18n-en="TLS endpoints using this certificate">受影响的 TLS 入口</span>
+                        <div id="bridge-tls-bindings">{{range $bridge.TLSBindings}}<span class="bridge-certificate-binding">{{.}}</span>{{else}}<span class="bridge-certificate-binding is-muted" data-i18n-zh="当前未启用 TLS Bridge 入口" data-i18n-en="No TLS Bridge endpoint is enabled">当前未启用 TLS Bridge 入口</span>{{end}}</div>
+                    </div>
+                    <p id="bridge-restart-hint" class="bridge-certificate-restart-hint{{if not $bridge.PendingRestart}} is-hidden{{end}}">{{$bridge.RestartHint}}</p>
+                </div>
+                <div class="bridge-certificate-configuration">
+                    <div class="bridge-certificate-status-head">
+                        <div><span class="bridge-certificate-eyebrow" data-i18n-zh="nps.conf 配置证书" data-i18n-en="Certificate configured in nps.conf">nps.conf 配置证书</span><strong id="bridge-config-status" class="bridge-certificate-status bridge-certificate-status--{{$bridge.Tone}}">{{$bridge.Status}}</strong></div>
+                        <span id="bridge-config-hash" class="bridge-certificate-hash" title="{{$bridge.Fingerprint}}">{{if $bridge.ShortHash}}{{$bridge.ShortHash}}{{else}}—{{end}}</span>
+                    </div>
+                    <div id="bridge-config-detail-wrap" class="bridge-certificate-error{{if not $bridge.Detail}} is-hidden{{end}}"><i class="fa fa-circle-exclamation" aria-hidden="true"></i><span id="bridge-config-detail">{{$bridge.Detail}}</span></div>
+                    <label class="bridge-certificate-hostname" for="bridge-certificate-hostname">
+                        <span data-i18n-zh="校验证书覆盖域名（可选）" data-i18n-en="Certificate hostname to validate (optional)">校验证书覆盖域名（可选）</span>
+                        <input id="bridge-certificate-hostname" class="form-control" type="text" value="{{$bridge.CheckHostname}}" placeholder="bridge.example.com" autocomplete="off">
+                        <small class="help-block" data-i18n-zh="默认从 Bridge 对外地址或全局服务地址推导。填写域名或 IP 后会额外校验 SAN；不需要域名校验时可以清空。"
+                           data-i18n-en="Derived from the public Bridge address or global server address. When set, the certificate SAN is checked as well; clear it to skip hostname validation.">默认从 Bridge 对外地址或全局服务地址推导。填写域名或 IP 后会额外校验 SAN；不需要域名校验时可以清空。</small>
+                    </label>
+                    <div id="bridge-certificate-pair" class="bridge-certificate-pair certificate-pair" data-certificate-pair data-certificate-modes="path,upload,paste" data-certificate-summary="false" data-validate-url="{{.web_base_url}}/global/bridgecertificate/check" data-hostname-provider="#bridge-certificate-hostname">
+                        <div class="certificate-mode-row">
+                            <span class="certificate-mode-label" data-i18n-zh="证书填写方式" data-i18n-en="Certificate input">证书填写方式</span>
+                            <select class="form-control certificate-mode-select" data-cert-mode aria-label="证书填写方式" data-aria-label-zh="证书填写方式" data-aria-label-en="Certificate input method"><option value="path" data-i18n-zh="路径" data-i18n-en="Path">路径</option><option value="upload" data-i18n-zh="上传" data-i18n-en="Upload">上传</option><option value="paste" data-i18n-zh="粘贴" data-i18n-en="Paste">粘贴</option></select>
+                            <button type="button" class="btn btn-outline btn-primary certificate-validate" data-i18n-zh="校验证书" data-i18n-en="Validate">校验证书</button>
+                        </div>
+                        <div class="certificate-mode-pane certificate-mode-pane--path certificate-mode-pane--compact">
+                            <label><span data-i18n-zh="证书链路径" data-i18n-en="Certificate chain path">证书链路径</span><input class="form-control" type="text" data-cert-path value="{{$bridge.CertFilePath}}" placeholder="conf/bridgessl/bridge_server.pem"><small class="help-block" data-i18n-zh="PEM 格式，可包含中间证书。相对路径以 NPS 运行目录为基准。" data-i18n-en="PEM format, optionally including intermediates. Relative paths resolve against the NPS runtime directory.">PEM 格式，可包含中间证书。相对路径以 NPS 运行目录为基准。</small></label>
+                            <label><span data-i18n-zh="私钥路径" data-i18n-en="Private key path">私钥路径</span><input class="form-control" type="text" data-key-path value="{{$bridge.KeyFilePath}}" placeholder="conf/bridgessl/bridge_server.key"><small class="help-block" data-i18n-zh="未加密的 PEM 私钥；NPS 只保存路径，不会把私钥内容回显到页面。" data-i18n-en="Unencrypted PEM private key. NPS stores only the path and never returns its contents to the page.">未加密的 PEM 私钥；NPS 只保存路径，不会把私钥内容回显到页面。</small></label>
+                        </div>
+                        <div class="certificate-mode-pane certificate-mode-pane--upload certificate-mode-pane--compact" hidden>
+                            <label><span data-i18n-zh="证书文件" data-i18n-en="Certificate file">证书文件</span><input class="form-control" type="file" accept=".pem,.crt,.cer" data-cert-upload><small class="help-block" data-i18n-zh="保存到 conf/bridgessl，并把路径写入 nps.conf。" data-i18n-en="Saved under conf/bridgessl with its path written to nps.conf.">保存到 conf/bridgessl，并把路径写入 nps.conf。</small></label>
+                            <label><span data-i18n-zh="私钥文件" data-i18n-en="Private key file">私钥文件</span><input class="form-control" type="file" accept=".pem,.key" data-key-upload><small class="help-block" data-i18n-zh="私钥文件权限会设置为仅 NPS 运行用户可读。" data-i18n-en="Private-key permissions are restricted to the NPS runtime user.">私钥文件权限会设置为仅 NPS 运行用户可读。</small></label>
+                        </div>
+                        <div class="certificate-mode-pane certificate-mode-pane--paste" hidden>
+                            <label><span data-i18n-zh="证书内容" data-i18n-en="Certificate content">证书内容</span><textarea class="form-control" rows="5" data-cert-paste placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+                            <label><span data-i18n-zh="私钥内容" data-i18n-en="Private key content">私钥内容</span><textarea class="form-control" rows="5" data-key-paste placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label>
+                        </div>
+                        <div class="certificate-validation-result" role="status" hidden></div>
+                    </div>
+                    <details class="bridge-certificate-more">
+                        <summary><span data-i18n-zh="查看证书详情" data-i18n-en="View certificate details">查看证书详情</span><i class="fa fa-chevron-down" aria-hidden="true"></i></summary>
+                        <dl class="bridge-certificate-details">
+                            <div><dt data-i18n-zh="到期时间" data-i18n-en="Expires">到期时间</dt><dd id="bridge-config-expiry">{{if $bridge.ExpiresAt}}{{$bridge.ExpiresAt}}{{else}}-{{end}}</dd></div>
+                            <div><dt data-i18n-zh="剩余天数" data-i18n-en="Days left">剩余天数</dt><dd id="bridge-config-days">{{if $bridge.ExpiresAt}}{{$bridge.DaysRemaining}}{{else}}-{{end}}</dd></div>
+                            <div><dt data-i18n-zh="密钥算法" data-i18n-en="Key algorithm">密钥算法</dt><dd id="bridge-config-key-alg">{{if $bridge.PublicKeyAlg}}{{$bridge.PublicKeyAlg}}{{else}}-{{end}}</dd></div>
+                            <div><dt data-i18n-zh="证书链" data-i18n-en="Certificate chain">证书链</dt><dd id="bridge-config-chain">{{if $bridge.ChainLength}}{{$bridge.ChainLength}}{{else}}-{{end}}</dd></div>
+                            <div><dt>SAN</dt><dd id="bridge-config-sans">{{if $bridge.SANSummary}}{{$bridge.SANSummary}}{{else}}-{{end}}</dd></div>
+                            <div><dt data-i18n-zh="颁发者" data-i18n-en="Issuer">颁发者</dt><dd id="bridge-config-issuer">{{if $bridge.Issuer}}{{$bridge.Issuer}}{{else}}-{{end}}</dd></div>
+                        </dl>
+                    </details>
+                    <div class="bridge-certificate-actions">
+                        <button id="save-bridge-certificate" class="btn btn-success" type="button"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存 Bridge 证书" data-i18n-en="Save Bridge certificate">保存 Bridge 证书</span></button>
+                        <button id="clear-bridge-certificate" class="btn btn-outline btn-warning" type="button"><i class="fa fa-rotate-left" aria-hidden="true"></i><span data-i18n-zh="使用临时证书" data-i18n-en="Use temporary certificate">使用临时证书</span></button>
+                        <small data-i18n-zh="保存后不会自动热加载，需要重启 NPS；已有 TLS 连接不会被配置保存动作主动断开。"
+                           data-i18n-en="Saving does not hot-reload the certificate; restart NPS to apply it. Existing TLS connections are not actively disconnected.">保存后不会自动热加载，需要重启 NPS；已有 TLS 连接不会被配置保存动作主动断开。</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <form id="platform-domain-form" class="certificate-card" autocomplete="off">
+        <header class="certificate-card__header">
+            <span class="certificate-card__icon"><i class="fa fa-cloud" aria-hidden="true"></i></span>
+            <div>
+                <h2 data-i18n-zh="平台泛域名与证书" data-i18n-en="Platform wildcard domains and certificates">平台泛域名与证书</h2>
+                <p data-i18n-zh="普通用户创建平台域名时只能选择这里的泛域名和单层前缀；证书路径与私钥不会暴露给普通用户。"
+                   data-i18n-en="Users choose one wildcard and a single-label prefix. Certificate and key paths are never exposed to regular users.">普通用户创建平台域名时只能选择这里的泛域名和单层前缀；证书路径与私钥不会暴露给普通用户。</p>
+            </div>
+        </header>
+        <div class="certificate-card__body">
+            <div id="platform-domain-list" class="platform-domain-list">
+                {{range .platformDomains}}
+                <article class="platform-domain-row" data-reference-count="{{.ReferenceCount}}">
+                    <input type="hidden" data-field="id" value="{{.ID}}">
+                    <div class="platform-domain-row__header">
+                        <div class="platform-domain-row__identity"><span class="platform-domain-row__mark"><i class="fa fa-cloud" aria-hidden="true"></i></span><div class="platform-domain-row__title"><strong data-domain-title>{{.Wildcard}}</strong><span class="platform-domain-reference"><i class="fa fa-link" aria-hidden="true"></i><span data-reference-text data-i18n-zh="被 {{.ReferenceCount}} 个主机引用" data-i18n-en="Used by {{.ReferenceCount}} host(s)">被 {{.ReferenceCount}} 个主机引用</span></span></div></div>
+                        <dl class="platform-domain-health"><div><dt data-i18n-zh="证书状态" data-i18n-en="Certificate status">证书状态</dt><dd data-health="status"{{if .Detail}} title="{{.Detail}}"{{end}}>{{.Status}}</dd></div><div><dt data-i18n-zh="到期时间" data-i18n-en="Expires at">到期时间</dt><dd data-health="expiry">{{if .ExpiresAt}}{{.ExpiresAt}}{{else}}-{{end}}</dd></div><div><dt data-i18n-zh="剩余天数" data-i18n-en="Days remaining">剩余天数</dt><dd data-health="days">{{if .Readable}}{{.DaysRemaining}} <span data-i18n-zh="天" data-i18n-en="days">天</span>{{else}}-{{end}}</dd></div></dl>
+                        <div class="platform-domain-row__actions"><button type="button" class="btn btn-outline platform-domain-toggle" aria-expanded="false"><i class="fa fa-sliders" aria-hidden="true"></i><span data-i18n-zh="配置" data-i18n-en="Configure">配置</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button><button type="button" class="btn btn-outline btn-danger platform-domain-remove"{{if gt .ReferenceCount 0}} disabled title="使用中的平台域名不能删除"{{end}} aria-label="删除平台域名"><i class="fa fa-trash" aria-hidden="true"></i></button></div>
+                    </div>
+                    <div class="platform-domain-row__editor">
+                        <div class="platform-domain-row__editor-head"><strong data-i18n-zh="域名与证书" data-i18n-en="Domain and certificate">域名与证书</strong><span data-i18n-zh="未被主机引用时可更名或删除；已被引用时仍可更新证书。" data-i18n-en="Unreferenced wildcards can be renamed or deleted; certificates remain editable when referenced.">未被主机引用时可更名或删除；已被引用时仍可更新证书。</span></div>
+                        <div class="platform-domain-row__fields">
+                            <div class="platform-domain-wildcard"><label><span data-i18n-zh="泛域名" data-i18n-en="Wildcard">泛域名</span><input class="form-control" type="text" data-field="wildcard" value="{{.Wildcard}}" placeholder="*.example.com"{{if gt .ReferenceCount 0}} readonly aria-readonly="true" title="该泛域名已被主机引用，不能直接更名" data-title-zh="该泛域名已被主机引用，不能直接更名" data-title-en="This wildcard is already used by hosts and cannot be renamed directly"{{end}}>{{if gt .ReferenceCount 0}}<small class="help-block" data-i18n-zh="已被 {{.ReferenceCount}} 个主机使用。为避免现有子域名规则失效，不能直接更名或删除；证书仍可正常更新。" data-i18n-en="Used by {{.ReferenceCount}} host(s). To keep existing child-domain rules valid, it cannot be renamed or deleted; its certificate can still be updated.">已被 {{.ReferenceCount}} 个主机使用。为避免现有子域名规则失效，不能直接更名或删除；证书仍可正常更新。</small>{{else}}<small class="help-block" data-i18n-zh="必须以 *. 开头且只能包含一个泛域名层级。" data-i18n-en="Must start with *. and contain exactly one wildcard level.">必须以 *. 开头且只能包含一个泛域名层级。</small>{{end}}</label></div>
+                            <div class="platform-certificate-pair certificate-pair" data-certificate-pair data-certificate-modes="path,upload,paste" data-validate-url="{{$.web_base_url}}/global/checkcertificate" data-wildcard="true" data-hostname-row-selector="[data-field='wildcard']">
+                                <div class="certificate-mode-row"><span class="certificate-mode-label" data-i18n-zh="证书填写方式" data-i18n-en="Certificate input">证书填写方式</span><select class="form-control certificate-mode-select" data-cert-mode aria-label="证书填写方式"><option value="path" data-i18n-zh="路径" data-i18n-en="Path">路径</option><option value="upload" data-i18n-zh="上传" data-i18n-en="Upload">上传</option><option value="paste" data-i18n-zh="粘贴" data-i18n-en="Paste">粘贴</option></select><button type="button" class="btn btn-outline btn-primary certificate-validate" data-i18n-zh="校验证书" data-i18n-en="Validate">校验证书</button></div>
+                                <div class="certificate-mode-pane certificate-mode-pane--path certificate-mode-pane--compact"><label><span data-i18n-zh="证书路径（.pem，可选）" data-i18n-en="Certificate path (.pem, optional)">证书路径（.pem，可选）</span><input class="form-control" type="text" data-field="cert" data-cert-path value="{{.CertFilePath}}" placeholder="conf/certs/fullchain.pem"><small class="help-block" data-i18n-zh="PEM 证书链路径；与私钥成对填写后平台域名可启用 HTTPS。" data-i18n-en="PEM certificate-chain path; provide it with the key to enable HTTPS.">PEM 证书链路径；与私钥成对填写后平台域名可启用 HTTPS。</small></label><label><span data-i18n-zh="私钥路径（.key，可选）" data-i18n-en="Key path (.key, optional)">私钥路径（.key，可选）</span><input class="form-control" type="text" data-field="key" data-key-path value="{{.KeyFilePath}}" placeholder="conf/certs/privkey.pem"><small class="help-block" data-i18n-zh="与证书对应的私钥路径；不会展示给普通用户。" data-i18n-en="Path to the matching private key; never shown to regular users.">与证书对应的私钥路径；不会展示给普通用户。</small></label></div>
+                                <div class="certificate-mode-pane certificate-mode-pane--upload certificate-mode-pane--compact" hidden><label><span data-i18n-zh="证书文件" data-i18n-en="Certificate file">证书文件</span><input class="form-control" type="file" accept=".pem,.crt,.cer" data-cert-upload></label><label><span data-i18n-zh="私钥文件" data-i18n-en="Private key file">私钥文件</span><input class="form-control" type="file" accept=".pem,.key" data-key-upload></label></div>
+                                <div class="certificate-mode-pane certificate-mode-pane--paste" hidden><label><span data-i18n-zh="证书内容" data-i18n-en="Certificate content">证书内容</span><textarea class="form-control" rows="5" data-cert-paste placeholder="-----BEGIN CERTIFICATE-----"></textarea></label><label><span data-i18n-zh="私钥内容" data-i18n-en="Private key content">私钥内容</span><textarea class="form-control" rows="5" data-key-paste placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label></div>
+                                <div class="certificate-validation-result" role="status" hidden></div>
+                            </div>
+                        </div>
+                        {{if .Detail}}<p class="platform-domain-error">{{.Detail}}</p>{{end}}
+                    </div>
+                </article>
+                {{end}}
+            </div>
+            <button id="add-platform-domain" class="btn btn-outline btn-primary" type="button"><i class="fa fa-plus" aria-hidden="true"></i><span data-i18n-zh="添加泛域名" data-i18n-en="Add wildcard">添加泛域名</span></button>
+            <p class="certificate-field-note" data-i18n-zh="被主机引用的泛域名不能删除或更名；更新证书会同步关联主机。证书留空表示仅提供 HTTP。"
+               data-i18n-en="A referenced wildcard cannot be deleted or renamed; certificate changes synchronize its hosts. Leave the pair empty for HTTP only.">被主机引用的泛域名不能删除或更名；更新证书会同步关联主机。证书留空表示仅提供 HTTP。</p>
+            <input id="platform-domains-input" type="hidden" name="platform_domains" value="[]">
+            <div class="certificate-savebar"><div><strong data-i18n-zh="保存平台泛域名与证书" data-i18n-en="Save platform wildcards and certificates">保存平台泛域名与证书</strong><span data-i18n-zh="仅更新平台域名池，不会修改全局访问名单、服务地址或使用说明。" data-i18n-en="Only the platform domain pool is updated; global access lists, server address and guide are untouched.">仅更新平台域名池，不会修改全局访问名单、服务地址或使用说明。</span></div><button class="btn btn-primary" type="submit"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存平台证书" data-i18n-en="Save platform certificates">保存平台证书</span></button></div>
+        </div>
+    </form>
+
+    <form id="certificate-config-form" class="certificate-card" autocomplete="off">
+        <header class="certificate-card__header">
+            <span class="certificate-card__icon"><i class="fa fa-file-certificate" aria-hidden="true"></i></span>
+            <div>
+                <h2 data-i18n-zh="nps.conf 证书配置" data-i18n-en="nps.conf certificate settings">nps.conf 证书配置</h2>
+                <p data-i18n-zh="仅维护证书、私钥、ACME 与证书缓存字段。其他 nps.conf 项仍由“服务端配置”管理，完整源码视图也会显示全部字段。"
+                   data-i18n-en="Only certificates, private keys, ACME and certificate cache fields are maintained here. Other settings remain in Server configuration; the source view still shows everything.">仅维护证书、私钥、ACME 与证书缓存字段。其他 nps.conf 项仍由“服务端配置”管理，完整源码视图也会显示全部字段。</p>
+            </div>
+        </header>
+        <div class="certificate-card__body">
+            <div class="certificate-config-stack">
+                {{range .certificate_config_sections}}
+                <section class="certificate-config-section is-collapsed" data-cert-section>
+                    <header class="certificate-config-section__header" data-cert-section-header>
+                        <div><h3>{{.Name}}</h3><p>{{.Description}}</p></div>
+                        <button class="certificate-config-section__toggle" type="button" aria-expanded="false" data-cert-section-toggle><span data-cert-section-label data-i18n-zh="展开配置" data-i18n-en="Expand">展开配置</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
+                    </header>
+                    <div class="certificate-config-section__body">
+                        {{range $field := .Fields}}
+                        <article class="certificate-config-field{{if not $field.Enabled}} is-disabled{{end}}" data-cert-field="{{$field.Key}}"{{if or (eq $field.Key "ssl_path") (eq $field.Key "ssl_email") (eq $field.Key "ssl_ca") (eq $field.Key "ssl_zerossl_api") (eq $field.Key "ssl_cache_max") (eq $field.Key "ssl_cache_reload") (eq $field.Key "ssl_cache_idle")}} data-cert-depends-on="force_auto_ssl"{{else if or (eq $field.Key "web_cert_file") (eq $field.Key "web_key_file")}} data-cert-depends-on="web_open_ssl"{{else if eq $field.Key "tls_bridge_port"}} data-cert-depends-on="tls_enable"{{end}}{{if eq $field.Key "ssl_zerossl_api"}} data-cert-depends-match="ssl_ca:ZeroSSL"{{end}}>
+                            <label for="certificate-config-{{$field.Key}}">{{$field.Label}} <code>{{$field.Key}}</code></label>
+                            <p>{{$field.Description}}</p>
+                            {{if $field.Optional}}<label class="certificate-config-optional"><input type="checkbox" name="config_enabled_{{$field.Key}}" value="1" data-cert-enabled="{{$field.Key}}"{{if $field.Enabled}} checked{{end}}><span data-i18n-zh="启用并写入此项" data-i18n-en="Enable and write this setting">启用并写入此项</span></label>{{end}}
+                            {{if eq $field.Type "bool"}}
+                            <select id="certificate-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-cert-input="{{$field.Key}}"><option value="true"{{if eq $field.Value "true"}} selected{{end}}>true / 启用</option><option value="false"{{if eq $field.Value "false"}} selected{{end}}>false / 关闭</option></select>
+                            {{else if eq $field.Type "select"}}
+                            <select id="certificate-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-cert-input="{{$field.Key}}">{{range $option := $field.Options}}<option value="{{$option}}"{{if eq $field.Value $option}} selected{{end}}>{{$option}}</option>{{end}}</select>
+                            {{else if eq $field.Type "secret"}}
+                            <div class="input-group"><input id="certificate-config-{{$field.Key}}" class="form-control" type="password" name="config_{{$field.Key}}" data-cert-input="{{$field.Key}}" placeholder="{{if $field.Present}}已配置，留空保持{{else}}未配置{{end}}" autocomplete="new-password"><button type="button" class="btn btn-outline certificate-reveal" data-target="certificate-config-{{$field.Key}}" aria-label="显示或隐藏值"><i class="fa fa-eye" aria-hidden="true"></i></button></div><span class="certificate-secret-note" data-i18n-zh="敏感值不会回显；留空保持当前值。" data-i18n-en="Secret values are never echoed; leave blank to keep the current value.">敏感值不会回显；留空保持当前值。</span>
+                            {{else}}
+                            <input id="certificate-config-{{$field.Key}}" class="form-control" type="{{if eq $field.Type "int"}}number{{else}}text{{end}}" name="config_{{$field.Key}}" value="{{$field.Value}}" data-cert-input="{{$field.Key}}"{{if eq $field.Type "int"}} min="0" step="1"{{end}}>
+                            {{end}}
+                        </article>
+                        {{end}}
+                    </div>
+                </section>
+                {{end}}
+            </div>
+            <p class="certificate-context-hint"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="证书路径使用 PEM；证书与私钥必须成对配置。启用自动 HTTPS 前请确认 80/443 与 DNS 校验条件可用。" data-i18n-en="Certificate paths use PEM and each pair must be complete. Before enabling automatic HTTPS, confirm ports 80/443 and DNS validation are available.">证书路径使用 PEM；证书与私钥必须成对配置。启用自动 HTTPS 前请确认 80/443 与 DNS 校验条件可用。</span></p>
+            <div class="certificate-savebar"><div><strong data-i18n-zh="保存 nps.conf 证书配置" data-i18n-en="Save nps.conf certificate settings">保存 nps.conf 证书配置</strong><span data-i18n-zh="仅更新本页证书相关字段，保存后会询问是否重启 NPS。" data-i18n-en="Only certificate-related fields on this page are updated. You will be asked whether to restart NPS.">仅更新本页证书相关字段，保存后会询问是否重启 NPS。</span></div><button class="btn btn-primary" type="submit" id="certificate-config-save"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存证书配置" data-i18n-en="Save certificate settings">保存证书配置</span></button></div>
+        </div>
+    </form>
+</section>
+
+<template id="platform-domain-template">
+    <article class="platform-domain-row" data-reference-count="0">
+        <input type="hidden" data-field="id" value="">
+        <div class="platform-domain-row__header">
+            <div class="platform-domain-row__identity"><span class="platform-domain-row__mark"><i class="fa fa-cloud" aria-hidden="true"></i></span><div class="platform-domain-row__title"><strong data-domain-title data-i18n-zh="新平台泛域名" data-i18n-en="New platform wildcard">新平台泛域名</strong><span class="platform-domain-reference"><i class="fa fa-link" aria-hidden="true"></i><span data-reference-text data-i18n-zh="尚未被主机引用" data-i18n-en="Not referenced by any host">尚未被主机引用</span></span></div></div>
+            <dl class="platform-domain-health"><div><dt data-i18n-zh="证书状态" data-i18n-en="Certificate status">证书状态</dt><dd data-health="status" data-i18n-zh="保存后检查" data-i18n-en="Checked after saving">保存后检查</dd></div><div><dt data-i18n-zh="到期时间" data-i18n-en="Expires at">到期时间</dt><dd data-health="expiry">-</dd></div><div><dt data-i18n-zh="剩余天数" data-i18n-en="Days remaining">剩余天数</dt><dd data-health="days">-</dd></div></dl>
+            <div class="platform-domain-row__actions"><button type="button" class="btn btn-outline platform-domain-toggle" aria-expanded="false"><i class="fa fa-sliders" aria-hidden="true"></i><span data-i18n-zh="配置" data-i18n-en="Configure">配置</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button><button type="button" class="btn btn-outline btn-danger platform-domain-remove" aria-label="删除平台域名"><i class="fa fa-trash" aria-hidden="true"></i></button></div>
+        </div>
+        <div class="platform-domain-row__editor">
+            <div class="platform-domain-row__editor-head"><strong data-i18n-zh="域名与证书" data-i18n-en="Domain and certificate">域名与证书</strong><span data-i18n-zh="保存前会校验证书与私钥是否匹配。" data-i18n-en="Certificate and key are validated before saving.">保存前会校验证书与私钥是否匹配。</span></div>
+            <div class="platform-domain-row__fields">
+                <div class="platform-domain-wildcard"><label><span data-i18n-zh="泛域名" data-i18n-en="Wildcard">泛域名</span><input class="form-control" type="text" data-field="wildcard" placeholder="*.example.com"><small class="help-block" data-i18n-zh="必须以 *. 开头；例如 *.example.com。" data-i18n-en="Must start with *.; for example, *.example.com.">必须以 *. 开头；例如 *.example.com。</small></label></div>
+                <div class="platform-certificate-pair certificate-pair" data-certificate-pair data-certificate-modes="path,upload,paste" data-validate-url="{{.web_base_url}}/global/checkcertificate" data-wildcard="true" data-hostname-row-selector="[data-field='wildcard']">
+                    <div class="certificate-mode-row"><span class="certificate-mode-label" data-i18n-zh="证书填写方式" data-i18n-en="Certificate input">证书填写方式</span><select class="form-control certificate-mode-select" data-cert-mode aria-label="证书填写方式"><option value="path" data-i18n-zh="路径" data-i18n-en="Path">路径</option><option value="upload" data-i18n-zh="上传" data-i18n-en="Upload">上传</option><option value="paste" data-i18n-zh="粘贴" data-i18n-en="Paste">粘贴</option></select><button type="button" class="btn btn-outline btn-primary certificate-validate" data-i18n-zh="校验证书" data-i18n-en="Validate">校验证书</button></div>
+                    <div class="certificate-mode-pane certificate-mode-pane--path certificate-mode-pane--compact"><label><span data-i18n-zh="证书路径（.pem，可选）" data-i18n-en="Certificate path (.pem, optional)">证书路径（.pem，可选）</span><input class="form-control" type="text" data-field="cert" data-cert-path placeholder="conf/certs/fullchain.pem"><small class="help-block" data-i18n-zh="与私钥一起填写以启用 HTTPS；相对路径以 conf_path 为基准。" data-i18n-en="Provide with the key to enable HTTPS; relative paths resolve against conf_path.">与私钥一起填写以启用 HTTPS；相对路径以 conf_path 为基准。</small></label><label><span data-i18n-zh="私钥路径（.key，可选）" data-i18n-en="Key path (.key, optional)">私钥路径（.key，可选）</span><input class="form-control" type="text" data-field="key" data-key-path placeholder="conf/certs/privkey.pem"><small class="help-block" data-i18n-zh="填写与证书匹配的私钥路径。" data-i18n-en="Path to the matching private key.">填写与证书匹配的私钥路径。</small></label></div>
+                    <div class="certificate-mode-pane certificate-mode-pane--upload certificate-mode-pane--compact" hidden><label><span data-i18n-zh="证书文件" data-i18n-en="Certificate file">证书文件</span><input class="form-control" type="file" accept=".pem,.crt,.cer" data-cert-upload></label><label><span data-i18n-zh="私钥文件" data-i18n-en="Private key file">私钥文件</span><input class="form-control" type="file" accept=".pem,.key" data-key-upload></label></div>
+                    <div class="certificate-mode-pane certificate-mode-pane--paste" hidden><label><span data-i18n-zh="证书内容" data-i18n-en="Certificate content">证书内容</span><textarea class="form-control" rows="5" data-cert-paste placeholder="-----BEGIN CERTIFICATE-----"></textarea></label><label><span data-i18n-zh="私钥内容" data-i18n-en="Private key content">私钥内容</span><textarea class="form-control" rows="5" data-key-paste placeholder="-----BEGIN PRIVATE KEY-----"></textarea></label></div>
+                    <div class="certificate-validation-result" role="status" hidden></div>
+                </div>
+            </div>
+        </div>
+    </article>
+</template>
+
+<script>
+$(function () {
+    var currentLabels = false;
+    function currentLanguage() { return typeof npsIsEnglish === 'function' && npsIsEnglish(); }
+    function localText(zh, en) { return currentLanguage() ? en : zh; }
+    function requestError(xhr) {
+        try {
+            var body = $.parseJSON(xhr.responseText);
+            if (body && body.msg) return body.msg;
+        } catch (ignored) {}
+        return typeof npsRequestErrorMessage === 'function' ? npsRequestErrorMessage() : localText('请求失败', 'Request failed');
+    }
+    function requestRestart() {
+        $.ajax({type: 'POST', url: '{{.web_base_url}}/global/config/restart', dataType: 'json'}).done(function (response) {
+            npsNotify(response && response.status ? 'success' : 'warning', (response && response.msg) || localText('请手动重启 NPS', 'Restart NPS manually'));
+        }).fail(function (xhr) { npsNotify('error', requestError(xhr)); });
+    }
+    function offerRestart(message) {
+        npsConfirmDialog(message, {
+            title: localText('重启 NPS', 'Restart NPS'), icon: 'fa-sync-alt', danger: true,
+            confirmLabel: localText('立即重启', 'Restart')
+        }).then(function (confirmed) { if (confirmed) requestRestart(); });
+    }
+    function setBusy(button, busy, busyText) {
+        if (!button) return;
+        if (!button.__certificateIdle) {
+            var initialIcon = button.querySelector('i'), initialLabel = button.querySelector('span');
+            button.__certificateIdle = {icon: initialIcon ? initialIcon.className : '', label: initialLabel ? initialLabel.textContent : ''};
+        }
+        button.disabled = busy;
+        var icon = button.querySelector('i'), label = button.querySelector('span');
+        if (icon) icon.className = busy ? 'fa fa-circle-notch fa-spin' : button.__certificateIdle.icon;
+        if (label) label.textContent = busy ? busyText : button.__certificateIdle.label;
+    }
+
+    var bridgeWidget = document.getElementById('bridge-certificate-pair');
+    var bridgeSave = document.getElementById('save-bridge-certificate');
+    var bridgeClear = document.getElementById('clear-bridge-certificate');
+    var bridgeHostname = document.getElementById('bridge-certificate-hostname');
+    if (bridgeWidget && window.npsCertificatePair) npsCertificatePair.attach(bridgeWidget);
+    function setBridgeStatus(node, text, tone) {
+        if (!node) return;
+        node.textContent = text || '-';
+        node.className = 'bridge-certificate-status bridge-certificate-status--' + (tone || 'muted');
+    }
+    function setBridgeText(id, value) { var node = document.getElementById(id); if (node) node.textContent = value || '-'; }
+    function renderBridgeStatus(data) {
+        if (!data) return;
+        setBridgeStatus(document.getElementById('bridge-runtime-status'), data.runtime_status, data.runtime_tone);
+        setBridgeStatus(document.getElementById('bridge-config-status'), data.status, data.tone);
+        setBridgeText('bridge-runtime-expiry', data.runtime_expires_at);
+        setBridgeText('bridge-runtime-days', data.runtime_expires_at ? String(data.runtime_days_remaining) : '-');
+        setBridgeText('bridge-runtime-fingerprint', data.runtime_short_hash || '-');
+        var runtimeFingerprint = document.getElementById('bridge-runtime-fingerprint');
+        if (runtimeFingerprint) runtimeFingerprint.title = data.runtime_fingerprint || '';
+        setBridgeText('bridge-config-hash', data.short_hash || '—');
+        var configHash = document.getElementById('bridge-config-hash');
+        if (configHash) configHash.title = data.fingerprint || '';
+        setBridgeText('bridge-config-expiry', data.expires_at);
+        setBridgeText('bridge-config-days', data.expires_at ? String(data.days_remaining) : '-');
+        setBridgeText('bridge-config-key-alg', data.public_key_algorithm);
+        setBridgeText('bridge-config-chain', data.chain_length ? String(data.chain_length) : '-');
+        setBridgeText('bridge-config-sans', (data.sans || []).join(', ') || '-');
+        setBridgeText('bridge-config-issuer', data.issuer);
+        var detailWrap = document.getElementById('bridge-config-detail-wrap');
+        var detail = document.getElementById('bridge-config-detail');
+        if (detail) detail.textContent = data.detail || '';
+        if (detailWrap) detailWrap.classList.toggle('is-hidden', !data.detail);
+        var pending = document.getElementById('bridge-certificate-pending');
+        if (pending) pending.classList.toggle('is-hidden', !data.pending_restart);
+        var hint = document.getElementById('bridge-restart-hint');
+        if (hint) {
+            hint.textContent = data.restart_hint || '';
+            hint.classList.toggle('is-hidden', !data.pending_restart);
+        }
+        var bindings = document.getElementById('bridge-tls-bindings');
+        if (bindings) {
+            bindings.innerHTML = '';
+            var values = data.tls_bindings || [];
+            var empty = values.length === 0;
+            if (empty) values = [localText('当前未启用 TLS Bridge 入口', 'No TLS Bridge endpoint is enabled')];
+            values.forEach(function (value) {
+                var item = document.createElement('span');
+                item.className = 'bridge-certificate-binding' + (empty ? ' is-muted' : '');
+                item.textContent = value;
+                bindings.appendChild(item);
+            });
+        }
+        var certPath = bridgeWidget && bridgeWidget.querySelector('[data-cert-path]');
+        var keyPath = bridgeWidget && bridgeWidget.querySelector('[data-key-path]');
+        if (certPath) certPath.value = data.cert_file_path || '';
+        if (keyPath) keyPath.value = data.key_file_path || '';
+    }
+    function afterBridgeSave(response) {
+        if (!response || !response.status) {
+            npsNotify('error', (response && response.msg) || localText('保存 Bridge 证书失败', 'Failed to save Bridge certificate'));
+            return;
+        }
+        renderBridgeStatus(response.data);
+        npsNotify('success', response.msg || localText('Bridge 证书配置已保存', 'Bridge certificate settings saved'));
+        if (response.restart_required) {
+            offerRestart(localText('Bridge 证书配置已保存。现在重启 NPS 使其生效吗？管理面板可能会短暂断开。', 'Bridge certificate settings were saved. Restart NPS now? The console may disconnect briefly.'));
+        }
+    }
+    if (bridgeSave) bridgeSave.addEventListener('click', function () {
+        if (!bridgeWidget || !window.npsCertificatePair) return;
+        setBusy(bridgeSave, true, localText('保存中…', 'Saving…'));
+        bridgeWidget.prepareForSubmit().then(function (material) {
+            var certPath = bridgeWidget.querySelector('[data-cert-path]');
+            var keyPath = bridgeWidget.querySelector('[data-key-path]');
+            $.ajax({
+                type: 'POST', url: '{{.web_base_url}}/global/bridgecertificate', dataType: 'json',
+                data: {
+                    mode: material.mode,
+                    cert: material.mode === 'path' ? (certPath ? $.trim(certPath.value) : '') : material.cert,
+                    key: material.mode === 'path' ? (keyPath ? $.trim(keyPath.value) : '') : material.key,
+                    hostname: bridgeHostname ? $.trim(bridgeHostname.value) : ''
+                }
+            }).done(afterBridgeSave).fail(function (xhr) { npsNotify('error', requestError(xhr)); });
+        }).catch(function (error) {
+            npsNotify('error', (error && error.message) || localText('读取证书文件失败', 'Failed to read certificate files'));
+        }).always(function () { setBusy(bridgeSave, false, ''); });
+    });
+    if (bridgeClear) bridgeClear.addEventListener('click', function () {
+        npsConfirmDialog(localText('清空 nps.conf 中的 Bridge 证书配置并改用临时自签名证书？重启后才会生效。', 'Clear the Bridge certificate settings and use a temporary self-signed certificate? This takes effect after restart.'), {
+            title: localText('使用临时证书', 'Use temporary certificate'), icon: 'fa-rotate-left', danger: true,
+            confirmLabel: localText('清空配置', 'Clear settings')
+        }).then(function (confirmed) {
+            if (!confirmed) return;
+            setBusy(bridgeClear, true, localText('处理中…', 'Working…'));
+            $.ajax({
+                type: 'POST', url: '{{.web_base_url}}/global/bridgecertificate', dataType: 'json',
+                data: {mode: 'clear', hostname: bridgeHostname ? $.trim(bridgeHostname.value) : ''}
+            }).done(afterBridgeSave).fail(function (xhr) { npsNotify('error', requestError(xhr)); }).always(function () { setBusy(bridgeClear, false, ''); });
+        });
+    });
+
+    var platformForm = $('#platform-domain-form');
+    var platformList = document.getElementById('platform-domain-list');
+    var platformTemplate = document.getElementById('platform-domain-template');
+    function setRowExpanded(row, expanded) {
+        row.classList.toggle('is-expanded', expanded);
+        var toggle = row.querySelector('.platform-domain-toggle');
+        if (toggle) toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    }
+    function removePlatformRow(row) {
+        if (!row || Number(row.getAttribute('data-reference-count') || '0') > 0) return;
+        npsConfirmDialog(localText('删除这个平台泛域名配置？', 'Delete this platform wildcard configuration?'), {
+            title: localText('删除平台泛域名', 'Delete platform wildcard'), icon: 'fa-trash', danger: true,
+            confirmLabel: localText('删除', 'Delete')
+        }).then(function (confirmed) { if (confirmed) row.remove(); });
+    }
+    function attachPlatformRow(row) {
+        var toggle = row.querySelector('.platform-domain-toggle');
+        var remove = row.querySelector('.platform-domain-remove');
+        var wildcard = row.querySelector('[data-field="wildcard"]');
+        var title = row.querySelector('[data-domain-title]');
+        if (toggle) toggle.addEventListener('click', function () { setRowExpanded(row, !row.classList.contains('is-expanded')); });
+        if (remove) remove.addEventListener('click', function () { removePlatformRow(row); });
+        if (wildcard && title) wildcard.addEventListener('input', function () { title.textContent = $.trim(wildcard.value) || localText('新平台泛域名', 'New platform wildcard'); });
+        var widget = row.querySelector('[data-certificate-pair]');
+        if (widget && window.npsCertificatePair) npsCertificatePair.attach(widget);
+    }
+    Array.prototype.forEach.call(platformList.querySelectorAll('.platform-domain-row'), attachPlatformRow);
+    document.getElementById('add-platform-domain').addEventListener('click', function () {
+        platformList.appendChild(platformTemplate.content.cloneNode(true));
+        var row = platformList.lastElementChild;
+        attachPlatformRow(row);
+        setRowExpanded(row, true);
+        if (typeof $('body').setLang === 'function') $('body').setLang('#platform-domain-list');
+        var wildcard = row.querySelector('[data-field="wildcard"]');
+        if (wildcard) wildcard.focus();
+    });
+    function applyPlatformStatuses(statuses) {
+        var byWildcard = {};
+        (statuses || []).forEach(function (status) {
+            byWildcard[String(status.Wildcard || '').toLowerCase().replace(/\.$/, '')] = status;
+        });
+        Array.prototype.forEach.call(platformList.querySelectorAll('.platform-domain-row'), function (row) {
+            var wildcardInput = row.querySelector('[data-field="wildcard"]');
+            var wildcard = $.trim(wildcardInput ? wildcardInput.value : '').toLowerCase();
+            var status = byWildcard[wildcard];
+            if (!status) return;
+            var id = row.querySelector('[data-field="id"]');
+            var title = row.querySelector('[data-domain-title]');
+            var referenceText = row.querySelector('[data-reference-text]');
+            var statusNode = row.querySelector('[data-health="status"]');
+            var expiryNode = row.querySelector('[data-health="expiry"]');
+            var daysNode = row.querySelector('[data-health="days"]');
+            var remove = row.querySelector('.platform-domain-remove');
+            var certPath = row.querySelector('[data-cert-path]');
+            var keyPath = row.querySelector('[data-key-path]');
+            var widget = row.querySelector('[data-certificate-pair]');
+            if (id) id.value = status.ID || '';
+            if (wildcardInput) wildcardInput.value = status.Wildcard || wildcardInput.value;
+            if (title) title.textContent = status.Wildcard || title.textContent;
+            if (referenceText) referenceText.textContent = currentLanguage() ? ('Used by ' + status.ReferenceCount + ' host(s)') : ('被 ' + status.ReferenceCount + ' 个主机引用');
+            if (statusNode) { statusNode.textContent = status.Status || '-'; statusNode.title = status.Detail || ''; }
+            if (expiryNode) expiryNode.textContent = status.ExpiresAt || '-';
+            if (daysNode) daysNode.textContent = status.Readable ? (status.DaysRemaining + (currentLanguage() ? ' days' : ' 天')) : '-';
+            if (certPath) certPath.value = status.CertFilePath || '';
+            if (keyPath) keyPath.value = status.KeyFilePath || '';
+            row.setAttribute('data-reference-count', String(status.ReferenceCount || 0));
+            if (remove && status.ReferenceCount > 0) remove.disabled = true;
+            if (widget && window.npsCertificatePair) {
+                npsCertificatePair.inspectExisting(widget).catch(function () { return false; });
+            }
+        });
+    }
+    platformForm.on('submit', function (event) {
+        event.preventDefault();
+        var button = platformForm.find('button[type="submit"]')[0];
+        setBusy(button, true, localText('保存中…', 'Saving…'));
+        npsCertificatePair.prepareIn(platformList).then(function () {
+            var domains = [];
+            Array.prototype.forEach.call(platformList.querySelectorAll('.platform-domain-row'), function (row) {
+                function value(field) { var input = row.querySelector('[data-field="' + field + '"]'); return input ? $.trim(input.value) : ''; }
+                var widget = row.querySelector('[data-certificate-pair]');
+                var material = widget ? widget.__npsCertificateMaterial : null;
+                var mode = material ? material.mode : 'path';
+                var wildcard = value('wildcard'), cert = value('cert'), key = value('key');
+                if (!wildcard && !cert && !key && !(material && (material.cert || material.key))) return;
+                domains.push({ID: value('id'), Wildcard: wildcard, CertFilePath: cert, KeyFilePath: key, CertMode: mode, CertData: mode === 'path' ? '' : material.cert, KeyData: mode === 'path' ? '' : material.key});
+            });
+            $('#platform-domains-input').val(JSON.stringify(domains));
+            $.ajax({type: 'POST', url: '{{.web_base_url}}/global/certificate/platform-domains', data: platformForm.serializeArray(), dataType: 'json'}).done(function (response) {
+                if (!response || !response.status) {
+                    npsNotify('error', (response && response.msg) || localText('平台证书保存失败', 'Failed to save platform certificates'));
+                    return;
+                }
+                applyPlatformStatuses(response.data);
+                npsNotify('success', response.msg || localText('平台泛域名与证书已保存', 'Platform wildcards and certificates saved'));
+            }).fail(function (xhr) {
+                npsNotify('error', requestError(xhr));
+            }).always(function () {
+                setBusy(button, false, '');
+            });
+        }).catch(function (error) {
+            setBusy(button, false, '');
+            npsNotify('error', (error && error.message) || localText('读取证书文件失败', 'Failed to read certificate files'));
+        });
+    });
+
+    var configForm = $('#certificate-config-form');
+    function configField(key) { return configForm.find('[data-cert-input="' + key + '"]'); }
+    function configEnabled(key) {
+        var optional = configForm.find('[data-cert-enabled="' + key + '"]');
+        if (optional.length && !optional.prop('checked')) return false;
+        var input = configField(key);
+        return input.length ? String(input.val()).toLowerCase() === 'true' : false;
+    }
+    function syncOptional(key) {
+        var checkbox = configForm.find('[data-cert-enabled="' + key + '"]');
+        var enabled = checkbox.prop('checked');
+        configField(key).prop('disabled', !enabled);
+        checkbox.closest('[data-cert-field]').toggleClass('is-disabled', !enabled);
+    }
+    function syncDependencies() {
+        configForm.find('[data-cert-depends-on]').each(function () {
+            var dependency = this.getAttribute('data-cert-depends-on');
+            var dependencyInput = configField(dependency);
+            var matchRule = this.getAttribute('data-cert-depends-match');
+            var matchesRule = true;
+            if (matchRule) {
+                var separator = matchRule.indexOf(':');
+                var matchKey = separator < 0 ? matchRule : matchRule.slice(0, separator);
+                var expectedValue = separator < 0 ? '' : matchRule.slice(separator + 1);
+                var matchInput = configField(matchKey);
+                matchesRule = matchInput.length > 0 && String(matchInput.val()) === expectedValue;
+            }
+            this.classList.toggle('is-context-hidden', !dependencyInput.length || !configEnabled(dependency) || !matchesRule);
+        });
+    }
+    configForm.find('[data-cert-enabled]').each(function () { syncOptional($(this).attr('data-cert-enabled')); }).on('change', function () {
+        syncOptional($(this).attr('data-cert-enabled'));
+        syncDependencies();
+    });
+    var configFormElement = document.getElementById('certificate-config-form');
+    if (configFormElement) {
+        configFormElement.addEventListener('input', syncDependencies);
+        configFormElement.addEventListener('change', syncDependencies);
+    }
+    syncDependencies();
+    configForm.on('click', '[data-cert-section-header]', function (event) {
+        if ($(event.target).closest('button').length) return;
+        $(this).find('[data-cert-section-toggle]').trigger('click');
+    });
+    configForm.on('click', '[data-cert-section-toggle]', function (event) {
+        event.stopPropagation();
+        var section = $(this).closest('[data-cert-section]');
+        var opening = section.hasClass('is-collapsed');
+        section.toggleClass('is-collapsed', !opening);
+        $(this).attr('aria-expanded', opening ? 'true' : 'false');
+        $(this).find('[data-cert-section-label]').text(opening ? localText('收起配置', 'Collapse') : localText('展开配置', 'Expand'));
+    });
+    configForm.on('click', '.certificate-reveal', function () {
+        var input = document.getElementById($(this).attr('data-target'));
+        if (!input) return;
+        var visible = input.type === 'text';
+        input.type = visible ? 'password' : 'text';
+        $(this).find('i').toggleClass('fa-eye fa-eye-slash');
+    });
+    configForm.on('submit', function (event) {
+        event.preventDefault();
+        var button = document.getElementById('certificate-config-save');
+        setBusy(button, true, localText('保存中…', 'Saving…'));
+        $.ajax({type: 'POST', url: '{{.web_base_url}}/global/certificate/config', data: configForm.serializeArray(), dataType: 'json'}).done(function (response) {
+            if (!response || !response.status) {
+                npsNotify('error', (response && response.msg) || localText('证书配置保存失败', 'Failed to save certificate settings'));
+                return;
+            }
+            npsNotify('success', response.msg || localText('证书配置已保存', 'Certificate settings saved'));
+            if (response.restart_required) {
+                offerRestart(localText('证书配置已保存。现在重启 NPS 使配置生效吗？管理面板可能会短暂断开。', 'Certificate settings were saved. Restart NPS now? The console may disconnect briefly.'));
+            }
+        }).fail(function (xhr) {
+            npsNotify('error', requestError(xhr));
+        }).always(function () {
+            setBusy(button, false, '');
+        });
+    });
+});
+</script>
