@@ -222,6 +222,9 @@
 		if (tableInstance && tableInstance.options.showColumns && typeof tableInstance.renderColumnsMenu === 'function') {
 			tableInstance.renderColumnsMenu();
 		}
+		if (tableInstance && typeof tableInstance.refreshFilterTitles === 'function') {
+			tableInstance.refreshFilterTitles();
+		}
 
 		if ( !$.isEmptyObject(chartdatas) ) {
 			setchartlang(languages['content']['charts'],chartdatas);

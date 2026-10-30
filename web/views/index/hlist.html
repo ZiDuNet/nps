@@ -17,23 +17,27 @@
             <button type="button" onclick="batchResourceAction('{{.web_base_url}}/index/hoststart', {}, '批量启用', 'Enable selected');" class="btn btn-outline btn-primary"><i class="fa fa-play" aria-hidden="true"></i><span data-i18n-zh="批量启用" data-i18n-en="Enable selected">批量启用</span></button>
             <button type="button" onclick="batchResourceAction('{{.web_base_url}}/index/hoststop', {}, '批量停用', 'Disable selected');" class="btn btn-outline btn-warning"><i class="fa fa-pause" aria-hidden="true"></i><span data-i18n-zh="批量停用" data-i18n-en="Disable selected">批量停用</span></button>
             {{if eq true .isAdmin}}
-            <label class="nps-table-filter" for="host-owner-filter">
+            <label class="nps-table-filter nps-table-filter--identity" for="host-owner-filter">
                 <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
                 <select id="host-owner-filter" class="form-control nps-table-filter__control" data-nps-table-filter="user_id">
                     <option value="" data-i18n-zh="全部用户" data-i18n-en="All users">全部用户</option>
                     <option value="0" data-i18n-zh="未分配" data-i18n-en="Unassigned">未分配</option>
                     {{range .users}}
-                    <option value="{{.Id}}">{{.Id}} · {{.UserName}}</option>
+                    <option value="{{.Id}}"
+                        data-i18n-zh="{{if and .Remark (ne .Remark .UserName)}}{{.Remark}}（{{.UserName}}）{{else}}{{.UserName}}{{end}}"
+                        data-i18n-en="{{if and .Remark (ne .Remark .UserName)}}{{.Remark}} ({{.UserName}}){{else}}{{.UserName}}{{end}}">{{if and .Remark (ne .Remark .UserName)}}{{.Remark}}（{{.UserName}}）{{else}}{{.UserName}}{{end}}</option>
                     {{end}}
                 </select>
             </label>
             {{end}}
-            <label class="nps-table-filter" for="host-client-filter">
+            <label class="nps-table-filter nps-table-filter--identity" for="host-client-filter">
                 <span class="nps-table-filter__label" data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>
                 <select id="host-client-filter" class="form-control nps-table-filter__control" data-nps-table-filter="filter_client_id" {{if .client_id}}disabled{{end}}>
                     <option value="0" data-i18n-zh="全部客户端" data-i18n-en="All clients">全部客户端</option>
                     {{range .clients}}
-                    <option value="{{.Id}}">{{.Id}} · {{.Remark}}</option>
+                    <option value="{{.Id}}" data-filter-owner-id="{{.UserId}}"
+                        data-i18n-zh="{{if .Remark}}{{.Remark}}（ID {{.Id}}）{{else}}未命名客户端（ID {{.Id}}）{{end}}"
+                        data-i18n-en="{{if .Remark}}{{.Remark}} (ID {{.Id}}){{else}}Unnamed client (ID {{.Id}}){{end}}">{{if .Remark}}{{.Remark}}（ID {{.Id}}）{{else}}未命名客户端（ID {{.Id}}）{{end}}</option>
                     {{end}}
                 </select>
             </label>
@@ -65,7 +69,12 @@ function hostPublicURL(host, port, scheme, location) {
 function hostEndpointLink(label, url) {
     if (!url) return '';
     var safeURL = npsEscapeHtml(url);
-    return '<a class="host-endpoint" href="' + safeURL + '" target="_blank" rel="noopener noreferrer"><span>' + label + '</span><i class="fa fa-external-link" aria-hidden="true"></i></a>';
+    return '<a class="host-endpoint" href="' + safeURL + '" target="_blank" rel="noopener noreferrer"'
+        + ' title="' + (npsIsEnglish() ? 'Open ' + label + ' in a new window' : '在新窗口打开 ' + label) + '"'
+        + ' data-title-zh="在新窗口打开 ' + label + '" data-title-en="Open ' + label + ' in a new window"'
+        + ' aria-label="' + (npsIsEnglish() ? 'Open ' + label + ' in a new window' : '在新窗口打开 ' + label) + '"'
+        + ' data-aria-label-zh="在新窗口打开 ' + label + '" data-aria-label-en="Open ' + label + ' in a new window">'
+        + '<span>' + label + '</span><i class="fa fa-external-link-alt" aria-hidden="true"></i></a>';
 }
 
 $('#table').npsTable({
@@ -177,16 +186,34 @@ $('#table').npsTable({
             var scheme = String(row.Scheme || 'all'); var links = '';
             if (scheme === 'all' || scheme === 'http') links += hostEndpointLink('HTTP', hostPublicURL(row.Host, row.HttpPort || hostHttpPort, 'http', row.Location));
             if (scheme === 'all' || scheme === 'https') links += hostEndpointLink('HTTPS', hostPublicURL(row.Host, row.HttpsPort || hostHttpsPort, 'https', row.Location));
-            var managed = row.PlatformManaged ? '<span class="badge badge-primary host-platform-badge">' + (npsIsEnglish() ? 'Platform' : '平台') + '</span>' : '';
+            var sourceBadge = row.PlatformManaged
+                ? '<span class="badge host-domain-badge host-domain-badge--managed" data-i18n-zh="平台" data-i18n-en="Platform">' + (npsIsEnglish() ? 'Platform' : '平台') + '</span>'
+                : '<span class="badge host-domain-badge host-domain-badge--custom" data-i18n-zh="自定义" data-i18n-en="Custom">' + (npsIsEnglish() ? 'Custom' : '自定义') + '</span>';
             var basicEnabled = row.BasicAuthSet || !!(row.Client && row.Client.BasicAuthSet);
             var lock = basicEnabled ? '<i class="fa fa-lock host-entry__lock" title="' + (npsIsEnglish() ? 'Basic authentication enabled' : '已启用 Basic 认证') + '" data-title-zh="已启用 Basic 认证" data-title-en="Basic authentication enabled" aria-hidden="true"></i>' : '';
-            return '<div class="host-entry"><div class="host-entry__name">' + lock + npsEscapeHtml(row.Host || '-') + managed + '</div><div class="host-entry__links">' + links + '</div></div>';
+            return '<div class="host-entry"><div class="host-entry__name">' + lock + npsEscapeHtml(row.Host || '-') + sourceBadge + '</div><div class="host-entry__links">' + links + '</div></div>';
         }},
         {field: 'Remark', title: '<span data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', class: 'host-list__remark', formatter: function (value) { return npsEscapeHtml(value || '-'); }},
         {field: 'Client', title: '<span data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>', class: 'host-list__client', formatter: function (value, row) {
-            var client = row.Client || {}, name = client.Id ? String(client.Id) + ' · ' + String(client.Remark || '-') : '-';
-            var state = client.IsConnect ? (npsIsEnglish() ? 'Online' : '在线') : (npsIsEnglish() ? 'Offline' : '离线');
-            return '<div class="host-client"><span>' + npsEscapeHtml(name) + '</span><small class="' + (client.IsConnect ? 'is-online' : 'is-offline') + '">' + state + '</small></div>';
+            var english = npsIsEnglish();
+            var client = row.Client || {};
+            var clientID = Number(client.Id) > 0 ? String(client.Id) : '';
+            var userID = Number(client.UserId) > 0 ? String(client.UserId) : '';
+            var clientRemark = String(client.Remark || '').trim();
+            var userName = String(client.UserRemark || client.UserName || '').trim();
+            var clientLine = clientID
+                ? (clientRemark || (english ? 'Unnamed client' : '未命名客户端')) + ' · ' + clientID
+                : (english ? 'Unassigned client · -' : '未分配客户端 · -');
+            var ownerLine = userID
+                ? (userName || (english ? 'Unknown user' : '未知用户')) + ' · ' + userID
+                : (english ? 'Unassigned user · -' : '未分配用户 · -');
+            var stateClass = client.IsConnect ? 'is-online' : 'is-offline';
+            var clientTitleZH = clientLine + ' · ' + (client.IsConnect ? '在线' : '离线');
+            var clientTitleEN = clientLine + ' · ' + (client.IsConnect ? 'Online' : 'Offline');
+            return '<div class="host-client">'
+                + '<span class="host-client__line host-client__client ' + stateClass + '" title="' + npsEscapeHtml(english ? clientTitleEN : clientTitleZH) + '" data-title-zh="' + npsEscapeHtml(clientTitleZH) + '" data-title-en="' + npsEscapeHtml(clientTitleEN) + '">' + npsEscapeHtml(clientLine) + '</span>'
+                + '<span class="host-client__line host-client__owner" title="' + npsEscapeHtml(ownerLine) + '">' + npsEscapeHtml(ownerLine) + '</span>'
+                + '</div>';
         }},
         {field: 'Target', title: '<span data-i18n-zh="内网目标" data-i18n-en="Internal target">内网目标</span>', class: 'host-list__target', formatter: function (value, row) { return '<code class="host-target-cell">' + npsEscapeHtml((row.Target || {}).TargetStr || '-') + '</code>'; }},
         {field: 'IsClose', title: '<span data-i18n-zh="状态" data-i18n-en="Status">状态</span>', align: 'center', class: 'host-list__status', formatter: function (value) { return value ? '<span class="badge badge-warning" data-i18n-zh="已停用" data-i18n-en="Disabled">已停用</span>' : '<span class="badge badge-success" data-i18n-zh="运行中" data-i18n-en="Active">运行中</span>'; }},

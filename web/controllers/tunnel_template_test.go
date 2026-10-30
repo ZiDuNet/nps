@@ -346,10 +346,34 @@ func TestTunnelListCopyControlsAreLocalized(t *testing.T) {
 	}
 }
 
+func TestTunnelListTemplateExposesCompactAccessActions(t *testing.T) {
+	content := readTemplateForTest(t, "../views/index/list.html")
+	for _, marker := range []string{
+		"function tunnelTargetItems",
+		"tunnelTargetMarkup",
+		"tunnelAccessAddressMarkup",
+		"tunnel-target-entry",
+		"tunnel-access-actions",
+		`data-clipboard-text="' + safeAddress + '"`,
+		`href="http://' + safeAddress + '"`,
+		"currentconnections: false",
+	} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("tunnel list misses compact access marker: %s", marker)
+		}
+	}
+	if strings.Contains(content, `return "<a href='http://" + safeAddress`) {
+		t.Fatal("tunnel access address must not be rendered as an implicit link")
+	}
+}
+
 func TestHostListTemplateUsesSafeDynamicOutput(t *testing.T) {
 	content := readTemplateForTest(t, "../views/index/hlist.html")
 	for _, marker := range []string{
 		`rel="noopener noreferrer"`,
+		`'<span>' + label + '</span>`,
+		`host-client__line`,
+		`client.UserRemark`,
 		`npsEscapeHtml((row.Target || {}).TargetStr || '-')`,
 		`type="button"`,
 		`url: '{{.web_base_url}}/index/hostlist'`,
@@ -740,7 +764,7 @@ func TestTunnelListTemplateQuotesRuntimeJavaScriptValues(t *testing.T) {
 	for _, marker := range []string{
 		`var tunnelListMode = '`,
 		`var tunnelListClientId = Number('`,
-		`var publicHost = "127.0.0.1";`,
+		`var publicHost = String("127.0.0.1" || '').trim();`,
 		`-type=kcp -password=`,
 	} {
 		if !strings.Contains(content, marker) {

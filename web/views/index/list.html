@@ -24,23 +24,27 @@
                             <i class="fa fa-pause" aria-hidden="true"></i> <span data-i18n-zh="批量停用" data-i18n-en="Disable selected">批量停用</span>
                         </button>
                         {{if eq true .isAdmin}}
-                        <label class="nps-table-filter" for="tunnel-owner-filter">
+                        <label class="nps-table-filter nps-table-filter--identity" for="tunnel-owner-filter">
                             <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
                             <select id="tunnel-owner-filter" class="form-control nps-table-filter__control" data-nps-table-filter="user_id">
                                 <option value="" data-i18n-zh="全部用户" data-i18n-en="All users">全部用户</option>
                                 <option value="0" data-i18n-zh="未分配" data-i18n-en="Unassigned">未分配</option>
                                 {{range .users}}
-                                <option value="{{.Id}}">{{.Id}} · {{.UserName}}</option>
+                                <option value="{{.Id}}"
+                                    data-i18n-zh="{{if and .Remark (ne .Remark .UserName)}}{{.Remark}}（{{.UserName}}）{{else}}{{.UserName}}{{end}}"
+                                    data-i18n-en="{{if and .Remark (ne .Remark .UserName)}}{{.Remark}} ({{.UserName}}){{else}}{{.UserName}}{{end}}">{{if and .Remark (ne .Remark .UserName)}}{{.Remark}}（{{.UserName}}）{{else}}{{.UserName}}{{end}}</option>
                                 {{end}}
                             </select>
                         </label>
                         {{end}}
-                        <label class="nps-table-filter" for="tunnel-client-filter">
+                        <label class="nps-table-filter nps-table-filter--identity" for="tunnel-client-filter">
                             <span class="nps-table-filter__label" data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>
                             <select id="tunnel-client-filter" class="form-control nps-table-filter__control" data-nps-table-filter="filter_client_id" {{if .client_id}}disabled{{end}}>
                                 <option value="0" data-i18n-zh="全部客户端" data-i18n-en="All clients">全部客户端</option>
                                 {{range .clients}}
-                                <option value="{{.Id}}">{{.Id}} · {{.Remark}}</option>
+                                <option value="{{.Id}}" data-filter-owner-id="{{.UserId}}"
+                                    data-i18n-zh="{{if .Remark}}{{.Remark}}（ID {{.Id}}）{{else}}未命名客户端（ID {{.Id}}）{{end}}"
+                                    data-i18n-en="{{if .Remark}}{{.Remark}} (ID {{.Id}}){{else}}Unnamed client (ID {{.Id}}){{end}}">{{if .Remark}}{{.Remark}}（ID {{.Id}}）{{else}}未命名客户端（ID {{.Id}}）{{end}}</option>
                                 {{end}}
                             </select>
                         </label>
@@ -81,12 +85,95 @@
         return npsBooleanMarkup(!!value);
     }
 
+    function tunnelTargetItems(value) {
+        var raw = String(value == null ? '' : value).trim();
+        if (!raw) return [];
+        return raw.split(/\r?\n/).map(function (line) {
+            return String(line || '').trim();
+        }).filter(function (line) {
+            return line !== '';
+        }).map(function (line) {
+            var candidate = line;
+            var schemeEnd = candidate.indexOf('://');
+            if (schemeEnd >= 0) candidate = candidate.slice(schemeEnd + 3);
+            var pathStart = candidate.indexOf('/');
+            if (pathStart >= 0) candidate = candidate.slice(0, pathStart);
+
+            if (/^\d+$/.test(candidate)) {
+                return {raw: line, host: '', port: candidate};
+            }
+
+            var host = '';
+            var port = '';
+            if (candidate.charAt(0) === '[') {
+                var bracketEnd = candidate.indexOf(']');
+                if (bracketEnd > 0) {
+                    host = candidate.slice(0, bracketEnd + 1);
+                    if (candidate.charAt(bracketEnd + 1) === ':') port = candidate.slice(bracketEnd + 2);
+                }
+            } else {
+                var colon = candidate.lastIndexOf(':');
+                if (colon > 0 && /^\d+$/.test(candidate.slice(colon + 1))) {
+                    host = candidate.slice(0, colon);
+                    port = candidate.slice(colon + 1);
+                }
+            }
+            return {
+                raw: line,
+                host: host || (port ? '' : candidate),
+                port: port
+            };
+        });
+    }
+
+    function tunnelTargetMarkup(value) {
+        var items = tunnelTargetItems(value);
+        if (!items.length) return '-';
+        return '<div class="tunnel-target-list">' + items.map(function (item) {
+            var lines = '';
+            if (item.host) lines += '<span class="tunnel-target-host">' + tunnelText(item.host) + '</span>';
+            if (item.port) lines += '<span class="tunnel-target-port">' + tunnelText(item.port) + '</span>';
+            return '<span class="tunnel-target-entry" title="' + tunnelText(item.raw) + '">' + lines + '</span>';
+        }).join('') + '</div>';
+    }
+
+    function tunnelAccessAddressMarkup(row) {
+        var port = Number(row.Port);
+        if (!isFinite(port) || Math.floor(port) !== port || port <= 0) return '-';
+        var publicHost = String("{{.ip}}" || '').trim();
+        if (publicHost.indexOf(':') >= 0 && publicHost.charAt(0) !== '[') publicHost = '[' + publicHost + ']';
+        var address = publicHost + ':' + port;
+        var safeAddress = tunnelText(address);
+        var english = npsIsEnglish();
+        var copyTitleZH = '复制访问地址';
+        var copyTitleEN = 'Copy access address';
+        var httpTitleZH = '尝试使用 HTTP 打开；浏览器可能因 HSTS 或 HTTPS 优先策略升级为 HTTPS';
+        var httpTitleEN = 'Try opening over HTTP; the browser may upgrade to HTTPS because of HSTS or HTTPS-First';
+        var actions = '<button type="button" class="copy tunnel-access-action tunnel-access-action--copy"'
+            + ' data-clipboard-text="' + safeAddress + '"'
+            + ' title="' + tunnelText(english ? copyTitleEN : copyTitleZH) + '"'
+            + ' data-title-zh="' + tunnelText(copyTitleZH) + '" data-title-en="' + tunnelText(copyTitleEN) + '"'
+            + ' aria-label="' + tunnelText(english ? copyTitleEN : copyTitleZH) + '"'
+            + ' data-aria-label-zh="' + tunnelText(copyTitleZH) + '" data-aria-label-en="' + tunnelText(copyTitleEN) + '">'
+            + '<i class="fa fa-copy" aria-hidden="true"></i><span data-i18n-zh="复制" data-i18n-en="Copy">' + (english ? 'Copy' : '复制') + '</span></button>';
+        if (String(row.Mode || tunnelListMode) === 'tcp') {
+            actions += '<a class="tunnel-access-action tunnel-access-action--http" href="http://' + safeAddress + '" target="_blank" rel="noopener noreferrer"'
+                + ' title="' + tunnelText(english ? httpTitleEN : httpTitleZH) + '"'
+                + ' data-title-zh="' + tunnelText(httpTitleZH) + '" data-title-en="' + tunnelText(httpTitleEN) + '"'
+                + ' aria-label="' + tunnelText(english ? httpTitleEN : httpTitleZH) + '"'
+                + ' data-aria-label-zh="' + tunnelText(httpTitleZH) + '" data-aria-label-en="' + tunnelText(httpTitleEN) + '">'
+                + '<i class="fa fa-external-link-alt" aria-hidden="true"></i><span>HTTP</span></a>';
+        }
+        return '<div class="tunnel-access-cell"><code class="tunnel-access-address" title="' + safeAddress + '">' + safeAddress + '</code>'
+            + '<div class="tunnel-access-actions">' + actions + '</div></div>';
+    }
+
     // Keep the table focused on fields that belong to the selected tunnel
     // mode.  The detail row remains the source for secondary values, so the
     // desktop table does not grow wider just because a mode has a different
     // connection model.
     var tunnelListModeColumns = {
-        tcp:       {port: true,  address: true,  target: true,  password: false, currentconnections: true},
+        tcp:       {port: true,  address: true,  target: true,  password: false, currentconnections: false},
         udp:       {port: true,  address: true,  target: true,  password: false, currentconnections: false},
         httpProxy: {port: true,  address: true,  target: false, password: false, currentconnections: false},
         socks5:    {port: true,  address: true,  target: false, password: false, currentconnections: false},
@@ -346,25 +433,22 @@
                 field: 'address',//域值
                 title: '<span langtag="word-accessaddress"></span>',//标题
                 halign: 'center',
+                class: 'tunnel-list__address',
                 sortable: false, //计算列，按 Port 排序即可
                 visible: tunnelListColumnVisible('address'),//false表示不显示
-                formatter: function (value, row, index) {
-                    var publicHost = "{{.ip}}";
-                    if (publicHost.indexOf(':') >= 0 && publicHost.charAt(0) !== '[') publicHost = '[' + publicHost + ']';
-                    var address = publicHost + ":" + Number(row.Port);
-                    var safeAddress = tunnelText(address);
-                    if (row.Mode === 'mixProxy' || row.Mode === 'httpProxy' || row.Mode === 'socks5') return safeAddress;
-                    return "<a href='http://" + safeAddress + "' target='_blank' rel='noopener noreferrer'>" + safeAddress + "</a>"
+                formatter: function (value, row) {
+                    return tunnelAccessAddressMarkup(row);
                 }
             },
             {
                 field: 'Target',//域值
                 title: '<span langtag="word-target"></span>',//标题
                 halign: 'center',
+                class: 'tunnel-list__target',
                 visible: tunnelListColumnVisible('target'),//false表示不显示
                 sortable: true, //启用排序
-                formatter: function (value, row, index) {
-                    return tunnelText((row.Target || {}).TargetStr);
+                formatter: function (value, row) {
+                    return tunnelTargetMarkup((row.Target || {}).TargetStr);
                 }
             },
             {

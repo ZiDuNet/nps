@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	htmltemplate "html/template"
 	"net"
 	"net/http"
@@ -137,7 +138,10 @@ type hostListRow struct {
 
 type hostListClient struct {
 	Id           int
+	UserId       int
 	Remark       string
+	UserName     string
+	UserRemark   string
 	IsConnect    bool
 	BasicAuthSet bool
 }
@@ -299,11 +303,20 @@ func newHostListRows(hosts []*file.Host) []*hostListRow {
 			client.RLock()
 			row.Client = hostListClient{
 				Id:           client.Id,
+				UserId:       client.UserId,
 				Remark:       client.Remark,
 				IsConnect:    client.IsConnect,
 				BasicAuthSet: client.Cnf != nil && client.Cnf.U != "" && client.Cnf.P != "",
 			}
 			client.RUnlock()
+			if row.Client.UserId > 0 {
+				if user, err := file.GetDb().GetUser(row.Client.UserId); err == nil && user != nil {
+					user.RLock()
+					row.Client.UserName = html.UnescapeString(user.UserName)
+					row.Client.UserRemark = html.UnescapeString(user.Remark)
+					user.RUnlock()
+				}
+			}
 		}
 		if target != nil {
 			target.RLock()

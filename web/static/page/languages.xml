@@ -342,6 +342,14 @@
 		<zh-CN>出口流量（内网→公网）</zh-CN>
 		<en-US>Outbound flow (LAN to public)</en-US>
 	</lang>
+	<lang id="word-exportflow-short">
+		<zh-CN>出口流量</zh-CN>
+		<en-US>Outbound flow</en-US>
+	</lang>
+	<lang id="word-exportflow-direction">
+		<zh-CN>（内网→公网）</zh-CN>
+		<en-US>(LAN → public)</en-US>
+	</lang>
 	<lang id="word-false">
 		<zh-CN>否</zh-CN>
 		<en-US>False</en-US>
@@ -399,6 +407,14 @@
 	<lang id="word-inletflow">
 		<zh-CN>入口流量（公网→内网）</zh-CN>
 		<en-US>Inbound flow (public to LAN)</en-US>
+	</lang>
+	<lang id="word-inletflow-short">
+		<zh-CN>入口流量</zh-CN>
+		<en-US>Inbound flow</en-US>
+	</lang>
+	<lang id="word-inletflow-direction">
+		<zh-CN>（公网→内网）</zh-CN>
+		<en-US>(public → LAN)</en-US>
 	</lang>
 	<lang id="word-registeredips">
 		<zh-CN>已登记 IP</zh-CN>

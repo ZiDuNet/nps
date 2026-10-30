@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.38</sub>
+﻿# NPS <sub>v1.1.39</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -193,6 +193,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.39** (2026-10-30) - Refined list identities, cascading owner/client filters, compact tunnel targets, and clearer domain and access actions. Client lists now keep both traffic directions visible, show remarks and owner context in centered two-line cells, and expose HTTP/HTTPS entry buttons without losing external-link cues.
 
 - **v1.1.38** (2026-10-29) - Unified list-page toolbars and expanded client connection audit details with server-side addresses, Bridge channels, handshake stages, client versions, public/local address provenance, account state and expiry information. Added terminal-style raw JSON detail views, public-table migrations for login bans and IP registration, login-ban filtering and pagination, and fixed scoped server-configuration saves and response-card layout.
 

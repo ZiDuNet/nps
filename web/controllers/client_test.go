@@ -65,7 +65,7 @@ func TestClientListRowsExposeUserName(t *testing.T) {
 	if !strings.Contains(got, `"UserName":"alice"`) {
 		t.Fatalf("expected client list row to expose UserName, got %s", got)
 	}
-	for _, expected := range []string{`"WebUserName":""`, `"WebPasswordSet":true`, `"BasicUserName":"basic-user"`, `"BasicPasswordSet":true`} {
+	for _, expected := range []string{`"UserRemark":""`, `"WebUserName":""`, `"WebPasswordSet":true`, `"BasicUserName":"basic-user"`, `"BasicPasswordSet":true`} {
 		if !strings.Contains(got, expected) {
 			t.Fatalf("expected client list row to expose safe credential metadata %s, got %s", expected, got)
 		}
@@ -74,6 +74,28 @@ func TestClientListRowsExposeUserName(t *testing.T) {
 		if secret != "basic-user" && strings.Contains(got, secret) {
 			t.Fatalf("client list row must not expose credential %q: %s", secret, got)
 		}
+	}
+}
+
+func TestClientListRowsResolveOwnerRemark(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	db.JsonDb.Users.Store(10, &file.User{
+		Id:       10,
+		UserName: "alice&amp;ops",
+		Remark:   "研发&amp;运维",
+		Status:   true,
+	})
+	rows := newClientListRows([]*file.Client{{
+		Id:        1,
+		UserId:    10,
+		UserName:  "stale",
+		VerifyKey: "client-vkey",
+	}})
+	if len(rows) != 1 {
+		t.Fatalf("client row count = %d, want 1", len(rows))
+	}
+	if rows[0].UserName != "alice&ops" || rows[0].UserRemark != "研发&运维" {
+		t.Fatalf("client owner = %q / %q, want alice&ops / 研发&运维", rows[0].UserName, rows[0].UserRemark)
 	}
 }
 
@@ -192,7 +214,7 @@ func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
 		`data-title-en="Disable client"`,
 		`data-title-en="Delete client"`,
 		`data-title-en="Copy command"`,
-		`storageKey: 'client-v3'`,
+		`storageKey: 'client-v4'`,
 		`client-version-pill`,
 		`npsNotify('success', npsIsEnglish() ? 'Copied' : '复制成功')`,
 	} {

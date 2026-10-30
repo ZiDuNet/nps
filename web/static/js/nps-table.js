@@ -245,6 +245,7 @@
 
         this.renderHeader();
         this.bindEvents();
+        this.initCascadingFilters();
         this.$el.data('nps.table', this);
         this.load();
         return this;
@@ -279,7 +280,10 @@
                 self.pageNumber = 1;
                 self.load();
             }, 220);
+        }).on('change.npsTable', '[data-nps-table-filter="user_id"]', function () {
+            self.refreshOwnerClientOptions();
         }).on('change.npsTable', '[data-nps-table-filter]', function () {
+            self.refreshFilterTitles();
             self.pageNumber = 1;
             self.load();
         }).on('click.npsTable', 'th[data-sort-field]', function () {
@@ -322,6 +326,57 @@
             self.savePreferences();
             self.load();
         });
+    };
+
+    NpsTable.prototype.refreshFilterTitles = function () {
+        this.$filters.find('select[data-nps-table-filter]').each(function () {
+            var $select = $(this);
+            var value = $.trim($select.find('option:selected').first().text());
+            var label = $.trim($select.closest('.nps-table-filter').find('.nps-table-filter__label').first().text());
+            if (value) $select.attr('title', value);
+            else $select.removeAttr('title');
+            if (value && label) $select.attr('aria-label', label + ': ' + value);
+            else $select.removeAttr('aria-label');
+        });
+    };
+
+    // Administrator resource lists use one owner filter and one client filter.
+    // The client options are narrowed to the selected owner while the server
+    // remains the authority for the final tenant/resource boundary.
+    NpsTable.prototype.initCascadingFilters = function () {
+        var $owner = this.$filters.find('select[data-nps-table-filter="user_id"]').first();
+        var $client = this.$filters.find('select[data-nps-table-filter="filter_client_id"]').first();
+        if ($owner.length && $client.length) {
+            this._ownerClientFilter = {
+                $owner: $owner,
+                $client: $client,
+                options: $client.find('option').map(function () {
+                    return $(this).clone()[0];
+                }).get()
+            };
+            this.refreshOwnerClientOptions();
+        }
+        this.refreshFilterTitles();
+    };
+
+    NpsTable.prototype.refreshOwnerClientOptions = function () {
+        var state = this._ownerClientFilter;
+        if (!state || !state.$owner.length || !state.$client.length) return;
+        var owner = $.trim(String(state.$owner.val() == null ? '' : state.$owner.val()));
+        var selected = String(state.$client.val() == null ? '0' : state.$client.val());
+        var selectedVisible = false;
+        var fragment = document.createDocumentFragment();
+        $.each(state.options, function (_, option) {
+            var $option = $(option).clone();
+            var optionOwner = $.trim(String($option.attr('data-filter-owner-id') == null ? '' : $option.attr('data-filter-owner-id')));
+            if (optionOwner && owner !== '' && optionOwner !== owner) return;
+            if (String($option.val()) === selected) selectedVisible = true;
+            fragment.appendChild($option[0]);
+        });
+        state.$client.empty().append(fragment);
+        if (!selectedVisible) selected = '0';
+        state.$client.val(selected);
+        this.refreshFilterTitles();
     };
 
     NpsTable.prototype.visibleColumns = function () {

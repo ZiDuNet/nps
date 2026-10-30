@@ -61,7 +61,7 @@ func TestUserListRowsExposeResourceCounts(t *testing.T) {
 	}
 
 	content := readUserTemplateForTest(t, "../views/user/list.html")
-	for _, marker := range []string{"field: 'ClientCount'", "field: 'TunnelCount'", "客户端配额（已用 / 上限）", "总隧道配额（已用 / 上限）"} {
+	for _, marker := range []string{"field: 'ClientCount'", "field: 'TunnelCount'", "客户端配额（已用 / 上限）", "总隧道配额（已用 / 上限）", "user-identity-remark", "row.Remark"} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("user list template misses resource count marker: %s", marker)
 		}

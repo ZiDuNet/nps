@@ -36,6 +36,18 @@ type BaseController struct {
 	requestID         string
 }
 
+type ownerFilterOption struct {
+	Id       int
+	UserName string
+	Remark   string
+}
+
+type clientFilterOption struct {
+	Id     int
+	UserId int
+	Remark string
+}
+
 const (
 	sessionPrincipalKey    = "authPrincipal"
 	sessionPrincipalUser   = "user"
@@ -878,18 +890,49 @@ func (s *BaseController) setOwnerFilterData() {
 	if !s.IsAdmin() {
 		return
 	}
-	s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
+	users, _ := file.GetDb().GetUserList(0, 10000, "")
+	options := make([]ownerFilterOption, 0, len(users))
+	for _, user := range users {
+		if user == nil {
+			continue
+		}
+		user.RLock()
+		option := ownerFilterOption{
+			Id:       user.Id,
+			UserName: html.UnescapeString(user.UserName),
+			Remark:   html.UnescapeString(user.Remark),
+		}
+		user.RUnlock()
+		options = append(options, option)
+	}
+	s.Data["users"] = options
 }
 
 // setClientFilterData supplies only the clients visible to the current
 // principal. The list endpoint independently enforces this same ownership
 // boundary for every request; these options are presentation data only.
 func (s *BaseController) setClientFilterData() {
+	var clients []*file.Client
 	if !s.IsAdmin() {
-		s.Data["clients"], _ = file.GetDb().GetClientListForAllowedIds(0, 10000, "", "", "", 0, s.GetAllowedClientIds())
-		return
+		clients, _ = file.GetDb().GetClientListForAllowedIds(0, 10000, "", "", "", 0, s.GetAllowedClientIds())
+	} else {
+		clients, _ = file.GetDb().GetClientList(0, 10000, "", "", "", 0)
 	}
-	s.Data["clients"], _ = file.GetDb().GetClientList(0, 10000, "", "", "", 0)
+	options := make([]clientFilterOption, 0, len(clients))
+	for _, client := range clients {
+		if client == nil {
+			continue
+		}
+		client.RLock()
+		option := clientFilterOption{
+			Id:     client.Id,
+			UserId: client.UserId,
+			Remark: html.UnescapeString(client.Remark),
+		}
+		client.RUnlock()
+		options = append(options, option)
+	}
+	s.Data["clients"] = options
 }
 
 func (s *BaseController) SetType(name string) {

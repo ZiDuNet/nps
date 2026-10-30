@@ -887,9 +887,9 @@ body.nps-bootstrap .management-page--host { max-width: 1800px; margin: 0 auto; }
     body.nps-bootstrap .management-page--host .nps-table__container .table th,
     body.nps-bootstrap .management-page--host .nps-table__container .table td { padding: 11px 9px !important; overflow: hidden; }
     body.nps-bootstrap .management-page--host .nps-table__container .table td { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
-    body.nps-bootstrap .management-page--host .host-list__entry { width: 30% !important; }
-    body.nps-bootstrap .management-page--host .host-list__remark { width: 10% !important; }
-    body.nps-bootstrap .management-page--host .host-list__client { width: 13% !important; }
+    body.nps-bootstrap .management-page--host .host-list__entry { width: 29% !important; }
+    body.nps-bootstrap .management-page--host .host-list__remark { width: 9% !important; }
+    body.nps-bootstrap .management-page--host .host-list__client { width: 15% !important; }
     body.nps-bootstrap .management-page--host .host-list__target { width: 17% !important; }
     body.nps-bootstrap .management-page--host .host-list__status { width: 80px !important; min-width: 80px !important; max-width: 80px !important; white-space: nowrap; text-align: center !important; }
     body.nps-bootstrap .management-page--host .host-list__actions { width: 148px !important; overflow: visible !important; }
@@ -902,11 +902,31 @@ body.nps-bootstrap .host-endpoint { display: inline-flex; align-items: center; g
 body.nps-bootstrap .host-endpoint:hover { background: var(--nps-surface-hover); }
 body.nps-bootstrap .host-endpoint i { font-size: 9px; }
 body.nps-bootstrap .host-platform-badge { flex: 0 0 auto; font-family: inherit; font-size: 10px; }
-body.nps-bootstrap .host-client { display: grid; gap: 3px; min-width: 0; }
-body.nps-bootstrap .host-client > span { color: var(--nps-ink); overflow-wrap: anywhere; }
-body.nps-bootstrap .host-client small { font-size: 11px; font-weight: 650; }
-body.nps-bootstrap .host-client .is-online { color: var(--nps-success); }
-body.nps-bootstrap .host-client .is-offline { color: var(--nps-faint); }
+body.nps-bootstrap .host-client { display: grid; gap: 2px; min-width: 0; }
+body.nps-bootstrap .host-client__line {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.nps-bootstrap .host-client__client,
+body.nps-bootstrap .host-client__owner { position: relative; padding-left: 11px; }
+body.nps-bootstrap .host-client__client { color: var(--nps-ink); font-weight: 650; }
+body.nps-bootstrap .host-client__owner { color: var(--nps-muted); font-size: 11px; }
+body.nps-bootstrap .host-client__client::before {
+    position: absolute;
+    top: 50%;
+    left: 1px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--nps-faint);
+    content: "";
+    transform: translateY(-50%);
+}
+body.nps-bootstrap .host-client__client.is-online::before { background: var(--nps-success); }
+body.nps-bootstrap .host-client__client.is-offline::before { background: var(--nps-faint); }
 body.nps-bootstrap .host-target-cell { display: block; min-width: 0; padding: 0; color: var(--nps-muted); background: transparent; border: 0; font-size: 11px; line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
 body.nps-bootstrap .host-actions { display: inline-flex; flex-wrap: nowrap; justify-content: center; gap: 4px; }
 body.nps-bootstrap .host-actions > .btn { width: 34px; min-width: 34px; height: 34px; padding: 0 !important; }
@@ -2812,6 +2832,77 @@ body.nps-bootstrap .management-page--tunnel .nps-table__grid td.tunnel-list__sta
 }
 .tunnel-status-chip.is-open::before { background: var(--nps-success); }
 .tunnel-status-chip__value { font-weight: 600; }
+body.nps-bootstrap .tunnel-access-cell,
+body.nps-bootstrap .tunnel-target-list {
+    display: grid;
+    min-width: 0;
+    justify-items: center;
+    text-align: center;
+}
+body.nps-bootstrap .tunnel-access-cell { gap: 6px; }
+body.nps-bootstrap .tunnel-target-list { gap: 7px; }
+body.nps-bootstrap .tunnel-access-address,
+body.nps-bootstrap .tunnel-target-host,
+body.nps-bootstrap .tunnel-target-port {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.nps-bootstrap .tunnel-access-address {
+    color: var(--nps-ink);
+    background: transparent;
+    border: 0;
+    font-size: 11px;
+    font-weight: 700;
+}
+body.nps-bootstrap .tunnel-target-entry {
+    display: grid;
+    min-width: 0;
+    justify-items: center;
+    line-height: 1.35;
+}
+body.nps-bootstrap .tunnel-target-host {
+    color: var(--nps-ink);
+    font-size: 11px;
+    font-weight: 650;
+}
+body.nps-bootstrap .tunnel-target-port {
+    color: var(--nps-muted);
+    font-size: 10px;
+}
+body.nps-bootstrap .tunnel-access-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+body.nps-bootstrap .tunnel-access-action {
+    display: inline-flex;
+    min-height: 25px;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 3px 7px;
+    color: var(--nps-muted);
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line-strong);
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none !important;
+    cursor: pointer;
+}
+body.nps-bootstrap .tunnel-access-action:hover {
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+    border-color: var(--nps-primary);
+}
+body.nps-bootstrap .tunnel-access-action i { font-size: 9px; }
 body.nps-bootstrap .management-page--tunnel .nps-table__grid th.tunnel-list__actions,
 body.nps-bootstrap .management-page--tunnel .nps-table__grid td.tunnel-list__actions {
     width: 184px !important;
@@ -4785,5 +4876,214 @@ body.nps-bootstrap .nps-table__filters .nps-table-filter__control {
     }
     body.nps-bootstrap .nps-table__bar-actions {
         order: 4;
+    }
+}
+
+/* Identity filters and two-line cells stay compact while keeping the account
+   and its human-readable remark available in the same visual track. */
+body.nps-bootstrap .nps-table__filters .nps-table-filter--identity .nps-table-filter__control {
+    min-width: 164px !important;
+    max-width: 220px !important;
+}
+body.nps-bootstrap .user-identity-cell {
+    display: grid;
+    width: 100%;
+    max-width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+    text-align: left;
+}
+body.nps-bootstrap .user-identity-copy,
+body.nps-bootstrap .client-owner-cell {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+body.nps-bootstrap .user-identity-name,
+body.nps-bootstrap .user-identity-remark,
+body.nps-bootstrap .client-owner-cell__name,
+body.nps-bootstrap .client-owner-cell__remark {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.nps-bootstrap .user-identity-name,
+body.nps-bootstrap .client-owner-cell__name {
+    color: var(--nps-ink);
+    font-weight: 700;
+}
+body.nps-bootstrap .user-identity-remark,
+body.nps-bootstrap .client-owner-cell__remark {
+    color: var(--nps-muted);
+    font-size: 10px;
+    font-weight: 550;
+    line-height: 1.35;
+}
+body.nps-bootstrap .client-owner-cell--empty {
+    color: var(--nps-faint);
+    font-size: 11px;
+}
+@media (min-width: 992px) {
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__remark,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__remark {
+        width: 136px !important;
+        min-width: 136px !important;
+        max-width: 136px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__owner,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__owner {
+        width: 148px !important;
+        min-width: 148px !important;
+        max-width: 148px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__address,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__address {
+        width: 124px !important;
+        min-width: 124px !important;
+        max-width: 124px !important;
+    }
+}
+body.nps-bootstrap .client-remark-cell,
+body.nps-bootstrap .client-address-cell {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__remark,
+body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__owner,
+body.nps-bootstrap .management-page--client .client-remark-cell {
+    text-align: center;
+}
+body.nps-bootstrap .management-page--client .client-list__owner .client-owner-cell,
+body.nps-bootstrap .management-page--client .client-list__owner .client-owner-cell--empty {
+    width: 100%;
+    justify-items: center;
+    text-align: center;
+}
+body.nps-bootstrap .management-page--client .client-list__owner .client-owner-cell__name,
+body.nps-bootstrap .management-page--client .client-list__owner .client-owner-cell__remark {
+    width: 100%;
+    text-align: center;
+}
+@media (min-width: 1200px) {
+    body.nps-bootstrap .management-page--user .nps-table__grid th.user-list__identity,
+    body.nps-bootstrap .management-page--user .nps-table__grid td.user-list__identity {
+        width: 168px !important;
+        min-width: 168px !important;
+        max-width: 168px !important;
+    }
+}
+
+/* Direction labels are subordinate to the metric name instead of forcing one
+   long, hard-to-scan column heading. */
+body.nps-bootstrap .client-flow-heading {
+    display: grid;
+    justify-items: center;
+    gap: 1px;
+    white-space: nowrap;
+    line-height: 1.15;
+}
+body.nps-bootstrap .client-flow-heading small {
+    color: var(--nps-faint);
+    font-size: 9px;
+    font-weight: 650;
+    letter-spacing: 0;
+}
+body.nps-bootstrap .nps-table__grid th.client-list__inlet-flow .nps-table__header-inner,
+body.nps-bootstrap .nps-table__grid th.client-list__export-flow .nps-table__header-inner {
+    overflow: visible;
+    text-overflow: clip;
+}
+body.nps-bootstrap .nps-table__grid th.client-list__inlet-flow .nps-table__header-inner > .client-flow-heading,
+body.nps-bootstrap .nps-table__grid th.client-list__export-flow .nps-table__header-inner > .client-flow-heading {
+    overflow: visible;
+    text-overflow: clip;
+}
+
+/* Domain source tags and public entry actions use explicit control styling so
+   custom domains and clickable HTTP/HTTPS endpoints are recognizable at a
+   glance without relying on color alone. */
+body.nps-bootstrap .host-domain-badge {
+    display: inline-flex;
+    flex: 0 0 auto;
+    min-height: 20px;
+    align-items: center;
+    padding: 2px 7px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 750;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+body.nps-bootstrap .host-domain-badge--managed {
+    color: var(--nps-primary) !important;
+    background: var(--nps-primary-soft) !important;
+    border-color: var(--nps-primary);
+}
+body.nps-bootstrap .host-domain-badge--custom {
+    color: var(--nps-warning) !important;
+    background: var(--nps-warning-soft) !important;
+    border-color: var(--nps-warning);
+}
+body.nps-bootstrap .host-endpoint {
+    display: inline-flex;
+    min-height: 30px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 4px 9px;
+    color: var(--nps-primary) !important;
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line-strong);
+    border-radius: 999px;
+    box-shadow: 0 1px 0 rgba(15, 35, 60, .04);
+    font-size: 11px;
+    font-weight: 750;
+    line-height: 1;
+    text-align: center;
+    text-decoration: none !important;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color .15s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+body.nps-bootstrap .host-endpoint:hover {
+    color: var(--nps-primary) !important;
+    background: var(--nps-primary-soft);
+    border-color: var(--nps-primary);
+    box-shadow: 0 2px 8px rgba(15, 35, 60, .12);
+}
+body.nps-bootstrap .host-endpoint:active {
+    box-shadow: inset 0 1px 2px rgba(15, 35, 60, .16);
+}
+body.nps-bootstrap .host-endpoint:focus-visible {
+    border-color: var(--nps-primary);
+    outline: 0;
+    box-shadow: var(--nps-focus);
+}
+body.nps-bootstrap .host-endpoint i {
+    display: inline-flex;
+    flex: 0 0 10px;
+    width: 10px;
+    min-width: 10px;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    line-height: 1;
+    opacity: .9;
+}
+@media (max-width: 991px) {
+    body.nps-bootstrap .nps-table__filters .nps-table-filter--identity .nps-table-filter__control {
+        min-width: 0 !important;
+        max-width: none !important;
+    }
+    body.nps-bootstrap .host-endpoint {
+        min-height: 36px;
+        padding: 6px 11px;
     }
 }

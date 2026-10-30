@@ -123,19 +123,23 @@
             {
                 field: 'UserName',
                 title: '<span title="用户名与账号状态" data-i18n-zh="用户" data-i18n-en="User">用户</span>',
-                halign: 'center',
+                align: 'left',
+                halign: 'left',
                 class: 'user-list__identity',
-                width: '108px',
+                width: '168px',
                 formatter: function(value, row) {
                     var statusText = row.Status
                         ? (npsIsEnglish() ? 'Active' : '启用')
                         : (npsIsEnglish() ? 'Disabled' : '停用');
                     var userName = value || '-';
-                    return '<span class="user-identity-cell"><span class="user-identity-name" title="' + userTableText(userName) + '">' + userTableText(userName) + '</span><span class="user-status-dot' + (row.Status ? ' is-active' : '') + '" title="' + statusText + '" aria-label="' + statusText + '"></span></span>';
+                    var remark = String(row.Remark || '').trim();
+                    var remarkLine = remark && remark !== String(userName)
+                        ? '<span class="user-identity-remark" title="' + userTableText(remark) + '">' + userTableText(remark) + '</span>'
+                        : '';
+                    return '<span class="user-identity-cell"><span class="user-identity-copy"><span class="user-identity-name" title="' + userTableText(userName) + '">' + userTableText(userName) + '</span>' + remarkLine + '</span><span class="user-status-dot' + (row.Status ? ' is-active' : '') + '" title="' + statusText + '" aria-label="' + statusText + '"></span></span>';
                 }
             },
             { field: 'Email', title: '<span title="邮箱" data-i18n-zh="邮箱" data-i18n-en="Email">邮箱</span>', halign: 'center', class: 'user-list__email', visible: false, escape: true, formatter: function(value) { return userTableText(value || '-'); } },
-            { field: 'Remark', title: '<span title="备注" data-i18n-zh="备注" data-i18n-en="Remark">备注</span>', halign: 'center', class: 'user-list__remark', visible: false, escape: true },
             {
                 field: 'ClientCount',
                 title: '<span title="客户端配额（已用 / 上限）" data-i18n-zh="客户端" data-i18n-en="Clients">客户端</span>',

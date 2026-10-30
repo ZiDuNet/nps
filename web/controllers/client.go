@@ -3,6 +3,7 @@ package controllers
 import (
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ type clientListRow struct {
 	Id                  int
 	UserId              int
 	UserName            string
+	UserRemark          string
 	VerifyKey           string
 	Addr                string
 	LocalAddr           string
@@ -375,11 +377,11 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 		row := &clientListRow{
 			Id:               client.Id,
 			UserId:           userID,
-			UserName:         userName,
+			UserName:         html.UnescapeString(userName),
 			VerifyKey:        client.VerifyKey,
 			Addr:             client.Addr,
 			LocalAddr:        client.LocalAddr,
-			Remark:           client.Remark,
+			Remark:           html.UnescapeString(client.Remark),
 			Status:           client.Status,
 			IsConnect:        client.IsConnect,
 			RateLimit:        client.RateLimit,
@@ -409,7 +411,9 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 		if userID > 0 {
 			if user, err := file.GetDb().GetUser(userID); err == nil && user != nil {
 				user.RLock()
-				row.UserName, row.UserExpireTime = user.UserName, user.ExpireTime
+				row.UserName = html.UnescapeString(user.UserName)
+				row.UserRemark = html.UnescapeString(user.Remark)
+				row.UserExpireTime = user.ExpireTime
 				user.RUnlock()
 			}
 		}

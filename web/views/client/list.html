@@ -28,13 +28,15 @@
                         <button type="button" onclick="batchResourceAction('{{.web_base_url}}/client/changestatus', {status: 0}, '批量停用', 'Disable selected')" class="btn btn-outline btn-warning">
                             <i class="fa fa-pause" aria-hidden="true"></i> <span data-i18n-zh="批量停用" data-i18n-en="Disable selected">批量停用</span>
                         </button>
-                        <label class="nps-table-filter" for="client-owner-filter">
+                        <label class="nps-table-filter nps-table-filter--identity" for="client-owner-filter">
                             <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
                             <select id="client-owner-filter" class="form-control nps-table-filter__control" data-nps-table-filter="user_id">
                                 <option value="" data-i18n-zh="全部用户" data-i18n-en="All users">全部用户</option>
                                 <option value="0" data-i18n-zh="未分配" data-i18n-en="Unassigned">未分配</option>
                                 {{range .users}}
-                                <option value="{{.Id}}">{{.Id}} · {{.UserName}}</option>
+                                <option value="{{.Id}}"
+                                    data-i18n-zh="{{if and .Remark (ne .Remark .UserName)}}{{.Remark}}（{{.UserName}}）{{else}}{{.UserName}}{{end}}"
+                                    data-i18n-en="{{if and .Remark (ne .Remark .UserName)}}{{.Remark}} ({{.UserName}}){{else}}{{.UserName}}{{end}}">{{if and .Remark (ne .Remark .UserName)}}{{.Remark}}（{{.UserName}}）{{else}}{{.UserName}}{{end}}</option>
                                 {{end}}
                             </select>
                         </label>
@@ -103,7 +105,10 @@
         // preference hid the version column (where the update action used to
         // live).  Existing preferences are intentionally not reused so the
         // remote-update action cannot disappear after an upgrade.
-        storageKey: 'client-v3',
+        // Reset the compact-column preference once so deployments that saved
+        // the previous hidden-flow defaults now receive the new visible flow
+        // columns. Administrators can still hide them from the column menu.
+        storageKey: 'client-v4',
         detailView: true,
         smartDisplay: true, // 智能显示 pagination 和 cardview 等
         formatLoadingMessage: function () { return npsTableState('client', true); },
@@ -215,7 +220,9 @@
                 + '<section class="client-detail__card">'
                 + '<h6 class="client-detail__section-title"><i class="fa fa-info-circle" aria-hidden="true"></i>' + (english ? 'Client details' : '客户端信息') + '</h6>'
                 + '<div class="client-detail__grid">'
-                + kv(english ? 'Owner' : '所属用户', row.UserId > 0 ? (text(row.UserName, '-') + '（ID ' + text(row.UserId) + '）') : (english ? 'Unassigned' : '未分配'))
+                + kv(english ? 'Owner' : '所属用户', row.UserId > 0
+                    ? (text(row.UserName, '-') + (row.UserRemark ? ' · ' + text(row.UserRemark) : '') + '（ID ' + text(row.UserId) + '）')
+                    : (english ? 'Unassigned' : '未分配'))
                 + kv(english ? 'Status' : '运行状态', row.Status === true ? (english ? 'Enabled' : '已启用') : (english ? 'Disabled' : '已停用'))
                 + kv(english ? 'Online' : '在线状态', row.IsConnect === true
                     ? (english ? 'Online' : '在线') + (row.ConnectionProtocol ? ' · ' + text(row.ConnectionProtocol) : '')
@@ -277,16 +284,33 @@
                 field: 'Remark',//域值
                 title: '<span langtag="word-remark"></span>',//标题
                 halign: 'center',
+                align: 'center',
+                class: 'client-list__remark',
                 visible: true,//false表示不显示
-                escape: true
+                formatter: function(value) {
+                    var remark = value || '-';
+                    return '<span class="client-remark-cell" title="' + npsEscapeHtml(remark) + '">' + npsEscapeHtml(remark) + '</span>';
+                }
             },
             {
                 field: 'UserName',
                 title: '<span data-i18n-zh="所属用户" data-i18n-en="Assigned user">所属用户</span>',
                 halign: 'center',
+                align: 'center',
+                class: 'client-list__owner',
+                width: '156px',
                 visible: true,
-                formatter: function(value) {
-                    return npsEscapeHtml(value || '-')
+                formatter: function(value, row) {
+                    if (!(Number(row.UserId) > 0)) {
+                        return '<span class="client-owner-cell client-owner-cell--empty">' + (npsIsEnglish() ? 'Unassigned' : '未分配') + '</span>';
+                    }
+                    var userName = value || '-';
+                    var remark = String(row.UserRemark || '').trim();
+                    var title = userName + (remark && remark !== userName ? ' · ' + remark : '');
+                    var remarkLine = remark && remark !== userName
+                        ? '<span class="client-owner-cell__remark" title="' + npsEscapeHtml(remark) + '">' + npsEscapeHtml(remark) + '</span>'
+                        : '';
+                    return '<span class="client-owner-cell" title="' + npsEscapeHtml(title) + '"><span class="client-owner-cell__name">' + npsEscapeHtml(userName) + '</span>' + remarkLine + '</span>';
                 }
             },
             {
@@ -329,15 +353,21 @@
                 field: 'Addr',//域值
                 title: '<span langtag="word-address"></span>',//标题
                 halign: 'center',
-                visible: true,//false表示不显示
-                escape: true
+                class: 'client-list__address',
+                // Compact desktop keeps both flow columns visible; the
+                // address remains available in the column picker and detail.
+                visible: !clientListCompact,
+                formatter: function(value) {
+                    var address = value || '-';
+                    return '<span class="client-address-cell" title="' + npsEscapeHtml(address) + '">' + npsEscapeHtml(address) + '</span>';
+                }
             },
             {
                 field: 'InletFlow',//域值
-                title: '<span langtag="word-inletflow"></span>',//标题
+                title: '<span class="client-flow-heading"><span langtag="word-inletflow-short"></span><small langtag="word-inletflow-direction"></small></span>',//标题
                 halign: 'center',
                 class: 'client-list__inlet-flow',
-                visible: !clientListCompact,//较窄桌面中在详情行保留，避免表头拥挤
+                visible: true,
                 sortable: true,//启用排序
                 formatter: function (value, row, index) {
                     return changeunit((row.Flow || {}).InletFlow)
@@ -345,10 +375,10 @@
             },
             {
                 field: 'ExportFlow',//域值
-                title: '<span langtag="word-exportflow"></span>',//标题
+                title: '<span class="client-flow-heading"><span langtag="word-exportflow-short"></span><small langtag="word-exportflow-direction"></small></span>',//标题
                 halign: 'center',
                 class: 'client-list__export-flow',
-                visible: !clientListCompact,//较窄桌面中在详情行保留，避免表头拥挤
+                visible: true,
                 sortable: true,//启用排序
                 formatter: function (value, row, index) {
                     return changeunit((row.Flow || {}).ExportFlow)

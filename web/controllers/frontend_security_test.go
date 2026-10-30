@@ -131,6 +131,99 @@ func TestListToolbarsUseUnifiedRightAlignedControlOrder(t *testing.T) {
 	}
 }
 
+func TestResourceListsExposeCascadingIdentityFilters(t *testing.T) {
+	scriptContent, err := os.ReadFile("../static/js/nps-table.js")
+	if err != nil {
+		t.Fatalf("read table script: %v", err)
+	}
+	for _, marker := range []string{
+		"initCascadingFilters",
+		"refreshOwnerClientOptions",
+		"refreshFilterTitles",
+		"data-filter-owner-id",
+		"[data-nps-table-filter=\"filter_client_id\"]",
+	} {
+		if !strings.Contains(string(scriptContent), marker) {
+			t.Fatalf("table script misses cascading filter marker %q", marker)
+		}
+	}
+	for _, path := range []string{"../views/index/list.html", "../views/index/hlist.html"} {
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read resource list template %s: %v", path, readErr)
+		}
+		template := string(content)
+		for _, marker := range []string{"nps-table-filter--identity", `data-filter-owner-id="{{.UserId}}"`, "未命名客户端（ID"} {
+			if !strings.Contains(template, marker) {
+				t.Fatalf("resource list template %s misses cascading filter marker %q", path, marker)
+			}
+		}
+	}
+	tunnelListContent, err := os.ReadFile("../views/index/list.html")
+	if err != nil {
+		t.Fatalf("read tunnel list template: %v", err)
+	}
+	for _, marker := range []string{
+		"function tunnelTargetItems",
+		"tunnel-target-entry",
+		"tunnelAccessAddressMarkup",
+		"tunnel-access-actions",
+		"data-clipboard-text",
+		"fa-external-link-alt",
+		"currentconnections: false",
+	} {
+		if !strings.Contains(string(tunnelListContent), marker) {
+			t.Fatalf("tunnel list template misses access display marker %q", marker)
+		}
+	}
+	hostListContent, err := os.ReadFile("../views/index/hlist.html")
+	if err != nil {
+		t.Fatalf("read host list template: %v", err)
+	}
+	for _, marker := range []string{`'<span>' + label + '</span>`, "fa-external-link-alt", "host-client__line", "client.UserRemark"} {
+		if !strings.Contains(string(hostListContent), marker) {
+			t.Fatalf("host list template misses endpoint action marker %q", marker)
+		}
+	}
+	styleContent, err := os.ReadFile("../static/css/nps-console.css")
+	if err != nil {
+		t.Fatalf("read console stylesheet: %v", err)
+	}
+	for _, marker := range []string{
+		".client-flow-heading",
+		".host-domain-badge--custom",
+		".host-endpoint",
+		".host-client__line",
+		".tunnel-access-cell",
+		".tunnel-target-entry",
+		".client-list__address",
+		".client-list__owner",
+		".client-list__remark",
+		".client-owner-cell__remark",
+		".user-identity-remark",
+	} {
+		if !strings.Contains(string(styleContent), marker) {
+			t.Fatalf("console stylesheet misses resource identity marker %q", marker)
+		}
+	}
+	clientListContent, err := os.ReadFile("../views/client/list.html")
+	if err != nil {
+		t.Fatalf("read client list template: %v", err)
+	}
+	for _, marker := range []string{
+		"storageKey: 'client-v4'",
+		"class: 'client-list__address',\n                // Compact desktop keeps both flow columns visible",
+		"class: 'client-list__inlet-flow',\n                visible: true",
+		"class: 'client-list__export-flow',\n                visible: true",
+		"align: 'center',\n                class: 'client-list__remark'",
+		"align: 'center',\n                class: 'client-list__owner'",
+	} {
+		if !strings.Contains(string(clientListContent), marker) {
+			t.Fatalf("client list template misses visible flow marker %q", marker)
+		}
+	}
+}
+
 func TestPublicLayoutKeepsShellAndNavigatesContentOnly(t *testing.T) {
 	content, err := os.ReadFile("../views/public/layout.html")
 	if err != nil {

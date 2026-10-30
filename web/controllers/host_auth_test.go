@@ -62,3 +62,33 @@ func TestHostListExposesClientLevelAuthStatusWithoutCredentials(t *testing.T) {
 		t.Fatalf("host list JSON did not include client-level BasicAuthSet: %s", encoded)
 	}
 }
+
+func TestHostListResolvesClientOwnerIdentity(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	db.JsonDb.Users.Store(10, &file.User{
+		Id:       10,
+		UserName: "alice&amp;ops",
+		Remark:   "研发&amp;运维",
+		Status:   true,
+	})
+	client := file.NewClient("test-vkey", false, false)
+	client.Id = 4
+	client.UserId = 10
+	client.Remark = "branch & lab"
+	client.IsConnect = true
+	host := &file.Host{
+		Id:     14,
+		Host:   "owner.example.test",
+		Client: client,
+		Target: &file.Target{TargetStr: "127.0.0.1:8080"},
+	}
+
+	rows := newHostListRows([]*file.Host{host})
+	if len(rows) != 1 {
+		t.Fatalf("host row count = %d, want 1", len(rows))
+	}
+	owner := rows[0].Client
+	if owner.UserId != 10 || owner.UserName != "alice&ops" || owner.UserRemark != "研发&运维" {
+		t.Fatalf("host list owner = %#v, want decoded user identity", owner)
+	}
+}
