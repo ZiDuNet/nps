@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.39</sub>
+﻿# NPS <sub>v1.1.40</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -208,6 +208,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.40** (2026-11-02) - NPC 运行时客户端、隧道和域名反代改用独立临时 ID，不再消耗持久化序列；客户端、隧道、域名反代和用户列表支持实时速率/连接排序，所有列表统一提供 20/50/100/200 分页。
 
 - **v1.1.39** (2026-10-30) - 优化列表身份信息、用户与客户端联动筛选、隧道目标展示和域名访问入口。客户端列表保留双向流量列，备注与所属用户改为居中双行显示；HTTP/HTTPS 入口改为保留外链图标的明确按钮，隧道访问地址提供复制和 HTTP 尝试操作。
 
