@@ -136,6 +136,12 @@ func (s *DbUtils) GetClientListFiltered(start, length int, search, sort, order s
 }
 
 func (s *DbUtils) GetUserList(start, length int, search string) ([]*User, int) {
+	return s.GetUserListSorted(start, length, search, "", "")
+}
+
+// GetUserListSorted keeps the historical user-list contract while allowing
+// the management table to sort by live shared bandwidth and connections.
+func (s *DbUtils) GetUserListSorted(start, length int, search, sortField, order string) ([]*User, int) {
 	list := make([]*User, 0)
 	all := make([]*User, 0)
 	s.JsonDb.Users.Range(func(key, value interface{}) bool {
@@ -152,9 +158,7 @@ func (s *DbUtils) GetUserList(start, length int, search string) ([]*User, int) {
 		all = append(all, v)
 		return true
 	})
-	sort.SliceStable(all, func(i, j int) bool {
-		return all[i].Id < all[j].Id
-	})
+	SortUsers(all, sortField, order)
 	cnt := len(all)
 	for _, user := range all {
 		if start--; start < 0 {
@@ -1102,6 +1106,15 @@ func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 	if t == nil || t.Client == nil || t.Target == nil {
 		return errors.New("隧道记录无效")
 	}
+	if t.NoStore {
+		// Runtime tunnels use a separate negative namespace. This also repairs
+		// older callers that assigned a persistent ID before setting NoStore.
+		if t.Id >= 0 {
+			t.Id = int(s.JsonDb.GetTemporaryTaskID())
+		}
+	} else if t.Id <= 0 {
+		t.Id = int(s.JsonDb.GetTaskId())
+	}
 	if err := NormalizeHealth(&t.Health); err != nil {
 		return err
 	}
@@ -1330,6 +1343,12 @@ func sameHostOwner(a, b *Client) bool {
 	aOwner, bOwner := hostOwner(a), hostOwner(b)
 	if aOwner.userID > 0 || bOwner.userID > 0 {
 		return aOwner.userID > 0 && aOwner.userID == bOwner.userID
+	}
+	// Negative client IDs belong to the same ephemeral NPC registration when
+	// they match. They are intentionally excluded from the persisted tenant
+	// namespace but may still own more than one runtime host rule.
+	if aOwner.clientID < 0 || bOwner.clientID < 0 {
+		return aOwner.clientID < 0 && aOwner.clientID == bOwner.clientID
 	}
 	return aOwner.clientID > 0 && aOwner.clientID == bOwner.clientID
 }
@@ -1970,7 +1989,13 @@ func (s *DbUtils) NewHost(t *Host) error {
 	}
 	hostMutationMu.Lock()
 	defer hostMutationMu.Unlock()
-	if t.Id <= 0 {
+	if t.NoStore {
+		// Runtime hosts must never consume the persistent host counter. Older
+		// callers may still arrive with a positive ID, so normalize those too.
+		if t.Id >= 0 {
+			t.Id = int(s.JsonDb.GetTemporaryHostID())
+		}
+	} else if t.Id <= 0 {
 		t.Id = int(s.JsonDb.GetHostId())
 	}
 	if t.Id > int(^uint32(0)>>1) {
@@ -1979,9 +2004,11 @@ func (s *DbUtils) NewHost(t *Host) error {
 	if _, exists := s.JsonDb.Hosts.Load(t.Id); exists {
 		return fmt.Errorf("主机 ID %d 已存在", t.Id)
 	}
-	for current := atomic.LoadInt32(&s.JsonDb.HostIncreaseId); t.Id > int(current); current = atomic.LoadInt32(&s.JsonDb.HostIncreaseId) {
-		if atomic.CompareAndSwapInt32(&s.JsonDb.HostIncreaseId, current, int32(t.Id)) {
-			break
+	if !t.NoStore {
+		for current := atomic.LoadInt32(&s.JsonDb.HostIncreaseId); t.Id > int(current); current = atomic.LoadInt32(&s.JsonDb.HostIncreaseId) {
+			if atomic.CompareAndSwapInt32(&s.JsonDb.HostIncreaseId, current, int32(t.Id)) {
+				break
+			}
 		}
 	}
 	if err := s.preparePlatformHost(t, nil); err != nil {
@@ -2124,8 +2151,14 @@ func (s *DbUtils) GetHostByAllowedClients(start, length int, id int, search stri
 // before counting and pagination. Host ownership is inherited from the
 // assigned client, so a zero owner selects hosts whose client is unassigned.
 func (s *DbUtils) GetHostByAllowedClientsFiltered(start, length int, id int, search string, owner *OwnerFilter, allowedClientIds map[int]struct{}) ([]*Host, int) {
-	list := make([]*Host, 0)
-	var cnt int
+	return s.GetHostByAllowedClientsFilteredSorted(start, length, id, search, "", "", owner, allowedClientIds)
+}
+
+// GetHostByAllowedClientsFilteredSorted is the host-list variant that applies
+// the requested sort before counting and pagination. Keeping the historical
+// wrapper above preserves the API used by older callers.
+func (s *DbUtils) GetHostByAllowedClientsFilteredSorted(start, length int, id int, search, sortField, order string, owner *OwnerFilter, allowedClientIds map[int]struct{}) ([]*Host, int) {
+	all := make([]*Host, 0)
 	keys := GetMapKeys(&s.JsonDb.Hosts, false, "", "")
 	for _, key := range keys {
 		if value, ok := s.JsonDb.Hosts.Load(key); ok {
@@ -2156,16 +2189,20 @@ func (s *DbUtils) GetHostByAllowedClientsFiltered(start, length int, id int, sea
 				continue
 			}
 			if id == 0 || clientID == id {
-				cnt++
-				if start--; start < 0 {
-					if length--; length >= 0 {
-						list = append(list, v)
-					}
-				}
+				all = append(all, v)
 			}
 		}
 	}
-	return list, cnt
+	SortHosts(all, sortField, order)
+	list := make([]*Host, 0, len(all))
+	for _, host := range all {
+		if start--; start < 0 {
+			if length--; length >= 0 {
+				list = append(list, host)
+			}
+		}
+	}
+	return list, len(all)
 }
 
 func (s *DbUtils) DelClient(id int) error {
@@ -2245,7 +2282,14 @@ reset:
 		}
 		return errors.New("Vkey duplicate, please reset")
 	}
-	if c.Id == 0 {
+	if c.NoStore {
+		// Public-key onboarding clients are runtime-only. Keep them addressable
+		// by the Bridge while preventing their IDs from consuming the persisted
+		// client sequence.
+		if c.Id >= 0 {
+			c.Id = int(s.JsonDb.GetTemporaryClientID())
+		}
+	} else if c.Id == 0 {
 		c.Id = int(s.JsonDb.GetClientId())
 	}
 	if c.Flow == nil {

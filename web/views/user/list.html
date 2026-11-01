@@ -64,7 +64,7 @@
         pagination: true,
         sidePagination: 'server',
         pageNumber: 1,
-        pageList: [5, 10, 20, 50],
+        pageList: [20, 50, 100, 200],
         storageKey: 'user',
         detailView: true,
         smartDisplay: true,
@@ -163,12 +163,13 @@
                 }
             },
             {
-                field: 'MaxConn',
+                field: 'UploadRate',
                 title: '<span title="实时共享连接、实时共享带宽及配置上限" data-i18n-zh="实时连接 / 带宽" data-i18n-en="Live connections / bandwidth">实时连接 / 带宽</span>',
                 halign: 'center',
                 align: 'center',
                 class: 'user-list__limits',
                 width: '164px',
+                sortable: true,
                 formatter: function(value, row) {
                     var userId = Number(row.Id);
                     var connectionLimit = Number(value) > 0 ? Number(value) : '∞';
@@ -180,6 +181,26 @@
                         + '<span class="user-live-metrics__direction" title="' + userTableText((npsIsEnglish() ? 'Download: ' : '下行：') + downloadLimit) + '">↓</span><span class="user-live-metrics__value" data-live-user-down>' + changeunit(Number(row.DownloadRate) || 0) + '/s</span>'
                         + '</div>';
                 }
+            },
+            {
+                field: 'DownloadRate',
+                title: '<span title="实时共享下行带宽" data-i18n-zh="实时共享下行带宽" data-i18n-en="Live shared download bandwidth">实时共享下行带宽</span>',
+                halign: 'center',
+                align: 'center',
+                visible: false,
+                sortable: true,
+                formatter: function(value, row) {
+                    return changeunit(Number(row.DownloadRate) || 0) + '/s';
+                }
+            },
+            {
+                field: 'MaxConn',
+                title: '<span title="最大并发连接数" data-i18n-zh="最大并发连接数" data-i18n-en="Maximum connections">最大并发连接数</span>',
+                halign: 'center',
+                align: 'center',
+                visible: false,
+                sortable: true,
+                formatter: function(value) { return userTableText(Number(value) > 0 ? value : userUnlimitedQuotaText()); }
             },
             { field: 'ExpireTime', title: '<span title="账号有效期" data-i18n-zh="有效期" data-i18n-en="Expiration">有效期</span>', halign: 'center', class: 'user-list__expiry', width: '96px', formatter: function(value) { return userTableText(value || userUnlimitedText()); } },
             {

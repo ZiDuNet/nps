@@ -2816,7 +2816,7 @@ loop:
 							tl.Target.TargetStr = strconv.Itoa(targets[i])
 						}
 					}
-					tl.Id = int(file.GetDb().JsonDb.GetTaskId())
+					tl.Id = int(file.GetDb().JsonDb.GetTemporaryTaskID())
 					tl.Status = true
 					tl.Flow = new(file.Flow)
 					tl.NoStore = true

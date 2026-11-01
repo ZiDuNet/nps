@@ -17,8 +17,8 @@
         contentType: 'application/x-www-form-urlencoded',
         queryParams: function (params) { return params; },
         pageNumber: 1,
-        pageSize: 10,
-        pageList: [10, 20, 50],
+        pageSize: 20,
+        pageList: [20, 50, 100, 200],
         pagination: true,
         search: false,
         showHeader: true,
@@ -113,7 +113,7 @@
             this.options.cardView = true;
         }
         this.pageNumber = Number(this.options.pageNumber) > 0 ? Number(this.options.pageNumber) : 1;
-        this.pageSize = Number(this.options.pageSize) > 0 ? Number(this.options.pageSize) : 10;
+        this.pageSize = Number(this.options.pageSize) > 0 ? Number(this.options.pageSize) : 20;
         this.restorePreferences();
         this.searchText = '';
         this.sortField = '';
@@ -622,7 +622,7 @@
         var $detail = $('<div class="nps-table__pagination-detail"></div>');
         $detail.append('<span>' + localText('显示第 ' + first + ' 到 ' + last + ' 条记录，共 ' + this.total + ' 条', 'Showing ' + first + ' to ' + last + ' of ' + this.total + ' records') + '</span>');
         var $size = $('<label class="nps-table__page-size-wrap"><span>' + localText('每页', 'Rows') + '</span><select class="form-control nps-table__page-size"></select></label>');
-        (this.options.pageList || [10, 20, 50]).forEach(function (size) {
+        (this.options.pageList || [20, 50, 100, 200]).forEach(function (size) {
             $size.find('select').append($('<option></option>').attr('value', size).prop('selected', Number(size) === self.pageSize).text(size));
         });
         $detail.append($size);

@@ -431,10 +431,23 @@ func StopServer(id int) error {
 }
 
 func validateTaskID(id int) error {
-	if id <= 0 {
-		return errors.New("invalid task ID")
+	if id > 0 {
+		return nil
 	}
-	return nil
+	// Negative IDs are reserved for NoStore tunnels created from an NPC
+	// configuration. They are valid for the runtime lifecycle but must never
+	// be accepted merely because an arbitrary negative number was supplied.
+	if id < 0 {
+		if task, err := file.GetDb().GetTask(id); err == nil && task != nil {
+			task.RLock()
+			noStore := task.NoStore
+			task.RUnlock()
+			if noStore {
+				return nil
+			}
+		}
+	}
+	return errors.New("invalid task ID")
 }
 
 func stopServer(id int) error {
@@ -660,38 +673,9 @@ func GetTunnelByOwnerFilter(start, length int, typeVal string, clientId int, sea
 			all_list = append(all_list, v)
 		}
 	}
-	//sort by Id, Remark, TargetStr, Port, asc or desc
-	if sortField == "Id" {
-		if order == "asc" {
-			sort.SliceStable(all_list, func(i, j int) bool { return all_list[i].Id < all_list[j].Id })
-		} else {
-			sort.SliceStable(all_list, func(i, j int) bool { return all_list[i].Id > all_list[j].Id })
-		}
-	} else if sortField == "ClientId" {
-		if order == "asc" {
-			sort.SliceStable(all_list, func(i, j int) bool { return tunnelClientID(all_list[i]) < tunnelClientID(all_list[j]) })
-		} else {
-			sort.SliceStable(all_list, func(i, j int) bool { return tunnelClientID(all_list[i]) > tunnelClientID(all_list[j]) })
-		}
-	} else if sortField == "Remark" {
-		if order == "asc" {
-			sort.SliceStable(all_list, func(i, j int) bool { return all_list[i].Remark < all_list[j].Remark })
-		} else {
-			sort.SliceStable(all_list, func(i, j int) bool { return all_list[i].Remark > all_list[j].Remark })
-		}
-	} else if sortField == "Client.VerifyKey" {
-		if order == "asc" {
-			sort.SliceStable(all_list, func(i, j int) bool { return tunnelClientVerifyKey(all_list[i]) < tunnelClientVerifyKey(all_list[j]) })
-		} else {
-			sort.SliceStable(all_list, func(i, j int) bool { return tunnelClientVerifyKey(all_list[i]) > tunnelClientVerifyKey(all_list[j]) })
-		}
-	} else if sortField == "Target" {
-		if order == "asc" {
-			sort.SliceStable(all_list, func(i, j int) bool { return tunnelTargetString(all_list[i]) < tunnelTargetString(all_list[j]) })
-		} else {
-			sort.SliceStable(all_list, func(i, j int) bool { return tunnelTargetString(all_list[i]) > tunnelTargetString(all_list[j]) })
-		}
-	}
+	// Keep sorting in one place so the Web table, including the live upload /
+	// download rate fields, uses one consistent snapshot per row.
+	file.SortTunnels(all_list, sortField, order)
 
 	//search
 	for _, key := range all_list {

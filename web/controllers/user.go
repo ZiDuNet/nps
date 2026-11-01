@@ -331,7 +331,7 @@ func (s *UserController) List() {
 		return
 	}
 	start, length := s.GetAjaxParams()
-	list, cnt := file.GetDb().GetUserList(start, length, s.getEscapeString("search"))
+	list, cnt := file.GetDb().GetUserListSorted(start, length, s.getEscapeString("search"), s.getEscapeString("sort"), s.getEscapeString("order"))
 	s.AjaxTable(newUserListRowsWithResourceCounts(list, file.GetDb().GetUserResourceCounts()), cnt, cnt, nil)
 }
 

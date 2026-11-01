@@ -223,7 +223,7 @@ func (s *Conn) GetHostInfo() (h *file.Host, err error) {
 	if h.Target == nil {
 		return nil, errors.New("主机目标为空")
 	}
-	h.Id = int(file.GetDb().JsonDb.GetHostId())
+	h.Id = int(file.GetDb().JsonDb.GetTemporaryHostID())
 	h.Flow = new(file.Flow)
 	h.NoStore = true
 	return
@@ -257,7 +257,7 @@ func (s *Conn) GetTaskInfo() (t *file.Tunnel, err error) {
 	if t.Target == nil {
 		return nil, errors.New("隧道目标为空")
 	}
-	t.Id = int(file.GetDb().JsonDb.GetTaskId())
+	t.Id = int(file.GetDb().JsonDb.GetTemporaryTaskID())
 	t.NoStore = true
 	t.Flow = new(file.Flow)
 	return

@@ -76,6 +76,61 @@ func TestLoadSyncMapFromFileSkipsUnreadablePath(t *testing.T) {
 	}
 }
 
+func TestNoStoreResourcesUseTemporaryIDs(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	db.ClientIncreaseId = 7
+	db.TaskIncreaseId = 11
+	db.HostIncreaseId = 13
+	utils := &DbUtils{JsonDb: db}
+
+	client := NewClient("temporary", true, false)
+	if err := utils.NewClient(client); err != nil {
+		t.Fatal(err)
+	}
+	if client.Id >= 0 {
+		t.Fatalf("temporary client ID = %d, want a negative runtime ID", client.Id)
+	}
+	if db.ClientIncreaseId != 7 {
+		t.Fatalf("temporary client advanced persistent counter to %d", db.ClientIncreaseId)
+	}
+
+	task := &Tunnel{
+		Id:      99,
+		NoStore: true,
+		Client:  client,
+		Target:  &Target{TargetStr: "127.0.0.1:8080"},
+		Mode:    "tcp",
+		Status:  true,
+	}
+	if err := utils.NewTask(task); err != nil {
+		t.Fatal(err)
+	}
+	if task.Id >= 0 {
+		t.Fatalf("temporary task ID = %d, want a negative runtime ID", task.Id)
+	}
+	if db.TaskIncreaseId != 11 {
+		t.Fatalf("temporary task advanced persistent counter to %d", db.TaskIncreaseId)
+	}
+
+	host := &Host{
+		Id:      99,
+		NoStore: true,
+		Host:    "runtime.example.com",
+		Scheme:  "http",
+		Client:  client,
+		Target:  &Target{TargetStr: "127.0.0.1:8080"},
+	}
+	if err := utils.NewHost(host); err != nil {
+		t.Fatal(err)
+	}
+	if host.Id >= 0 {
+		t.Fatalf("temporary host ID = %d, want a negative runtime ID", host.Id)
+	}
+	if db.HostIncreaseId != 13 {
+		t.Fatalf("temporary host advanced persistent counter to %d", db.HostIncreaseId)
+	}
+}
+
 func syncMapLen(m interface {
 	Range(func(key, value interface{}) bool)
 }) int {

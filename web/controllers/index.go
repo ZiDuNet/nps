@@ -1954,7 +1954,8 @@ func (s *IndexController) HostList() {
 				return
 			}
 		}
-		list, cnt := file.GetDb().GetHostByAllowedClientsFiltered(start, length, clientId, s.getEscapeString("search"), owner, allowed)
+		sortField, order := s.getEscapeString("sort"), s.getEscapeString("order")
+		list, cnt := file.GetDb().GetHostByAllowedClientsFilteredSorted(start, length, clientId, s.getEscapeString("search"), sortField, order, owner, allowed)
 		s.AjaxTable(newHostListRows(list), cnt, cnt, nil)
 	}
 }

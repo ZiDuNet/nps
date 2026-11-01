@@ -38,15 +38,21 @@ type JsonDb struct {
 	Global           *Glob
 	globalMu         sync.RWMutex
 	RunPath          string
-	ClientIncreaseId int32  //client increased id
-	UserIncreaseId   int32  //user increased id
-	TaskIncreaseId   int32  //task increased id
-	HostIncreaseId   int32  //host increased id
-	TaskFilePath     string //task file path
-	HostFilePath     string //host file path
-	ClientFilePath   string //client file path
-	UserFilePath     string //user file path
-	GlobalFilePath   string //global file path
+	ClientIncreaseId int32 //client increased id
+	UserIncreaseId   int32 //user increased id
+	TaskIncreaseId   int32 //task increased id
+	HostIncreaseId   int32 //host increased id
+	// Temporary IDs live in a separate negative namespace. Runtime records
+	// received from NPC are marked NoStore and must never advance the
+	// persistent counters above; they still need stable keys while connected.
+	temporaryClientID int32
+	temporaryTaskID   int32
+	temporaryHostID   int32
+	TaskFilePath      string //task file path
+	HostFilePath      string //host file path
+	ClientFilePath    string //client file path
+	UserFilePath      string //user file path
+	GlobalFilePath    string //global file path
 }
 
 func (s *JsonDb) LoadTaskFromJsonFile() {
@@ -347,6 +353,23 @@ func (s *JsonDb) GetTaskId() int32 {
 
 func (s *JsonDb) GetHostId() int32 {
 	return atomic.AddInt32(&s.HostIncreaseId, 1)
+}
+
+// GetTemporaryClientID returns a negative ID for an ephemeral client. The
+// counter is intentionally independent from ClientIncreaseId so public or
+// runtime-only clients do not create gaps in clients.json IDs.
+func (s *JsonDb) GetTemporaryClientID() int32 {
+	return atomic.AddInt32(&s.temporaryClientID, -1)
+}
+
+// GetTemporaryTaskID returns a negative ID for an ephemeral tunnel.
+func (s *JsonDb) GetTemporaryTaskID() int32 {
+	return atomic.AddInt32(&s.temporaryTaskID, -1)
+}
+
+// GetTemporaryHostID returns a negative ID for an ephemeral host rule.
+func (s *JsonDb) GetTemporaryHostID() int32 {
+	return atomic.AddInt32(&s.temporaryHostID, -1)
 }
 
 func loadSyncMapFromFile(filePath string, f func(value string)) {

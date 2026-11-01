@@ -23,10 +23,10 @@ func sortClientByKey(m *sync.Map, sortField, order string) []int {
 }
 
 type clientSortSnapshot struct {
-	id                                          int
-	inlet, export, nowRate                      int64
-	remark, version, verifyKey, addr, localAddr string
-	status, isConnect                           bool
+	id                                               int
+	inlet, export, nowRate, uploadRate, downloadRate int64
+	remark, version, verifyKey, addr, localAddr      string
+	status, isConnect                                bool
 }
 
 func snapshotClient(client *Client) clientSortSnapshot {
@@ -48,6 +48,7 @@ func snapshotClient(client *Client) clientSortSnapshot {
 	client.RUnlock()
 	if flow != nil {
 		snapshot.inlet, snapshot.export, _ = flow.Snapshot()
+		snapshot.uploadRate, snapshot.downloadRate = flow.RateSnapshot()
 	}
 	if limiter != nil {
 		snapshot.nowRate = limiter.CurrentRate()
@@ -57,6 +58,7 @@ func snapshotClient(client *Client) clientSortSnapshot {
 
 type tunnelSortSnapshot struct {
 	id, clientID, port                        int
+	uploadRate, downloadRate                  int64
 	remark, verifyKey, mode, target, password string
 	status, runStatus, clientConnect          bool
 }
@@ -66,7 +68,7 @@ func snapshotTunnel(tunnel *Tunnel) tunnelSortSnapshot {
 		return tunnelSortSnapshot{}
 	}
 	tunnel.RLock()
-	client, target := tunnel.Client, tunnel.Target
+	client, target, flow := tunnel.Client, tunnel.Target, &tunnel.RateLimits
 	snapshot := tunnelSortSnapshot{
 		id:        tunnel.Id,
 		port:      tunnel.Port,
@@ -88,11 +90,13 @@ func snapshotTunnel(tunnel *Tunnel) tunnelSortSnapshot {
 		snapshot.target = target.TargetStr
 		target.RUnlock()
 	}
+	snapshot.uploadRate, snapshot.downloadRate = flow.CurrentRates()
 	return snapshot
 }
 
 type hostSortSnapshot struct {
 	id, clientID             int
+	uploadRate, downloadRate int64
 	remark, verifyKey, host  string
 	scheme, target, location string
 	isClose, clientConnect   bool
@@ -103,7 +107,7 @@ func snapshotHost(host *Host) hostSortSnapshot {
 		return hostSortSnapshot{}
 	}
 	host.RLock()
-	client, target := host.Client, host.Target
+	client, target, flow := host.Client, host.Target, &host.RateLimits
 	snapshot := hostSortSnapshot{
 		id:       host.Id,
 		remark:   host.Remark,
@@ -124,6 +128,7 @@ func snapshotHost(host *Host) hostSortSnapshot {
 		snapshot.target = target.TargetStr
 		target.RUnlock()
 	}
+	snapshot.uploadRate, snapshot.downloadRate = flow.CurrentRates()
 	return snapshot
 }
 
@@ -156,6 +161,70 @@ func lessString(a, b string, asc bool) bool {
 		return strings.ToLower(a) < strings.ToLower(b)
 	}
 	return strings.ToLower(a) > strings.ToLower(b)
+}
+
+type userSortSnapshot struct {
+	id, maxConn, connections int
+	uploadRate, downloadRate int64
+	username, remark, email  string
+	status                   bool
+}
+
+func snapshotUser(user *User) userSortSnapshot {
+	if user == nil {
+		return userSortSnapshot{}
+	}
+	user.RLock()
+	snapshot := userSortSnapshot{
+		id:       user.Id,
+		maxConn:  user.MaxConn,
+		username: user.UserName,
+		remark:   user.Remark,
+		email:    user.Email,
+		status:   user.Status,
+	}
+	user.RUnlock()
+	connections, _, uploadRate, downloadRate := UserRuntimeSnapshot(snapshot.id)
+	snapshot.connections = int(connections)
+	snapshot.uploadRate = uploadRate
+	snapshot.downloadRate = downloadRate
+	return snapshot
+}
+
+// SortUsers sorts users by the fields exposed by the management table. The
+// live rate values are sampled once per row before sorting so a comparator
+// never observes different values for the same user during one request.
+func SortUsers(list []*User, sortField, order string) {
+	snapshots := make(map[*User]userSortSnapshot, len(list))
+	for _, user := range list {
+		snapshots[user] = snapshotUser(user)
+	}
+	asc := order != "desc"
+	sort.SliceStable(list, func(i, j int) bool {
+		a, b := snapshots[list[i]], snapshots[list[j]]
+		switch sortField {
+		case "Id":
+			return lessInt(a.id, b.id, asc)
+		case "UserName":
+			return lessString(a.username, b.username, asc)
+		case "Remark":
+			return lessString(a.remark, b.remark, asc)
+		case "Email":
+			return lessString(a.email, b.email, asc)
+		case "Status":
+			return lessBool(a.status, b.status, asc)
+		case "MaxConn":
+			return lessInt(a.maxConn, b.maxConn, asc)
+		case "Connections":
+			return lessInt(a.connections, b.connections, asc)
+		case "UploadRate":
+			return lessInt64(a.uploadRate, b.uploadRate, asc)
+		case "DownloadRate":
+			return lessInt64(a.downloadRate, b.downloadRate, asc)
+		default:
+			return lessInt(a.id, b.id, true)
+		}
+	})
 }
 
 // SortClients sorts clients in-place by the given field (web table sort name).
@@ -192,6 +261,10 @@ func SortClients(list []*Client, sortField, order string) {
 			return lessInt64(a.export, b.export, asc)
 		case "NowRate":
 			return lessInt64(a.nowRate, b.nowRate, asc)
+		case "UploadRate", "Rate.UploadRate":
+			return lessInt64(a.uploadRate, b.uploadRate, asc)
+		case "DownloadRate", "Rate.DownloadRate":
+			return lessInt64(a.downloadRate, b.downloadRate, asc)
 		case "Status":
 			return lessBool(a.status, b.status, asc)
 		case "IsConnect":
@@ -240,6 +313,10 @@ func SortTunnels(list []*Tunnel, sortField, order string) {
 			return lessBool(a.runStatus, b.runStatus, asc)
 		case "IsConnect", "Client.IsConnect":
 			return lessBool(a.clientConnect, b.clientConnect, asc)
+		case "UploadRate":
+			return lessInt64(a.uploadRate, b.uploadRate, asc)
+		case "DownloadRate":
+			return lessInt64(a.downloadRate, b.downloadRate, asc)
 		default:
 			return lessInt(a.id, b.id, true)
 		}
@@ -283,6 +360,10 @@ func SortHosts(list []*Host, sortField, order string) {
 			return lessBool(a.isClose, b.isClose, asc)
 		case "IsConnect", "Client.IsConnect":
 			return lessBool(a.clientConnect, b.clientConnect, asc)
+		case "UploadRate":
+			return lessInt64(a.uploadRate, b.uploadRate, asc)
+		case "DownloadRate":
+			return lessInt64(a.downloadRate, b.downloadRate, asc)
 		default:
 			return lessInt(a.id, b.id, true)
 		}

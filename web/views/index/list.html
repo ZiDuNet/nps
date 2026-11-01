@@ -240,7 +240,7 @@
         pagination: true,//分页
         sidePagination: 'server',//服务器端分页
         pageNumber: 1,
-        pageList: [5, 10, 20, 50],//分页步进值
+        pageList: [20, 50, 100, 200],//分页步进值
         storageKey: 'tunnel-' + tunnelListMode + '-v2',
         detailView: true,
         smartDisplay: true, // 智能显示 pagination 和 cardview 等
@@ -480,6 +480,31 @@
                 sortable: true,
                 formatter: function (value) {
                     return tunnelText(value || 0);
+                }
+            },
+            {
+                field: 'UploadRate',
+                title: '<span data-i18n-zh="实时带宽 ↑ / ↓" data-i18n-en="Live bandwidth ↑ / ↓">实时带宽 ↑ / ↓</span>',
+                align: 'center',
+                halign: 'center',
+                visible: true,
+                sortable: true,
+                formatter: function (value, row) {
+                    return '<span class="client-live-rate"><span class="client-live-rate__direction">↑</span><span class="client-live-rate__value">'
+                        + tunnelText(changeunit(Number(row.UploadRate) || 0) + '/s')
+                        + '</span><span class="client-live-rate__direction">↓</span><span class="client-live-rate__value">'
+                        + tunnelText(changeunit(Number(row.DownloadRate) || 0) + '/s') + '</span></span>';
+                }
+            },
+            {
+                field: 'DownloadRate',
+                title: '<span data-i18n-zh="实时下行带宽" data-i18n-en="Live download bandwidth">实时下行带宽</span>',
+                align: 'center',
+                halign: 'center',
+                visible: false,
+                sortable: true,
+                formatter: function (value, row) {
+                    return tunnelText(changeunit(Number(row.DownloadRate) || 0) + '/s');
                 }
             },
             {
