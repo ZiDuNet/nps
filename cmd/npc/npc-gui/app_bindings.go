@@ -884,12 +884,30 @@ func getExecutablePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Resolve updater markers before EvalSymlinks. Linux may report the
+	// executing inode as "<path> (deleted)" immediately after an atomic
+	// replacement, which is not a real filesystem path.
+	exePath = normalizeExecutablePath(exePath)
 	// 解析符号链接，获取真实路径
 	exePath, err = filepath.EvalSymlinks(exePath)
 	if err != nil {
 		return "", err
 	}
-	return exePath, nil
+	return normalizeExecutablePath(exePath), nil
+}
+
+// normalizeExecutablePath maps updater backup paths back to the stable
+// executable or application bundle. Unix systems can continue executing an
+// inode after it has been renamed; if an older updater left this process under
+// a .old name, restart and future replacements must target the real path.
+func normalizeExecutablePath(path string) string {
+	path = strings.TrimSuffix(path, " (deleted)")
+	const appBackupSuffix = ".app.old"
+	appBackupMarker := appBackupSuffix + string(filepath.Separator) + "Contents" + string(filepath.Separator) + "MacOS" + string(filepath.Separator)
+	if index := strings.Index(path, appBackupMarker); index >= 0 {
+		return path[:index] + ".app" + path[index+len(appBackupSuffix):]
+	}
+	return strings.TrimSuffix(path, ".old")
 }
 
 // enableStartup 启用开机启动（跨平台）

@@ -39,6 +39,30 @@ func TestMacAppBundlePath(t *testing.T) {
 	}
 }
 
+func TestNormalizeExecutablePath(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "regular", path: "/opt/npc-gui", want: "/opt/npc-gui"},
+		{name: "standalone backup", path: "/opt/npc-gui.old", want: "/opt/npc-gui"},
+		{name: "deleted inode", path: "/opt/npc-gui (deleted)", want: "/opt/npc-gui"},
+		{
+			name: "mac app backup",
+			path: "/Applications/NPS Client.app.old/Contents/MacOS/NPS Client",
+			want: "/Applications/NPS Client.app/Contents/MacOS/NPS Client",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeExecutablePath(tt.path); got != tt.want {
+				t.Fatalf("normalizeExecutablePath(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestReplaceMacAppBundle(t *testing.T) {
 	root := t.TempDir()
 	appPath := filepath.Join(root, "NPS Client.app")

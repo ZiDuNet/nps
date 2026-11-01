@@ -14,6 +14,7 @@ func RestartNpcProcess() error {
 	if err != nil {
 		return err
 	}
+	executable = stableExecutablePath(executable)
 	cmd := exec.Command(executable, os.Args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

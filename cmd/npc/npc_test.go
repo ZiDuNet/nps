@@ -4,9 +4,11 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -238,5 +240,11 @@ func TestNpcServiceLogPath(t *testing.T) {
 	}
 	if _, err := npcServiceLogPath("nps-client-../outside"); err == nil {
 		t.Fatal("expected invalid service name to be rejected")
+	}
+}
+
+func TestInputCmdFromEOFReturns(t *testing.T) {
+	if inputCmdFrom(bufio.NewReader(strings.NewReader(""))) {
+		t.Fatal("inputCmdFrom should stop when stdin reaches EOF")
 	}
 }

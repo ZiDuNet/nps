@@ -91,3 +91,53 @@ func TestReplaceBinFromPackageUsesExplicitTarget(t *testing.T) {
 		t.Fatalf("target content = %q, want new-binary", content)
 	}
 }
+
+func TestStableExecutablePath(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{name: "regular", path: "/opt/npc", want: "/opt/npc"},
+		{name: "backup", path: "/opt/npc.old", want: "/opt/npc"},
+		{name: "deleted inode", path: "/opt/npc (deleted)", want: "/opt/npc"},
+		{name: "nested backup", path: "/opt/client/npc.old", want: "/opt/client/npc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := stableExecutablePath(tt.path); got != tt.want {
+				t.Fatalf("stableExecutablePath(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReplaceExecutableDoesNotCreateUnixBackup(t *testing.T) {
+	if common.IsWindows() {
+		t.Skip("Windows requires the .old backup while the executable is running")
+	}
+
+	root := t.TempDir()
+	src := filepath.Join(root, "new")
+	dest := filepath.Join(root, "npc")
+	if err := os.WriteFile(src, []byte("new-binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dest, []byte("old-binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := replaceExecutable(src, dest); err != nil {
+		t.Fatalf("replaceExecutable: %v", err)
+	}
+	content, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "new-binary" {
+		t.Fatalf("target content = %q, want new-binary", content)
+	}
+	if _, err := os.Stat(dest + ".old"); !os.IsNotExist(err) {
+		t.Fatalf("unexpected Unix backup %s (err=%v)", dest+".old", err)
+	}
+}

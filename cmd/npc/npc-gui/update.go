@@ -521,8 +521,10 @@ func guiExeExt() string {
 }
 
 // replaceExecutableFile 用新文件替换正在运行的可执行文件。
-// Windows 下运行中的 exe 不能直接覆盖，先改名备份再替换。
+// Windows 下运行中的 exe 不能直接覆盖，先改名备份再替换。Unix 可以
+// 原子替换正在执行的 inode，不应创建 .old，否则重启时可能再次执行备份。
 func replaceExecutableFile(srcBin, destBin string) error {
+	destBin = normalizeExecutablePath(destBin)
 	if srcFi, err := os.Stat(srcBin); err == nil {
 		if dstFi, err := os.Stat(destBin); err == nil {
 			if os.SameFile(srcFi, dstFi) {
@@ -534,22 +536,26 @@ func replaceExecutableFile(srcBin, destBin string) error {
 		return err
 	}
 
-	// 将当前程序改名为 .old 备份（Windows 上运行中的文件允许改名）
-	if _, err := os.Stat(destBin); err == nil {
-		bak := destBin + ".old"
-		_ = os.Remove(bak)
-		if err := os.Rename(destBin, bak); err != nil {
-			return fmt.Errorf("无法备份当前程序 %s: %w", destBin, err)
+	// 将当前程序改名为 .old 备份（Windows 上运行中的文件允许改名）。
+	if runtime.GOOS == "windows" {
+		if _, err := os.Stat(destBin); err == nil {
+			bak := destBin + ".old"
+			_ = os.Remove(bak)
+			if err := os.Rename(destBin, bak); err != nil {
+				return fmt.Errorf("无法备份当前程序 %s: %w", destBin, err)
+			}
 		}
 	}
 
 	// 同文件系统 rename 原子替换；跨卷回退为拷贝
 	if err := os.Rename(srcBin, destBin); err != nil {
-		if _, copyErr := copyFileForUpdate(srcBin, destBin); copyErr != nil {
+		if copyErr := copyFileForUpdateAtomic(srcBin, destBin); copyErr != nil {
 			// 尽力恢复旧程序
-			bak := destBin + ".old"
-			if _, statErr := os.Stat(bak); statErr == nil {
-				_ = os.Rename(bak, destBin)
+			if runtime.GOOS == "windows" {
+				bak := destBin + ".old"
+				if _, statErr := os.Stat(bak); statErr == nil {
+					_ = os.Rename(bak, destBin)
+				}
 			}
 			return fmt.Errorf("替换可执行文件失败: %w", copyErr)
 		}
@@ -558,18 +564,48 @@ func replaceExecutableFile(srcBin, destBin string) error {
 	return nil
 }
 
-func copyFileForUpdate(src, dest string) (int64, error) {
+func copyFileForUpdateAtomic(src, dest string) error {
+	tmp, err := os.CreateTemp(filepath.Dir(dest), "."+filepath.Base(dest)+".update-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
 	srcF, err := os.Open(src)
 	if err != nil {
-		return 0, err
+		_ = tmp.Close()
+		return err
 	}
-	defer srcF.Close()
-	dstF, err := os.Create(dest)
-	if err != nil {
-		return 0, err
+	if _, err := io.Copy(tmp, srcF); err != nil {
+		_ = srcF.Close()
+		_ = tmp.Close()
+		return err
 	}
-	defer dstF.Close()
-	return io.Copy(dstF, srcF)
+	if info, err := os.Stat(src); err == nil {
+		if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+			_ = srcF.Close()
+			_ = tmp.Close()
+			return err
+		}
+	}
+	if err := srcF.Close(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, dest); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }
 
 func chmodExecutable(path string, mode os.FileMode) {

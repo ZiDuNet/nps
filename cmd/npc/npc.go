@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -171,7 +172,9 @@ func main() {
 	if err != nil {
 		logs.Error(err, "service function disabled")
 		registerRemoteUpdateHandler(nil)
-		run()
+		if !run() {
+			return
+		}
 		// run without service
 		wg := sync.WaitGroup{}
 		wg.Add(1)
@@ -538,7 +541,23 @@ func (p *npc) run() error {
 			logs.Warning("npc: panic serving %v: %v\n%s", err, string(buf))
 		}
 	}()
-	run()
+	if !run() {
+		// A service started without a usable server/vkey or config must not fall
+		// through to an EOF-spinning menu. Ask the service manager to stop this
+		// instance; the service remains installed and can be started again after
+		// its arguments are corrected.
+		if !service.Interactive() && serviceStopper.svc != nil {
+			go func() {
+				if err := service.Control(serviceStopper.svc, "stop"); err != nil {
+					logs.Error("[启动] 无有效配置，停止 NPC 系统服务失败：%v", err)
+				}
+			}()
+		}
+		if serviceStopper.svc != nil {
+			_ = p.Stop(serviceStopper.svc)
+		}
+		return nil
+	}
 	select {
 	case <-p.exit:
 		logs.Warning("stop...")
@@ -546,7 +565,11 @@ func (p *npc) run() error {
 	return nil
 }
 
-func run() {
+// run starts the requested NPC workload and reports whether the caller should
+// keep the process alive. A false result means that no valid workload was
+// started (for example, an invalid non-interactive invocation or EOF on the
+// interactive menu).
+func run() bool {
 	common.ReportInstall("npc")
 	common.InitPProfFromArg(*pprofAddr)
 	if err := common.SetCustomDNS(*dnsServer); err != nil {
@@ -586,12 +609,12 @@ func run() {
 			if err := manager.StartLocalServer(localServer); err != nil {
 				logs.Error("启动 P2P/Secret 本地监听失败：", err)
 				manager.Close()
-				return
+				return false
 			}
-			return
+			return true
 		}
 		go client.StartLocalServer(localServer, commonConfig)
-		return
+		return true
 	}
 	env := common.GetEnvMap()
 	if *serverAddr == "" {
@@ -600,12 +623,16 @@ func run() {
 	if *verifyKey == "" {
 		*verifyKey, _ = env["NPC_SERVER_VKEY"]
 	}
+	if *configPath == "" && ((*serverAddr == "") != (*verifyKey == "")) {
+		logs.Error("server 和 vkey 必须同时提供；或者改用 -config 指定客户端配置文件")
+		return false
+	}
 	if *verifyKey != "" && *serverAddr != "" && *configPath == "" {
 		logs.Info("the version of client is %s, the core version of client is %s,tls enable is %t", version.VERSION, version.GetVersion(), *tlsEnable)
 		connections := expandNpcConnections(*serverAddr, *verifyKey, *connType, *localIP)
 		if len(connections) == 0 {
 			logs.Error("server 或 vkey 不能为空")
-			return
+			return false
 		}
 		for _, connection := range connections {
 			connection := connection
@@ -629,7 +656,7 @@ func run() {
 				endNpcConn(connection.vkey, kicked)
 			}()
 		}
-
+		return true
 	} else {
 		if *configPath == "" {
 			*configPath = common.GetConfigPath()
@@ -661,11 +688,15 @@ func run() {
 			}
 		}
 		if started {
-			return
+			return true
+		}
+		if !service.Interactive() {
+			logs.Error("未找到 NPC 配置文件，且当前不是交互式终端；请使用 -server 与 -vkey，或提供有效的 -config")
+			return false
 		}
 		// 无配置文件模式双击运行
 		printSlogan()
-		inputCmd()
+		return inputCmd()
 	}
 }
 
@@ -766,14 +797,21 @@ func printSlogan() {
 	fmt.Println()
 }
 
-func inputCmd() {
+func inputCmd() bool {
+	return inputCmdFrom(bufio.NewReader(os.Stdin))
+}
+
+func inputCmdFrom(stdin *bufio.Reader) bool {
 	for {
 		var input string
 		fmt.Printf("请输入：")
 
-		stdin := bufio.NewReader(os.Stdin)
 		_, err := fmt.Fscanln(stdin, &input)
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				fmt.Println("输入已结束，退出 NPC 菜单")
+				return false
+			}
 			fmt.Println("输入有误，请重新输入")
 			continue
 		}

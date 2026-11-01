@@ -566,6 +566,11 @@ func replaceBinFromPackage(srcPath, descPath, bin, targetPath string) error {
 	} else if exe, err := os.Executable(); err == nil {
 		destBin = exe
 	}
+	// A previous updater could have renamed the running Unix process to
+	// "<binary>.old" before restarting it.  Never treat that backup name as
+	// the installation target, otherwise every subsequent update would keep
+	// refreshing the backup while leaving the stable executable unchanged.
+	destBin = stableExecutablePath(destBin)
 	if _, err := os.Stat(srcBin); err != nil {
 		// unpackit may return a nested root dir; search one level if needed
 		if found, findErr := findBinInDir(srcPath, filepath.Base(srcBin)); findErr == nil {
@@ -604,9 +609,25 @@ func findBinInDir(root, name string) (string, error) {
 	return "", os.ErrNotExist
 }
 
+// stableExecutablePath maps an updater backup path back to the executable's
+// stable installation path.  It is intentionally conservative: only the
+// suffix produced by this package is removed.
+func stableExecutablePath(path string) string {
+	// Linux appends " (deleted)" to /proc/self/exe after an atomic rename
+	// replaces the inode currently executing. Strip that diagnostic suffix
+	// before resolving the backup suffix so a post-update restart can still
+	// execute the newly installed file.
+	path = strings.TrimSuffix(path, " (deleted)")
+	return strings.TrimSuffix(path, ".old")
+}
+
 // replaceExecutable places srcBin at destBin. On Windows a running executable
-// cannot be overwritten, but it can be renamed aside first.
+// cannot be overwritten, but it can be renamed aside first. Unix kernels allow
+// an executing file to be atomically replaced, so creating a .old backup there
+// is both unnecessary and dangerous: /proc/self/exe may then resolve to the
+// backup path during the restart.
 func replaceExecutable(srcBin, destBin string) error {
+	destBin = stableExecutablePath(destBin)
 	if _, err := os.Stat(srcBin); err != nil {
 		return fmt.Errorf("源文件不存在: %s: %w", srcBin, err)
 	}
@@ -622,27 +643,75 @@ func replaceExecutable(srcBin, destBin string) error {
 	}
 
 	// Move the current binary out of the way when present (required on Windows
-	// while the process is still running).
-	if _, err := os.Stat(destBin); err == nil {
-		bak := destBin + ".old"
-		_ = os.Remove(bak)
-		if err := os.Rename(destBin, bak); err != nil {
-			return fmt.Errorf("无法备份当前程序 %s: %w", destBin, err)
+	// while the process is still running). On Unix, rename(src, dest) below is
+	// safe while the old inode is still executing and avoids changing
+	// /proc/self/exe to a .old path.
+	if common.IsWindows() {
+		if _, err := os.Stat(destBin); err == nil {
+			bak := destBin + ".old"
+			_ = os.Remove(bak)
+			if err := os.Rename(destBin, bak); err != nil {
+				return fmt.Errorf("无法备份当前程序 %s: %w", destBin, err)
+			}
 		}
 	}
 
 	// Same filesystem: rename is atomic. Fall back to copy across volumes.
 	if err := os.Rename(srcBin, destBin); err != nil {
-		if _, copyErr := copyFile(srcBin, destBin); copyErr != nil {
+		if copyErr := copyFileAtomic(srcBin, destBin); copyErr != nil {
 			// Best-effort restore of previous binary
-			bak := destBin + ".old"
-			if _, statErr := os.Stat(bak); statErr == nil {
-				_ = os.Rename(bak, destBin)
+			if common.IsWindows() {
+				bak := destBin + ".old"
+				if _, statErr := os.Stat(bak); statErr == nil {
+					_ = os.Rename(bak, destBin)
+				}
 			}
 			return fmt.Errorf("替换可执行文件失败: %w", copyErr)
 		}
 		_ = os.Remove(srcBin)
 	}
+	return nil
+}
+
+// copyFileAtomic copies a binary to a temporary file beside its destination
+// and renames it into place. This keeps the replacement atomic even when the
+// update archive lives on a different filesystem (where os.Rename returns
+// EXDEV); directly truncating a running Unix executable could otherwise leave
+// the process with a partially written image.
+func copyFileAtomic(src, dest string) error {
+	tmp, err := os.CreateTemp(filepath.Dir(dest), "."+filepath.Base(dest)+".update-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	srcFile, err := os.Open(src)
+	if err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := io.Copy(tmp, srcFile); err != nil {
+		_ = srcFile.Close()
+		_ = tmp.Close()
+		return err
+	}
+	if err := srcFile.Close(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, dest); err != nil {
+		return err
+	}
+	cleanup = false
 	return nil
 }
 

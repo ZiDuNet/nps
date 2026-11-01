@@ -15,5 +15,9 @@ func RestartNpcProcess() error {
 	if err != nil {
 		return err
 	}
+	// The updater keeps a Windows backup as <binary>.old. Older Unix updates
+	// could create the same backup and leave /proc/self/exe pointing at it;
+	// always restart the stable installation path instead of that backup.
+	executable = stableExecutablePath(executable)
 	return syscall.Exec(executable, os.Args, os.Environ())
 }
