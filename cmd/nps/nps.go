@@ -28,6 +28,7 @@ import (
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server/connection"
 	"ehang.io/nps/server/tool"
+	"ehang.io/nps/server/usage"
 	"ehang.io/nps/web/audit"
 	"ehang.io/nps/web/controllers"
 	"ehang.io/nps/web/routers"
@@ -491,6 +492,7 @@ func (p *nps) Start(s service.Service) error {
 }
 func (p *nps) Stop(s service.Service) error {
 	_, _ = s.Status()
+	usage.Stop()
 	closeIPRegistrationServer()
 	stopAccessListWatcher()
 	p.stopOnce.Do(func() { close(p.exit) })
@@ -578,6 +580,7 @@ func run() error {
 	ipRegisterMu.Lock()
 	ipRegisterServer = registrationServer
 	ipRegisterMu.Unlock()
+	usage.Start()
 	startAccessListWatcher()
 	return nil
 }

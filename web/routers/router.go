@@ -14,6 +14,7 @@ func Init() {
 			beego.NSRouter("/ip/register", &controllers.LoginController{}, "*:IPRegister"),
 			beego.NSRouter("/", &controllers.IndexController{}, "*:Index"),
 			beego.NSRouter("/index/help/content", &controllers.IndexController{}, "GET:HelpContent"),
+			beego.NSRouter("/index/usagehistory", &controllers.IndexController{}, "GET:UsageHistory"),
 			beego.NSRouter("/overview", &controllers.DashboardController{}, "*:Entry"),
 			beego.NSRouter("/overview/admin", &controllers.DashboardController{}, "*:Admin"),
 			beego.NSRouter("/overview/user", &controllers.DashboardController{}, "*:User"),
@@ -58,6 +59,7 @@ func Init() {
 		beego.Router("/ip/register", &controllers.LoginController{}, "*:IPRegister")
 		beego.Router("/", &controllers.IndexController{}, "*:Index")
 		beego.Router("/index/help/content", &controllers.IndexController{}, "GET:HelpContent")
+		beego.Router("/index/usagehistory", &controllers.IndexController{}, "GET:UsageHistory")
 		beego.Router("/overview", &controllers.DashboardController{}, "*:Entry")
 		beego.Router("/overview/admin", &controllers.DashboardController{}, "*:Admin")
 		beego.Router("/overview/user", &controllers.DashboardController{}, "*:User")
@@ -113,6 +115,7 @@ func apiV1Routers() []beego.LinkNamespace {
 		// Account-scoped dashboard snapshots.
 		beego.NSRouter("/status", &controllers.ApiV1Controller{}, "GET:Status"),
 		beego.NSRouter("/status/live", &controllers.ApiV1Controller{}, "GET:StatusLive"),
+		beego.NSRouter("/status/history", &controllers.ApiV1Controller{}, "GET:StatusHistory"),
 		beego.NSRouter("/overview", &controllers.ApiV1Controller{}, "GET:Overview"),
 
 		// Clients.

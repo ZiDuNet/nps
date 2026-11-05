@@ -67,6 +67,13 @@
 | tls_bridge_port | TLS 桥接端口，默认 `8025`。**与 `bridge_port` 并存**：客户端可分别用 `bridge_port`（明文）或 `tls_bridge_port`（TLS）接入 | `8025` |
 | disconnect_timeout | 未收到 mux 心跳回包的最大次数；每次检查间隔为 5 秒，默认 `60`（即约 5 分钟） | `60` |
 | flow_store_interval | 流量数据持久化间隔，单位分钟；留空或 `0` 关闭定时持久化 | `1` |
+| usage_history_enabled | 是否记录用户、客户端、隧道和域名规则的分钟/五分钟用量历史 | `true` |
+| usage_history_path | 历史用量 JSON 快照路径 | `conf/usage_history.json` |
+| usage_history_interval | 用量采样间隔，单位秒；小于 10 秒时回退为 60 秒 | `60` |
+| usage_history_1m_hours | 分钟精度数据保留时长，单位小时 | `48` |
+| usage_history_5m_days | 五分钟精度数据保留时长，单位天 | `90` |
+| usage_history_save_every | 每采样多少次写盘一次；正常退出时额外保存 | `5` |
+| usage_history_max_resources | 历史中最多保留的资源数量 | `20000` |
 | client_history_limit | 客户端详情中保留的最近连接会话数；`0` 关闭，最大 `100` | `5` |
 | log_level | 日志级别：当前格式支持 `0`~`7`，也接受文字别名 `trace`、`debug`、`info`、`warn`、`error`、`fatal`、`panic`、`off` | `6` |
 | log_path | 日志文件路径；`-log_path` 命令行参数优先，归档保存在同一目录 | `nps.log` |

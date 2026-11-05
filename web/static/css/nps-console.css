@@ -1475,6 +1475,38 @@ body.nps-bootstrap .dashboard-pending-empty { color: var(--nps-faint); backgroun
 body.nps-bootstrap .dashboard-quota-summary { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--nps-line); }
 body.nps-bootstrap .dashboard-quota-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 7px; min-width: 0; margin: 8px 0 0; padding: 0; list-style: none; }
 body.nps-bootstrap .dashboard-quota-item { min-width: 0; padding: 6px 9px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 4px; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+body.nps-bootstrap .dashboard-usage-history-panel { overflow: hidden; }
+body.nps-bootstrap .dashboard-usage-history-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+body.nps-bootstrap .dashboard-usage-history-head .dashboard-config-heading { flex: 1 1 320px; }
+body.nps-bootstrap .dashboard-usage-history-ranges {
+    display: inline-flex;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 3px;
+    margin-left: auto;
+    padding: 3px;
+    background: var(--nps-surface-subtle);
+    border: 1px solid var(--nps-line);
+    border-radius: 6px;
+}
+body.nps-bootstrap .dashboard-usage-history-ranges button {
+    min-height: 28px;
+    padding: 4px 10px;
+    color: var(--nps-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+body.nps-bootstrap .dashboard-usage-history-ranges button:hover,
+body.nps-bootstrap .dashboard-usage-history-ranges button:focus-visible { color: var(--nps-primary); background: var(--nps-primary-soft); outline: 0; }
+body.nps-bootstrap .dashboard-usage-history-ranges button.is-active { color: var(--nps-primary); background: var(--nps-surface); box-shadow: 0 1px 2px rgba(16, 35, 62, .10); }
+body.nps-bootstrap .dashboard-usage-history-panel .ibox-content { padding: 12px 14px 10px !important; }
+body.nps-bootstrap #usage-history { height: 230px; min-height: 230px; }
+body.nps-bootstrap .dashboard-usage-history-status { min-height: 17px; margin: 6px 2px 0; color: var(--nps-faint); font-size: 11px; line-height: 1.5; }
 
 /* The legacy theme applies a broad .pace-done transition and SmoothlyMenu also
    hides the menu before fading it in. Keep navigation transitions bounded so
@@ -1501,6 +1533,11 @@ body.nps-bootstrap.fullscreen-ibox-mode .animated { animation: none !important; 
     body.nps-bootstrap .dashboard-runtime-cards { grid-template-columns: minmax(0, 1fr); }
     body.nps-bootstrap .dashboard-runtime-card--metrics { grid-column: auto; }
     body.nps-bootstrap .dashboard-pending { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    body.nps-bootstrap .dashboard-usage-history-head { align-items: stretch; }
+    body.nps-bootstrap .dashboard-usage-history-head .dashboard-config-heading { flex-basis: 100%; }
+    body.nps-bootstrap .dashboard-usage-history-ranges { width: 100%; margin-left: 0; }
+    body.nps-bootstrap .dashboard-usage-history-ranges button { flex: 1 1 0; padding-right: 6px; padding-left: 6px; }
+    body.nps-bootstrap #usage-history { height: 220px; min-height: 220px; }
 }
 
 /* Unified form system. Forms own their

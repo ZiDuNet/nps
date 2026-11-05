@@ -499,7 +499,7 @@ reset:
 	}
 	backendTimeout := newBackendTimeoutConn(target, policy)
 	backendTimeout.SetWritePolicy(policy.backendUploadStall, 0)
-	backendTimeout.SetReadPolicy(policy.backendReadStall, policy.backendResponseBodyTotal)
+	backendTimeout.SetReadPolicy(policy.backendResponseHeader, 0)
 	connClient = conn.GetConnWithUserLimits(backendTimeout, lk.Crypt, lk.Compress, clientRate, true, nil, host, file.UserRateLimiterForClient(hostClient))
 	if targetIsHTTPS {
 		sni := hostName

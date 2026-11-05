@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"ehang.io/nps/lib/common"
@@ -69,6 +68,7 @@ type History struct {
 	dirty     bool
 	path      string
 	options   Options
+	collect   func() totalsSnapshot
 }
 
 type Options struct {
@@ -82,7 +82,8 @@ type Options struct {
 var (
 	defaultHistory *History
 	startOnce      sync.Once
-	started        atomic.Bool
+	stopOnce       sync.Once
+	stopCh         = make(chan struct{})
 )
 
 // Start begins asynchronous minute sampling. It is safe to call repeatedly;
@@ -92,8 +93,12 @@ func Start() {
 		return
 	}
 	startOnce.Do(func() {
+		path := strings.TrimSpace(beego.AppConfig.String("usage_history_path"))
+		if path == "" {
+			path = filepath.Join("conf", "usage_history.json")
+		}
 		options := Options{
-			Path:           filepath.Join(common.GetRunPath(), "conf", "usage_history.json"),
+			Path:           common.ResolveConfigPath(path),
 			SampleInterval: time.Duration(configInt("usage_history_interval", 60)) * time.Second,
 			Retention1m:    time.Duration(configInt("usage_history_1m_hours", 48)) * time.Hour,
 			Retention5m:    time.Duration(configInt("usage_history_5m_days", 90)) * 24 * time.Hour,
@@ -107,13 +112,25 @@ func Start() {
 			logs.Warn("读取历史用量数据失败：%v", err)
 		}
 		defaultHistory.Sample(time.Now())
-		started.Store(true)
 		go defaultHistory.run()
 	})
 }
 
 func Default() *History {
 	return defaultHistory
+}
+
+// Stop flushes the current snapshot and stops the background sampler.
+func Stop() {
+	stopOnce.Do(func() {
+		close(stopCh)
+		if defaultHistory != nil {
+			defaultHistory.Sample(time.Now())
+			if err := defaultHistory.Save(); err != nil {
+				logs.Warn("保存历史用量数据失败：%v", err)
+			}
+		}
+	})
 }
 
 func New(options Options) *History {
@@ -133,34 +150,30 @@ func New(options Options) *History {
 		resources: make(map[string]*Resource),
 		previous:  make(map[string]cumulative),
 		path:      options.Path,
+		options:   options,
+		collect:   collectTotals,
 	}
-	history.options = options
 	return history
-}
-
-// options is kept outside the snapshot for compatibility with older JSON.
-func (h *History) attachOptions(options Options) {
-	h.options = options
-}
-
-// History deliberately contains only serializable business data; options are
-// retained in this unexported side field to keep callers from mutating them.
-func (h *History) setOptions(options Options) {
-	h.options = options
 }
 
 func (h *History) run() {
 	ticker := time.NewTicker(h.options.SampleInterval)
 	defer ticker.Stop()
 	saveCounter := 0
-	for now := range ticker.C {
-		h.Sample(now)
-		saveCounter++
-		if saveCounter >= h.options.SaveEvery {
+	for {
+		select {
+		case now := <-ticker.C:
+			h.Sample(now)
+			saveCounter++
+			if saveCounter < h.options.SaveEvery {
+				continue
+			}
 			saveCounter = 0
 			if err := h.Save(); err != nil {
 				logs.Warn("保存历史用量数据失败：%v", err)
 			}
+		case <-stopCh:
+			return
 		}
 	}
 }
@@ -185,8 +198,8 @@ func (h *History) Load() error {
 	}
 	h.updatedAt = time.Unix(snapshot.UpdatedAt, 0)
 	for _, resource := range h.resources {
-		resource.TotalBytes = pointTotal(resource.Points1m) + pointTotal(resource.Points5m)
-		trimPoints(resource)
+		resource.Points1m = trimBefore(resource.Points1m, time.Now().Add(-h.options.Retention1m).Unix())
+		resource.Points5m = trimBefore(resource.Points5m, time.Now().Add(-h.options.Retention5m).Unix())
 	}
 	return nil
 }
@@ -227,7 +240,11 @@ func (h *History) Sample(now time.Time) {
 	if h == nil {
 		return
 	}
-	current := collectTotals()
+	collect := h.collect
+	if collect == nil {
+		collect = collectTotals
+	}
+	current := collect()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	minuteTime := now.Truncate(time.Minute).Unix()
@@ -293,14 +310,6 @@ func trimBefore(points []Point, cutoff int64) []Point {
 		return points
 	}
 	return append([]Point(nil), points[index:]...)
-}
-
-func trimPoints(resource *Resource) {
-	if resource == nil {
-		return
-	}
-	resource.Points1m = trimBefore(resource.Points1m, time.Now().Add(-24*time.Hour).Unix())
-	resource.Points5m = trimBefore(resource.Points5m, time.Now().Add(-90*24*time.Hour).Unix())
 }
 
 func (h *History) trimResources() {
@@ -458,7 +467,7 @@ func (h *History) Query(query Query) []Summary {
 		if !matchesQuery(resource, query) {
 			continue
 		}
-		summary := summarize(resource, query)
+		summary := summarize(resource, query, h.options.SampleInterval)
 		result = append(result, summary)
 	}
 	sort.Slice(result, func(i, j int) bool {
@@ -486,7 +495,7 @@ func matchesQuery(resource *Resource, query Query) bool {
 	return true
 }
 
-func summarize(resource *Resource, query Query) Summary {
+func summarize(resource *Resource, query Query, sampleInterval time.Duration) Summary {
 	summary := Summary{Resource: *resource}
 	summary.Points1m = nil
 	summary.Points5m = nil
@@ -494,11 +503,15 @@ func summarize(resource *Resource, query Query) Summary {
 	points5m := filterPoints(resource.Points5m, query.From, query.To)
 	uploadRates := make([]int64, 0, len(points))
 	downloadRates := make([]int64, 0, len(points))
+	sampleSeconds := int64(sampleInterval / time.Second)
+	if sampleSeconds <= 0 {
+		sampleSeconds = 60
+	}
 	for _, point := range points {
 		summary.UploadBytes += point.Upload
 		summary.DownloadBytes += point.Download
-		uploadRates = append(uploadRates, point.Upload)
-		downloadRates = append(downloadRates, point.Download)
+		uploadRates = append(uploadRates, point.Upload/sampleSeconds)
+		downloadRates = append(downloadRates, point.Download/sampleSeconds)
 	}
 	for _, point := range points5m {
 		summary.UploadBytes5m += point.Upload
@@ -515,11 +528,55 @@ func summarize(resource *Resource, query Query) Summary {
 	}
 	if len(points) > 0 {
 		avg := float64(summary.UploadBytes+summary.DownloadBytes) / float64(len(points))
-		if avg > 0 && summary.LimitBytes > summary.TotalBytes {
-			summary.EstimatedDays = float64(summary.LimitBytes-summary.TotalBytes) / avg / 1440
+		dailyBytes := avg * (float64(24*time.Hour) / float64(sampleInterval))
+		if dailyBytes > 0 && summary.LimitBytes > summary.TotalBytes {
+			summary.EstimatedDays = float64(summary.LimitBytes-summary.TotalBytes) / dailyBytes
 		}
 	}
 	return summary
+}
+
+// Series returns permission-filtered raw points for charts. Only the selected
+// resolution is populated; the other slice is cleared to keep API payloads
+// bounded.
+func (h *History) Series(query Query, bucket string) ([]Resource, int64) {
+	if h == nil {
+		return nil, 0
+	}
+	if bucket != "5m" {
+		bucket = "1m"
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	result := make([]Resource, 0)
+	for _, resource := range h.resources {
+		if !matchesQuery(resource, query) {
+			continue
+		}
+		copyResource := *resource
+		copyResource.Points1m = nil
+		copyResource.Points5m = nil
+		if bucket == "5m" {
+			copyResource.Points5m = append([]Point(nil), filterPoints(resource.Points5m, query.From, query.To)...)
+		} else {
+			copyResource.Points1m = append([]Point(nil), filterPoints(resource.Points1m, query.From, query.To)...)
+		}
+		result = append(result, copyResource)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Scope != result[j].Scope {
+			return result[i].Scope < result[j].Scope
+		}
+		return result[i].Key < result[j].Key
+	})
+	interval := int64(h.options.SampleInterval / time.Second)
+	if bucket == "5m" {
+		interval = int64((5 * time.Minute) / time.Second)
+	}
+	if interval <= 0 {
+		interval = 60
+	}
+	return result, interval
 }
 
 func filterPoints(points []Point, from, to time.Time) []Point {
@@ -592,14 +649,6 @@ func (h *History) ExportCSV(writer io.Writer, query Query, bucket string) error 
 	}
 	csvWriter.Flush()
 	return csvWriter.Error()
-}
-
-func pointTotal(points []Point) int64 {
-	var total int64
-	for _, point := range points {
-		total += point.Upload + point.Download
-	}
-	return total
 }
 
 func configInt(key string, fallback int) int {

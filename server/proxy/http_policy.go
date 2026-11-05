@@ -127,17 +127,15 @@ type timeoutConn struct {
 func newTimeoutConn(conn net.Conn, policy httpProxyPolicy) *timeoutConn {
 	return &timeoutConn{
 		Conn:       conn,
-		readStall:  policy.clientResponseStall,
-		writeStall: policy.clientUploadStall,
+		writeStall: policy.clientResponseStall,
+		writeTotal: policy.clientResponseTotal,
 	}
 }
 
 func newBackendTimeoutConn(conn net.Conn, policy httpProxyPolicy) *timeoutConn {
 	return &timeoutConn{
 		Conn:       conn,
-		readStall:  policy.backendReadStall,
 		writeStall: policy.backendUploadStall,
-		readTotal:  policy.backendResponseBodyTotal,
 	}
 }
 
@@ -146,6 +144,9 @@ func (c *timeoutConn) SetReadPolicy(stall, total time.Duration) {
 	c.readStall, c.readTotal, c.readStarted, c.readExempt = stall, total, time.Time{}, false
 	c.policyApplied = true
 	c.mu.Unlock()
+	if stall <= 0 && total <= 0 {
+		c.clearReadDeadline()
+	}
 }
 
 func (c *timeoutConn) SetWritePolicy(stall, total time.Duration) {
@@ -153,12 +154,16 @@ func (c *timeoutConn) SetWritePolicy(stall, total time.Duration) {
 	c.writeStall, c.writeTotal, c.writeStarted = stall, total, time.Time{}
 	c.policyApplied = true
 	c.mu.Unlock()
+	if stall <= 0 && total <= 0 {
+		c.clearWriteDeadline()
+	}
 }
 
 func (c *timeoutConn) ExemptReadTimeout() {
 	c.mu.Lock()
 	c.readStall, c.readTotal, c.readExempt = 0, 0, true
 	c.mu.Unlock()
+	c.clearReadDeadline()
 }
 
 func (c *timeoutConn) Read(p []byte) (int, error) {
@@ -187,6 +192,7 @@ func (c *timeoutConn) applyDeadline(write bool) {
 	defer c.mu.Unlock()
 	if write {
 		if c.writeStall <= 0 && c.writeTotal <= 0 {
+			_ = c.Conn.SetWriteDeadline(time.Time{})
 			return
 		}
 		if c.writeStarted.IsZero() {
@@ -196,6 +202,7 @@ func (c *timeoutConn) applyDeadline(write bool) {
 		return
 	}
 	if c.readExempt || (c.readStall <= 0 && c.readTotal <= 0) {
+		_ = c.Conn.SetReadDeadline(time.Time{})
 		return
 	}
 	if c.readStarted.IsZero() {

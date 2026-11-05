@@ -119,6 +119,27 @@
         </div>
     </div>
 
+    <div id="usage-history-panel" class="panel ibox float-e-margins nps-panel dashboard-usage-history-panel">
+        <div class="ibox-title dashboard-usage-history-head">
+            <div class="dashboard-config-heading">
+                <span class="dashboard-config-heading__icon" aria-hidden="true"><i class="fa fa-chart-area"></i></span>
+                <div class="dashboard-config-heading__copy">
+                    <h5 data-i18n-zh="用量趋势" data-i18n-en="Usage history">用量趋势</h5>
+                    <p data-i18n-zh="按分钟持久化的 NPS 代理用量，不含 P2P 直连" data-i18n-en="Persisted NPS proxy usage; direct P2P traffic is excluded">按分钟持久化的 NPS 代理用量，不含 P2P 直连</p>
+                </div>
+            </div>
+            <div class="dashboard-usage-history-ranges" role="group" aria-label="用量时间范围" data-aria-label-zh="用量时间范围" data-aria-label-en="Usage time range">
+                <button type="button" class="is-active" data-range="24h" aria-pressed="true" data-i18n-zh="24 小时" data-i18n-en="24 hours">24 小时</button>
+                <button type="button" data-range="7d" aria-pressed="false" data-i18n-zh="7 天" data-i18n-en="7 days">7 天</button>
+                <button type="button" data-range="30d" aria-pressed="false" data-i18n-zh="30 天" data-i18n-en="30 days">30 天</button>
+            </div>
+        </div>
+        <div class="ibox-content">
+            <div id="usage-history" class="dashboard-chart" role="img" aria-label="历史用量趋势图" data-aria-label-zh="历史用量趋势图" data-aria-label-en="Usage history chart"></div>
+            <p id="usage-history-status" class="dashboard-usage-history-status" role="status" aria-live="polite" data-i18n-zh="正在读取历史用量" data-i18n-en="Loading usage history">正在读取历史用量</p>
+        </div>
+    </div>
+
 {{if ne true .isAdmin}}
     <div class="panel ibox float-e-margins nps-panel dashboard-user-bridge-panel">
         <div class="ibox-title dashboard-config-title">
@@ -733,6 +754,49 @@
 			]
 			};
 
+		chartdatas['usage-history'] = {
+			tooltip: {
+				trigger: 'axis',
+				formatter: function (params) {
+					if (!params || !params.length) return '';
+					var str = new Date(params[0].value[0]).toLocaleString() + '<br>';
+					for (var i = 0; i < params.length; i++) {
+						str += '<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:' + params[i].color + ';"></span>' + params[i].seriesName + ': ' + dashboardFormatRate(params[i].value[1]) + '<br>';
+					}
+					return str;
+				}
+			},
+			legend: {
+				top: 0,
+				right: 8,
+				itemWidth: 12,
+				itemHeight: 8
+			},
+			grid: {
+				left: '3%',
+				right: '3%',
+				top: 34,
+				bottom: '3%',
+				containLabel: true
+			},
+			xAxis: {
+				type: 'time',
+				axisLabel: { hideOverlap: true }
+			},
+			yAxis: {
+				type: 'value',
+				axisLabel: {
+					formatter: function (value) {
+						return typeof changeunit === 'function' ? changeunit(value) + '/s' : value + 'B/s';
+					}
+				}
+			},
+			series: [
+				{name: '上传', type: 'line', smooth: true, showSymbol: false, areaStyle: {opacity: 0.08}, data: []},
+				{name: '下载', type: 'line', smooth: true, showSymbol: false, areaStyle: {opacity: 0.08}, data: []}
+			]
+		};
+
 		function applyDashboardChartLabels() {
 			var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
 			if (chartdatas['flow'] && chartdatas['flow'].legend && chartdatas['flow'].series && chartdatas['flow'].series[0]) {
@@ -1039,14 +1103,73 @@
                 .always(function () { $button.removeClass('is-refreshing').prop('disabled', false); });
         }
 
+        function dashboardUsageHistoryRange() {
+            var range = String($('#usage-history-panel .dashboard-usage-history-ranges .is-active').attr('data-range') || '24h');
+            return range === '7d' || range === '30d' ? range : '24h';
+        }
+
+        function dashboardLoadUsageHistory() {
+            if (!$('#usage-history').length) return;
+            var range = dashboardUsageHistoryRange();
+            var now = new Date();
+            var span = range === '30d' ? 30 : (range === '7d' ? 7 : 1);
+            var from = new Date(now.getTime() - span * 24 * 60 * 60 * 1000);
+            var bucket = range === '24h' ? '1m' : '5m';
+            var base = String((window.nps && window.nps.web_base_url) || '').replace(/\/+$/, '');
+            var english = dashboardIsEnglish();
+            $('#usage-history-status').text(english ? 'Loading usage history' : '正在读取历史用量');
+            $.ajax({
+                url: base + '/index/usagehistory',
+                data: {scope: 'global', from: from.toISOString(), to: now.toISOString(), bucket: bucket},
+                dataType: 'json',
+                cache: false,
+                global: false,
+                timeout: 12000
+            }).done(function (response) {
+                var payload = dashboardValue(response, 'data', {});
+                var resources = dashboardValue(payload, 'resources', []);
+                var resource = $.isArray(resources) && resources.length ? resources[0] : null;
+                var points = resource ? ((payload.bucket === '5m' ? resource.points_5m : resource.points_1m) || []) : [];
+                var interval = Math.max(1, dashboardNumber(payload.interval_seconds, 60));
+                var upload = [];
+                var download = [];
+                for (var i = 0; i < points.length; i++) {
+                    var point = points[i] || {};
+                    var timestamp = dashboardNumber(point.t, 0) * 1000;
+                    if (!timestamp) continue;
+                    upload.push([timestamp, Math.round(dashboardNumber(point.u, 0) / interval)]);
+                    download.push([timestamp, Math.round(dashboardNumber(point.d, 0) / interval)]);
+                }
+                chartdatas['usage-history'].legend.data = english ? ['Upload', 'Download'] : ['上传', '下载'];
+                chartdatas['usage-history'].series[0].name = chartdatas['usage-history'].legend.data[0];
+                chartdatas['usage-history'].series[1].name = chartdatas['usage-history'].legend.data[1];
+                chartdatas['usage-history'].series[0].data = upload;
+                chartdatas['usage-history'].series[1].data = download;
+                if (charts['usage-history'] && typeof charts['usage-history'].setOption === 'function') {
+                    charts['usage-history'].setOption(chartdatas['usage-history'], true);
+                }
+                $('#usage-history-status').text(points.length
+                    ? (english ? 'Samples: ' + points.length : '采样点：' + points.length)
+                    : (english ? 'History will appear after the first sampling interval' : '完成首个采样周期后显示历史数据'));
+            }).fail(function () {
+                $('#usage-history-status').text(english ? 'Usage history is temporarily unavailable' : '历史用量暂时不可用');
+            });
+        }
+
         var dashboardRefreshTimer = null;
+        var usageHistoryTimer = null;
         var dashboardResizeHandler = null;
         var dashboardPageCleanup = function () {
             if (dashboardRefreshTimer) {
                 window.clearInterval(dashboardRefreshTimer);
                 dashboardRefreshTimer = null;
             }
+            if (usageHistoryTimer) {
+                window.clearInterval(usageHistoryTimer);
+                usageHistoryTimer = null;
+            }
             $('#dashboard-refresh').off('.dashboard');
+            $('#usage-history-panel').off('.usageHistory');
             $(window).off('pagehide.dashboard');
             if (dashboardResizeHandler) {
                 window.removeEventListener('resize', dashboardResizeHandler);
@@ -1058,10 +1181,19 @@
         $(function () {
             if (!$('#dashboard-runtime-panel').length && !$('#dashboard-refresh').length) return;
             dashboardRefresh();
+            dashboardLoadUsageHistory();
             dashboardRefreshTimer = window.setInterval(function () {
                 if (!document.hidden) dashboardRefresh();
             }, 15000);
+            usageHistoryTimer = window.setInterval(function () {
+                if (!document.hidden) dashboardLoadUsageHistory();
+            }, 60000);
             $('#dashboard-refresh').off('click.dashboard').on('click.dashboard', dashboardRefresh);
+            $('#usage-history-panel').off('click.usageHistory').on('click.usageHistory', '.dashboard-usage-history-ranges button', function () {
+                $('#usage-history-panel .dashboard-usage-history-ranges button').removeClass('is-active').attr('aria-pressed', 'false');
+                $(this).addClass('is-active').attr('aria-pressed', 'true');
+                dashboardLoadUsageHistory();
+            });
             $(window).off('pagehide.dashboard').on('pagehide.dashboard', dashboardPageCleanup);
             dashboardResizeHandler = function () {
                 for (var key in charts) {
@@ -1073,6 +1205,9 @@
             window.addEventListener('resize', dashboardResizeHandler);
         });
         $(document).off('npsLanguageChanged.dashboard').on('npsLanguageChanged.dashboard', function () {
-            if ($('#dashboard-runtime-panel').length || $('#dashboard-refresh').length) dashboardRefresh();
+            if ($('#dashboard-runtime-panel').length || $('#dashboard-refresh').length) {
+                dashboardRefresh();
+                dashboardLoadUsageHistory();
+            }
         });
 </script>
