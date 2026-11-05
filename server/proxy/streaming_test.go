@@ -3,6 +3,7 @@ package proxy
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -154,7 +155,7 @@ func TestHostSSEStaysOpenPastRequestIdleWindow(t *testing.T) {
 	if err := clientConn.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := upstreamPeer.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
+	if err := upstreamPeer.SetWriteDeadline(time.Now().Add(time.Second)); err != nil && !errors.Is(err, io.ErrClosedPipe) {
 		t.Fatal(err)
 	}
 	// A final upstream write wakes the response copier so it observes the
