@@ -288,7 +288,7 @@
                 </div>
                 <div id="dashboard-key-result" class="credential-result mt-3" hidden>
                     <label class="form-label" for="dashboard-key-value" data-i18n-zh="大屏快捷地址" data-i18n-en="Dashboard shortcut">大屏快捷地址</label>
-                    <div class="input-group"><input id="dashboard-key-value" class="form-control" type="text" readonly><a id="dashboard-key-open-status" class="btn btn-outline btn-primary" href="#" target="_blank" rel="noopener noreferrer" title="打开大屏" aria-label="打开大屏" hidden><i class="fa fa-external-link" aria-hidden="true"></i></a><button id="dashboard-key-copy" type="button" class="btn btn-outline btn-primary" title="复制快捷地址" aria-label="复制快捷地址"><i class="fa fa-copy" aria-hidden="true"></i></button></div>
+                    <div class="input-group"><input id="dashboard-key-value" class="form-control" type="text" readonly><a id="dashboard-key-open-status" class="btn btn-outline btn-primary" href="#" target="_blank" rel="noopener noreferrer" title="打开大屏" aria-label="打开大屏" hidden><i class="fa fa-external-link" aria-hidden="true"></i><span data-i18n-zh="打开" data-i18n-en="Open">打开</span></a><button id="dashboard-key-copy" type="button" class="btn btn-outline btn-primary" title="复制快捷地址" aria-label="复制快捷地址"><i class="fa fa-copy" aria-hidden="true"></i></button></div>
                     <label class="form-label mt-3" for="dashboard-key-raw" data-i18n-zh="大屏密钥" data-i18n-en="Dashboard key">大屏密钥</label>
                     <div class="input-group"><input id="dashboard-key-raw" class="form-control" type="text" readonly><button id="dashboard-key-raw-copy" type="button" class="btn btn-outline btn-primary" title="复制密钥" aria-label="复制密钥"><i class="fa fa-copy" aria-hidden="true"></i></button></div>
                     <small class="help-block" data-i18n-zh="地址与密钥一一对应；更换密钥后请使用新的快捷地址。" data-i18n-en="The address and key form a pair; use the new shortcut after rotating the key.">地址与密钥一一对应；更换密钥后请使用新的快捷地址。</small>
@@ -423,14 +423,20 @@
                 var key = response && response.key ? response.key : '';
                 var url = '';
                 if (key) {
-                    var serverURL = response && response.url ? String(response.url) : '';
-                    if (/^https?:\/\//i.test(serverURL)) {
-                        url = serverURL;
-                    } else {
-                        // 用浏览器当前访问的主机拼出可达地址，避免反向代理场景下
-                        // 服务端看到的内部 Host 被写进快捷地址。
-                        url = window.location.origin + (window.nps.web_base_url || '') + '/overview#access_key=' + encodeURIComponent(key);
+                    var basePath = String((window.nps && window.nps.web_base_url) || '').trim();
+                    if (/^https?:\/\//i.test(basePath)) {
+                        try {
+                            basePath = new URL(basePath, window.location.origin).pathname;
+                        } catch (_) {
+                            basePath = '';
+                        }
                     }
+                    basePath = basePath.replace(/\/+$/, '');
+                    if (basePath && basePath.charAt(0) !== '/') basePath = '/' + basePath;
+                    // 快捷地址始终复用浏览器当前协议、域名和端口，只保留
+                    // web_base_url 的路径前缀，避免反向代理或旧绝对地址导致
+                    // 用户被带到服务端不可达的内部地址。
+                    url = window.location.origin + basePath + '/overview#access_key=' + encodeURIComponent(key);
                 }
                 dashboardKeyURL = url;
                 $('#dashboard-key-value').val(url);

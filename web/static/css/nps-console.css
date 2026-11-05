@@ -4228,7 +4228,14 @@ body.nps-bootstrap .nav-sidebar-footer .nav-account-tool:focus-visible {
 }
 body.nps-bootstrap .credential-result .input-group { display: flex; gap: 8px; }
 body.nps-bootstrap .credential-result .input-group .form-control { min-width: 0; flex: 1; }
-body.nps-bootstrap .credential-result .input-group .btn { flex: none; }
+body.nps-bootstrap .credential-result .input-group .btn {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+}
 body.nps-bootstrap .nav-sidebar-footer .nav-account--button:focus-visible {
     outline: 2px solid #9ec1ff;
     outline-offset: 2px;

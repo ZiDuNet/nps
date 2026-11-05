@@ -242,6 +242,9 @@ func TestPublicLayoutKeepsShellAndNavigatesContentOnly(t *testing.T) {
 		`a[data-console-navigate][href]`,
 		`window.npsBeforeNavigate`,
 		`window.npsNavigate = navigate`,
+		`data-i18n-zh="打开"`,
+		`basePath = new URL(basePath, window.location.origin).pathname`,
+		`url = window.location.origin + basePath + '/overview#access_key='`,
 	} {
 		if !strings.Contains(template, marker) {
 			t.Fatalf("public layout misses content navigation marker %q", marker)

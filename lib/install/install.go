@@ -225,7 +225,7 @@ func ForceUpdateNpc() {
 		return
 	}
 	if updated {
-		fmt.Println("强制更新成功，请重启客户端")
+		fmt.Println("强制更新成功。正在运行的 NPC 进程或系统服务需要重启后才会加载新版本。")
 	}
 }
 
@@ -236,7 +236,7 @@ func UpdateNpcNew() {
 		return
 	}
 	if updated {
-		fmt.Println("更新成功，请重启客户端")
+		fmt.Println("更新成功。正在运行的 NPC 进程或系统服务需要重启后才会加载新版本。")
 	}
 }
 
@@ -244,16 +244,24 @@ func UpdateNpcNew() {
 // checksum, and replaces the running NPC binary. It deliberately does not
 // restart the process; callers decide how to restart their service safely.
 func UpdateNpcResult() (bool, error) {
+	targets, err := npcUpdateTargets()
+	if err != nil {
+		return false, err
+	}
 	npcUpdateMu.Lock()
 	defer npcUpdateMu.Unlock()
-	return updateNpcResult("", false)
+	return updateNpcResult(targets, false)
 }
 
 // ForceUpdateNpcResult is the programmatic form of `npc update-force`.
 func ForceUpdateNpcResult() (bool, error) {
+	targets, err := npcUpdateTargets()
+	if err != nil {
+		return false, err
+	}
 	npcUpdateMu.Lock()
 	defer npcUpdateMu.Unlock()
-	return updateNpcResult("", true)
+	return updateNpcResult(targets, true)
 }
 
 // UpdateNpcResultAt is the same update operation but writes the NPC binary to
@@ -263,10 +271,14 @@ func ForceUpdateNpcResult() (bool, error) {
 func UpdateNpcResultAt(targetPath string) (bool, error) {
 	npcUpdateMu.Lock()
 	defer npcUpdateMu.Unlock()
-	return updateNpcResult(targetPath, false)
+	return updateNpcResult([]string{targetPath}, false)
 }
 
-func updateNpcResult(targetPath string, force bool) (bool, error) {
+func updateNpcResult(targetPaths []string, force bool) (bool, error) {
+	targetPaths = normalizeExecutableTargets(targetPaths, common.IsWindows())
+	if len(targetPaths) == 0 {
+		return false, errors.New("未找到 NPC 更新目标")
+	}
 	release, err := fetchLatestRelease()
 	if err != nil {
 		return false, fmt.Errorf("获取最新版本失败：%w", err)
@@ -296,10 +308,37 @@ func updateNpcResult(targetPath string, force bool) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("下载更新失败：%w", err)
 	}
-	if err := copyStaticFileReplaceNpcAt(destPath, common.GetAppPath(), targetPath); err != nil {
+	log.Println("NPC 更新目标：", strings.Join(targetPaths, ", "))
+	updatedTargets, err := copyStaticFileReplaceNpcTargets(destPath, targetPaths)
+	if err != nil {
+		if len(updatedTargets) > 0 {
+			log.Println("已更新的 NPC 文件：", strings.Join(updatedTargets, ", "))
+		}
 		return false, fmt.Errorf("替换客户端文件失败（请确认服务账号有权写入 NPC 安装目录）：%w", err)
 	}
+	log.Println("已更新的 NPC 文件：", strings.Join(updatedTargets, ", "))
 	return true, nil
+}
+
+// npcUpdateTargets returns the stable installation copy and the executable
+// that launched this process. A portable client normally has only one target;
+// a Windows service installation also refreshes Program Files\nps\npc.exe.
+// Missing installation copies are not created here, so portable updates never
+// request administrator access unexpectedly.
+func npcUpdateTargets() ([]string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("获取当前 NPC 路径失败：%w", err)
+	}
+	targets := make([]string, 0, 2)
+	if common.IsWindows() {
+		stablePath := filepath.Join(common.GetInstallPath(), "npc.exe")
+		if info, statErr := os.Stat(stablePath); statErr == nil && !info.IsDir() {
+			targets = append(targets, stablePath)
+		}
+	}
+	targets = append(targets, executable)
+	return normalizeExecutableTargets(targets, common.IsWindows()), nil
 }
 
 type release struct {
@@ -506,10 +545,7 @@ func copyStaticFile(srcPath, bin string) (string, error) {
 		return "", fmt.Errorf("更新包中未找到可执行文件 %s: %w", srcBin, err)
 	}
 
-	destinations := []string{filepath.Join(common.GetAppPath(), bin+".exe")}
-	if !common.IsWindows() {
-		destinations = []string{"/usr/bin/" + bin, "/usr/local/bin/" + bin}
-	}
+	destinations := staticFileDestinations(bin, common.GetInstallPath(), common.IsWindows())
 	srcInfo, err := os.Stat(srcBin)
 	if err != nil {
 		return "", err
@@ -539,6 +575,13 @@ func copyStaticFile(srcPath, bin string) (string, error) {
 	return "", lastErr
 }
 
+func staticFileDestinations(bin, installPath string, windows bool) []string {
+	if windows {
+		return []string{filepath.Join(installPath, bin+".exe")}
+	}
+	return []string{"/usr/bin/" + bin, "/usr/local/bin/" + bin}
+}
+
 func copyStaticFileReplaceNps(srcPath, descPath string) error {
 	// Web UI is embedded in the binary; only replace the executable.
 	return replaceBinFromPackage(srcPath, descPath, "nps", "")
@@ -549,14 +592,31 @@ func copyStaticFileReplaceNpc(srcPath, descPath string) error {
 }
 
 func copyStaticFileReplaceNpcAt(srcPath, descPath, targetPath string) error {
-	return replaceBinFromPackage(srcPath, descPath, "npc", targetPath)
+	// descPath is retained for API compatibility; NPC updates always target an
+	// explicit executable path or the process that launched the updater.
+	_ = descPath
+	target := targetPath
+	if target == "" {
+		executable, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		target = executable
+	}
+	_, err := copyStaticFileReplaceNpcTargets(srcPath, []string{target})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func replaceBinFromPackage(srcPath, descPath, bin, targetPath string) error {
-	srcBin := filepath.Join(srcPath, bin)
+	srcBin, err := packageBinaryPath(srcPath, bin, common.IsWindows())
+	if err != nil {
+		return err
+	}
 	destBin := filepath.Join(descPath, bin)
 	if common.IsWindows() {
-		srcBin += ".exe"
 		destBin += ".exe"
 	}
 	// Update the executable that launched this updater. This also supports
@@ -571,14 +631,6 @@ func replaceBinFromPackage(srcPath, descPath, bin, targetPath string) error {
 	// the installation target, otherwise every subsequent update would keep
 	// refreshing the backup while leaving the stable executable unchanged.
 	destBin = stableExecutablePath(destBin)
-	if _, err := os.Stat(srcBin); err != nil {
-		// unpackit may return a nested root dir; search one level if needed
-		if found, findErr := findBinInDir(srcPath, filepath.Base(srcBin)); findErr == nil {
-			srcBin = found
-		} else {
-			return fmt.Errorf("更新包中未找到可执行文件 %s: %w", srcBin, err)
-		}
-	}
 	if err := replaceExecutable(srcBin, destBin); err != nil {
 		return err
 	}
@@ -586,6 +638,70 @@ func replaceBinFromPackage(srcPath, descPath, bin, targetPath string) error {
 	// Clean temp package; keep parent temp dir if still in use
 	_ = os.RemoveAll(srcPath)
 	return nil
+}
+
+func copyStaticFileReplaceNpcTargets(srcPath string, targetPaths []string) ([]string, error) {
+	srcBin, err := packageBinaryPath(srcPath, "npc", common.IsWindows())
+	if err != nil {
+		return nil, err
+	}
+	targetPaths = normalizeExecutableTargets(targetPaths, common.IsWindows())
+	if len(targetPaths) == 0 {
+		return nil, errors.New("未找到 NPC 更新目标")
+	}
+	updated := make([]string, 0, len(targetPaths))
+	failures := make([]string, 0)
+	for _, target := range targetPaths {
+		if err := replaceExecutable(srcBin, target); err != nil {
+			failures = append(failures, fmt.Sprintf("%s：%v", target, err))
+			continue
+		}
+		chMod(target, 0755)
+		updated = append(updated, target)
+	}
+	if len(failures) > 0 {
+		return updated, fmt.Errorf("部分更新目标替换失败：%s", strings.Join(failures, "；"))
+	}
+	_ = os.RemoveAll(srcPath)
+	return updated, nil
+}
+
+func packageBinaryPath(root, bin string, windows bool) (string, error) {
+	name := bin
+	if windows {
+		name += ".exe"
+	}
+	candidate := filepath.Join(root, name)
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate, nil
+	}
+	found, err := findBinInDir(root, name)
+	if err == nil {
+		return found, nil
+	}
+	return "", fmt.Errorf("更新包中未找到可执行文件 %s: %w", candidate, err)
+}
+
+func normalizeExecutableTargets(targetPaths []string, windows bool) []string {
+	targets := make([]string, 0, len(targetPaths))
+	seen := make(map[string]struct{}, len(targetPaths))
+	for _, target := range targetPaths {
+		target = stableExecutablePath(strings.TrimSpace(target))
+		if target == "" {
+			continue
+		}
+		target = filepath.Clean(target)
+		key := target
+		if windows {
+			key = strings.ToLower(key)
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		targets = append(targets, target)
+	}
+	return targets
 }
 
 func findBinInDir(root, name string) (string, error) {
@@ -618,7 +734,27 @@ func stableExecutablePath(path string) string {
 	// before resolving the backup suffix so a post-update restart can still
 	// execute the newly installed file.
 	path = strings.TrimSuffix(path, " (deleted)")
+	base := filepath.Base(path)
+	if index := strings.LastIndex(base, ".old-"); index > 0 {
+		suffix := base[index+len(".old-"):]
+		numeric := suffix != ""
+		for _, char := range suffix {
+			if char < '0' || char > '9' {
+				numeric = false
+				break
+			}
+		}
+		if numeric {
+			return filepath.Join(filepath.Dir(path), base[:index])
+		}
+	}
 	return strings.TrimSuffix(path, ".old")
+}
+
+// StableExecutablePath maps updater backup names back to the executable path
+// that should be started or replaced next.
+func StableExecutablePath(path string) string {
+	return stableExecutablePath(path)
 }
 
 // replaceExecutable places srcBin at destBin. On Windows a running executable
@@ -643,34 +779,54 @@ func replaceExecutable(srcBin, destBin string) error {
 	}
 
 	// Move the current binary out of the way when present (required on Windows
-	// while the process is still running). On Unix, rename(src, dest) below is
-	// safe while the old inode is still executing and avoids changing
+	// while the process is still running). On Unix, the atomic copy below can
+	// replace the old inode while it is executing without changing
 	// /proc/self/exe to a .old path.
+	backupPath := ""
 	if common.IsWindows() {
 		if _, err := os.Stat(destBin); err == nil {
-			bak := destBin + ".old"
-			_ = os.Remove(bak)
+			bak, backupErr := executableBackupPath(destBin)
+			if backupErr != nil {
+				return backupErr
+			}
 			if err := os.Rename(destBin, bak); err != nil {
 				return fmt.Errorf("无法备份当前程序 %s: %w", destBin, err)
 			}
+			backupPath = bak
 		}
 	}
 
-	// Same filesystem: rename is atomic. Fall back to copy across volumes.
-	if err := os.Rename(srcBin, destBin); err != nil {
-		if copyErr := copyFileAtomic(srcBin, destBin); copyErr != nil {
-			// Best-effort restore of previous binary
-			if common.IsWindows() {
-				bak := destBin + ".old"
-				if _, statErr := os.Stat(bak); statErr == nil {
-					_ = os.Rename(bak, destBin)
-				}
-			}
-			return fmt.Errorf("替换可执行文件失败: %w", copyErr)
+	// Copy through a temporary file beside the destination. This keeps the
+	// replacement atomic and leaves the downloaded source available when one
+	// update must refresh multiple installed copies.
+	if err := copyFileAtomic(srcBin, destBin); err != nil {
+		// Best-effort restore of previous binary
+		if backupPath != "" {
+			_ = os.Rename(backupPath, destBin)
 		}
-		_ = os.Remove(srcBin)
+		return fmt.Errorf("替换可执行文件失败: %w", err)
 	}
 	return nil
+}
+
+func executableBackupPath(destBin string) (string, error) {
+	legacy := destBin + ".old"
+	if _, err := os.Stat(legacy); os.IsNotExist(err) {
+		return legacy, nil
+	}
+	if err := os.Remove(legacy); err == nil {
+		return legacy, nil
+	}
+	// A previous running process may still own the legacy backup name on
+	// Windows. Use a unique numeric suffix so repeated updates can continue
+	// without deleting an image that the OS still has mapped.
+	for attempt := int64(0); attempt < 100; attempt++ {
+		candidate := fmt.Sprintf("%s.old-%d", destBin, time.Now().UnixNano()+attempt)
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("无法为 %s 选择可用的更新备份路径", destBin)
 }
 
 // copyFileAtomic copies a binary to a temporary file beside its destination
@@ -721,8 +877,7 @@ func copyFileAtomic(src, dest string) error {
 func InstallNpcPath() (string, error) {
 	path := common.GetInstallPath()
 	if !common.FileExists(path) {
-		err := os.Mkdir(path, 0755)
-		if err != nil {
+		if err := os.MkdirAll(path, 0755); err != nil {
 			return "", err
 		}
 	}

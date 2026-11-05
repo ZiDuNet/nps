@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/quickcommand"
 	"github.com/kardianos/service"
 )
@@ -165,6 +166,47 @@ func TestFindNpcCommandAfterFlags(t *testing.T) {
 	command, index = findNpcCommand([]string{"-service_name=nps-client-key", "update-force"})
 	if command != "update-force" || index != 1 {
 		t.Fatalf("findNpcCommand() = (%q, %d), want (update-force, 1)", command, index)
+	}
+}
+
+func TestRemoteUpdateServiceNamePrefersInstalledDefaultService(t *testing.T) {
+	tests := []struct {
+		name                    string
+		configured              string
+		vKey                    string
+		defaultServiceInstalled bool
+		want                    string
+	}{
+		{name: "standard install", configured: "Npc", vKey: "alpha", defaultServiceInstalled: true, want: "Npc"},
+		{name: "legacy menu service", configured: "Npc", vKey: "alpha", want: "nps-client-alpha"},
+		{name: "explicit protocol service", configured: "nps-client-alpha-ws", vKey: "alpha", defaultServiceInstalled: true, want: "nps-client-alpha-ws"},
+		{name: "empty configured name", configured: "", vKey: "alpha", defaultServiceInstalled: true, want: "Npc"},
+		{name: "missing vkey", configured: "Npc", want: "Npc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := remoteUpdateServiceName(tt.configured, tt.vKey, tt.defaultServiceInstalled); got != tt.want {
+				t.Fatalf("remoteUpdateServiceName(%q, %q, %t) = %q, want %q", tt.configured, tt.vKey, tt.defaultServiceInstalled, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStableNpcExecutablePathForRemoteUpdater(t *testing.T) {
+	tests := map[string]string{
+		`C:\Program Files\nps\npc.exe`:                         `C:\Program Files\nps\npc.exe`,
+		`C:\Program Files\nps\npc.exe.old`:                     `C:\Program Files\nps\npc.exe`,
+		`C:\Program Files\nps\npc.exe.old-1762312345678900000`: `C:\Program Files\nps\npc.exe`,
+		`/opt/nps/npc (deleted)`:                               `/opt/nps/npc`,
+		`/opt/nps/npc.old`:                                     `/opt/nps/npc`,
+	}
+	for input, want := range tests {
+		if got := install.StableExecutablePath(input); got != want {
+			t.Fatalf("StableExecutablePath(%q) = %q, want %q", input, got, want)
+		}
+	}
+	if !waitForWindowsProcessExit(0) {
+		t.Fatal("waitForWindowsProcessExit(0) should report the parent exited")
 	}
 }
 

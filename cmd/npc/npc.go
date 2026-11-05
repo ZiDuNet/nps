@@ -274,12 +274,8 @@ func registerRemoteUpdateHandler(s service.Service) {
 			if s == nil {
 				return false, fmt.Errorf("Windows 客户端服务对象不可用")
 			}
-			restartName := *serviceName
-			if restartName == "Npc" && vKey != "" {
-				// Older menu-installed services did not persist -service_name.
-				restartName = "nps-client-" + vKey
-			}
 			serviceMode := !service.Interactive()
+			restartName := remoteUpdateServiceName(*serviceName, vKey, npcServiceInstalled("Npc"))
 			if err := spawnWindowsRemoteUpdateHelper(restartName, serviceMode); err != nil {
 				return false, fmt.Errorf("无法启动 Windows 客户端更新器：%w", err)
 			}
@@ -308,6 +304,36 @@ func registerRemoteUpdateHandler(s service.Service) {
 	})
 }
 
+func remoteUpdateServiceName(configuredName, vKey string, defaultServiceInstalled bool) string {
+	configuredName = strings.TrimSpace(configuredName)
+	if configuredName == "" {
+		configuredName = "Npc"
+	}
+	if configuredName != "Npc" || defaultServiceInstalled {
+		return configuredName
+	}
+	// Legacy menu-installed services used nps-client-<vkey> without persisting
+	// -service_name. A normal `npc install` service is named Npc, so check that
+	// exact service before falling back to the legacy naming convention.
+	if vKey = strings.TrimSpace(vKey); vKey != "" {
+		return "nps-client-" + vKey
+	}
+	return configuredName
+}
+
+func npcServiceInstalled(name string) bool {
+	if strings.TrimSpace(name) == "" {
+		return false
+	}
+	prg := &npc{exit: make(chan struct{})}
+	s, err := service.New(prg, newNpcServiceConfig(name, name, "NPS 内网穿透客户端"))
+	if err != nil {
+		return false
+	}
+	_, err = s.Status()
+	return err == nil
+}
+
 // spawnWindowsRemoteUpdateHelper copies the current executable to a temporary
 // updater path. Windows keeps the running image locked, so the helper waits
 // for the NPC process to exit, updates the original executable, and then
@@ -317,6 +343,7 @@ func spawnWindowsRemoteUpdateHelper(name string, serviceMode bool) error {
 	if err != nil {
 		return err
 	}
+	targetPath := install.StableExecutablePath(executable)
 	source, err := os.Open(executable)
 	if err != nil {
 		return err
@@ -345,7 +372,7 @@ func spawnWindowsRemoteUpdateHelper(name string, serviceMode bool) error {
 
 	args := []string{
 		"-remote_update_helper=true",
-		"-remote_update_target=" + executable,
+		"-remote_update_target=" + targetPath,
 		"-remote_update_parent=" + strconv.Itoa(os.Getpid()),
 	}
 	var argsFile string
@@ -394,55 +421,98 @@ func runWindowsRemoteUpdateHelper() {
 		fmt.Fprintln(os.Stderr, "remote update helper target is missing")
 		return
 	}
-	waitForWindowsProcessExit(*remoteUpdateParent)
-	if _, err := install.UpdateNpcResultAt(*remoteUpdateTarget); err != nil {
+	targetPath := filepath.Clean(*remoteUpdateTarget)
+	writeNpcUpdaterLog("更新器已启动，目标=%s，服务=%s，父进程=%d", targetPath, *remoteUpdateService, *remoteUpdateParent)
+	if !waitForWindowsProcessExit(*remoteUpdateParent) {
+		err := fmt.Errorf("等待父进程 %d 退出超时", *remoteUpdateParent)
 		fmt.Fprintln(os.Stderr, "NPC 远程更新失败：", err)
+		writeNpcUpdaterLog("远程更新失败：%v", err)
 		return
 	}
+	updated, err := install.UpdateNpcResultAt(targetPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "NPC 远程更新失败：", err)
+		writeNpcUpdaterLog("远程更新失败：%v", err)
+		restartNpcAfterRemoteUpdate(targetPath)
+		return
+	}
+	if !updated {
+		writeNpcUpdaterLog("当前已是最新版本，无需替换")
+		restartNpcAfterRemoteUpdate(targetPath)
+		return
+	}
+	writeNpcUpdaterLog("远程更新文件替换完成")
+	restartNpcAfterRemoteUpdate(targetPath)
+}
+
+func restartNpcAfterRemoteUpdate(targetPath string) {
 	if *remoteUpdateService != "" {
-		cmd := exec.Command(*remoteUpdateTarget, "-service_name="+*remoteUpdateService, "restart")
+		cmd := exec.Command(targetPath, "-service_name="+*remoteUpdateService, "restart")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			fmt.Fprintln(os.Stderr, "NPC Windows 服务重启失败：", err)
+			writeNpcUpdaterLog("服务 %s 重启失败：%v", *remoteUpdateService, err)
+		} else {
+			writeNpcUpdaterLog("服务 %s 已重启", *remoteUpdateService)
 		}
 		return
 	}
 	if *remoteUpdateArgsFile == "" {
 		fmt.Fprintln(os.Stderr, "remote update helper arguments are missing")
+		writeNpcUpdaterLog("前台客户端启动参数缺失，无法重启")
 		return
 	}
 	data, err := os.ReadFile(*remoteUpdateArgsFile)
 	_ = os.Remove(*remoteUpdateArgsFile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "读取 NPC 启动参数失败：", err)
+		writeNpcUpdaterLog("前台客户端启动参数读取失败：%v", err)
 		return
 	}
 	var args []string
 	if err := json.Unmarshal(data, &args); err != nil {
 		fmt.Fprintln(os.Stderr, "解析 NPC 启动参数失败：", err)
+		writeNpcUpdaterLog("前台客户端启动参数解析失败：%v", err)
 		return
 	}
-	cmd := exec.Command(*remoteUpdateTarget, args...)
+	cmd := exec.Command(targetPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, "NPC 重启失败：", err)
+		writeNpcUpdaterLog("前台客户端重启失败：%v", err)
+	} else {
+		writeNpcUpdaterLog("前台客户端已重新启动")
 	}
 }
 
-func waitForWindowsProcessExit(pid int) {
-	if pid <= 0 {
+func writeNpcUpdaterLog(format string, args ...interface{}) {
+	logPath := common.GetNpcLogPath()
+	if *remoteUpdateTarget != "" {
+		logPath = filepath.Join(filepath.Dir(*remoteUpdateTarget), "npc-updater.log")
+	}
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
 		return
+	}
+	defer file.Close()
+	_, _ = fmt.Fprintf(file, "%s [updater] %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, args...))
+}
+
+func waitForWindowsProcessExit(pid int) bool {
+	if pid <= 0 {
+		return true
 	}
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		output, err := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH").CombinedOutput()
 		if err != nil || !strings.Contains(string(output), strconv.Itoa(pid)) {
-			return
+			return true
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
+	return false
 }
 
 type npc struct {
