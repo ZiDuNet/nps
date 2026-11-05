@@ -54,7 +54,8 @@ Host、统计、审计和连接日志。
 - 管理员签名或普通用户 Token 在进入业务控制器前校验，失败返回 JSON
   `401/403`，不会跳转登录页。
 - Bridge TLS 证书只允许管理员调用
-  `/api/v1/global/bridge-certificate`；保存后需重启 NPS。
+  `/api/v1/global/bridge-certificate`；保存会同步校验证书并热加载到后续 TLS
+  握手，热加载失败时继续使用上一份有效证书。
 - 旧 `/auth/*`、`/client/*`、`/index/*`、`/user/*`、`/global/*` 继续兼容
   Web 页面、NPC 和既有调用方，清单见[历史 Web API](webapi.md)。
 

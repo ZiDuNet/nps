@@ -76,7 +76,13 @@ func configSeconds(key string, fallback int) time.Duration {
 		raw = strconv.Itoa(fallback)
 	}
 	value, err := strconv.Atoi(raw)
-	if err != nil || value <= 0 {
+	if err != nil {
+		if fallback <= 0 {
+			return 0
+		}
+		return time.Duration(fallback) * time.Second
+	}
+	if value <= 0 {
 		return 0
 	}
 	return time.Duration(value) * time.Second

@@ -15,10 +15,22 @@ http_add_origin_header=true
 
 | 请求头 | 含义 |
 | --- | --- |
-| `X-Forwarded-For` | 访问链路中的来源地址；NPS 会保留已有链路并追加它直接看到的来源 |
+| `X-Forwarded-For` | 来源地址链；默认覆盖客户端伪装的同名头，`preserve` 或可信代理模式会保留旧链路并追加 NPS 直接看到的来源 |
 | `X-Real-IP` | NPS 看到的直接访问者 IP |
+| `X-Forwarded-Host` | 访问者请求 NPS 时使用的原始域名 |
+| `X-Forwarded-Proto` | 访问者到 NPS 的协议，`http` 或 `https` |
+| `X-Forwarded-Port` | 访问者请求的原始端口 |
+| `X-Real-Proto` | 与 `X-Forwarded-Proto` 对应的兼容协议头 |
 
-该能力只适用于 NPS 可以解析的 HTTP 请求，以及由 NPS 终结 TLS 后的 HTTPS 请求；TCP、UDP、SOCKS5 和纯 TLS 透传没有 HTTP Header 可写入。后端必须只信任由 NPS 或受控反向代理写入的这两个请求头。若后端直接暴露在公网，客户端可以伪造同名 Header，不能把它们作为唯一的身份凭据。
+`http_forwarded_header_mode=overwrite` 是默认策略，会覆盖访问者传入的转发头；
+`preserve` 保留已有值并追加来源；`trusted` 只有 TCP 对端命中
+`trusted_proxy_ips` 时才保留已有值。`http_forwarded_trust_mode=strict` 还会
+限制 NPS 从 `X-Real-IP`/`X-Forwarded-For` 还原访问者地址时只信任这些代理。
+
+该能力只适用于 NPS 可以解析的 HTTP 请求，以及由 NPS 终结 TLS 后的 HTTPS
+请求；TCP、UDP、SOCKS5 和纯 TLS 透传没有 HTTP Header 可写入。后端必须只信任
+由 NPS 或受控反向代理写入的这些请求头。若后端直接暴露在公网，客户端可以伪造
+同名 Header，不能把它们作为唯一的身份凭据。
 
 ## 修改配置后的生效范围
 
@@ -91,6 +103,14 @@ sudo nps reload
 资源状态图按运行中、已停止、等待连接和启动失败汇总，不会把协议类型误当作运行状态。流量、连接和配额数值仍以服务端数据层为准，页面刷新失败时不会覆盖上一次成功的结果。
 
 管理员首页的“配额使用”区域会列出每个可见客户端的连接、隧道和流量限制；普通用户只会看到自己名下的客户端。未设置限制的项目显示为“未设置限制”，不会凭空生成配额。
+
+首页的“用量趋势”卡片读取持久化的 NPS 代理历史，不依赖当前浏览器保持打开。
+管理员默认查看全站汇总，普通用户查看自己的账号范围；可切换最近 24 小时、
+7 天和 30 天。24 小时使用分钟精度，7 天和 30 天使用五分钟精度。卡片每
+60 秒刷新，页面进入后台时暂停请求。采样默认每 60 秒一次，首次启动后需等待
+一个采样周期才会出现第一个点；现存连接在服务启动时的首次采样只建立累计值
+基线，不会被误算成一次爆发流量。原始数据默认写入
+`conf/usage_history.json`，不包含 P2P 直连流量。
 
 ## 版本兼容
 

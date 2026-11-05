@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.40</sub>
+﻿# NPS <sub>v1.1.41</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -208,6 +208,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.41** (2026-11-06) - 新增同一 VKey 多实例身份、持久化历史用量与账号范围趋势 API，完善 HTTP 请求头、分阶段超时和可选隔离连接池，并支持 Bridge 证书热加载；修复大屏快捷地址和 NPC 系统服务更新路径。
 
 - **v1.1.40** (2026-11-02) - NPC 运行时客户端、隧道和域名反代改用独立临时 ID，不再消耗持久化序列；客户端、隧道、域名反代和用户列表支持实时速率/连接排序，所有列表统一提供 20/50/100/200 分页。
 

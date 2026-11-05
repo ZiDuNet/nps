@@ -83,7 +83,7 @@ DNS 不会替代端口开放，也不会隐藏非 80/443 端口。即使 `*.exam
 
 - **请求 Host**：将发给后端的 `Host` 改为后端虚拟主机需要的值。
 - **自定义请求 Header**：每行使用 `名称: 值`，例如 `X-Environment: production`。
-- **真实来源 Header**：启用 `http_add_origin_header=true` 后，NPS 会向后端追加 `X-Forwarded-For` 与 `X-Real-IP`。后端只能信任来自 NPS 或受控反向代理的这些 Header。
+- **真实来源 Header**：启用 `http_add_origin_header=true` 后，NPS 会维护 `X-Forwarded-For`、`X-Real-IP`、`X-Forwarded-Host`、`X-Forwarded-Proto`、`X-Forwarded-Port` 和 `X-Real-Proto`。默认覆盖访问者传入的转发头；也可选择保留链路或只信任指定代理。后端只能信任来自 NPS 或受控反向代理的这些 Header。
 - **Basic 认证**：域名规则可单独配置 `auth`/独立账号；留空时使用所属客户端的公共 Basic。HTTP 正向代理和 SOCKS5 的规则级认证是另一组代理端口配置。
 
 域名规则的“兼容与响应”选项还包括：

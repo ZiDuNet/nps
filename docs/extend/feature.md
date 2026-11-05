@@ -55,7 +55,7 @@
 - **Host 重写和自定义请求 Header**：用于后端虚拟主机、上游鉴权或兼容已有应用；Header 每行 `名称: 值`。
 - **Basic 认证**：域名代理优先使用 Host 级账号；HTTP 正向代理和 SOCKS5 优先使用混合代理规则级账号；未配置时才回退到所属客户端的公共 Basic。
 - **HTTPS 终结或透传**：可上传/引用证书与私钥，或者让内网服务自行处理 TLS。自动 HTTPS 会将 HTTP 请求重定向到对应 HTTPS 端口。
-- **真实来源 Header**：`http_add_origin_header=true` 时，NPS 向后端添加 `X-Forwarded-For` 与 `X-Real-IP`。代理链路和信任边界见[部署与运行说明](description.md#获取访问者真实-ip)。
+- **真实来源 Header**：`http_add_origin_header=true` 时，NPS 向后端添加 `X-Forwarded-For`、`X-Real-IP`、`X-Forwarded-Host`、`X-Forwarded-Proto`、`X-Forwarded-Port` 和 `X-Real-Proto`，并支持覆盖、保留追加或仅信任指定代理。代理链路和信任边界见[部署与运行说明](description.md#获取访问者真实-ip)。
 
 ### HTTP 缓存
 

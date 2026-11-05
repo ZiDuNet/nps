@@ -681,7 +681,8 @@ POST /global/certificate/config/
 `ssl_cache_reload`、`ssl_cache_idle`、`web_open_ssl`、`web_cert_file`、
 `web_key_file`、`ip_register_cert_file`、`ip_register_key_file`、
 `tls_enable` 和 `tls_bridge_port`。保存会保留注释、自定义项及其他未提交配置；
-成功响应中的 `restart_required` 表示是否需要重启 NPS。
+Bridge TLS 证书会立即校验并热加载；其他监听或 TLS 开关字段保存后，
+`restart_required` 表示是否需要重启 NPS。
 
 ---
 
@@ -706,7 +707,7 @@ GET /global/bridgecertificate/
 
 仅管理员可调用。返回当前运行证书与 `nps.conf` 配置证书的状态、有效期、
 剩余天数、SAN、密钥算法、链条数和 SHA-256 指纹，并标记证书变更是否需要
-重启；不会返回私钥内容。
+排查或重试热加载；不会返回私钥内容。
 
 ---
 
@@ -732,7 +733,8 @@ POST /global/bridgecertificate/
 `paste` 时把材料写入 `conf/bridgessl/bridge_server.pem` 和
 `conf/bridgessl/bridge_server.key` 后保存路径；`mode=clear` 删除两个配置键。
 保存只会更新 `nps.conf` 中现有的 `bridge_cert_file`、`bridge_key_file`，
-保留其他字段、注释和自定义项，保存后需要重启 NPS。标准 `/api/v1` 说明见
+保留其他字段、注释和自定义项。保存会立即校验并热加载证书，新 TLS 握手使用
+新证书；热加载失败时继续使用上一份有效证书。标准 `/api/v1` 说明见
 [对外 API v1](../api.md#bridge-tls-证书接口)。
 
 ---

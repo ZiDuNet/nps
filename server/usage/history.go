@@ -77,6 +77,7 @@ type Options struct {
 	Retention1m    time.Duration
 	Retention5m    time.Duration
 	SaveEvery      int
+	MaxResources   int
 }
 
 var (
@@ -103,6 +104,7 @@ func Start() {
 			Retention1m:    time.Duration(configInt("usage_history_1m_hours", 48)) * time.Hour,
 			Retention5m:    time.Duration(configInt("usage_history_5m_days", 90)) * 24 * time.Hour,
 			SaveEvery:      configInt("usage_history_save_every", 5),
+			MaxResources:   configInt("usage_history_max_resources", 20000),
 		}
 		if options.SampleInterval < 10*time.Second {
 			options.SampleInterval = time.Minute
@@ -145,6 +147,9 @@ func New(options Options) *History {
 	}
 	if options.SaveEvery <= 0 {
 		options.SaveEvery = 5
+	}
+	if options.MaxResources <= 0 {
+		options.MaxResources = 20000
 	}
 	history := &History{
 		resources: make(map[string]*Resource),
@@ -201,6 +206,7 @@ func (h *History) Load() error {
 		resource.Points1m = trimBefore(resource.Points1m, time.Now().Add(-h.options.Retention1m).Unix())
 		resource.Points5m = trimBefore(resource.Points5m, time.Now().Add(-h.options.Retention5m).Unix())
 	}
+	h.trimResourcesLocked()
 	return nil
 }
 
@@ -284,9 +290,7 @@ func (h *History) Sample(now time.Time) {
 		resource.Points1m = trimBefore(resource.Points1m, cutoff1m)
 		resource.Points5m = trimBefore(resource.Points5m, cutoff5m)
 	}
-	if len(h.resources) > configInt("usage_history_max_resources", 20000) {
-		h.trimResources()
-	}
+	h.trimResourcesLocked()
 }
 
 func appendPoint(resource *Resource, points *[]Point, point Point) {
@@ -312,15 +316,45 @@ func trimBefore(points []Point, cutoff int64) []Point {
 	return append([]Point(nil), points[index:]...)
 }
 
-func (h *History) trimResources() {
-	keys := make([]string, 0, len(h.resources))
-	for key, resource := range h.resources {
-		if resource != nil && len(resource.Points1m) == 0 && len(resource.Points5m) == 0 {
-			keys = append(keys, key)
-		}
+func (h *History) trimResourcesLocked() {
+	if h == nil || h.options.MaxResources <= 0 || len(h.resources) <= h.options.MaxResources {
+		return
 	}
-	for _, key := range keys {
-		delete(h.resources, key)
+	type candidate struct {
+		key  string
+		last int64
+	}
+	candidates := make([]candidate, 0, len(h.resources))
+	for key, resource := range h.resources {
+		if key == "global:0" || resource == nil {
+			continue
+		}
+		last := int64(0)
+		if previous, ok := h.previous[key]; ok && previous.at.Unix() > last {
+			last = previous.at.Unix()
+		}
+		if n := len(resource.Points1m); n > 0 && resource.Points1m[n-1].Time > last {
+			last = resource.Points1m[n-1].Time
+		}
+		if n := len(resource.Points5m); n > 0 && resource.Points5m[n-1].Time > last {
+			last = resource.Points5m[n-1].Time
+		}
+		candidates = append(candidates, candidate{key: key, last: last})
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].last != candidates[j].last {
+			return candidates[i].last < candidates[j].last
+		}
+		return candidates[i].key < candidates[j].key
+	})
+	remove := len(h.resources) - h.options.MaxResources
+	for _, item := range candidates {
+		if remove <= 0 {
+			break
+		}
+		delete(h.resources, item.key)
+		delete(h.previous, item.key)
+		remove--
 	}
 }
 

@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.40</sub>
+﻿# NPS <sub>v1.1.41</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -193,6 +193,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.41** (2026-11-06) - Added multi-instance NPC identity, persisted usage history with dashboard trends and scoped API access, complete forwarded-header and HTTP timeout controls, optional isolated backend connection reuse, and Bridge certificate hot reload. Fixed dashboard shortcut URLs and NPC service update paths.
 
 - **v1.1.40** (2026-11-02) - Runtime-only NPC resources now use independent temporary IDs, preventing persistent JSON ID gaps; client, tunnel, host, and user tables add stable live-rate/connection sorting, and all list pages share 20/50/100/200 pagination.
 

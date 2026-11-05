@@ -70,7 +70,7 @@ ip_register_port=0
 # ip_register_key_file=conf/register.key
 ```
 
-将 `ip_register_port` 设为非 0 才会启用；默认回环绑定。需要让其他机器访问时，应明确绑定受控网卡，优先启用 HTTPS。`allow_x_real_ip` 默认开启（`true`）：页面经过反向代理时会读取代理覆盖的 `X-Real-IP`（无效时回退到 `X-Forwarded-For` 首地址），只有显式关闭后才直接使用 TCP 对端地址；也支持用匹配的 `X-NPS-Http-Only` 密钥只为特定入口开启真实 IP 头。页面会明确显示当前使用的是反代传递的公网 IP 还是 NPS 看到的代理 IP；浏览器本身不能可靠地直接提供公网 IP。`trusted_proxy_ips` 仅为旧配置兼容字段，不是 Docker + Nginx 的额外必填项。若登记页或管理面板直接暴露在公网且可被任意客户端直达，应显式关闭 `allow_x_real_ip`，防止伪造请求头绕过 IP 规则。
+将 `ip_register_port` 设为非 0 才会启用；默认回环绑定。需要让其他机器访问时，应明确绑定受控网卡，优先启用 HTTPS。`allow_x_real_ip` 默认开启（`true`）：页面经过反向代理时会读取代理覆盖的 `X-Real-IP`（无效时回退到 `X-Forwarded-For` 首地址），只有显式关闭后才直接使用 TCP 对端地址；也支持用匹配的 `X-NPS-Http-Only` 密钥只为特定入口开启真实 IP 头。页面会明确显示当前使用的是反代传递的公网 IP 还是 NPS 看到的代理 IP；浏览器本身不能可靠地直接提供公网 IP。`http_forwarded_trust_mode=legacy` 保持历史兼容行为；改为 `strict` 后，只有 TCP 对端命中 `trusted_proxy_ips` 才会读取其转发来源头，因此 Docker + Nginx 场景需要在启用严格模式时显式填写代理网段。若登记页或管理面板直接暴露在公网且可被任意客户端直达，应显式关闭 `allow_x_real_ip`，防止伪造请求头绕过 IP 规则。
 
 严格 IP 策略依赖 NPS 实际看到的来源 IP。若 NPS 位于 CDN、反向代理或四层负载均衡之后，先确认源地址传递方式；不要把可由任意客户端伪造的 HTTP Header 当作网络访问控制依据。
 

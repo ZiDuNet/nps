@@ -129,6 +129,40 @@ func TestHistoryStopSavesCurrentSnapshot(t *testing.T) {
 	}
 }
 
+func TestHistoryEnforcesResourceLimitAndKeepsGlobal(t *testing.T) {
+	history := New(Options{
+		SampleInterval: time.Minute,
+		Retention1m:    48 * time.Hour,
+		Retention5m:    90 * 24 * time.Hour,
+		MaxResources:   2,
+	})
+	snapshot := totalsSnapshot{resources: map[string]*totalResource{
+		"client:1": {
+			Resource: Resource{Key: "client:1", Scope: ScopeClient, ID: 1},
+		},
+		"client:2": {
+			Resource: Resource{Key: "client:2", Scope: ScopeClient, ID: 2},
+		},
+		"global:0": {
+			Resource: Resource{Key: "global:0", Scope: ScopeGlobal},
+		},
+	}}
+	history.collect = func() totalsSnapshot { return snapshot }
+	now := time.Now().Truncate(time.Minute)
+	history.Sample(now)
+	history.Sample(now.Add(time.Minute))
+
+	if len(history.resources) != 2 {
+		t.Fatalf("resource count = %d, want 2", len(history.resources))
+	}
+	if history.resources["global:0"] == nil {
+		t.Fatal("global resource must be retained")
+	}
+	if _, exists := history.previous["client:1"]; exists {
+		t.Fatal("evicted resource retained its cumulative baseline")
+	}
+}
+
 func testTotals(upload, download int64) totalsSnapshot {
 	return totalsSnapshot{resources: map[string]*totalResource{
 		"client:1": {

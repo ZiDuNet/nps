@@ -42,7 +42,7 @@ API 文档固定发布在：
 
 | 资源 | 路径 | 方法 |
 | --- | --- | --- |
-| 概览 | `/api/v1/status`、`/api/v1/status/live`、`/api/v1/overview` | `GET` |
+| 概览 | `/api/v1/status`、`/api/v1/status/live`、`/api/v1/status/history`、`/api/v1/overview` | `GET` |
 | 客户端 | `/api/v1/clients` | `GET`、`POST` |
 | 客户端 | `/api/v1/clients/{id}` | `GET`、`PATCH`、`PUT`、`DELETE` |
 | 客户端 | `/api/v1/clients/{id}/status`、`/upgrade` | `POST` |
@@ -114,8 +114,10 @@ QUIC/HTTP/3 与加密内层链路共用这套证书，不支持多证书列表�
 `upload` 与 `paste` 的提交内容会安全写入
 `conf/bridgessl/bridge_server.pem`、`conf/bridgessl/bridge_server.key`，接口响应与
 `nps.conf` 只使用相对路径。`mode=clear` 会删除两个配置键，重启后回到临时
-自签名证书。保存成功后 `restart_required=true`，可再调用
-`POST /api/v1/global/config/restart`，或手动重启 NPS；不会热加载证书。
+自签名证书；清空动作会立即切回临时证书。其余保存动作会同步校验并热加载，
+新 TLS 握手无需重启即可使用新证书。若热加载失败，接口返回
+`restart_required=true`，服务端继续使用上一份有效证书；此时可修复证书文件
+后再保存，或调用 `POST /api/v1/global/config/restart`。
 
 示例：
 
@@ -202,6 +204,70 @@ GET /api/v1/status/live
 日志仍由服务端按 `UserId` 授权范围过滤；用户、全局参数等管理资源只允许
 管理员凭据访问。API 密钥与登录 Session 相互独立，浏览器 Cookie 不能替代
 本接口要求的凭据。
+
+### 历史用量趋势
+
+```http
+GET /api/v1/status/history
+```
+
+该接口读取持久化的 NPS 代理用量，用于仪表盘趋势、配额观察和后续计费分析。
+数据按 `usage_history_interval` 采样；分钟精度默认保留 48 小时，五分钟精度
+默认保留 90 天。P2P 直连不计入历史用量。
+
+| 参数 | 说明 |
+| --- | --- |
+| `scope` | `global`、`user`、`client`、`tunnel` 或 `host`；默认 `global` |
+| `id` | 当前范围的资源 ID；`user`/`client` 范围也可以分别使用 `user_id`、`client_id` |
+| `from` | 起始时间，支持 RFC3339 或 Unix 秒；默认结束时间前 24 小时 |
+| `to` | 结束时间，支持 RFC3339 或 Unix 秒；默认当前时间 |
+| `bucket` | `1m` 或 `5m`；留空时，范围不超过 48 小时使用 `1m`，否则使用 `5m` |
+
+管理员可以查询任意范围。普通用户 Token 只能查询自己的用户、所属客户端、
+所属隧道和域名规则；即使传入其他资源 ID，也不会扩大授权范围。查询某一个
+用户或客户端时，应同时传入对应范围，例如：
+
+```bash
+curl -s "http://127.0.0.1:8081/api/v1/status/history?scope=user&id=12&bucket=1m&from=2026-11-05T00:00:00Z&to=2026-11-06T00:00:00Z" \
+  -H "Authorization: Bearer npsu_REPLACE_WITH_TOKEN"
+```
+
+成功响应的 `data` 包含查询范围、采样精度、时间范围和服务端实际使用的
+`interval_seconds`。`resources` 数组中只填充与 `bucket` 对应的
+`points_1m` 或 `points_5m`：
+
+```json
+{
+  "status": 1,
+  "code": "ok",
+  "msg": "ok",
+  "data": {
+    "generated_at": "2026-11-06T12:00:00+08:00",
+    "scope": "user",
+    "bucket": "1m",
+    "interval_seconds": 60,
+    "from": "2026-11-05T12:00:00+08:00",
+    "to": "2026-11-06T12:00:00+08:00",
+    "resources": [
+      {
+        "key": "user:12",
+        "scope": "user",
+        "id": 12,
+        "name": "alice",
+        "total_bytes": 10485760,
+        "points_1m": [
+          {"t": 1793937600, "u": 65536, "d": 131072}
+        ]
+      }
+    ]
+  },
+  "request_id": "..."
+}
+```
+
+每个采样点中 `t` 是 Unix 秒，`u`、`d` 是该采样窗口内的上传和下载字节数。
+要换算成平均速率，使用 `u / interval_seconds` 和 `d / interval_seconds`。
+历史采集关闭或尚未启动时接口返回 `503 usage_history_failed`。
 
 ### 管理员创建注册用户
 

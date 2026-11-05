@@ -30,7 +30,7 @@ func TestLiveClientSnapshotsHonorsAllowlist(t *testing.T) {
 	noDisplay := &file.Client{Id: noDisplayID, UserId: 42, NoDisplay: true, Flow: &file.Flow{}}
 	atomic.StoreInt32(&visible.NowConn, 3)
 	atomic.StoreInt32(&hidden.NowConn, 1)
-	db := file.GetDb().JsonDb.Clients
+	db := &file.GetDb().JsonDb.Clients
 	db.Store(visibleID, visible)
 	db.Store(hiddenID, hidden)
 	db.Store(noDisplayID, noDisplay)

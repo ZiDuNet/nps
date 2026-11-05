@@ -26,8 +26,9 @@ Docker 部署时可在容器内设置 `NPS_WEB_IP=0.0.0.0` 让前置代理访问
 
 `allow_x_real_ip=true` 时，管理面板、IP 登记页和 HTTP Host 来源识别会优先读取
 `X-Real-IP`，其次读取 `X-Forwarded-For` 的第一项。前置代理必须**覆盖**这些
-请求头，不能保留客户端提交值后再追加。该功能不要求填写
-`trusted_proxy_ips`；后者仅为旧 Web 部署保留的兼容字段。
+请求头，不能保留客户端提交值后再追加。默认 `legacy` 模式保持历史行为；
+设置 `http_forwarded_trust_mode=strict` 后，只有 TCP 对端命中
+`trusted_proxy_ips` 时才会采用这些请求头。
 
 当前 Web 管理面板不执行全局同源/Origin 校验。反向代理应保留正确的 `Host`，
 并按需设置 `X-Forwarded-Host` 和 `X-Forwarded-Proto`；`web_base_url` 只负责
@@ -59,7 +60,8 @@ NPC 来源地址，不要和 Web/HTTP Host 的 `allow_x_real_ip` 混为一谈。
 | HTTP/3 域名代理 | 按配置 | UDP | 同时需要 HTTPS 入口、证书和 `http3_proxy_port` |
 
 只开放实际使用的端口。Bridge TLS、WSS、QUIC 和加密内层链路共用
-`bridge_cert_file` / `bridge_key_file`；替换证书后需重启 NPS。
+`bridge_cert_file` / `bridge_key_file`；有效证书文件替换后，后续 TLS 握手会
+自动加载，无需重启 NPS。
 
 P2P 若设置 `p2p_port=6000`，旧版 P2P 使用 UDP `6000-6002`，新版 NAT
 observer 还需 `6003-6005`。新旧端口不能只开放一组。

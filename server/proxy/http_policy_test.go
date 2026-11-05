@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/astaxie/beego"
 )
 
 type deadlineRecordingConn struct {
@@ -169,5 +171,32 @@ func TestStreamingResponseDetection(t *testing.T) {
 				t.Fatalf("isStreamingResponse() = %t, want %t", got, test.want)
 			}
 		})
+	}
+}
+
+func TestConfigSecondsFallsBackForMalformedValues(t *testing.T) {
+	const key = "test_http_timeout_fallback"
+	previous := beego.AppConfig.String(key)
+	t.Cleanup(func() { _ = beego.AppConfig.Set(key, previous) })
+
+	if err := beego.AppConfig.Set(key, "not-a-number"); err != nil {
+		t.Fatal(err)
+	}
+	if got := configSeconds(key, 17); got != 17*time.Second {
+		t.Fatalf("malformed timeout = %s, want 17s", got)
+	}
+
+	if err := beego.AppConfig.Set(key, "0"); err != nil {
+		t.Fatal(err)
+	}
+	if got := configSeconds(key, 17); got != 0 {
+		t.Fatalf("explicit zero timeout = %s, want unlimited", got)
+	}
+
+	if err := beego.AppConfig.Set(key, "-5"); err != nil {
+		t.Fatal(err)
+	}
+	if got := configSeconds(key, 17); got != 0 {
+		t.Fatalf("negative timeout = %s, want unlimited", got)
 	}
 }
