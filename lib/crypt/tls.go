@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -27,18 +28,38 @@ import (
 )
 
 var (
-	cert     tls.Certificate
-	rsaKey   *rsa.PrivateKey
-	rsaKeyMu sync.Mutex
+	activeCert atomic.Pointer[tls.Certificate]
+	rsaKey     *rsa.PrivateKey
+	rsaKeyMu   sync.Mutex
 
+	bridgeCertMu        sync.Mutex
+	bridgeCertPath      string
+	bridgeKeyPath       string
+	bridgeCertModTime   time.Time
+	bridgeKeyModTime    time.Time
+	bridgeCertSize      int64
+	bridgeKeySize       int64
+	lastReloadAttempt   time.Time
+	lastReloadAttemptV  atomic.Int64
+	lastReloadErrorV    atomic.Value
 	certLoadedFromFiles atomic.Bool
 )
 
 func InitTls() {
+	bridgeCertMu.Lock()
+	bridgeCertPath, bridgeKeyPath = "", ""
+	bridgeCertModTime, bridgeKeyModTime = time.Time{}, time.Time{}
+	bridgeCertSize, bridgeKeySize = 0, 0
+	bridgeCertMu.Unlock()
+	lastReloadErrorV.Store("")
 	certLoadedFromFiles.Store(false)
 	c, k, err := generateKeyPair("NPS Org")
 	if err == nil {
-		cert, err = tls.X509KeyPair(c, k)
+		var loaded tls.Certificate
+		loaded, err = tls.X509KeyPair(c, k)
+		if err == nil {
+			storeCertificate(loaded)
+		}
 	}
 	if err != nil {
 		log.Fatalln("Error initializing crypto certs", err)
@@ -57,6 +78,83 @@ func InitTlsFromFiles(certPath, keyPath string) error {
 	if certPath == "" || keyPath == "" {
 		return fmt.Errorf("Bridge certificate and key paths must both be configured")
 	}
+	bridgeCertMu.Lock()
+	bridgeCertPath = certPath
+	bridgeKeyPath = keyPath
+	bridgeCertMu.Unlock()
+	if err := ReloadBridgeCertificate(); err != nil {
+		return err
+	}
+	certLoadedFromFiles.Store(true)
+	ensureLoginRSAKey()
+	return nil
+}
+
+// ConfigureBridgeCertificateFiles updates the runtime hot-reload source. It is
+// used by the management panel after nps.conf is atomically saved, so changing
+// the path takes effect without restarting NPS.
+func ConfigureBridgeCertificateFiles(certPath, keyPath string) error {
+	certPath = strings.TrimSpace(certPath)
+	keyPath = strings.TrimSpace(keyPath)
+	if certPath == "" || keyPath == "" {
+		return errors.New("Bridge certificate and key paths must both be configured")
+	}
+	bridgeCertMu.Lock()
+	bridgeCertPath = certPath
+	bridgeKeyPath = keyPath
+	bridgeCertModTime, bridgeKeyModTime = time.Time{}, time.Time{}
+	bridgeCertSize, bridgeKeySize = 0, 0
+	bridgeCertMu.Unlock()
+	return ReloadBridgeCertificate()
+}
+
+func GetCert() tls.Certificate {
+	_ = maybeReloadBridgeCertificate()
+	return GetCertWithoutReload()
+}
+
+func GetCertWithoutReload() tls.Certificate {
+	if loaded := activeCert.Load(); loaded != nil {
+		return *loaded
+	}
+	return tls.Certificate{}
+}
+
+// GetCertificate is the tls.Config callback used by every Bridge-facing TLS
+// endpoint. It checks the configured files and atomically reloads a complete,
+// valid certificate pair before a new TLS handshake.
+func GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	certificate := GetCert()
+	if len(certificate.Certificate) == 0 {
+		return nil, errors.New("Bridge TLS certificate is unavailable")
+	}
+	return &certificate, nil
+}
+
+// IsCertLoadedFromFiles reports whether the active runtime certificate came
+// from the configured files instead of the generated temporary certificate.
+func IsCertLoadedFromFiles() bool {
+	return certLoadedFromFiles.Load()
+}
+
+// ReloadBridgeCertificate validates and installs the configured certificate
+// pair. A malformed or half-written renewal leaves the last known-good
+// certificate active.
+func ReloadBridgeCertificate() error {
+	bridgeCertMu.Lock()
+	certPath, keyPath := bridgeCertPath, bridgeKeyPath
+	bridgeCertMu.Unlock()
+	if certPath == "" || keyPath == "" {
+		return errors.New("Bridge certificate and key paths must both be configured")
+	}
+	certInfo, err := os.Stat(certPath)
+	if err != nil {
+		return fmt.Errorf("read Bridge certificate metadata %q: %w", certPath, err)
+	}
+	keyInfo, err := os.Stat(keyPath)
+	if err != nil {
+		return fmt.Errorf("read Bridge private key metadata %q: %w", keyPath, err)
+	}
 	certPEM, err := os.ReadFile(certPath)
 	if err != nil {
 		return fmt.Errorf("read Bridge certificate %q: %w", certPath, err)
@@ -69,28 +167,97 @@ func InitTlsFromFiles(certPath, keyPath string) error {
 	if err != nil {
 		return fmt.Errorf("parse Bridge certificate: %w", err)
 	}
-	cert = loaded
+	if len(loaded.Certificate) == 0 {
+		return errors.New("Bridge certificate chain is empty")
+	}
+	if loaded.Leaf == nil {
+		leaf, parseErr := x509.ParseCertificate(loaded.Certificate[0])
+		if parseErr != nil {
+			return fmt.Errorf("parse Bridge leaf certificate: %w", parseErr)
+		}
+		loaded.Leaf = leaf
+	}
+	storeCertificate(loaded)
+	bridgeCertMu.Lock()
+	bridgeCertModTime = certInfo.ModTime()
+	bridgeKeyModTime = keyInfo.ModTime()
+	bridgeCertSize = certInfo.Size()
+	bridgeKeySize = keyInfo.Size()
+	lastReloadAttempt = time.Now()
+	bridgeCertMu.Unlock()
+	lastReloadAttemptV.Store(time.Now().UnixNano())
+	lastReloadErrorV.Store("")
 	certLoadedFromFiles.Store(true)
 	ensureLoginRSAKey()
+	logs.Info("Bridge 证书已重新加载")
 	return nil
 }
 
-func GetCert() tls.Certificate {
-	return cert
+// BridgeCertificateLastReloadError exposes the most recent automatic reload
+// failure without changing the active certificate. It is useful for status
+// pages and tests.
+func BridgeCertificateLastReloadError() string {
+	value, _ := lastReloadErrorV.Load().(string)
+	return value
 }
 
-// IsCertLoadedFromFiles reports whether the process is currently serving the
-// operator-configured Bridge certificate instead of the generated temporary
-// certificate. It is used by the management panel to distinguish the active
-// certificate from a newly saved, not-yet-restarted configuration.
-func IsCertLoadedFromFiles() bool {
-	return certLoadedFromFiles.Load()
+func storeCertificate(certificate tls.Certificate) {
+	copyCertificate := certificate
+	activeCert.Store(&copyCertificate)
+}
+
+func maybeReloadBridgeCertificate() error {
+	bridgeCertMu.Lock()
+	certPath, keyPath := bridgeCertPath, bridgeKeyPath
+	knownCertMod, knownKeyMod := bridgeCertModTime, bridgeKeyModTime
+	knownCertSize, knownKeySize := bridgeCertSize, bridgeKeySize
+	bridgeCertMu.Unlock()
+	if certPath == "" || keyPath == "" {
+		return nil
+	}
+	certInfo, certErr := os.Stat(certPath)
+	keyInfo, keyErr := os.Stat(keyPath)
+	if certErr != nil || keyErr != nil {
+		bridgeCertMu.Lock()
+		lastReloadAttempt = time.Now()
+		bridgeCertMu.Unlock()
+		lastReloadAttemptV.Store(time.Now().UnixNano())
+		lastReloadErrorV.Store(firstError(certErr, keyErr).Error())
+		return firstError(certErr, keyErr)
+	}
+	unchanged := certInfo.ModTime().Equal(knownCertMod) && keyInfo.ModTime().Equal(knownKeyMod) &&
+		certInfo.Size() == knownCertSize && keyInfo.Size() == knownKeySize
+	if unchanged {
+		return nil
+	}
+	now := time.Now()
+	lastAttempt := time.Unix(0, lastReloadAttemptV.Load())
+	if now.Sub(lastAttempt) < time.Second {
+		return nil
+	}
+	if err := ReloadBridgeCertificate(); err != nil {
+		lastReloadAttemptV.Store(now.UnixNano())
+		lastReloadErrorV.Store(err.Error())
+		logs.Warn("Bridge 证书文件已变化，但自动重载失败，继续使用上一份有效证书: %v", err)
+		return err
+	}
+	return nil
+}
+
+func firstError(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetCertFingerprint returns the SHA-256 fingerprint of the server
 // certificate's DER bytes. Clients can pin this value when using the
 // self-signed TLS Bridge certificate.
 func GetCertFingerprint() string {
+	cert := GetCert()
 	if len(cert.Certificate) == 0 {
 		return ""
 	}
@@ -104,6 +271,7 @@ func GetCertFingerprint() string {
 // normal trust store and hostname verification so automatic renewal does not
 // invalidate every existing NPC command.
 func IsCertSelfSigned() bool {
+	cert := GetCert()
 	return IsCertificateSelfSigned(cert)
 }
 
@@ -141,6 +309,7 @@ func GetCertificateFingerprint(certificate tls.Certificate) []byte {
 // modern P2P. The NPC certificate is ephemeral and never replaces the NPS
 // server's configured Bridge or HTTPS certificate.
 func EnsureTls() {
+	cert := GetCert()
 	if len(cert.Certificate) == 0 {
 		InitTls()
 	}
@@ -157,6 +326,7 @@ func ensureLoginRSAKey() {
 	if rsaKey != nil {
 		return
 	}
+	cert := GetCertWithoutReload()
 	if key, ok := cert.PrivateKey.(*rsa.PrivateKey); ok && key != nil {
 		rsaKey = key
 		return
@@ -276,13 +446,7 @@ func NewPinnedTlsServerConfig(fingerprint []byte, certificate tls.Certificate, a
 }
 
 func NewTlsServerConn(conn net.Conn) net.Conn {
-	var err error
-	if err != nil {
-		logs.Error(err)
-		os.Exit(0)
-		return nil
-	}
-	config := &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+	config := &tls.Config{GetCertificate: GetCertificate, MinVersion: tls.VersionTLS12}
 	return tls.Server(conn, config)
 }
 

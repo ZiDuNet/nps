@@ -221,8 +221,8 @@ func TestSaveBridgeCertificatePathPreservesConfigAndClearRemovesPair(t *testing.
 	if response["status"] != float64(1) {
 		t.Fatalf("save response = %#v", response)
 	}
-	if response["restart_required"] != true {
-		t.Fatalf("save response must require restart: %#v", response)
+	if response["restart_required"] != false || response["hot_reloaded"] != true {
+		t.Fatalf("save response must report a hot reload: %#v", response)
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {

@@ -50,6 +50,7 @@ type httpServer struct {
 	addOrigin     bool
 	cache         *cache.Cache
 	cacheLen      int
+	httpPolicy    httpProxyPolicy
 }
 
 // http3Service is the lifecycle surface shared by the optional HTTP/3
@@ -112,6 +113,7 @@ func NewHttp(bridge *bridge.Bridge, c *file.Tunnel, httpPort, httpsPort int, use
 		useCache:     useCache,
 		cacheLen:     cacheLen,
 		addOrigin:    addOrigin,
+		httpPolicy:   loadHTTPProxyPolicy(),
 	}
 	if useCache {
 		httpServer.cache = cache.New(cacheLen)
@@ -391,6 +393,10 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		}
 		c.Close()
 	}()
+	policy := s.httpPolicy
+	if policy == (httpProxyPolicy{}) {
+		policy = loadHTTPProxyPolicy()
+	}
 	firstReq := true
 	var responseDone chan struct{}
 	var responseStreaming chan struct{}
@@ -491,13 +497,20 @@ reset:
 		logs.Warn("bridge returned nil HTTP target for %s", lk.Host)
 		return
 	}
-	connClient = conn.GetConnWithUserLimits(target, lk.Crypt, lk.Compress, clientRate, true, nil, host, file.UserRateLimiterForClient(hostClient))
+	backendTimeout := newBackendTimeoutConn(target, policy)
+	backendTimeout.SetWritePolicy(policy.backendUploadStall, 0)
+	backendTimeout.SetReadPolicy(policy.backendReadStall, policy.backendResponseBodyTotal)
+	connClient = conn.GetConnWithUserLimits(backendTimeout, lk.Crypt, lk.Compress, clientRate, true, nil, host, file.UserRateLimiterForClient(hostClient))
 	if targetIsHTTPS {
 		sni := hostName
 		if hostChange != "" {
 			sni = hostChange
 		}
+		if policy.backendTLSHandshake > 0 {
+			_ = backendTimeout.SetDeadline(time.Now().Add(policy.backendTLSHandshake))
+		}
 		tlsConn, tlsErr := conn.GetTlsConn(readWriteCloserAsNetConn(connClient), sni)
+		_ = backendTimeout.SetDeadline(time.Time{})
 		if tlsErr != nil {
 			logs.Warn("HTTPS backend handshake failed for host %s target %s: %v", hostName, targetAddr, tlsErr)
 			return
@@ -511,6 +524,7 @@ reset:
 	wg.Add(1)
 	responseStarted = true
 	responseWaitOnExit = r.Close || strings.EqualFold(strings.TrimSpace(r.Header.Get("Connection")), "close")
+	clientResponseTimeout := newTimeoutConn(c, policy)
 	go func(targetConn io.ReadWriteCloser, requestHost *file.Host, streaming, done chan struct{}) {
 		defer targetConn.Close()
 		defer func() {
@@ -521,8 +535,29 @@ reset:
 			close(done)
 		}()
 
-		probe := newResponseInspector(newResponseHeaderTransform(targetConn, requestHost), traffic.Resource{Kind: "host", ID: currentHost.Id}, requestQueue, streaming)
-		if _, err1 := goroutine.CopyBufferWithFlowsDirection(c, probe, hostFlow, []*file.Flow{clientFlow}, nil, requestHost, "", goroutine.FlowOutbound); err1 != nil {
+		probe := newResponseInspector(
+			newResponseHeaderTransform(targetConn, requestHost),
+			traffic.Resource{Kind: "host", ID: currentHost.Id},
+			requestQueue,
+			streaming,
+			func(response *http.Response) {
+				if response == nil {
+					return
+				}
+				contentType := strings.ToLower(strings.TrimSpace(response.Header.Get("Content-Type")))
+				if response.StatusCode == http.StatusSwitchingProtocols ||
+					strings.HasPrefix(contentType, "text/event-stream") ||
+					strings.HasPrefix(contentType, "application/grpc") ||
+					strings.HasPrefix(contentType, "multipart/x-mixed-replace") {
+					backendTimeout.ExemptReadTimeout()
+					clientResponseTimeout.SetWritePolicy(policy.clientResponseStall, 0)
+					return
+				}
+				backendTimeout.SetReadPolicy(policy.backendReadStall, policy.backendResponseBodyTotal)
+				clientResponseTimeout.SetWritePolicy(policy.clientResponseStall, policy.clientResponseTotal)
+			},
+		)
+		if _, err1 := goroutine.CopyBufferWithFlowsDirection(clientResponseTimeout, probe, hostFlow, []*file.Flow{clientFlow}, nil, requestHost, "", goroutine.FlowOutbound); err1 != nil {
 			return
 		}
 	}(connClient, currentHost, responseStreaming, responseDone)
@@ -594,7 +629,8 @@ reset:
 			return
 		}
 		if firstReq {
-			if err = writeRequestRaw(lenConn, r, br, requestBody); err != nil {
+			requestBodyReader := newDeadlineReader(br, c.SetReadDeadline, policy.clientUploadStall, policy.clientUploadTotal)
+			if err = writeRequestRaw(lenConn, r, requestBodyReader, requestBody); err != nil {
 				logs.Error(err)
 				break
 			}
@@ -602,12 +638,14 @@ reset:
 			if r.Body != nil && requestBody.Active() {
 				r.Body = &captureReadCloser{ReadCloser: r.Body, capture: requestBody}
 			}
+			r.Body = wrapClientRequestBody(r.Body, c.SetReadDeadline, policy)
 			if err = r.Write(lenConn); err != nil {
 				logs.Error(err)
 				break
 			}
 			requestBody.End()
 		}
+		_ = c.SetReadDeadline(time.Time{})
 		// Keep the header deadline active while writeRequestRaw forwards the
 		// request body. A client that drips a body must not hold a hijacked
 		// connection forever.
@@ -689,7 +727,7 @@ reset:
 	waitForResponse()
 }
 
-func writeRequestRaw(w io.Writer, r *http.Request, br *bufio.Reader, capture *traffic.BodyCapture) error {
+func writeRequestRaw(w io.Writer, r *http.Request, br io.Reader, capture *traffic.BodyCapture) error {
 	bw := bufio.NewWriter(w)
 	if _, err := fmt.Fprintf(bw, "%s %s HTTP/1.1\r\n", r.Method, r.URL.RequestURI()); err != nil {
 		return err
@@ -756,7 +794,11 @@ func copyFixedBody(w io.Writer, br io.Reader, length int64, capture *traffic.Bod
 	return nil
 }
 
-func copyRawChunked(w io.Writer, br *bufio.Reader, capture *traffic.BodyCapture) error {
+func copyRawChunked(w io.Writer, source io.Reader, capture *traffic.BodyCapture) error {
+	br, ok := source.(*bufio.Reader)
+	if !ok {
+		br = bufio.NewReader(source)
+	}
 	for {
 		line, err := br.ReadString('\n')
 		if err != nil {

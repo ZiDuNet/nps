@@ -92,6 +92,7 @@ type responseInspector struct {
 	resource     traffic.Resource
 	requests     *requestQueue
 	streaming    chan struct{}
+	onHeaders    func(*http.Response)
 	streamOnce   sync.Once
 	buffer       []byte
 	state        int
@@ -105,12 +106,17 @@ type responseInspector struct {
 	finishedOnce sync.Once
 }
 
-func newResponseInspector(reader io.Reader, resource traffic.Resource, requests *requestQueue, streaming chan struct{}) *responseInspector {
+func newResponseInspector(reader io.Reader, resource traffic.Resource, requests *requestQueue, streaming chan struct{}, onHeaders ...func(*http.Response)) *responseInspector {
+	var headerCallback func(*http.Response)
+	if len(onHeaders) > 0 {
+		headerCallback = onHeaders[0]
+	}
 	return &responseInspector{
 		reader:    reader,
 		resource:  resource,
 		requests:  requests,
 		streaming: streaming,
+		onHeaders: headerCallback,
 		state:     responseHeaders,
 	}
 }
@@ -186,6 +192,9 @@ func (r *responseInspector) parseHeaders() {
 		return
 	}
 	defer response.Body.Close()
+	if r.onHeaders != nil {
+		r.onHeaders(response)
+	}
 
 	if !r.started {
 		r.request, r.started = r.requests.next()

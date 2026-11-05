@@ -40,6 +40,9 @@ const (
 	// REPORT_LOCAL_IP: server requests client local/private IPs on WORK_MAIN.
 	// New clients reply with WriteLenContent; old clients ignore the flag (server times out).
 	REPORT_LOCAL_IP = "rlip"
+	// CLIENT_IDENTITY asks a compatible NPC to identify one process instance.
+	// The reply is a length-prefixed JSON ClientIdentity with no flag.
+	CLIENT_IDENTITY = "idnt"
 	NEW_TASK        = "task"
 	NEW_CONF        = "conf"
 	NEW_HOST        = "host"

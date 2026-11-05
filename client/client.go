@@ -4,11 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +31,7 @@ import (
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/p2pproto"
+	"ehang.io/nps/lib/version"
 )
 
 // ClientLogger receives logs emitted by one TRP client instance. It lets
@@ -119,6 +124,9 @@ type TRPClient struct {
 	remoteHealths  []*file.Health
 	p2pManager     *P2PManager
 	serverInfo     serverInfo
+	instanceID     string
+	instanceHost   string
+	instanceStart  time.Time
 }
 
 // new client
@@ -138,6 +146,11 @@ func NewRPClientWithTLS(svraddr string, vKey string, bridgeConnType string, prox
 	if cnf != nil && cnf.CommonConfig != nil {
 		p2pManager = NewP2PManager(context.Background(), cnf.CommonConfig)
 	}
+	instanceID := make([]byte, 16)
+	if _, err := rand.Read(instanceID); err != nil {
+		instanceID = []byte(strconv.FormatInt(common.TimeNow().UnixNano(), 10))
+	}
+	hostname, _ := os.Hostname()
 	return &TRPClient{
 		svrAddr:        svraddr,
 		tlsEnable:      tlsEnable,
@@ -154,6 +167,9 @@ func NewRPClientWithTLS(svraddr string, vKey string, bridgeConnType string, prox
 		closeCh:        make(chan struct{}),
 		logger:         nil, // 默认使用全局 logger，可通过 SetLogger 设置
 		p2pManager:     p2pManager,
+		instanceID:     hex.EncodeToString(instanceID),
+		instanceHost:   strings.TrimSpace(hostname),
+		instanceStart:  time.Now(),
 	}
 }
 
@@ -469,6 +485,25 @@ mainLoop:
 				s.logWarn("report local address failed: %s", err.Error())
 			} else {
 				s.logTrace("reported local addr: %s", localIPs)
+			}
+		case common.CLIENT_IDENTITY:
+			identity := common.ClientIdentity{
+				InstanceID: s.instanceID,
+				Hostname:   s.instanceHost,
+				OS:         runtime.GOOS,
+				Arch:       runtime.GOARCH,
+				Version:    version.VERSION,
+				StartedAt:  s.instanceStart.Format(time.RFC3339),
+			}
+			for _, value := range strings.FieldsFunc(common.GetLocalIPs(signal.Conn), func(r rune) bool {
+				return r == ',' || r == ';' || r == '\n' || r == ' ' || r == '\t'
+			}) {
+				if value = strings.TrimSpace(value); value != "" {
+					identity.LocalIPs = append(identity.LocalIPs, value)
+				}
+			}
+			if _, err := signal.SendInfo(identity, ""); err != nil {
+				s.logWarn("上报客户端实例信息失败：%s", err)
 			}
 		case common.NEW_UDP_CONN:
 			//read server udp addr and password

@@ -2,6 +2,8 @@ package rate
 
 import (
 	"io"
+	"net"
+	"time"
 )
 
 type rateConn struct {
@@ -40,4 +42,39 @@ func (s *rateConn) Write(b []byte) (n int, err error) {
 
 func (s *rateConn) Close() error {
 	return s.conn.Close()
+}
+
+func (s *rateConn) LocalAddr() net.Addr {
+	if value, ok := s.conn.(net.Conn); ok {
+		return value.LocalAddr()
+	}
+	return nil
+}
+
+func (s *rateConn) RemoteAddr() net.Addr {
+	if value, ok := s.conn.(net.Conn); ok {
+		return value.RemoteAddr()
+	}
+	return nil
+}
+
+func (s *rateConn) SetDeadline(t time.Time) error {
+	if value, ok := s.conn.(interface{ SetDeadline(time.Time) error }); ok {
+		return value.SetDeadline(t)
+	}
+	return nil
+}
+
+func (s *rateConn) SetReadDeadline(t time.Time) error {
+	if value, ok := s.conn.(interface{ SetReadDeadline(time.Time) error }); ok {
+		return value.SetReadDeadline(t)
+	}
+	return nil
+}
+
+func (s *rateConn) SetWriteDeadline(t time.Time) error {
+	if value, ok := s.conn.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		return value.SetWriteDeadline(t)
+	}
+	return nil
 }

@@ -3,6 +3,8 @@ package controllers
 import (
 	"os"
 	"strings"
+
+	"ehang.io/nps/server"
 )
 
 // Clients lists the clients visible to the current principal.
@@ -59,6 +61,46 @@ func (s *ApiV1Controller) ClientUpdateCheck() {
 	}
 	s.pathFormValue("id")
 	s.emitLegacy(s.invokeSafe("client", "UpdateCheck", &ClientController{}, false))
+}
+
+// ClientInstances lists each live NPC process for one client.
+func (s *ApiV1Controller) ClientInstances() {
+	s.pathFormValue("id")
+	id, err := s.GetInt("id")
+	if err != nil || id <= 0 || !isAllowedClient(id, s.GetAllowedClientIds()) {
+		s.apiRespond(404, map[string]interface{}{"status": 0, "code": "not_found", "msg": "客户端不存在"})
+		return
+	}
+	if server.Bridge == nil {
+		s.apiRespond(503, map[string]interface{}{"status": 0, "code": "unavailable", "msg": "Bridge 尚未初始化"})
+		return
+	}
+	s.apiRespond(200, map[string]interface{}{
+		"status": 1,
+		"code":   "ok",
+		"data":   server.Bridge.ClientInstances(id),
+	})
+}
+
+// ClientInstanceDisconnect closes one NPC process without deleting its client
+// registration or interrupting another process using the same VKey.
+func (s *ApiV1Controller) ClientInstanceDisconnect() {
+	s.pathFormValue("id")
+	id, err := s.GetInt("id")
+	if err != nil || id <= 0 || !isAllowedClient(id, s.GetAllowedClientIds()) {
+		s.apiRespond(404, map[string]interface{}{"status": 0, "code": "not_found", "msg": "客户端不存在"})
+		return
+	}
+	instanceID := strings.TrimSpace(s.GetString("instance_id"))
+	if instanceID == "" {
+		s.apiRespond(400, map[string]interface{}{"status": 0, "code": "invalid_instance", "msg": "instance_id 不能为空"})
+		return
+	}
+	if err := server.DisconnectClientInstance(id, instanceID); err != nil {
+		s.apiRespond(409, map[string]interface{}{"status": 0, "code": "disconnect_failed", "msg": err.Error()})
+		return
+	}
+	s.apiRespond(200, map[string]interface{}{"status": 1, "code": "ok", "msg": "客户端实例已断开"})
 }
 
 // Tunnels lists tunnels, optionally filtered by type and client.

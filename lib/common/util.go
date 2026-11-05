@@ -135,6 +135,10 @@ func Getverifyval(vkey string) string {
 
 // Change headers and host of request
 func ChangeHostAndHeader(r *http.Request, host string, header string, addr string) {
+	originalHost := ""
+	if r != nil {
+		originalHost = r.Host
+	}
 	if host != "" {
 		r.Host = host
 	}
@@ -151,16 +155,66 @@ func ChangeHostAndHeader(r *http.Request, host string, header string, addr strin
 		}
 	}
 	addr = GetIpByAddr(addr)
-	if prior, ok := r.Header["X-Forwarded-For"]; ok {
-		addr = strings.Join(prior, ", ") + ", " + addr
-	}
 
 	addOrigin, _ := beego.AppConfig.Bool("http_add_origin_header")
 
 	if addOrigin {
 		logs.Debug("set X-Forwarded-For X-Real-IP = " + addr)
-		r.Header.Set("X-Forwarded-For", addr)
-		r.Header.Set("X-Real-IP", addr)
+		mode := strings.ToLower(strings.TrimSpace(beego.AppConfig.String("http_forwarded_header_mode")))
+		if mode == "" {
+			mode = "overwrite"
+		}
+		preserve := mode == "preserve"
+		if mode == "trusted" {
+			preserve = IsTrustedProxy(addr, beego.AppConfig.String("trusted_proxy_ips")) &&
+				strings.TrimSpace(r.Header.Get("X-Forwarded-For")) != ""
+		}
+		if preserve && strings.TrimSpace(r.Header.Get("X-Forwarded-For")) != "" {
+			if addr != "" {
+				r.Header.Set("X-Forwarded-For", strings.TrimSpace(r.Header.Get("X-Forwarded-For"))+", "+addr)
+			}
+		} else if addr != "" {
+			r.Header.Set("X-Forwarded-For", addr)
+		}
+		if addr != "" && (!preserve || strings.TrimSpace(r.Header.Get("X-Real-IP")) == "") {
+			r.Header.Set("X-Real-IP", addr)
+		}
+		scheme := strings.ToLower(strings.TrimSpace(r.URL.Scheme))
+		if scheme == "" {
+			if r.TLS != nil {
+				scheme = "https"
+			} else {
+				scheme = "http"
+			}
+		}
+		hostValue := strings.TrimSpace(originalHost)
+		port := ""
+		if hostValue != "" {
+			if parsedHost, parsedPort, err := net.SplitHostPort(hostValue); err == nil {
+				hostValue, port = parsedHost, parsedPort
+			} else if strings.HasPrefix(hostValue, "[") && strings.HasSuffix(hostValue, "]") {
+				hostValue = strings.Trim(hostValue, "[]")
+			}
+		}
+		if port == "" {
+			if scheme == "https" {
+				port = "443"
+			} else {
+				port = "80"
+			}
+		}
+		if hostValue != "" && (!preserve || strings.TrimSpace(r.Header.Get("X-Forwarded-Host")) == "") {
+			r.Header.Set("X-Forwarded-Host", hostValue)
+		}
+		if !preserve || strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")) == "" {
+			r.Header.Set("X-Forwarded-Proto", scheme)
+		}
+		if !preserve || strings.TrimSpace(r.Header.Get("X-Forwarded-Port")) == "" {
+			r.Header.Set("X-Forwarded-Port", port)
+		}
+		if !preserve || strings.TrimSpace(r.Header.Get("X-Real-Proto")) == "" {
+			r.Header.Set("X-Real-Proto", scheme)
+		}
 	}
 }
 

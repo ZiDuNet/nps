@@ -38,6 +38,38 @@ func firstForwardedValue(value string) string {
 	return value
 }
 
+// IsTrustedProxy reports whether remoteAddr belongs to one of the configured
+// proxy IPs or CIDRs. localhost and direct IP entries are accepted alongside
+// CIDR notation; commas and whitespace separate entries.
+func IsTrustedProxy(remoteAddr, configured string) bool {
+	peer := net.ParseIP(strings.Trim(GetIpByAddr(strings.TrimSpace(remoteAddr)), "[]"))
+	if peer == nil {
+		return false
+	}
+	for _, raw := range strings.FieldsFunc(configured, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == ' ' || r == '\t'
+	}) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if raw == "*" {
+			return true
+		}
+		if strings.Contains(raw, "/") {
+			_, network, err := net.ParseCIDR(raw)
+			if err == nil && network.Contains(peer) {
+				return true
+			}
+			continue
+		}
+		if candidate := net.ParseIP(strings.Trim(raw, "[]")); candidate != nil && candidate.Equal(peer) {
+			return true
+		}
+	}
+	return false
+}
+
 // BuildTCPBindAddr returns an optional source address for outgoing TCP
 // connections. Invalid or empty values leave source selection to the OS.
 func BuildTCPBindAddr(localIP string) net.Addr {

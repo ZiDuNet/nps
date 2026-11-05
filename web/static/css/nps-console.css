@@ -1001,6 +1001,15 @@ body.nps-bootstrap .client-detail__history-row:last-child { border-bottom: 0; }
 body.nps-bootstrap .client-detail__history-state { justify-self: end; color: var(--nps-muted); }
 body.nps-bootstrap .client-detail__history-state--online { color: var(--nps-success, #218838); font-weight: 650; }
 body.nps-bootstrap .client-detail__history-empty { color: var(--nps-muted); font-size: 12px; }
+body.nps-bootstrap .client-instance-list { display: grid; gap: 8px; }
+body.nps-bootstrap .client-instance-row { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(260px, 1.4fr) auto; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--nps-line); border-radius: 10px; background: var(--nps-surface-soft, #f8fafc); }
+body.nps-bootstrap .client-instance-row__identity,
+body.nps-bootstrap .client-instance-row__detail { display: grid; gap: 3px; min-width: 0; }
+body.nps-bootstrap .client-instance-row__identity code,
+body.nps-bootstrap .client-instance-row__detail span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.nps-bootstrap .client-instance-row__detail { color: var(--nps-muted); font-size: 12px; }
+body.nps-bootstrap .client-instance-row__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+body.nps-bootstrap .client-instance-row__actions .btn { display: inline-flex; align-items: center; gap: 5px; }
 body.nps-bootstrap .client-detail__command code,
 body.nps-bootstrap .tunnel-detail__command code,
 body.nps-bootstrap .help-command { color: var(--nps-ink); background: var(--nps-surface-subtle); border-color: var(--nps-line); }

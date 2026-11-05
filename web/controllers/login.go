@@ -622,6 +622,10 @@ func requestMayUseForwardedIP(request *http.Request) bool {
 		return false
 	}
 	if beego.AppConfig.DefaultBool("allow_x_real_ip", true) {
+		if strings.EqualFold(strings.TrimSpace(beego.AppConfig.String("http_forwarded_trust_mode")), "strict") &&
+			!common.IsTrustedProxy(request.RemoteAddr, beego.AppConfig.String("trusted_proxy_ips")) {
+			return false
+		}
 		return true
 	}
 	secret := strings.TrimSpace(beego.AppConfig.String("x_nps_http_only"))

@@ -16,7 +16,6 @@ import (
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/goroutine"
 	"ehang.io/nps/lib/rate"
-	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 )
 
@@ -26,9 +25,10 @@ type HTTPError struct {
 }
 
 type HttpReverseProxy struct {
-	proxy                 *ReverseProxy
-	server                *httpServer
-	responseHeaderTimeout time.Duration
+	proxy         *ReverseProxy
+	server        *httpServer
+	policy        httpProxyPolicy
+	transportPool *httpTransportPool
 }
 
 // reverseProxyState is captured before handing a request to the transport.
@@ -46,6 +46,7 @@ type reverseProxyState struct {
 	config         file.Config
 	localProxy     bool
 	registeredOnly bool
+	server         *httpServer
 }
 
 type reverseProxyContextKey struct{}
@@ -169,12 +170,25 @@ func (rp *HttpReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		config:         config,
 		localProxy:     localProxy,
 		registeredOnly: registeredOnly,
+		server:         rp.server,
 	}
 	req = req.WithContext(context.WithValue(req.Context(), reverseProxyContextKey{}, state))
 
 	if rp.proxy == nil {
 		http.Error(rw, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 		return
+	}
+	responseController := http.NewResponseController(rw)
+	defer func() {
+		_ = responseController.SetReadDeadline(time.Time{})
+		_ = responseController.SetWriteDeadline(time.Time{})
+	}()
+	if req.Body != nil && req.Body != http.NoBody {
+		req.Body = wrapClientRequestBody(req.Body, responseController.SetReadDeadline, rp.policy)
+	}
+	if timeoutWriter := wrapClientResponseWriter(rw, rp.policy); timeoutWriter != nil {
+		rw = timeoutWriter
+		defer timeoutWriter.clearDeadline()
 	}
 	rp.proxy.ServeHTTP(rw, req, host)
 }
@@ -224,39 +238,34 @@ func (c *flowConn) LocalAddr() net.Addr { return c.fakeAddr }
 
 func (c *flowConn) RemoteAddr() net.Addr { return c.fakeAddr }
 
-func (*flowConn) SetDeadline(t time.Time) error { return nil }
+func (c *flowConn) SetDeadline(t time.Time) error {
+	if value, ok := c.ReadWriteCloser.(interface{ SetDeadline(time.Time) error }); ok {
+		return value.SetDeadline(t)
+	}
+	return nil
+}
 
-func (*flowConn) SetReadDeadline(t time.Time) error { return nil }
+func (c *flowConn) SetReadDeadline(t time.Time) error {
+	if value, ok := c.ReadWriteCloser.(interface{ SetReadDeadline(time.Time) error }); ok {
+		return value.SetReadDeadline(t)
+	}
+	return nil
+}
 
-func (*flowConn) SetWriteDeadline(t time.Time) error { return nil }
+func (c *flowConn) SetWriteDeadline(t time.Time) error {
+	if value, ok := c.ReadWriteCloser.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		return value.SetWriteDeadline(t)
+	}
+	return nil
+}
 
 func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
-	responseHeaderTimeout := beego.AppConfig.DefaultInt("http_proxy_response_timeout", 100)
-	if responseHeaderTimeout <= 0 {
-		responseHeaderTimeout = 100
-	}
+	policy := loadHTTPProxyPolicy()
 	rp := &HttpReverseProxy{
-		server:                s,
-		responseHeaderTimeout: time.Duration(responseHeaderTimeout) * time.Second,
+		server: s,
+		policy: policy,
 	}
 	local, _ := net.ResolveTCPAddr("tcp", "127.0.0.1")
-	dialBridge := func(ctx context.Context, _, _ string) (net.Conn, error) {
-		state, stateErr := stateFromContext(ctx)
-		if stateErr != nil || s == nil || s.bridge == nil {
-			return nil, NewHTTPError(http.StatusBadGateway, "proxy request state is unavailable")
-		}
-		lk := conn.NewLink("http", state.targetAddr, state.config.Crypt, state.config.Compress, state.req.RemoteAddr, state.localProxy, hostProxyProtocolVersion(state.host))
-		target, err := s.bridge.SendLinkInfo(state.clientID, lk, &file.Tunnel{RegisteredOnly: state.registeredOnly})
-		if err != nil {
-			logs.Notice("connect to target %s error %s", lk.Host, err)
-			return nil, NewHTTPError(http.StatusBadGateway, "Cannot connect to the server")
-		}
-		if target == nil {
-			return nil, NewHTTPError(http.StatusBadGateway, "server returned an empty connection")
-		}
-		connClient := conn.GetConnWithUserLimits(target, lk.Crypt, lk.Compress, state.clientRate, true, nil, state.host, state.userRate)
-		return &flowConn{ReadWriteCloser: connClient, fakeAddr: local, host: state.host, flow: state.clientFlow, track: true}, nil
-	}
 	proxy := NewReverseProxy(&httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			state, err := stateFromContext(r.Context())
@@ -295,39 +304,14 @@ func NewHttpReverseProxy(s *httpServer) *HttpReverseProxy {
 			}
 			return nil
 		},
-		Transport: &http.Transport{
-			ResponseHeaderTimeout: rp.responseHeaderTimeout,
-			DisableKeepAlives:     true,
-			DialContext:           dialBridge,
-			DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				bridgeConn, err := dialBridge(ctx, network, addr)
-				if err != nil {
-					return nil, err
-				}
-				state, stateErr := stateFromContext(ctx)
-				if stateErr != nil {
-					_ = bridgeConn.Close()
-					return nil, stateErr
-				}
-				state.host.RLock()
-				sni := state.host.Host
-				if state.host.HostChange != "" {
-					sni = state.host.HostChange
-				}
-				state.host.RUnlock()
-				tlsConn, tlsErr := conn.GetTlsConn(bridgeConn, sni)
-				if tlsErr != nil {
-					_ = bridgeConn.Close()
-					return nil, NewHTTPError(http.StatusBadGateway, "HTTPS backend handshake failed")
-				}
-				return tlsConn, nil
-			},
-		},
+		Transport: rp.transportPool,
 		ErrorHandler: func(rw http.ResponseWriter, req *http.Request, err error) {
 			logs.Warn("do http proxy request error: %v", err)
 			rw.WriteHeader(http.StatusNotFound)
 		},
 	})
+	rp.transportPool = newHTTPTransportPool(policy)
+	proxy.Transport = rp.transportPool
 	proxy.WebSocketDialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		state, stateErr := stateFromContext(ctx)
 		if stateErr != nil || s == nil || s.bridge == nil {

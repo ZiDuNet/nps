@@ -203,6 +203,32 @@
                 commandSection += '<div class="client-detail__history-empty">' + (english ? 'No Bridge endpoint is available for commands. Check bridge_*_show settings.' : '当前没有可用于生成命令的 Bridge 入口，请检查 bridge_*_show 展示设置。') + '</div>';
             }
             commandSection += '</section>';
+            var instances = Array.isArray(row.Instances) ? row.Instances : [];
+            var instanceSection = '<section class="client-detail__section client-instances">'
+                + '<h6 class="client-detail__section-title"><i class="fa fa-layer-group" aria-hidden="true"></i>' + (english ? 'Live instances' : '在线实例') + '</h6>';
+            if (instances.length) {
+                instanceSection += '<div class="client-instance-list">' + instances.map(function (instance) {
+                    var name = instance.Hostname || instance.InstanceID || '-';
+                    var runtime = [];
+                    if (instance.OS || instance.Arch) runtime.push([instance.OS, instance.Arch].filter(Boolean).join('/'));
+                    if (instance.Version) runtime.push('v' + instance.Version);
+                    if (instance.Transport) runtime.push(instance.Transport);
+                    var endpoint = text(instance.RemoteAddr || '-') + ' · ' + listText(instance.LocalIPs || []);
+                    var legacy = String(instance.InstanceID || '').indexOf('legacy-') === 0;
+                    return '<div class="client-instance-row">'
+                        + '<div class="client-instance-row__identity"><strong>' + text(name) + '</strong><code>' + text(instance.InstanceID || '-') + '</code></div>'
+                        + '<div class="client-instance-row__detail"><span>' + text(runtime.join(' · '), '-') + '</span><span>' + endpoint + '</span></div>'
+                        + '<div class="client-instance-row__actions">'
+                        + (instance.Online ? '<span class="client-detail__history-state client-detail__history-state--online">' + (english ? 'Online' : '在线') + '</span>' : '')
+                        + (!legacy && instance.Online
+                            ? '<button type="button" class="btn btn-outline btn-warning btn-xs client-instance-disconnect" data-client-id="' + Number(row.Id) + '" data-instance-id="' + text(instance.InstanceID) + '"><i class="fa fa-plug" aria-hidden="true"></i><span>' + (english ? 'Disconnect' : '断开实例') + '</span></button>'
+                            : '')
+                        + '</div></div>';
+                }).join('') + '</div>';
+            } else {
+                instanceSection += '<div class="client-detail__history-empty">' + (english ? 'No live instance information. Upgrade NPC to 1.1.41 or later.' : '暂无在线实例信息；NPC 升级到 1.1.41 或更高版本后会显示。') + '</div>';
+            }
+            instanceSection += '</section>';
             return '<div class="client-detail">'
                 + commandSection
                 + '<div class="client-detail__cards">'
@@ -257,6 +283,7 @@
                 + kv(english ? 'Effective expiry' : '实际有效期', effectiveExpiry)
                 + '</div></section>'
                 + '</div>'
+                + instanceSection
                 + section('history', english ? 'Recent connections' : '最近连接记录', (row.ConnectionHistory || []).length
                     ? row.ConnectionHistory.slice().reverse().slice(0, 3).map(function (event) {
                         var state = event.OfflineTime
@@ -523,6 +550,32 @@
         $(this).addClass('active').attr('aria-selected', 'true');
         $section.find('.client-detail__protocol-panel').removeClass('active');
         $section.find('[data-client-protocol-panel="' + target + '"]').addClass('active');
+    });
+
+    $(document).on('click', '.client-instance-disconnect', function () {
+        var $button = $(this);
+        var clientId = Number($button.attr('data-client-id'));
+        var instanceId = String($button.attr('data-instance-id') || '');
+        if (!clientId || !instanceId) return;
+        var english = npsIsEnglish();
+        if (!window.confirm(english
+            ? 'Disconnect this NPC instance only? Other instances using the same client will stay online.'
+            : '只断开这个 NPC 实例？同一客户端的其他实例会保持在线。')) return;
+        $button.prop('disabled', true);
+        $.post('{{.web_base_url}}/client/disconnectinstance', {
+            id: clientId,
+            instance_id: instanceId
+        }).done(function (response) {
+            if (response && response.status === 0) {
+                window.alert(response.msg || (english ? 'Disconnect failed' : '断开失败'));
+                return;
+            }
+            $('#table').npsTable('refresh');
+        }).fail(function () {
+            window.alert(english ? 'Disconnect failed' : '断开失败');
+        }).always(function () {
+            $button.prop('disabled', false);
+        });
     });
 
     var clientUpdateState = null;

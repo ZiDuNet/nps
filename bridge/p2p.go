@@ -246,7 +246,7 @@ func newP2PService(cfg P2PConfig) (*p2pService, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	svc := &p2pService{
 		probe:    probe,
-		tlsCfg:   &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{cert}},
+		tlsCfg:   &tls.Config{MinVersion: tls.VersionTLS13, GetCertificate: crypt.GetCertificate},
 		announce: newP2PAnnouncer(cfg.IP),
 		ctx:      ctx,
 		cancel:   cancel,

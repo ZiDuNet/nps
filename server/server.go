@@ -3,6 +3,7 @@ package server
 import (
 	"ehang.io/nps/lib/version"
 	"errors"
+	"fmt"
 	"math"
 	"net/netip"
 	"sort"
@@ -990,6 +991,14 @@ func KickClientConnect(clientId int) {
 	if Bridge != nil {
 		Bridge.KickClient(clientId)
 	}
+}
+
+// DisconnectClientInstance closes only one NPC process session.
+func DisconnectClientInstance(clientID int, instanceID string) error {
+	if Bridge == nil {
+		return fmt.Errorf("Bridge 尚未初始化")
+	}
+	return Bridge.DisconnectClientInstance(clientID, instanceID)
 }
 
 // RevokeUserClients disconnects every client owned by a disabled/expired user

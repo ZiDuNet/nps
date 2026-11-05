@@ -117,10 +117,27 @@ TCP TLS、WSS、QUIC/HTTP/3 和加密内层链路。
 | http_proxy_access_port | 管理面板生成 HTTP 域名访问链接时使用的对外端口；留空跟随监听端口，不改变监听 | （空） |
 | https_proxy_access_port | 管理面板生成 HTTPS 域名访问链接时使用的对外端口；留空跟随监听端口，不改变监听 | （空） |
 | show_http_proxy_port | 域名隧道访问地址是否拼接非 80/443 端口，`true` / `false` | `true` |
-| http_add_origin_header | 是否在 http(s) 请求头中追加 `X-Forwarded-For` / `X-Real-IP`，用于内网获取真实 IP | `true` |
+| http_add_origin_header | 是否向后端添加来源地址和协议请求头 | `true` |
+| http_forwarded_header_mode | `overwrite` 覆盖、`preserve` 保留已有头并追加、`trusted` 仅对可信代理保留 | `overwrite` |
+| http_forwarded_trust_mode | `legacy` 兼容历史行为；`strict` 仅信任 `trusted_proxy_ips` 中的代理 | `legacy` |
 | http_cache | 是否开启静态文件缓存 | `false` |
 | http_cache_length | 缓存条目数上限，`0` 表示不限制 | `100` |
-| http_proxy_response_timeout | 反向代理等待后端响应头的超时时间，单位秒 | `100` |
+| http_proxy_response_timeout | 反向代理等待后端响应头的时间，单位秒，`0` 表示不限 | `100` |
+| http_client_upload_stall_timeout | 客户端上传停滞超时，单位秒 | `60` |
+| http_client_response_stall_timeout | 访问者读取响应停滞超时，单位秒 | `60` |
+| http_client_upload_total_timeout | 客户端请求体上传总时长，`0` 不限 | `0` |
+| http_client_response_total_timeout | 非流式响应总时长，SSE/gRPC/升级连接豁免，`0` 不限 | `0` |
+| http_backend_connect_timeout | 后端连接启动超时，单位秒，`0` 不限 | `10` |
+| http_backend_tls_handshake_timeout | 后端 TLS 握手超时，单位秒 | `10` |
+| http_backend_request_start_timeout | 后端请求启动等待上限，单位秒 | `100` |
+| http_backend_upload_stall_timeout | 向后端上传写入停滞超时，单位秒 | `60` |
+| http_backend_read_stall_timeout | 后端正文读取停滞超时，SSE/gRPC 豁免 | `60` |
+| http_backend_response_total_timeout | 非流式后端响应总时长，`0` 不限 | `0` |
+| http_backend_keepalive | 是否按安全隔离键复用后端连接 | `false` |
+| http_backend_max_idle_conns / http_backend_max_idle_conns_per_host | 空闲连接上限 | `128` / `16` |
+| http_backend_idle_conn_timeout | 后端空闲连接回收秒数 | `90` |
+| http_backend_expect_continue_timeout | `100-continue` 等待秒数 | `1` |
+| http_backend_max_pools | 后端隔离池上限 | `256` |
 
 HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCKS 混合代理”。一条混合代理隧道共用一个公网端口，可在表单中分别开启 HTTP、SOCKS5，至少保留一种。旧版本保存的 `httpProxy`、`socks5` 记录仍可访问；编辑后会迁移为混合代理记录，服务端和 API 继续兼容旧模式值。
 

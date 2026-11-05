@@ -53,8 +53,8 @@ func (s *Bridge) prepareWebSocketBridge(port int, secure bool) (preparedWebSocke
 		transport = "wss"
 		virtualListener = s.virtualWSS
 		listener = tls.NewListener(listener, &tls.Config{
-			Certificates: []tls.Certificate{crypt.GetCert()},
-			MinVersion:   tls.VersionTLS12,
+			GetCertificate: crypt.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
 		})
 	}
 	upgrader := websocket.Upgrader{

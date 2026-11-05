@@ -66,6 +66,21 @@ type clientListRow struct {
 	ConnectionProtocol  string
 	ConnectionProtocols []string
 	ConnectionCommands  []clientBridgeCommand
+	Instances           []clientInstanceRow
+}
+
+type clientInstanceRow struct {
+	InstanceID  string
+	Hostname    string
+	OS          string
+	Arch        string
+	Version     string
+	Transport   string
+	RemoteAddr  string
+	LocalIPs    []string
+	StartedAt   string
+	ConnectedAt string
+	Online      bool
 }
 
 type clientBridgeCommand struct {
@@ -428,6 +443,21 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 			row.EffectiveExpireTime = effectiveExpireTime
 		}
 		if server.Bridge != nil {
+			for _, instance := range server.Bridge.ClientInstances(client.Id) {
+				row.Instances = append(row.Instances, clientInstanceRow{
+					InstanceID:  instance.InstanceID,
+					Hostname:    instance.Hostname,
+					OS:          instance.OS,
+					Arch:        instance.Arch,
+					Version:     instance.Version,
+					Transport:   bridgeendpoint.ProtocolName(instance.Transport),
+					RemoteAddr:  instance.RemoteAddr,
+					LocalIPs:    append([]string(nil), instance.LocalIPs...),
+					StartedAt:   instance.StartedAt,
+					ConnectedAt: instance.ConnectedAt,
+					Online:      instance.Online,
+				})
+			}
 			transports := server.Bridge.ActiveClientTransports(client.Id)
 			row.IsConnect = len(transports) > 0
 			for _, transport := range transports {
@@ -445,6 +475,43 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+// DisconnectInstance closes one NPC process without removing the client
+// registration or disconnecting other instances that share the same VKey.
+func (s *ClientController) DisconnectInstance() {
+	if !s.RequirePost() {
+		return
+	}
+	id := s.GetIntNoErr("id")
+	if !s.RequireAdminOrClientOwner(id) {
+		return
+	}
+	instanceID := strings.TrimSpace(s.GetString("instance_id"))
+	if instanceID == "" {
+		s.AjaxErr("缺少客户端实例 ID")
+		return
+	}
+	if server.Bridge == nil {
+		s.AjaxErr("Bridge 尚未初始化")
+		return
+	}
+	client, err := file.GetDb().GetClient(id)
+	if err != nil || client == nil {
+		s.AjaxErr("客户端不存在")
+		return
+	}
+	client.RLock()
+	ownerID := client.UserId
+	client.RUnlock()
+	if err := server.DisconnectClientInstance(id, instanceID); err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
+	s.auditMutation("client.instance.disconnect", "client", id, ownerID, "", nil, map[string]string{
+		"instance_id": instanceID,
+	})
+	s.AjaxOk("客户端实例已断开")
 }
 
 func attachClientBridgeCommands(rows []*clientListRow, requestHost string) []bridgeendpoint.Endpoint {

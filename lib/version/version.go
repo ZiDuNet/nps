@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const VERSION = "1.1.40"
+const VERSION = "1.1.41"
 
 // SecureHandshakeMinVersion is the first NPC release that uses the secure
 // Bridge handshake. Clients at or below 1.1.28 remain on the legacy handshake
@@ -44,6 +44,10 @@ const HealthConfigMinVersion = "1.1.29"
 // UDP/KCP P2P path and are never sent modern control frames.
 const ModernP2PMinVersion = "1.1.29"
 
+// ClientIdentityMinVersion is the first NPC release that answers the additive
+// CLIENT_IDENTITY control request. Older clients never receive the request.
+const ClientIdentityMinVersion = "1.1.41"
+
 // KeyedFileMinVersion is the first NPC release that identifies each file
 // access mux independently. Older clients continue to use the legacy shared
 // file channel and handshake without an extra payload.
@@ -56,6 +60,11 @@ func SupportsKeyedFiles(release string) bool {
 
 func SupportsModernP2P(release string) bool {
 	comparison, err := Compare(release, ModernP2PMinVersion)
+	return err == nil && comparison >= 0
+}
+
+func SupportsClientIdentity(release string) bool {
+	comparison, err := Compare(release, ClientIdentityMinVersion)
 	return err == nil && comparison >= 0
 }
 

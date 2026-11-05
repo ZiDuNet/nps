@@ -268,10 +268,10 @@ func bridgeCertificateStatusSnapshot(hostname string) bridgeCertificateStatus {
 	switch {
 	case inspection.Valid && (!crypt.IsCertLoadedFromFiles() || status.Fingerprint != status.RuntimeFingerprint):
 		status.PendingRestart = true
-		status.RestartHint = "证书文件已更新，重启 NPS 后应用"
+		status.RestartHint = "证书文件已更新，正在等待下一次 TLS 握手自动加载"
 	case !status.Configured && crypt.IsCertLoadedFromFiles():
 		status.PendingRestart = true
-		status.RestartHint = "证书配置已清空，重启 NPS 后切换到临时证书"
+		status.RestartHint = "证书配置已清空；重新保存或重启 NPS 后切换到临时证书"
 	}
 	return status
 }
@@ -364,10 +364,21 @@ func (s *GlobalController) SaveBridgeCertificate() {
 		s.AjaxErr("保存 Bridge 证书配置失败: " + err.Error())
 		return
 	}
+	hotReloadErr := error(nil)
+	if mode == "clear" {
+		crypt.InitTls()
+	} else {
+		hotReloadErr = crypt.ConfigureBridgeCertificateFiles(
+			common.ResolveConfigPath(certPath),
+			common.ResolveConfigPath(keyPath),
+		)
+	}
 	after := bridgeCertificateStatusSnapshot(hostname)
-	restartRequired := len(changed) > 0 || materialChanged || after.PendingRestart
-	message := "Bridge 证书配置已保存，需要重启 NPS 后生效"
-	if !restartRequired {
+	restartRequired := hotReloadErr != nil
+	message := "Bridge 证书配置已保存并热加载，新 TLS 握手立即使用新证书"
+	if hotReloadErr != nil {
+		message = "Bridge 证书配置已保存，但热加载失败，继续使用上一份有效证书: " + hotReloadErr.Error()
+	} else if len(changed) == 0 && !materialChanged {
 		message = "Bridge 证书配置未发生变化"
 	}
 	result := map[string]interface{}{
@@ -375,6 +386,7 @@ func (s *GlobalController) SaveBridgeCertificate() {
 		"msg":              message,
 		"changed":          changed,
 		"restart_required": restartRequired,
+		"hot_reloaded":     hotReloadErr == nil,
 		"data":             after,
 	}
 	details := map[string]string{

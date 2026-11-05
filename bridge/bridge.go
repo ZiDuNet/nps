@@ -5,8 +5,10 @@ import (
 	"crypto/tls"
 	"ehang.io/nps/lib/nps_mux"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -42,10 +44,30 @@ type Client struct {
 	fileChannels map[string]*nps_mux.Mux
 	Version      string
 	Transport    string
+	Instance     common.ClientIdentity
+	RemoteAddr   string
+	ConnectedAt  time.Time
 	retryTime    atomic.Int32 // it will be add 1 when ping not ok until to 3 will close the client
 	parent       *Client
 	sessions     []*Client
 	selectSeq    atomic.Uint64
+}
+
+// ClientInstanceSnapshot describes one live MAIN/CHAN session. Multiple NPC
+// processes using the same VKey are reported separately and can be
+// disconnected without affecting the others.
+type ClientInstanceSnapshot struct {
+	InstanceID  string   `json:"instance_id"`
+	Hostname    string   `json:"hostname,omitempty"`
+	OS          string   `json:"os,omitempty"`
+	Arch        string   `json:"arch,omitempty"`
+	Version     string   `json:"version"`
+	Transport   string   `json:"transport"`
+	RemoteAddr  string   `json:"remote_addr,omitempty"`
+	LocalIPs    []string `json:"local_ips,omitempty"`
+	StartedAt   string   `json:"started_at,omitempty"`
+	ConnectedAt string   `json:"connected_at,omitempty"`
+	Online      bool     `json:"online"`
 }
 
 // Node is the small compatibility view used by the modern P2P coordinator.
@@ -332,6 +354,38 @@ func (c *Client) TransportSnapshot() string {
 	return transport
 }
 
+func (c *Client) instanceSnapshot(index int, fallbackTransport string) ClientInstanceSnapshot {
+	if c == nil {
+		return ClientInstanceSnapshot{}
+	}
+	c.mu.Lock()
+	instanceID := strings.TrimSpace(c.Instance.InstanceID)
+	if instanceID == "" {
+		instanceID = fmt.Sprintf("legacy-%d", index+1)
+	}
+	transport := strings.ToLower(strings.TrimSpace(c.Transport))
+	if transport == "" {
+		transport = strings.ToLower(strings.TrimSpace(fallbackTransport))
+	}
+	snapshot := ClientInstanceSnapshot{
+		InstanceID: instanceID,
+		Hostname:   c.Instance.Hostname,
+		OS:         c.Instance.OS,
+		Arch:       c.Instance.Arch,
+		Version:    c.Version,
+		Transport:  transport,
+		RemoteAddr: c.RemoteAddr,
+		LocalIPs:   append([]string(nil), c.Instance.LocalIPs...),
+		StartedAt:  c.Instance.StartedAt,
+	}
+	if !c.ConnectedAt.IsZero() {
+		snapshot.ConnectedAt = c.ConnectedAt.Format(time.RFC3339)
+	}
+	c.mu.Unlock()
+	snapshot.Online = sessionHasResource(c, "online")
+	return snapshot
+}
+
 func (c *Client) GetNode() *Node {
 	if c == nil {
 		return nil
@@ -365,6 +419,53 @@ func (s *Bridge) RequestClientUpdate(id int) error {
 		return fmt.Errorf("发送升级指令失败：%w", err)
 	}
 	return nil
+}
+
+func (s *Bridge) requestClientIdentity(session *Client, c *conn.Conn, release string, clientID int) common.ClientIdentity {
+	if session == nil || c == nil || !version.SupportsClientIdentity(release) {
+		return common.ClientIdentity{}
+	}
+	session.sendMu.Lock()
+	_ = c.SetWriteDeadline(time.Now().Add(3 * time.Second))
+	_, err := c.Write([]byte(common.CLIENT_IDENTITY))
+	_ = c.SetWriteDeadline(time.Time{})
+	session.sendMu.Unlock()
+	if err != nil {
+		logs.Trace("[连接] clientId %d 实例信息请求发送失败：%v", clientID, err)
+		return common.ClientIdentity{}
+	}
+	_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	defer c.SetReadDeadline(time.Time{})
+	length, err := c.GetLen()
+	if err != nil || length <= 0 || length > 64<<10 {
+		if err != nil {
+			logs.Trace("读取客户端实例信息失败：%v", err)
+		}
+		return common.ClientIdentity{}
+	}
+	payload := make([]byte, length)
+	if _, err := io.ReadFull(c, payload); err != nil {
+		logs.Trace("读取客户端实例信息内容失败：%v", err)
+		return common.ClientIdentity{}
+	}
+	var identity common.ClientIdentity
+	if err := json.Unmarshal(payload, &identity); err != nil {
+		logs.Trace("解析客户端实例信息失败：%v", err)
+		return common.ClientIdentity{}
+	}
+	identity.InstanceID = strings.TrimSpace(identity.InstanceID)
+	identity.Hostname = strings.TrimSpace(identity.Hostname)
+	identity.OS = strings.TrimSpace(identity.OS)
+	identity.Arch = strings.TrimSpace(identity.Arch)
+	identity.Version = strings.TrimSpace(identity.Version)
+	identity.StartedAt = strings.TrimSpace(identity.StartedAt)
+	if len(identity.InstanceID) > 128 {
+		identity.InstanceID = identity.InstanceID[:128]
+	}
+	if identity.LocalIPs == nil {
+		identity.LocalIPs = []string{}
+	}
+	return identity
 }
 
 func supportsHealthConfig(versionText string) bool {
@@ -547,6 +648,75 @@ func (s *Bridge) ActiveClientTransports(id int) []string {
 	return transports
 }
 
+// ClientInstances returns a stable snapshot of every live session for one
+// client id. Legacy clients still appear with a synthetic instance id.
+func (s *Bridge) ClientInstances(id int) []ClientInstanceSnapshot {
+	if s == nil {
+		return nil
+	}
+	s.clientsMu.Lock()
+	defer s.clientsMu.Unlock()
+	value, ok := s.Client.Load(id)
+	if !ok {
+		return nil
+	}
+	root, ok := bridgeClient(value)
+	if !ok {
+		return nil
+	}
+	ensureClientSessions(root)
+	instances := make([]ClientInstanceSnapshot, 0, len(root.sessions))
+	for index, session := range root.sessions {
+		if session == nil || !sessionHasResource(session, "signal") {
+			continue
+		}
+		instances = append(instances, session.instanceSnapshot(index, s.tunnelType))
+	}
+	return instances
+}
+
+// DisconnectClientInstance closes only the selected NPC process instance. The
+// rest of the VKey's sessions keep forwarding traffic.
+func (s *Bridge) DisconnectClientInstance(id int, instanceID string) error {
+	if s == nil {
+		return errors.New("Bridge 尚未初始化")
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return errors.New("实例 ID 不能为空")
+	}
+	s.clientsMu.Lock()
+	value, ok := s.Client.Load(id)
+	if !ok {
+		s.clientsMu.Unlock()
+		return fmt.Errorf("客户端 %d 当前未连接", id)
+	}
+	root, ok := bridgeClient(value)
+	if !ok {
+		s.clientsMu.Unlock()
+		return fmt.Errorf("客户端 %d 的运行时记录无效", id)
+	}
+	ensureClientSessions(root)
+	var signal *conn.Conn
+	for _, session := range root.sessions {
+		session.mu.Lock()
+		sessionInstanceID := strings.TrimSpace(session.Instance.InstanceID)
+		if sessionInstanceID == instanceID && session.signal != nil {
+			signal = session.signal
+		}
+		session.mu.Unlock()
+		if signal != nil {
+			break
+		}
+	}
+	s.clientsMu.Unlock()
+	if signal == nil {
+		return fmt.Errorf("客户端 %d 的实例 %s 不在线", id, instanceID)
+	}
+	s.delClient(id, signal)
+	return nil
+}
+
 func (s *Bridge) requestClientHealthConfig(id int, db *file.DbUtils) error {
 	if s == nil {
 		return errors.New("服务端 Bridge 尚未初始化")
@@ -693,7 +863,7 @@ func (s *Bridge) StartTunnel() error {
 	}
 	if tlsListener != nil {
 		go conn.Accept(tlsListener, func(c net.Conn) {
-			secure := tls.Server(c, &tls.Config{Certificates: []tls.Certificate{crypt.GetCert()}, MinVersion: tls.VersionTLS12})
+			secure := tls.Server(c, &tls.Config{GetCertificate: crypt.GetCertificate, MinVersion: tls.VersionTLS12})
 			if !s.virtualTLS.Serve(secure) {
 				_ = secure.Close()
 			}
@@ -839,7 +1009,6 @@ func (s *Bridge) startExtraBridgeTransports() error {
 		if alpn == "" {
 			alpn = "nps"
 		}
-		cert := crypt.GetCert()
 		quicConfig := &quic.Config{
 			KeepAlivePeriod:    time.Duration(beego.AppConfig.DefaultInt("quic_keep_alive_period", 10)) * time.Second,
 			MaxIdleTimeout:     time.Duration(beego.AppConfig.DefaultInt("quic_max_idle_timeout", 30)) * time.Second,
@@ -856,9 +1025,9 @@ func (s *Bridge) startExtraBridgeTransports() error {
 		}
 		var quicErr error
 		quicListener, quicErr = quic.ListenAddr(net.JoinHostPort(quicIP, strconv.Itoa(quicPort)), &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS12,
-			NextProtos:   []string{alpn},
+			GetCertificate: crypt.GetCertificate,
+			MinVersion:     tls.VersionTLS12,
+			NextProtos:     []string{alpn},
 		}, quicConfig)
 		if quicErr != nil {
 			if kcpEndpointValue != nil {
@@ -1568,6 +1737,9 @@ func (s *Bridge) delClient(id int, expectedSignal *conn.Conn) {
 			}
 			files = append(files, clearFileChannelsLocked(cl)...)
 			cl.signal, cl.tunnel, cl.file = nil, nil, nil
+			cl.Instance = common.ClientIdentity{}
+			cl.RemoteAddr = ""
+			cl.ConnectedAt = time.Time{}
 			cl.mu.Unlock()
 		}
 		root.sessions = nil
@@ -1592,6 +1764,9 @@ func (s *Bridge) delClient(id int, expectedSignal *conn.Conn) {
 		}
 		files = append(files, clearFileChannelsLocked(cl)...)
 		cl.signal, cl.tunnel, cl.file = nil, nil, nil
+		cl.Instance = common.ClientIdentity{}
+		cl.RemoteAddr = ""
+		cl.ConnectedAt = time.Time{}
 		cl.mu.Unlock()
 		removeClientSession(root, cl)
 		if !clientHasSignal(root) {
@@ -1879,17 +2054,23 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 				selected.signal = c
 				selected.Version = vs
 				selected.Transport = normalizeBridgeTransport(transportType)
+				selected.RemoteAddr = netAddrString(c.Conn.RemoteAddr())
+				selected.ConnectedAt = time.Now()
 				selected.mu.Unlock()
 			} else {
 				s.Client.Delete(id)
 				selected = NewClient(nil, nil, c, vs)
 				selected.Transport = normalizeBridgeTransport(transportType)
+				selected.RemoteAddr = netAddrString(c.Conn.RemoteAddr())
+				selected.ConnectedAt = time.Now()
 				ensureClientSessions(selected)
 				s.Client.Store(id, selected)
 			}
 		} else {
 			selected = NewClient(nil, nil, c, vs)
 			selected.Transport = normalizeBridgeTransport(transportType)
+			selected.RemoteAddr = netAddrString(c.Conn.RemoteAddr())
+			selected.ConnectedAt = time.Now()
 			ensureClientSessions(selected)
 			s.Client.Store(id, selected)
 		}
@@ -1900,7 +2081,24 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 		if oldSignal != nil && oldSignal != c {
 			_ = oldSignal.Close()
 		}
-		clientLocalAddr := s.requestClientLocalAddr(id, c)
+		identity := s.requestClientIdentity(selected, c, vs, id)
+		clientLocalAddr := strings.Join(identity.LocalIPs, ",")
+		if identity.InstanceID != "" {
+			selected.mu.Lock()
+			if selected.signal == c {
+				selected.Instance = identity
+			}
+			selected.mu.Unlock()
+		}
+		if clientLocalAddr != "" {
+			if client, err := file.GetDb().GetClient(id); err == nil {
+				client.Lock()
+				client.LocalAddr = clientLocalAddr
+				client.Unlock()
+			}
+		} else {
+			clientLocalAddr = s.requestClientLocalAddr(id, c)
+		}
 		clientLocalAddrSource := ""
 		if clientLocalAddr != "" {
 			clientLocalAddrSource = connectionlog.ClientLocalAddrSourceCurrentReport

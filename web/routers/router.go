@@ -121,6 +121,8 @@ func apiV1Routers() []beego.LinkNamespace {
 		beego.NSRouter("/clients/:id/status", &controllers.ApiV1Controller{}, "POST:ClientStatus"),
 		beego.NSRouter("/clients/:id/upgrade", &controllers.ApiV1Controller{}, "POST:ClientUpgrade"),
 		beego.NSRouter("/clients/:id/update-check", &controllers.ApiV1Controller{}, "GET:ClientUpdateCheck"),
+		beego.NSRouter("/clients/:id/instances", &controllers.ApiV1Controller{}, "GET:ClientInstances"),
+		beego.NSRouter("/clients/:id/instances/disconnect", &controllers.ApiV1Controller{}, "POST:ClientInstanceDisconnect"),
 
 		// Tunnels.
 		beego.NSRouter("/tunnels", &controllers.ApiV1Controller{}, "GET:Tunnels;POST:TunnelsCreate"),

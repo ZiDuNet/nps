@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"math/big"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -133,4 +135,76 @@ func TestCertificateSelfSignedDetection(t *testing.T) {
 	if IsCertificateSelfSigned(tls.Certificate{Certificate: [][]byte{leafDER, caDER}}) {
 		t.Fatal("CA-issued leaf certificate was treated as self-signed")
 	}
+}
+
+func TestBridgeCertificateHotReloadKeepsLastGoodPair(t *testing.T) {
+	t.Cleanup(InitTls)
+	dir := t.TempDir()
+	certPath := filepath.Join(dir, "bridge.pem")
+	keyPath := filepath.Join(dir, "bridge.key")
+	writePair := func(serial int64) {
+		t.Helper()
+		certPEM, keyPEM := testCertificatePair(t, serial)
+		if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writePair(101)
+	if err := InitTlsFromFiles(certPath, keyPath); err != nil {
+		t.Fatal(err)
+	}
+	firstFingerprint := GetCertFingerprint()
+	if firstFingerprint == "" {
+		t.Fatal("first certificate fingerprint is empty")
+	}
+
+	writePair(102)
+	lastReloadAttemptV.Store(0)
+	secondFingerprint := GetCertFingerprint()
+	if secondFingerprint == "" || secondFingerprint == firstFingerprint {
+		t.Fatalf("certificate did not reload: first=%s second=%s", firstFingerprint, secondFingerprint)
+	}
+
+	if err := os.WriteFile(certPath, []byte("not a certificate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lastReloadAttemptV.Store(0)
+	if got := GetCertFingerprint(); got != secondFingerprint {
+		t.Fatalf("invalid replacement changed active certificate: got=%s want=%s", got, secondFingerprint)
+	}
+	if BridgeCertificateLastReloadError() == "" {
+		t.Fatal("expected invalid replacement to be reported")
+	}
+}
+
+func testCertificatePair(t *testing.T, serial int64) ([]byte, []byte) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(serial),
+		Subject:               pkix.Name{CommonName: "bridge.example.com"},
+		DNSNames:              []string{"bridge.example.com"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
+		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 }

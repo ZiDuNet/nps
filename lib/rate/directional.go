@@ -2,7 +2,9 @@ package rate
 
 import (
 	"io"
+	"net"
 	"sync"
+	"time"
 )
 
 // Directional provides independent, shared upload and download buckets for a
@@ -121,4 +123,39 @@ func (c *directionalConn) Write(p []byte) (int, error) {
 		c.limiter.Upload(int64(len(p)))
 	}
 	return c.ReadWriteCloser.Write(p)
+}
+
+func (c *directionalConn) LocalAddr() net.Addr {
+	if value, ok := c.ReadWriteCloser.(net.Conn); ok {
+		return value.LocalAddr()
+	}
+	return nil
+}
+
+func (c *directionalConn) RemoteAddr() net.Addr {
+	if value, ok := c.ReadWriteCloser.(net.Conn); ok {
+		return value.RemoteAddr()
+	}
+	return nil
+}
+
+func (c *directionalConn) SetDeadline(t time.Time) error {
+	if value, ok := c.ReadWriteCloser.(interface{ SetDeadline(time.Time) error }); ok {
+		return value.SetDeadline(t)
+	}
+	return nil
+}
+
+func (c *directionalConn) SetReadDeadline(t time.Time) error {
+	if value, ok := c.ReadWriteCloser.(interface{ SetReadDeadline(time.Time) error }); ok {
+		return value.SetReadDeadline(t)
+	}
+	return nil
+}
+
+func (c *directionalConn) SetWriteDeadline(t time.Time) error {
+	if value, ok := c.ReadWriteCloser.(interface{ SetWriteDeadline(time.Time) error }); ok {
+		return value.SetWriteDeadline(t)
+	}
+	return nil
 }
