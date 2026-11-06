@@ -302,14 +302,14 @@ $(function () {
             return '<pre class="audit-connection-raw">' + text(JSON.stringify(raw, null, 2)) + '</pre>';
         },
         columns: [
-            {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', width: '154px'},
-            {field: 'Actor', title: '<span data-i18n-zh="操作者" data-i18n-en="Actor">操作者</span>', halign: 'center', escape: true},
-            {field: 'SourceIP', title: '<span data-i18n-zh="来源地址" data-i18n-en="Source">来源地址</span>', halign: 'center', escape: true},
-            {field: 'Action', title: '<span data-i18n-zh="动作" data-i18n-en="Action">动作</span>', halign: 'center', escape: true},
-            {field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', escape: true},
-            {field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', formatter: resultBadge},
-            {field: 'Error', title: '<span data-i18n-zh="错误" data-i18n-en="Error">错误</span>', halign: 'center', escape: true},
-            {field: 'Details', title: '<span data-i18n-zh="变更摘要" data-i18n-en="Summary">变更摘要</span>', halign: 'center', escape: true}
+            {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', class: 'audit-list__time', width: '154px'},
+            {field: 'Actor', title: '<span data-i18n-zh="操作者" data-i18n-en="Actor">操作者</span>', halign: 'center', class: 'audit-list__actor', escape: true},
+            {field: 'SourceIP', title: '<span data-i18n-zh="来源地址" data-i18n-en="Source">来源地址</span>', halign: 'center', class: 'audit-list__source', escape: true},
+            {field: 'Action', title: '<span data-i18n-zh="动作" data-i18n-en="Action">动作</span>', halign: 'center', class: 'audit-list__action', escape: true},
+            {field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', class: 'audit-list__resource', escape: true},
+            {field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', class: 'audit-list__result', formatter: resultBadge},
+            {field: 'Error', title: '<span data-i18n-zh="错误" data-i18n-en="Error">错误</span>', halign: 'center', class: 'audit-list__error', escape: true},
+            {field: 'Details', title: '<span data-i18n-zh="变更摘要" data-i18n-en="Summary">变更摘要</span>', halign: 'center', class: 'audit-list__details', escape: true}
         ]
     });
 
@@ -376,15 +376,15 @@ $(function () {
             return '<pre class="audit-connection-raw">' + text(JSON.stringify(raw, null, 2)) + '</pre>';
         },
         columns: [
-            {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', width: '148px'},
-            {field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', width: '68px', formatter: resultBadge},
-            {field: 'Kind', title: '<span data-i18n-zh="连接" data-i18n-en="Connection">连接</span>', halign: 'center', width: '155px', formatter: connectionSummary},
-            {field: 'User', title: '<span data-i18n-zh="用户 / 客户端" data-i18n-en="User / client">用户 / 客户端</span>', halign: 'center', width: '150px', formatter: identitySummary},
-            {field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', escape: true},
-            {field: 'Transport', title: '<span data-i18n-zh="协议" data-i18n-en="Protocol">协议</span>', halign: 'center', width: '88px', formatter: protocolSummary},
-            {field: 'SourceIP', title: '<span data-i18n-zh="来源 IP" data-i18n-en="Source IP">来源 IP</span>', halign: 'center', width: '120px', escape: true},
-            {field: 'ClientLocalAddr', title: '<span data-i18n-zh="客户端内网地址" data-i18n-en="Client LAN">客户端内网地址</span>', halign: 'center', width: '135px', escape: true},
-            {field: 'Error', title: '<span data-i18n-zh="结果说明" data-i18n-en="Result details">结果说明</span>', halign: 'center', escape: true}
+            {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', class: 'audit-list__time', width: '148px'},
+            {field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', class: 'audit-list__result', width: '68px', formatter: resultBadge},
+            {field: 'Kind', title: '<span data-i18n-zh="连接" data-i18n-en="Connection">连接</span>', halign: 'center', class: 'audit-list__kind', width: '155px', formatter: connectionSummary},
+            {field: 'User', title: '<span data-i18n-zh="用户 / 客户端" data-i18n-en="User / client">用户 / 客户端</span>', halign: 'center', class: 'audit-list__identity', width: '150px', formatter: identitySummary},
+            {field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', class: 'audit-list__resource', escape: true},
+            {field: 'Transport', title: '<span data-i18n-zh="协议" data-i18n-en="Protocol">协议</span>', halign: 'center', class: 'audit-list__protocol', width: '88px', formatter: protocolSummary},
+            {field: 'SourceIP', title: '<span data-i18n-zh="来源 IP" data-i18n-en="Source IP">来源 IP</span>', halign: 'center', class: 'audit-list__source', width: '120px', escape: true},
+            {field: 'ClientLocalAddr', title: '<span data-i18n-zh="客户端内网地址" data-i18n-en="Client LAN">客户端内网地址</span>', halign: 'center', class: 'audit-list__client-lan', width: '135px', escape: true},
+            {field: 'Error', title: '<span data-i18n-zh="结果说明" data-i18n-en="Result details">结果说明</span>', halign: 'center', class: 'audit-list__error', escape: true}
         ]
     });
 

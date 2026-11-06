@@ -37,6 +37,14 @@ func Init() {
 			beego.NSRouter("/global/certificate", &controllers.GlobalController{}, "GET:Certificate"),
 			beego.NSRouter("/global/certificate/config", &controllers.GlobalController{}, "POST:SaveCertificateConfig"),
 			beego.NSRouter("/global/certificate/platform-domains", &controllers.GlobalController{}, "POST:SaveCertificatePlatformDomains"),
+			beego.NSRouter("/global/security", &controllers.SecurityController{}, "GET:Settings"),
+			beego.NSRouter("/security/devices", &controllers.SecurityController{}, "GET:DeviceList"),
+			beego.NSRouter("/security/revoke", &controllers.SecurityController{}, "POST:RevokeDevice"),
+			beego.NSRouter("/security/revoke-all", &controllers.SecurityController{}, "POST:RevokeAllDevices"),
+			beego.NSRouter("/security/pow/save", &controllers.SecurityController{}, "POST:SavePoW"),
+			beego.NSRouter("/security/totp/start", &controllers.SecurityController{}, "POST:TOTPStart"),
+			beego.NSRouter("/security/totp/confirm", &controllers.SecurityController{}, "POST:TOTPConfirm"),
+			beego.NSRouter("/security/totp/disable", &controllers.SecurityController{}, "POST:TOTPDisable"),
 			beego.NSRouter("/global/bridgecertificate", &controllers.GlobalController{}, "GET:BridgeCertificate;POST:SaveBridgeCertificate"),
 			beego.NSRouter("/global/bridgecertificate/check", &controllers.GlobalController{}, "POST:CheckBridgeCertificate"),
 			beego.NSRouter("/global/banlist", &controllers.GlobalController{}, "GET:Banlist;POST:Banlist"),
@@ -82,6 +90,14 @@ func Init() {
 		beego.Router("/global/certificate", &controllers.GlobalController{}, "GET:Certificate")
 		beego.Router("/global/certificate/config", &controllers.GlobalController{}, "POST:SaveCertificateConfig")
 		beego.Router("/global/certificate/platform-domains", &controllers.GlobalController{}, "POST:SaveCertificatePlatformDomains")
+		beego.Router("/global/security", &controllers.SecurityController{}, "GET:Settings")
+		beego.Router("/security/devices", &controllers.SecurityController{}, "GET:DeviceList")
+		beego.Router("/security/revoke", &controllers.SecurityController{}, "POST:RevokeDevice")
+		beego.Router("/security/revoke-all", &controllers.SecurityController{}, "POST:RevokeAllDevices")
+		beego.Router("/security/pow/save", &controllers.SecurityController{}, "POST:SavePoW")
+		beego.Router("/security/totp/start", &controllers.SecurityController{}, "POST:TOTPStart")
+		beego.Router("/security/totp/confirm", &controllers.SecurityController{}, "POST:TOTPConfirm")
+		beego.Router("/security/totp/disable", &controllers.SecurityController{}, "POST:TOTPDisable")
 		beego.Router("/global/bridgecertificate", &controllers.GlobalController{}, "GET:BridgeCertificate;POST:SaveBridgeCertificate")
 		beego.Router("/global/bridgecertificate/check", &controllers.GlobalController{}, "POST:CheckBridgeCertificate")
 		beego.Router("/global/banlist", &controllers.GlobalController{}, "GET:Banlist;POST:Banlist")

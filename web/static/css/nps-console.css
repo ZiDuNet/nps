@@ -36,6 +36,9 @@
     --nps-shadow-sm: 0 2px 8px rgba(34, 64, 101, .07);
     --nps-radius: 8px;
     --nps-focus: 0 0 0 3px rgba(37, 99, 235, .2);
+    --nps-auth-network-line: rgba(37, 99, 235, .22);
+    --nps-auth-network-node: rgba(37, 99, 235, .44);
+    --nps-auth-network-glow: rgba(37, 99, 235, .1);
     --c-accent: var(--nps-primary);
     --c-accent-light: var(--nps-primary-soft);
     --c-border: var(--nps-line);
@@ -78,6 +81,9 @@
     --nps-shadow: 0 14px 34px rgba(0, 0, 0, .28);
     --nps-shadow-sm: 0 3px 10px rgba(0, 0, 0, .22);
     --nps-focus: 0 0 0 3px rgba(110, 160, 255, .28);
+    --nps-auth-network-line: rgba(110, 160, 255, .27);
+    --nps-auth-network-node: rgba(145, 183, 255, .58);
+    --nps-auth-network-glow: rgba(110, 160, 255, .13);
 }
 [data-theme="dark"] body.nps-bootstrap ::selection { color: #071326; }
 [data-theme="dark"] body.nps-bootstrap .btn-primary,
@@ -205,7 +211,7 @@ body.nps-bootstrap .white-bg {
 [data-theme="dark"] body.nps-bootstrap .navbar-static-top,
 [data-theme="dark"] body.nps-bootstrap .white-bg { background: rgba(14, 23, 39, .97) !important; }
 body.nps-bootstrap .navbar-header { min-height: 60px; }
-body.nps-bootstrap .nps-topbar { display: flex !important; align-items: stretch; min-height: 60px; }
+body.nps-bootstrap .nps-topbar { display: flex !important; align-items: stretch; min-height: 60px; padding-top: 0 !important; padding-bottom: 0 !important; }
 body.nps-bootstrap .navbar-header { display: flex; flex: 0 0 auto; align-items: stretch; }
 body.nps-bootstrap .navbar-minimalize { width: 36px; height: 36px; margin: 12px 0 0 17px !important; padding: 0 !important; color: var(--nps-muted) !important; background: var(--nps-surface) !important; border: 1px solid var(--nps-line) !important; border-radius: 6px !important; box-shadow: none !important; }
 body.nps-bootstrap .navbar-minimalize:hover { color: var(--nps-primary) !important; background: var(--nps-primary-soft) !important; border-color: var(--nps-primary-soft) !important; }
@@ -379,7 +385,7 @@ body.nps-bootstrap .dashboard-page-actions { display: flex; flex-wrap: wrap; gap
 body.nps-bootstrap #nps-content h1[tabindex="-1"]:focus { outline: 0 !important; box-shadow: none !important; }
 body.nps-bootstrap .system-settings-tabs {
     display: inline-grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 4px;
     width: min(100%, 1040px);
     margin: -5px 0 20px;
@@ -996,20 +1002,52 @@ body.nps-bootstrap .client-detail__value,
 body.nps-bootstrap .client-detail__line span:last-child,
 body.nps-bootstrap .host-detail__value,
 body.nps-bootstrap .tunnel-detail__value { color: var(--nps-ink); }
-body.nps-bootstrap .client-detail__history-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: center; gap: 8px 16px; padding: 9px 0; border-bottom: 1px solid var(--nps-line); color: var(--nps-ink); font-size: 12px; }
-body.nps-bootstrap .client-detail__history-row:last-child { border-bottom: 0; }
-body.nps-bootstrap .client-detail__history-state { justify-self: end; color: var(--nps-muted); }
-body.nps-bootstrap .client-detail__history-state--online { color: var(--nps-success, #218838); font-weight: 650; }
-body.nps-bootstrap .client-detail__history-empty { color: var(--nps-muted); font-size: 12px; }
-body.nps-bootstrap .client-instance-list { display: grid; gap: 8px; }
-body.nps-bootstrap .client-instance-row { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(260px, 1.4fr) auto; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--nps-line); border-radius: 10px; background: var(--nps-surface-soft, #f8fafc); }
-body.nps-bootstrap .client-instance-row__identity,
-body.nps-bootstrap .client-instance-row__detail { display: grid; gap: 3px; min-width: 0; }
+body.nps-bootstrap .client-detail__activity-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; margin-top: 14px; }
+body.nps-bootstrap .client-detail__activity-card { min-width: 0; margin: 0; padding: 12px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 7px; }
+body.nps-bootstrap .client-detail__activity-card .client-detail__section-title { display: flex; align-items: center; gap: 6px; margin: 0 0 9px; padding: 0 0 8px; }
+body.nps-bootstrap .client-detail__activity-card .client-detail__section-title > i { flex: 0 0 16px; margin-right: 0; }
+body.nps-bootstrap .client-detail__section-count { display: inline-flex; min-width: 20px; height: 18px; align-items: center; justify-content: center; margin-left: auto; padding: 0 6px; color: var(--nps-primary); background: var(--nps-primary-soft); border-radius: 999px; font-size: 10px; font-weight: 750; line-height: 1; }
+body.nps-bootstrap .client-detail__activity-scroll { max-height: 224px; overflow-y: auto; overscroll-behavior: contain; padding-right: 3px; border-radius: 5px; scrollbar-color: var(--nps-line-strong) transparent; scrollbar-gutter: stable; scrollbar-width: thin; }
+body.nps-bootstrap .client-detail__activity-scroll:focus-visible { outline: 0; box-shadow: var(--nps-focus); }
+body.nps-bootstrap .client-detail__activity-scroll::-webkit-scrollbar { width: 6px; }
+body.nps-bootstrap .client-detail__activity-scroll::-webkit-scrollbar-track { background: transparent; }
+body.nps-bootstrap .client-detail__activity-scroll::-webkit-scrollbar-thumb { background: var(--nps-line-strong); border-radius: 999px; }
+body.nps-bootstrap .client-instance-list,
+body.nps-bootstrap .client-history-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); align-items: start; gap: 8px; }
+body.nps-bootstrap .client-instance-notice { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; margin-bottom: 8px; padding: 9px 10px; color: var(--nps-ink); background: color-mix(in srgb, var(--nps-warning-soft) 78%, var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-warning) 30%, transparent); border-radius: 7px; }
+body.nps-bootstrap .client-instance-notice > i { padding-top: 2px; color: var(--nps-warning); font-size: 14px; text-align: center; }
+body.nps-bootstrap .client-instance-notice__body { display: grid; gap: 3px; min-width: 0; }
+body.nps-bootstrap .client-instance-notice__body > strong { color: var(--nps-ink); font-size: 12px; font-weight: 750; line-height: 1.4; }
+body.nps-bootstrap .client-instance-notice__body > span { color: var(--nps-muted); font-size: 11px; line-height: 1.5; }
+body.nps-bootstrap .client-instance-notice details { margin-top: 2px; font-size: 11px; line-height: 1.5; }
+body.nps-bootstrap .client-instance-notice summary { width: fit-content; color: var(--nps-warning); font-weight: 700; cursor: pointer; }
+body.nps-bootstrap .client-instance-notice summary:focus-visible { outline: 0; box-shadow: var(--nps-focus); border-radius: 3px; }
+body.nps-bootstrap .client-instance-notice ol { display: grid; gap: 4px; margin: 6px 0 0; padding-left: 18px; color: var(--nps-muted); }
+body.nps-bootstrap .client-instance-row { display: grid; gap: 7px; min-width: 0; padding: 9px 10px; color: var(--nps-ink); background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 7px; }
+body.nps-bootstrap .client-instance-row__identity { display: grid; gap: 5px; min-width: 0; }
+body.nps-bootstrap .client-instance-row__name { display: flex; min-width: 0; align-items: center; gap: 6px; }
+body.nps-bootstrap .client-instance-row__identity strong { color: var(--nps-ink); font-size: 12px; font-weight: 700; }
 body.nps-bootstrap .client-instance-row__identity code,
-body.nps-bootstrap .client-instance-row__detail span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body.nps-bootstrap .client-instance-row__detail { color: var(--nps-muted); font-size: 12px; }
-body.nps-bootstrap .client-instance-row__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-body.nps-bootstrap .client-instance-row__actions .btn { display: inline-flex; align-items: center; gap: 5px; }
+body.nps-bootstrap .client-instance-row__identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.nps-bootstrap .client-instance-row__identity strong { min-width: 0; }
+body.nps-bootstrap .client-instance-row__id { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 6px; min-width: 0; }
+body.nps-bootstrap .client-instance-row__id > span { color: var(--nps-faint); font-size: 10px; font-weight: 700; }
+body.nps-bootstrap .client-instance-row__id code { min-width: 0; padding: 0; color: var(--nps-muted); background: transparent; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.nps-bootstrap .client-instance-row__meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 6px 10px; padding-top: 7px; border-top: 1px solid var(--nps-line); }
+body.nps-bootstrap .client-instance-meta { display: grid; gap: 1px; min-width: 0; }
+body.nps-bootstrap .client-instance-meta > span { color: var(--nps-faint); font-size: 10px; font-weight: 700; line-height: 1.35; }
+body.nps-bootstrap .client-instance-meta > strong { min-width: 0; color: var(--nps-ink); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 11px; font-weight: 600; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.nps-bootstrap .client-detail__history-state { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; padding: 2px 7px; color: var(--nps-muted); background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 999px; font-size: 10px; font-weight: 700; line-height: 1.4; white-space: nowrap; }
+body.nps-bootstrap .client-detail__history-state::before { width: 5px; height: 5px; flex: 0 0 5px; background: currentColor; border-radius: 50%; content: ""; }
+body.nps-bootstrap .client-detail__history-state--online { color: var(--nps-success); background: var(--nps-success-soft); border-color: transparent; }
+body.nps-bootstrap .client-history-item { display: grid; gap: 6px; min-width: 0; padding: 9px 10px; background: var(--nps-surface); border: 1px solid var(--nps-line); border-left: 3px solid var(--nps-line-strong); border-radius: 7px; }
+body.nps-bootstrap .client-history-item.is-online { border-left-color: var(--nps-success); }
+body.nps-bootstrap .client-history-item__primary { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 7px; }
+body.nps-bootstrap .client-history-item__primary .client-history-item__time { flex: 1 1 auto; }
+body.nps-bootstrap .client-history-item__time { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 7px; min-width: 0; color: var(--nps-muted); font-size: 12px; line-height: 1.5; }
+body.nps-bootstrap .client-history-item__time > span { font-weight: 650; }
+body.nps-bootstrap .client-history-item__time > time { min-width: 0; color: var(--nps-ink); font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 12px; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.nps-bootstrap .client-detail__history-empty { padding: 10px 2px; color: var(--nps-muted); font-size: 12px; line-height: 1.5; }
 body.nps-bootstrap .client-detail__command code,
 body.nps-bootstrap .tunnel-detail__command code,
 body.nps-bootstrap .help-command { color: var(--nps-ink); background: var(--nps-surface-subtle); border-color: var(--nps-line); }
@@ -1240,10 +1278,10 @@ body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__bars .management
 }
 body.nps-bootstrap .nps-table .nps-table__toolbar > .nps-table__columns { margin-left: auto !important; }
 
-/* Long commands reserve a fixed action column and wrap inside their own track. */
+/* Command text and its copy action stay together while long values wrap. */
 body.nps-bootstrap .client-detail__command,
 body.nps-bootstrap .tunnel-detail__command {
-    grid-template-columns: minmax(94px, 124px) minmax(0, 1fr) 36px;
+    grid-template-columns: minmax(94px, 124px) minmax(0, 1fr);
     align-items: start;
     gap: 10px;
 }
@@ -1253,12 +1291,20 @@ body.nps-bootstrap .tunnel-detail__command-label {
     padding-top: 7px;
     overflow-wrap: anywhere;
 }
+body.nps-bootstrap .nps-detail-command-content {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    gap: 8px;
+}
 body.nps-bootstrap .client-detail__command code,
 body.nps-bootstrap .tunnel-detail__command code {
     display: block;
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     min-width: 0;
     min-height: 36px;
+    flex: 0 1 auto;
     padding: 7px 9px;
     white-space: normal !important;
     overflow-wrap: anywhere;
@@ -1267,6 +1313,7 @@ body.nps-bootstrap .tunnel-detail__command code {
 body.nps-bootstrap .client-detail__copy,
 body.nps-bootstrap .tunnel-detail__copy {
     display: inline-flex;
+    flex: 0 0 36px;
     width: 36px;
     min-width: 36px;
     height: 36px;
@@ -1430,7 +1477,7 @@ body.nps-bootstrap .form-page .form-workflow-form > .form-section-content-collap
     body.nps-bootstrap .management-page--host .nps-table__container.has-card-view .host-entry__name { font-size: 12px; }
     body.nps-bootstrap .management-page--host .nps-table__container.has-card-view .host-actions { justify-content: flex-start; }
     body.nps-bootstrap .client-detail__command,
-    body.nps-bootstrap .tunnel-detail__command { grid-template-columns: minmax(0, 1fr) 36px; gap: 6px 8px; }
+    body.nps-bootstrap .tunnel-detail__command { grid-template-columns: minmax(0, 1fr); gap: 6px 8px; }
     body.nps-bootstrap .client-detail__command-label,
     body.nps-bootstrap .tunnel-detail__command-label { grid-column: 1 / -1; padding-top: 0; }
     body.nps-bootstrap .table-responsive { border: 0; }
@@ -2951,9 +2998,9 @@ body.nps-bootstrap .tunnel-access-action:hover {
 body.nps-bootstrap .tunnel-access-action i { font-size: 9px; }
 body.nps-bootstrap .management-page--tunnel .nps-table__grid th.tunnel-list__actions,
 body.nps-bootstrap .management-page--tunnel .nps-table__grid td.tunnel-list__actions {
-    width: 184px !important;
-    min-width: 184px !important;
-    max-width: 184px !important;
+    width: 160px !important;
+    min-width: 160px !important;
+    max-width: 160px !important;
     padding-right: 0 !important;
     padding-left: 0 !important;
     text-align: center !important;
@@ -2975,13 +3022,13 @@ body.nps-bootstrap .management-page--host .nps-table__grid td.host-list__actions
     max-width: none;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 2px;
 }
 body.nps-bootstrap .management-page--tunnel .nps-table__grid td.tunnel-list__actions .tunnel-actions > .btn,
 body.nps-bootstrap .management-page--tunnel .nps-table__grid td.tunnel-list__actions .tunnel-actions > a,
 body.nps-bootstrap .management-page--host .nps-table__grid td.host-list__actions .host-actions > .btn,
 body.nps-bootstrap .management-page--host .nps-table__grid td.host-list__actions .host-actions > a {
-    flex: 0 0 32px;
+    flex: 0 0 30px;
     box-sizing: border-box;
     margin-right: 0 !important;
     margin-left: 0 !important;
@@ -3228,14 +3275,15 @@ body.nps-bootstrap .user-detail-summary .badge {
     body.nps-bootstrap .user-detail-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
-    body.nps-bootstrap .client-detail__history-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-    body.nps-bootstrap .client-detail__history-state { justify-self: start; }
     body.nps-bootstrap .client-detail__cards,
     body.nps-bootstrap .host-detail__cards,
     body.nps-bootstrap .tunnel-detail__cards { grid-template-columns: minmax(0, 1fr); }
+    body.nps-bootstrap .client-instance-list,
+    body.nps-bootstrap .client-history-list { grid-template-columns: minmax(0, 1fr); }
     body.nps-bootstrap .client-update-fields { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 991px) {
+    body.nps-bootstrap .client-detail__activity-grid { grid-template-columns: minmax(0, 1fr); }
     body.nps-bootstrap .user-detail-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
@@ -4579,6 +4627,22 @@ body.auth-body .auth-panel__badge {
     border-color: var(--nps-line);
     animation-duration: 2.6s;
 }
+body.auth-body a.auth-panel__ip-link {
+    width: max-content;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color .16s ease, background-color .16s ease, border-color .16s ease, transform .16s ease;
+}
+body.auth-body a.auth-panel__ip-link:hover {
+    color: #fff;
+    background: var(--nps-primary);
+    border-color: var(--nps-primary);
+    transform: translateY(-1px);
+}
+body.auth-body a.auth-panel__ip-link:focus-visible {
+    outline: 0;
+    box-shadow: var(--nps-focus);
+}
 @media (max-width: 768px) {
     body.nps-bootstrap .nav-sidebar-footer .nav-account { margin-right: 18px !important; margin-left: 18px !important; }
     body.auth-body .auth-context__brand-lockup .auth-context__brand-mark { width: 58px; height: 58px; }
@@ -4663,6 +4727,93 @@ body.auth-body .auth-page::after {
         animation: none;
         transform: translate3d(-4vw, -2vh, 0) scale(.98);
     }
+}
+
+/* Shared authentication background and session controls. The supplied
+   single-file network scene is isolated in a same-origin frame so its dense
+   topology animation cannot interfere with forms, focus, or keyboard input. */
+body.auth-body .auth-network-background {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    border: 0;
+    pointer-events: none;
+}
+body.auth-body .auth-page {
+    z-index: 1;
+    background: transparent !important;
+}
+body.auth-body .auth-page::before,
+body.auth-body .auth-page::after {
+    display: none !important;
+}
+body.auth-body .auth-context__description {
+    max-width: none;
+    overflow: hidden;
+    font-size: clamp(11px, 1.15vw, 14px);
+    letter-spacing: -.01em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.auth-body .auth-page > .auth-page__header,
+body.auth-body .auth-page > .auth-page__main,
+body.auth-body .auth-page > .auth-page__footer {
+    position: relative;
+    z-index: 1;
+}
+body.auth-body .auth-remember {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 32px;
+    margin: 12px 0 0;
+    padding: 3px 5px;
+    color: var(--nps-muted);
+    background: transparent;
+    border: 0;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.3;
+    transition: color .16s ease;
+}
+body.auth-body .auth-remember:hover {
+    color: var(--nps-primary);
+}
+body.auth-body .auth-remember:focus-within {
+    color: var(--nps-primary);
+    box-shadow: none;
+}
+body.auth-body .auth-remember input {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--nps-primary);
+}
+body.auth-body .auth-remember strong {
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
+}
+body.auth-body .auth-remember small {
+    color: var(--nps-faint);
+    font-size: 11px;
+    white-space: nowrap;
+}
+[data-theme="dark"] body.auth-body .auth-captcha__challenge {
+    /* Captcha text is rasterized with dark glyphs. Keep a light challenge tile
+       in dark mode instead of inverting or dimming the bitmap. */
+    background: #fff !important;
+    border-color: #c9d6e6 !important;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .06);
+}
+[data-theme="dark"] body.auth-body .auth-captcha__challenge img {
+    filter: none !important;
 }
 
 /* Keep the account/exit block visually separated from the last navigation
@@ -4993,18 +5144,50 @@ body.nps-bootstrap .client-owner-cell--empty {
     }
     body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__address,
     body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__address {
-        width: 124px !important;
-        min-width: 124px !important;
-        max-width: 124px !important;
+        width: 148px !important;
+        min-width: 148px !important;
+        max-width: 148px !important;
     }
 }
-body.nps-bootstrap .client-remark-cell,
-body.nps-bootstrap .client-address-cell {
+body.nps-bootstrap .client-remark-heading { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+body.nps-bootstrap .client-remark-help { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; color: var(--nps-faint); border-radius: 50%; cursor: help; }
+body.nps-bootstrap .client-remark-help i { font-size: 12px; }
+body.nps-bootstrap .client-remark-help:hover,
+body.nps-bootstrap .client-remark-help:focus-visible { color: var(--nps-primary); background: var(--nps-primary-soft); outline: 0; }
+body.nps-bootstrap .client-remark-cell {
     display: block;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+body.nps-bootstrap .client-address-cell {
+    display: grid;
+    min-width: 0;
+    justify-items: center;
+    gap: 2px;
+    line-height: 1.35;
+    text-align: center;
+}
+body.nps-bootstrap .client-address-cell__ip,
+body.nps-bootstrap .client-address-cell__region {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.nps-bootstrap .client-address-cell__region {
+    min-height: 13px;
+    color: var(--nps-muted);
+    font-size: 10px;
+    font-weight: 550;
+}
+body.nps-bootstrap .client-address-cell__region[data-ip-region-state="loading"] {
+    color: var(--nps-faint);
+}
+body.nps-bootstrap .client-address-cell__region[data-ip-region-state="error"] {
+    color: var(--nps-faint);
 }
 body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__remark,
 body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__owner,
@@ -5138,5 +5321,1323 @@ body.nps-bootstrap .host-endpoint i {
     body.nps-bootstrap .host-endpoint {
         min-height: 36px;
         padding: 6px 11px;
+    }
+}
+
+/* Client inventory density pass.
+   The client grid carries more operational data than the other resource
+   lists. Its columns therefore use explicit compact tracks so the table,
+   sticky actions, and expanded detail row all share the available width. */
+@media (min-width: 1181px) {
+    body.nps-bootstrap .management-page--client .nps-table__body {
+        overflow-x: hidden !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid {
+        width: 100% !important;
+        min-width: 0 !important;
+        table-layout: fixed !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid thead th {
+        min-width: 0 !important;
+        height: 44px;
+        padding: 0 !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__header-inner {
+        min-width: 0 !important;
+        min-height: 44px;
+        padding: 5px 6px;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__header-inner > :first-child:not(.nps-table__sort) {
+        min-width: 0;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid tbody td {
+        height: 50px;
+        padding: 7px 6px !important;
+        font-size: 12px;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__detail-cell {
+        width: 34px !important;
+        min-width: 34px !important;
+        max-width: 34px !important;
+        padding: 0 !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__detail-toggle {
+        width: 26px;
+        height: 26px;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__id,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__id {
+        width: 42px !important;
+        min-width: 42px !important;
+        max-width: 42px !important;
+        padding-right: 4px !important;
+        padding-left: 4px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__remark,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__remark {
+        width: 96px !important;
+        min-width: 96px !important;
+        max-width: 96px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__owner,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__owner {
+        width: 104px !important;
+        min-width: 104px !important;
+        max-width: 104px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__version,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__version {
+        width: 64px !important;
+        min-width: 64px !important;
+        max-width: 64px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__address,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__address {
+        width: 104px !important;
+        min-width: 104px !important;
+        max-width: 104px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__inlet-flow,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__inlet-flow,
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__export-flow,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__export-flow {
+        width: 68px !important;
+        min-width: 68px !important;
+        max-width: 68px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__rate,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__rate {
+        width: 92px !important;
+        min-width: 92px !important;
+        max-width: 92px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__connections,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__connections {
+        width: 64px !important;
+        min-width: 64px !important;
+        max-width: 64px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__expire-time,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__expire-time {
+        width: 78px !important;
+        min-width: 78px !important;
+        max-width: 78px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__status,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__status {
+        width: 48px !important;
+        min-width: 48px !important;
+        max-width: 48px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__connection,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__connection {
+        width: 64px !important;
+        min-width: 64px !important;
+        max-width: 64px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__option,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__option {
+        width: 104px !important;
+        min-width: 104px !important;
+        max-width: 104px !important;
+        padding-right: 3px !important;
+        padding-left: 3px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__view,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__view {
+        width: 64px !important;
+        min-width: 64px !important;
+        max-width: 64px !important;
+        padding-right: 3px !important;
+        padding-left: 3px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__option {
+        right: 64px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td.client-list__option {
+        right: 64px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid tbody td.client-list__inlet-flow,
+    body.nps-bootstrap .management-page--client .nps-table__grid tbody td.client-list__export-flow,
+    body.nps-bootstrap .management-page--client .nps-table__grid tbody td.client-list__rate,
+    body.nps-bootstrap .management-page--client .nps-table__grid tbody td.client-list__connections {
+        text-align: right !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__inlet-flow .nps-table__header-inner,
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__export-flow .nps-table__header-inner,
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__rate .nps-table__header-inner,
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__connections .nps-table__header-inner {
+        justify-content: flex-end !important;
+    }
+    body.nps-bootstrap .management-page--client .client-actions {
+        gap: 2px;
+    }
+    body.nps-bootstrap .management-page--client .client-actions > .btn {
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        flex-basis: 28px;
+        border-radius: 5px;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid .nps-detail-view > td {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        padding: 14px !important;
+        overflow: hidden;
+        white-space: normal;
+    }
+}
+
+/* Identity and resource columns stay centered; telemetry reads as a compact
+   numeric block with stable digit widths. */
+body.nps-bootstrap .management-page--client .client-table-number {
+    display: inline-block;
+    max-width: 100%;
+    font-variant-numeric: tabular-nums;
+    font-weight: 650;
+    white-space: nowrap;
+}
+body.nps-bootstrap .management-page--client .client-live-rate {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    justify-content: end;
+    gap: 1px 3px;
+    line-height: 1.25;
+}
+body.nps-bootstrap .management-page--client .client-live-rate__value {
+    font-size: 10px;
+}
+body.nps-bootstrap .management-page--client .client-live-rate__direction {
+    font-size: 8px;
+}
+body.nps-bootstrap .management-page--client .client-flow-heading {
+    justify-items: end;
+    gap: 0;
+    line-height: 1.1;
+}
+body.nps-bootstrap .management-page--client .client-flow-heading small {
+    font-size: 8px;
+}
+
+/* Status, protocol, and version are separate kinds of information, so they
+   use separate visual roles instead of borrowing the generic blue badge. */
+body.nps-bootstrap .client-status-badge,
+body.nps-bootstrap .client-connection-badge {
+    display: inline-flex;
+    width: max-content;
+    max-width: 100%;
+    min-height: 20px;
+    align-items: center;
+    justify-content: center;
+    justify-self: start;
+    padding: 2px 7px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 750;
+    line-height: 1;
+    white-space: nowrap;
+}
+body.nps-bootstrap .client-status-badge--enabled,
+body.nps-bootstrap .client-connection-state--online .client-connection-badge {
+    color: var(--nps-success) !important;
+    background: var(--nps-success-soft) !important;
+}
+body.nps-bootstrap .client-status-badge--disabled,
+body.nps-bootstrap .client-connection-state--offline .client-connection-badge {
+    color: var(--nps-muted) !important;
+    background: var(--nps-surface) !important;
+    border-color: var(--nps-line);
+}
+body.nps-bootstrap .management-page--client .client-connection-state {
+    gap: 2px;
+}
+body.nps-bootstrap .management-page--client .client-connection-protocol {
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--nps-muted);
+    font-size: 9px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+}
+body.nps-bootstrap .management-page--client .client-version-pill {
+    min-height: 22px;
+    padding: 2px 6px;
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border-color: var(--nps-line);
+    font-size: 10px;
+    font-weight: 700;
+}
+body.nps-bootstrap .management-page--client .client-version-pill:hover,
+body.nps-bootstrap .management-page--client .client-version-pill:focus-visible {
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+    border-color: var(--nps-primary);
+}
+body.nps-bootstrap .management-page--client .client-list__option .btn-warning {
+    color: var(--nps-warning) !important;
+    background: var(--nps-warning-soft) !important;
+    border-color: color-mix(in srgb, var(--nps-warning) 38%, transparent) !important;
+}
+body.nps-bootstrap .management-page--client .client-list__option .btn-danger {
+    color: var(--nps-danger) !important;
+    background: var(--nps-danger-soft) !important;
+    border-color: color-mix(in srgb, var(--nps-danger) 38%, transparent) !important;
+}
+body.nps-bootstrap .management-page--client .client-list__option .btn-warning:hover,
+body.nps-bootstrap .management-page--client .client-list__option .btn-danger:hover {
+    color: #fff !important;
+}
+body.nps-bootstrap .management-page--client .client-list__option .btn-warning:hover {
+    background: var(--nps-warning) !important;
+}
+body.nps-bootstrap .management-page--client .client-list__option .btn-danger:hover {
+    background: var(--nps-danger) !important;
+}
+
+/* Expanded details respond to their own available width. The table detail
+   row no longer inherits a wider scrolling grid, and cards fold to one track
+   as soon as their content would become cramped. */
+body.nps-bootstrap .management-page--client .client-detail {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    padding: 4px 2px;
+}
+body.nps-bootstrap .management-page--client .client-detail__connection-section {
+    min-width: 0;
+    overflow: hidden;
+}
+body.nps-bootstrap .management-page--client .client-detail__protocol-tabs,
+body.nps-bootstrap .management-page--client .client-detail__protocol-summary,
+body.nps-bootstrap .management-page--client .client-detail__protocol-chips {
+    min-width: 0;
+}
+body.nps-bootstrap .management-page--client .client-detail__protocol-summary {
+    flex-wrap: wrap;
+}
+body.nps-bootstrap .management-page--client .client-detail__protocol-chips {
+    flex-wrap: wrap;
+}
+body.nps-bootstrap .management-page--client .client-detail__cards {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+    gap: 12px;
+}
+body.nps-bootstrap .management-page--client .client-detail__card .client-detail__grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+    gap: 7px 14px;
+}
+body.nps-bootstrap .management-page--client .client-detail__activity-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+body.nps-bootstrap .management-page--client .client-detail__activity-card {
+    padding: 10px;
+    overflow: hidden;
+}
+body.nps-bootstrap .management-page--client .client-detail__activity-card .client-detail__section-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+body.nps-bootstrap .management-page--client .client-detail__activity-scroll {
+    min-width: 0;
+    max-height: clamp(176px, 24vh, 224px);
+}
+body.nps-bootstrap .management-page--client .client-instance-list,
+body.nps-bootstrap .management-page--client .client-history-list {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+}
+body.nps-bootstrap .management-page--client .client-instance-row__meta {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 125px), 1fr));
+}
+body.nps-bootstrap .management-page--client .client-instance-notice {
+    grid-template-columns: 16px minmax(0, 1fr);
+}
+body.nps-bootstrap .management-page--client .client-history-item__primary {
+    flex-wrap: wrap;
+}
+body.nps-bootstrap .management-page--client .client-history-item__time {
+    grid-template-columns: max-content minmax(0, 1fr);
+    font-size: 11px;
+}
+body.nps-bootstrap .management-page--client .client-history-item__time > time {
+    font-size: 11px;
+}
+
+@media (min-width: 992px) and (max-width: 1180px) {
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__option,
+    body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td.client-list__option,
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__view,
+    body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td.client-list__view {
+        position: static !important;
+        right: auto !important;
+        box-shadow: none !important;
+    }
+}
+
+/* The compact client grid switches to labelled cards before the telemetry
+   tracks become unreadable. These final selectors intentionally win over the
+   base fixed-table rules and preserve the same detail panel inside each card. */
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__body {
+    overflow-x: hidden !important;
+    padding: 8px;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid thead {
+    display: none;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody {
+    display: grid;
+    width: 100%;
+    gap: 8px;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row {
+    position: relative;
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+    gap: 0 14px;
+    margin: 0;
+    padding: 9px 11px 9px 38px;
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line);
+    border-radius: 7px;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row:nth-child(odd) {
+    background: var(--nps-surface-subtle);
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td {
+    display: grid !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    grid-template-columns: minmax(64px, 34%) minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+    padding: 5px 0 !important;
+    border: 0 !important;
+    text-align: left !important;
+    white-space: normal;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td::before {
+    content: attr(data-label);
+    min-width: 0;
+    color: var(--nps-faint);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td > * {
+    min-width: 0;
+    max-width: 100%;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-table__detail-cell {
+    position: absolute;
+    top: 10px;
+    left: 8px;
+    display: block !important;
+    width: 26px !important;
+    min-width: 26px !important;
+    max-width: 26px !important;
+    padding: 0 !important;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.nps-table__detail-cell::before {
+    display: none;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__remark,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__owner,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__status,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__connection {
+    text-align: left !important;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__option,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__view {
+    grid-template-columns: minmax(64px, 34%) minmax(0, 1fr);
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__option .client-actions,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row td.client-list__view .client-actions {
+    justify-content: flex-start;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-detail-view {
+    display: block;
+    width: 100%;
+    margin-top: -8px;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-detail-view > td {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    padding: 14px !important;
+    background: var(--nps-surface) !important;
+    border: 1px solid var(--nps-line) !important;
+    border-top: 0 !important;
+    border-radius: 0 0 7px 7px;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__loading-row,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__empty-row {
+    display: block;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__loading-row > td,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__empty-row > td {
+    display: block !important;
+    width: 100% !important;
+}
+
+/* -------------------------------------------------------------------------
+   Shared management-list system
+
+   Every server-backed list uses the same table surface, header rhythm, row
+   density, semantic action colors, and responsive card structure. Resource
+   pages may still define their own column widths and cell content, but they
+   no longer need to duplicate the surrounding table chrome.
+   ------------------------------------------------------------------------- */
+body.nps-bootstrap .nps-table .nps-table__container {
+    overflow: hidden !important;
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line);
+    border-radius: 8px;
+    box-shadow: var(--nps-shadow-sm);
+}
+body.nps-bootstrap .nps-table .nps-table__body {
+    background: var(--nps-surface);
+    scrollbar-color: var(--nps-line-strong) transparent;
+    scrollbar-width: thin;
+}
+body.nps-bootstrap .nps-table .nps-table__grid {
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--nps-surface);
+}
+body.nps-bootstrap .nps-table .nps-table__grid thead th {
+    height: 44px !important;
+    padding: 0 !important;
+    color: var(--nps-muted);
+    background: var(--nps-surface-subtle);
+    border-bottom: 1px solid var(--nps-line-strong);
+    vertical-align: middle;
+}
+body.nps-bootstrap .nps-table .nps-table__header-inner {
+    min-height: 44px !important;
+    padding: 6px 8px !important;
+    color: inherit;
+    font-size: 11px;
+    font-weight: 720;
+    line-height: 1.25;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody td {
+    height: 52px;
+    padding: 7px 8px !important;
+    color: var(--nps-ink);
+    background: var(--nps-surface);
+    border-top: 1px solid var(--nps-line);
+    font-size: 12px;
+    line-height: 1.4;
+    vertical-align: middle;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody tr.nps-table__row:nth-child(odd) > td {
+    background: var(--nps-surface-subtle);
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody tr.nps-table__row:hover > td {
+    background: var(--nps-surface-hover);
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody tr.nps-table__row > td + td {
+    border-left: 1px solid color-mix(in srgb, var(--nps-line) 68%, transparent);
+}
+body.nps-bootstrap .nps-table .nps-table__detail-cell {
+    width: 34px !important;
+    min-width: 34px !important;
+    max-width: 34px !important;
+    padding: 0 !important;
+    text-align: center;
+}
+body.nps-bootstrap .nps-table .nps-table__detail-toggle {
+    display: inline-flex;
+    width: 26px;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    color: var(--nps-muted);
+    background: transparent;
+    border-radius: 5px;
+    text-decoration: none !important;
+}
+body.nps-bootstrap .nps-table .nps-table__detail-toggle:hover,
+body.nps-bootstrap .nps-table .nps-table__detail-toggle:focus-visible {
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody td code {
+    max-width: 100%;
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+    border-radius: 4px;
+    font-size: 10.5px;
+    overflow-wrap: anywhere;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .badge,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .label {
+    display: inline-flex;
+    width: max-content;
+    max-width: 100%;
+    min-height: 20px;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 720;
+    line-height: 1.2;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .btn-group,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .tunnel-actions,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .host-actions,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .user-actions,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .client-actions {
+    align-items: center;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: 3px;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .btn-group > .btn,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .btn-group > a,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .tunnel-actions > .btn,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .tunnel-actions > a,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .host-actions > .btn,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .host-actions > a,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .user-actions > .btn,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .user-actions > a {
+    display: inline-flex;
+    flex: 0 0 30px;
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    border-radius: 6px;
+    line-height: 1;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .btn-outline.btn-warning {
+    color: var(--nps-warning) !important;
+    background: var(--nps-warning-soft) !important;
+    border-color: color-mix(in srgb, var(--nps-warning) 38%, transparent) !important;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .btn-outline.btn-danger {
+    color: var(--nps-danger) !important;
+    background: var(--nps-danger-soft) !important;
+    border-color: color-mix(in srgb, var(--nps-danger) 38%, transparent) !important;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .btn-outline.btn-warning:hover,
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .btn-outline.btn-danger:hover {
+    color: #fff !important;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .btn-outline.btn-warning:hover {
+    background: var(--nps-warning) !important;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tbody td .btn-outline.btn-danger:hover {
+    background: var(--nps-danger) !important;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tr.nps-detail-view > td {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    padding: 14px !important;
+    background: var(--nps-surface) !important;
+    border-top: 1px solid var(--nps-line-strong);
+    white-space: normal;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tr.nps-detail-view > td > * {
+    min-width: 0;
+    max-width: 100%;
+}
+body.nps-bootstrap .nps-table .nps-table__grid tr.nps-detail-view [class$="__cards"],
+body.nps-bootstrap .nps-table .nps-table__grid tr.nps-detail-view [class$="__grid"] {
+    min-width: 0;
+}
+body.nps-bootstrap .nps-table .nps-table__loading-row > td,
+body.nps-bootstrap .nps-table .nps-table__empty-row > td {
+    height: auto;
+    padding: 30px 16px !important;
+    color: var(--nps-muted);
+    text-align: center;
+}
+
+/* Smart tables use the same labelled card at every responsive threshold.
+   Labels stay left-aligned for scanning while their values use the full
+   remaining track. */
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__body {
+    overflow-x: hidden !important;
+    padding: 9px;
+    background: var(--nps-canvas);
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid td.tunnel-list__actions,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid td.host-list__actions,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid td.user-list__actions,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid td.global-list__actions {
+    position: static !important;
+    right: auto !important;
+    box-shadow: none !important;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    background: transparent;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid thead {
+    display: none;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+    gap: 10px;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row {
+    position: relative;
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+    column-gap: 16px;
+    row-gap: 0;
+    margin: 0;
+    padding: 12px;
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line);
+    border-radius: 8px;
+    box-shadow: var(--nps-shadow-sm);
+}
+body.nps-bootstrap .nps-table[data-detail-view="true"][data-card-view="true"] .nps-table__grid tbody tr.nps-table__row {
+    padding: 12px 46px 12px 42px;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row:nth-child(odd) {
+    background: var(--nps-surface);
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row:hover {
+    background: var(--nps-surface);
+    border-color: var(--nps-line-strong);
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td {
+    display: grid !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    grid-template-columns: minmax(70px, 34%) minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-bottom: 1px solid color-mix(in srgb, var(--nps-line) 58%, transparent) !important;
+    text-align: left !important;
+    white-space: normal;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td::before {
+    content: attr(data-label);
+    min-width: 0;
+    color: var(--nps-faint);
+    font-size: 10px;
+    font-weight: 720;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td > * {
+    min-width: 0;
+    max-width: 100%;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.nps-table__detail-cell {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: block !important;
+    width: 26px !important;
+    min-width: 26px !important;
+    max-width: 26px !important;
+    padding: 0 !important;
+    border: 0 !important;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.nps-table__detail-cell::before,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.nps-checkbox::before {
+    display: none;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.nps-checkbox {
+    position: absolute;
+    top: 9px;
+    right: 10px;
+    display: block !important;
+    width: 28px !important;
+    min-width: 28px !important;
+    max-width: 28px !important;
+    padding: 3px !important;
+    border: 0 !important;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.tunnel-list__actions,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__actions,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.user-list__actions,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.global-list__actions {
+    grid-column: 1 / -1;
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    margin-top: 3px;
+    padding-top: 10px !important;
+    border-bottom: 0 !important;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.tunnel-list__actions::before,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__actions::before,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.user-list__actions::before,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.global-list__actions::before {
+    flex: 0 0 min(34%, 104px);
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.tunnel-list__actions > .btn-group,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.tunnel-list__actions > .tunnel-actions,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__actions > .btn-group,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__actions > .host-actions,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.user-list__actions > .btn-group,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.user-list__actions > .user-actions,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.global-list__actions > .btn {
+    margin-left: auto;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-detail-view {
+    display: block;
+    grid-column: 1 / -1;
+    width: 100%;
+    margin-top: -10px;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-detail-view > td {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    padding: 14px !important;
+    background: var(--nps-surface) !important;
+    border: 1px solid var(--nps-line) !important;
+    border-top: 0 !important;
+    border-radius: 0 0 8px 8px;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__loading-row,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__empty-row {
+    display: block;
+    grid-column: 1 / -1;
+}
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__loading-row > td,
+body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__empty-row > td {
+    display: block !important;
+    width: 100% !important;
+}
+
+@media (max-width: 600px) {
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row {
+        padding-right: 12px;
+    }
+    body.nps-bootstrap .nps-table[data-detail-view="true"][data-card-view="true"] .nps-table__grid tbody tr.nps-table__row {
+        padding: 44px 12px 12px;
+    }
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.nps-checkbox {
+        right: 12px;
+    }
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.tunnel-list__actions,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__actions,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.user-list__actions,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.global-list__actions {
+        flex-wrap: wrap;
+    }
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.tunnel-list__actions::before,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__actions::before,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.user-list__actions::before,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.global-list__actions::before {
+        flex-basis: 100%;
+    }
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.tunnel-list__actions > .btn-group,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.tunnel-list__actions > .tunnel-actions,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__actions > .btn-group,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__actions > .host-actions,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.user-list__actions > .btn-group,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.user-list__actions > .user-actions,
+    body.nps-bootstrap .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.global-list__actions > .btn {
+        margin-left: 0;
+    }
+}
+
+/* Client inventory: every grid cell, header, metric, badge, and action group
+   is centered. The compact card view keeps labels left-aligned for scanning
+   but centers each field value. */
+body.nps-bootstrap .management-page--client .nps-table__grid thead th,
+body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td {
+    text-align: center !important;
+}
+body.nps-bootstrap .management-page--client .nps-table__grid thead th .nps-table__header-inner {
+    justify-content: center !important;
+}
+body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__inlet-flow .nps-table__header-inner,
+body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__export-flow .nps-table__header-inner,
+body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__rate .nps-table__header-inner,
+body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__connections .nps-table__header-inner {
+    justify-content: center !important;
+}
+body.nps-bootstrap .management-page--client .nps-table__grid .client-flow-heading {
+    justify-items: center;
+}
+body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td .client-remark-cell,
+body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td .client-owner-cell,
+body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td .client-address-cell,
+body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td .client-connection-state {
+    width: 100%;
+    justify-items: center;
+    text-align: center;
+}
+body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td .client-live-rate {
+    justify-content: center;
+    justify-self: center;
+}
+body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td .client-actions {
+    justify-content: center;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td {
+    text-align: center !important;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.client-list__remark,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.client-list__owner,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.client-list__status,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.client-list__connection {
+    text-align: center !important;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td::before {
+    text-align: left;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td > * {
+    justify-self: center;
+    text-align: center;
+}
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.client-list__option .client-actions,
+body.nps-bootstrap .management-page--client .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.client-list__view .client-actions {
+    justify-content: center;
+}
+
+/* The domain page predates the shared card view and still carries percentage
+   column widths for its old phone layout. Card cells must ignore those table
+   tracks so every field receives the full label/value row. */
+body.nps-bootstrap .management-page--host .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__entry,
+body.nps-bootstrap .management-page--host .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__remark,
+body.nps-bootstrap .management-page--host .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__client,
+body.nps-bootstrap .management-page--host .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__target,
+body.nps-bootstrap .management-page--host .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__rate,
+body.nps-bootstrap .management-page--host .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__status,
+body.nps-bootstrap .management-page--host .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__actions {
+    display: grid !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+}
+body.nps-bootstrap .management-page--host .nps-table[data-card-view="true"] .nps-table__grid tbody tr.nps-table__row > td.host-list__actions {
+    display: flex !important;
+    grid-column: 1 / -1;
+}
+
+/* Audit rows contain identifiers and event names that must remain readable.
+   Keep short machine values on one line at desktop widths, while allowing
+   error and JSON summary cells to wrap and grow the row when necessary. */
+@media (min-width: 1181px) {
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__time,
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__actor,
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__source,
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__resource,
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__result,
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__client-lan {
+        white-space: nowrap;
+    }
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__action {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 10.5px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__kind,
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__identity,
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__protocol {
+        min-width: 108px;
+    }
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-connection-summary {
+        min-width: 0;
+    }
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-connection-summary > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__error,
+    body.nps-bootstrap .management-page--audit .nps-table__grid .audit-list__details {
+        min-width: 180px;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+}
+
+/* Persistent shell page context.
+   The title, context badge and one-line description occupy the open center of
+   the fixed top bar. Page-specific actions remain in the content once, directly
+   above the form or table they affect. */
+html {
+    scroll-padding-top: 76px;
+}
+
+body.nps-bootstrap #page-wrapper {
+    padding-top: 76px !important;
+}
+
+body.nps-bootstrap .nps-topbar {
+    height: 60px;
+    min-height: 60px !important;
+    flex-wrap: nowrap;
+    padding: 0 !important;
+}
+
+body.nps-bootstrap .nps-topbar > .navbar-header,
+body.nps-bootstrap .nps-topbar > .navbar-top-links {
+    height: 60px;
+    min-height: 60px;
+}
+
+body.nps-bootstrap .nps-page-context {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    align-self: stretch;
+    gap: 8px;
+    min-width: 0;
+    padding: 0 14px 0 4px;
+    overflow: hidden;
+}
+
+body.nps-bootstrap .nps-page-context[hidden] {
+    display: none !important;
+}
+
+body.nps-bootstrap .nps-page-context h1 {
+    flex: 0 1 auto;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--nps-ink);
+    font-size: 18px;
+    font-weight: 750;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.nps-bootstrap .nps-page-context .dashboard-page-kicker {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 1px 7px;
+    color: var(--nps-primary);
+    background: var(--nps-primary-soft);
+    border: 1px solid color-mix(in srgb, var(--nps-primary) 18%, var(--nps-line));
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 750;
+    letter-spacing: .05em;
+    line-height: 1.45;
+    white-space: nowrap;
+}
+
+body.nps-bootstrap .nps-page-context p {
+    flex: 1 1 120px;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--nps-muted);
+    font-size: 11.5px;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.nps-bootstrap .nps-page-context h1[tabindex="-1"]:focus {
+    outline: 0;
+}
+
+body.nps-bootstrap .dashboard-page-header.has-context-in-topbar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 34px;
+    margin: 0 0 16px;
+}
+
+body.nps-bootstrap .dashboard-page-header.has-context-in-topbar.is-actions-only {
+    justify-content: flex-end;
+}
+
+body.nps-bootstrap .dashboard-page-header.has-context-in-topbar .nps-page-header-source {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+    column-gap: 8px;
+    row-gap: 4px;
+}
+
+body.nps-bootstrap .dashboard-page-header.has-context-in-topbar .nps-page-header-source[hidden] {
+    display: none !important;
+}
+
+body.nps-bootstrap .dashboard-page-header.has-context-in-topbar .nps-page-header-source > :not(.dashboard-page-kicker):not(h1):not(p) {
+    flex: 1 0 100%;
+    margin-top: 0;
+}
+
+body.nps-bootstrap .dashboard-page-actions {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    padding-bottom: 0;
+}
+
+@media (max-width: 1199px) {
+    body.nps-bootstrap .navbar-top-links > li:first-child {
+        display: none;
+    }
+}
+
+@media (max-width: 991px) {
+    body.nps-bootstrap .nps-page-context {
+        gap: 6px;
+        padding-right: 10px;
+    }
+    body.nps-bootstrap .nps-page-context h1 {
+        font-size: 17px;
+    }
+    body.nps-bootstrap .nps-page-context p {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    html {
+        scroll-padding-top: 72px;
+    }
+    body.nps-bootstrap #page-wrapper {
+        padding-top: 72px !important;
+    }
+    body.nps-bootstrap .nps-page-context {
+        padding-right: 6px;
+    }
+    body.nps-bootstrap .nps-page-context .dashboard-page-kicker {
+        display: none;
+    }
+    body.nps-bootstrap .dashboard-page-header.has-context-in-topbar {
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+    body.nps-bootstrap .dashboard-page-header.has-context-in-topbar .dashboard-page-actions {
+        flex-wrap: wrap;
+    }
+}
+
+/* Domain access links intentionally reuse the tunnel access action geometry
+   so HTTP/HTTPS entries and TCP tunnel entries read as one control family. */
+body.nps-bootstrap .host-entry__links {
+    gap: 4px;
+}
+
+body.nps-bootstrap .host-endpoint.tunnel-access-action {
+    min-height: 25px;
+    gap: 4px;
+    padding: 3px 7px;
+    color: var(--nps-muted) !important;
+    background: var(--nps-surface);
+    border: 1px solid var(--nps-line-strong);
+    border-radius: 5px;
+    box-shadow: none;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+body.nps-bootstrap .host-endpoint.tunnel-access-action:hover {
+    color: var(--nps-primary) !important;
+    background: var(--nps-primary-soft);
+    border-color: var(--nps-primary);
+    box-shadow: none;
+}
+
+body.nps-bootstrap .host-endpoint.tunnel-access-action:active {
+    box-shadow: none;
+}
+
+body.nps-bootstrap .host-endpoint.tunnel-access-action i {
+    display: inline;
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    font-size: 9px;
+    line-height: 1;
+    opacity: 1;
+}
+
+body.nps-bootstrap .tunnel-access-action:focus-visible,
+body.nps-bootstrap .host-endpoint.tunnel-access-action:focus-visible {
+    border-color: var(--nps-primary);
+    outline: 0;
+    box-shadow: var(--nps-focus);
+}
+
+/* Desktop list pages use the viewport as their application frame. The page
+   heading, toolbar, and pagination remain fixed in place while only the data
+   rows scroll. Phones intentionally keep normal document scrolling. */
+@media (min-width: 992px) {
+    html.nps-table-viewport {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    body.nps-bootstrap.nps-table-viewport {
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+    }
+
+    body.nps-bootstrap.nps-table-viewport #page-wrapper {
+        display: flex;
+        height: 100vh;
+        height: 100dvh;
+        min-height: 0;
+        flex-direction: column;
+        overflow: hidden;
+        padding-bottom: 8px !important;
+    }
+
+    body.nps-bootstrap.nps-table-viewport #nps-content {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        padding-top: 16px;
+        box-sizing: border-box;
+    }
+
+    body.nps-bootstrap.nps-table-viewport #nps-content > .management-page,
+    body.nps-bootstrap.nps-table-viewport #nps-content > .form-page {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .management-page-header,
+    body.nps-bootstrap.nps-table-viewport .form-page-header,
+    body.nps-bootstrap.nps-table-viewport .ip-register-admin-summary,
+    body.nps-bootstrap.nps-table-viewport .audit-hub__tabs,
+    body.nps-bootstrap.nps-table-viewport .footer {
+        flex: 0 0 auto;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .management-page-grid {
+        display: block;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .management-page-column {
+        display: flex;
+        height: 100%;
+        min-height: 0;
+        align-items: flex-start;
+        overflow: hidden;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .management-table-card,
+    body.nps-bootstrap.nps-table-viewport .form-page > .panel {
+        display: flex;
+        flex: 0 1 auto;
+        min-height: 0;
+        max-height: 100%;
+        margin-bottom: 0 !important;
+        overflow: hidden;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .management-table-content,
+    body.nps-bootstrap.nps-table-viewport .form-page > .panel > .ibox-content {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .management-table-content > .nps-table,
+    body.nps-bootstrap.nps-table-viewport .form-page > .panel > .ibox-content > .nps-table {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .audit-hub__view.is-active {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+        align-items: flex-start;
+        overflow: hidden;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .audit-hub__view.is-active > .management-table-card {
+        flex: 0 1 auto;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .nps-table__toolbar,
+    body.nps-bootstrap.nps-table-viewport .nps-table__pagination {
+        flex: 0 0 auto;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .nps-table__container {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .nps-table__container > .nps-table__body {
+        height: 100%;
+        min-height: 0;
+        overflow: auto !important;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .nps-table__grid thead th {
+        position: sticky !important;
+        top: 0;
+        z-index: 12 !important;
+    }
+
+    body.nps-bootstrap.nps-table-viewport .footer {
+        margin-top: 6px !important;
+        padding-top: 8px !important;
+        font-size: 11px;
     }
 }

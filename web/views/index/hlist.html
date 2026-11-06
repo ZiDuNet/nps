@@ -5,9 +5,6 @@
             <h1 id="host-list-title" data-i18n-zh="域名反代" data-i18n-en="Domain reverse proxy">域名反代</h1>
             <p data-i18n-zh="集中查看访问入口、协议与内网目标；展开行可查看路由摘要。" data-i18n-en="Review public entry points, protocols, and internal targets. Expand a row for routing details.">集中查看访问入口、协议与内网目标；展开行可查看路由摘要。</p>
         </div>
-        <div class="dashboard-page-actions">
-            <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/index/hostdiagnose"><i class="fa fa-stethoscope" aria-hidden="true"></i><span data-i18n-zh="规则诊断" data-i18n-en="Rule diagnosis">规则诊断</span></a>
-        </div>
     </header>
 
     <div class="management-page-grid"><div class="management-page-column"><section class="panel ibox float-e-margins management-table-card nps-panel"><div class="ibox-content management-table-content">
@@ -16,6 +13,7 @@
             <button type="button" onclick="batchDelete('{{.web_base_url}}/index/delhost');" class="btn btn-outline btn-danger"><i class="fa fa-trash" aria-hidden="true"></i><span data-i18n-zh="批量删除" data-i18n-en="Delete selected">批量删除</span></button>
             <button type="button" onclick="batchResourceAction('{{.web_base_url}}/index/hoststart', {}, '批量启用', 'Enable selected');" class="btn btn-outline btn-primary"><i class="fa fa-play" aria-hidden="true"></i><span data-i18n-zh="批量启用" data-i18n-en="Enable selected">批量启用</span></button>
             <button type="button" onclick="batchResourceAction('{{.web_base_url}}/index/hoststop', {}, '批量停用', 'Disable selected');" class="btn btn-outline btn-warning"><i class="fa fa-pause" aria-hidden="true"></i><span data-i18n-zh="批量停用" data-i18n-en="Disable selected">批量停用</span></button>
+            <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/index/hostdiagnose"><i class="fa fa-stethoscope" aria-hidden="true"></i><span data-i18n-zh="规则诊断" data-i18n-en="Rule diagnosis">规则诊断</span></a>
             {{if eq true .isAdmin}}
             <label class="nps-table-filter nps-table-filter--identity" for="host-owner-filter">
                 <span class="nps-table-filter__label" data-i18n-zh="所属用户" data-i18n-en="Owner">所属用户</span>
@@ -30,17 +28,17 @@
                 </select>
             </label>
             {{end}}
-            <label class="nps-table-filter nps-table-filter--identity" for="host-client-filter">
-                <span class="nps-table-filter__label" data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>
-                <select id="host-client-filter" class="form-control nps-table-filter__control" data-nps-table-filter="filter_client_id" {{if .client_id}}disabled{{end}}>
+            <div class="nps-table-filter nps-table-filter--identity">
+                <span id="host-client-filter-label" class="nps-table-filter__label" data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>
+                <select id="host-client-filter" class="form-control nps-table-filter__control" data-nps-table-filter="filter_client_id" aria-labelledby="host-client-filter-label" {{if .client_id}}disabled{{end}}>
                     <option value="0" data-i18n-zh="全部客户端" data-i18n-en="All clients">全部客户端</option>
                     {{range .clients}}
-                    <option value="{{.Id}}" data-filter-owner-id="{{.UserId}}"
+                    <option value="{{.Id}}" data-filter-owner-id="{{.UserId}}" data-client-online="{{.IsConnect}}"
                         data-i18n-zh="{{if .Remark}}{{.Remark}}（ID {{.Id}}）{{else}}未命名客户端（ID {{.Id}}）{{end}}"
                         data-i18n-en="{{if .Remark}}{{.Remark}} (ID {{.Id}}){{else}}Unnamed client (ID {{.Id}}){{end}}">{{if .Remark}}{{.Remark}}（ID {{.Id}}）{{else}}未命名客户端（ID {{.Id}}）{{end}}</option>
                     {{end}}
                 </select>
-            </label>
+            </div>
         </div>
         <table id="table"></table>
     </div></section></div></div>
@@ -69,12 +67,13 @@ function hostPublicURL(host, port, scheme, location) {
 function hostEndpointLink(label, url) {
     if (!url) return '';
     var safeURL = npsEscapeHtml(url);
-    return '<a class="host-endpoint" href="' + safeURL + '" target="_blank" rel="noopener noreferrer"'
+    return '<a class="host-endpoint tunnel-access-action" href="' + safeURL + '" target="_blank" rel="noopener noreferrer"'
         + ' title="' + (npsIsEnglish() ? 'Open ' + label + ' in a new window' : '在新窗口打开 ' + label) + '"'
         + ' data-title-zh="在新窗口打开 ' + label + '" data-title-en="Open ' + label + ' in a new window"'
         + ' aria-label="' + (npsIsEnglish() ? 'Open ' + label + ' in a new window' : '在新窗口打开 ' + label) + '"'
         + ' data-aria-label-zh="在新窗口打开 ' + label + '" data-aria-label-en="Open ' + label + ' in a new window">'
-        + '<span>' + label + '</span><i class="fa fa-external-link-alt" aria-hidden="true"></i></a>';
+        + '<i class="fa fa-external-link-alt" aria-hidden="true"></i>'
+        + '<span>' + label + '</span></a>';
 }
 
 $('#table').npsTable({

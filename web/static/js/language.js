@@ -434,6 +434,121 @@ function npsRequestErrorMessage() {
         : '请求失败，请检查连接后重试。';
 }
 
+function npsAuthErrorMessage(response) {
+    response = response || {};
+    var english = npsIsEnglish();
+    var messages = {
+        captcha_invalid: {
+            zh: '验证码错误，请刷新后重试。',
+            en: 'The verification code is incorrect. Refresh it and try again.'
+        },
+        invalid_credentials: {
+            zh: '用户名或密码错误。',
+            en: 'The username or password is incorrect.'
+        },
+        registration_disabled: {
+            zh: '当前未开放用户注册。',
+            en: 'Self-registration is currently disabled.'
+        },
+        email_verification_disabled: {
+            zh: '当前注册不要求邮箱验证。',
+            en: 'Email verification is not required for registration.'
+        },
+        invalid_email: {
+            zh: '邮箱地址格式不正确。',
+            en: 'Enter a valid email address.'
+        },
+        email_required: {
+            zh: '启用邮箱验证时必须填写邮箱。',
+            en: 'An email address is required when email verification is enabled.'
+        },
+        email_in_use: {
+            zh: '该邮箱已绑定其他账号，请直接登录。',
+            en: 'This email is already linked to another account. Sign in instead.'
+        },
+        email_code_rate_limited: {
+            zh: '验证码发送过于频繁，请稍后再试。',
+            en: 'Too many verification code requests. Try again later.'
+        },
+        email_code_unavailable: {
+            zh: '暂时无法生成邮箱验证码，请稍后再试。',
+            en: 'A verification code cannot be issued right now. Try again later.'
+        },
+        smtp_incomplete: {
+            zh: '邮件服务配置不完整，请联系管理员。',
+            en: 'Email service configuration is incomplete. Contact the administrator.'
+        },
+        email_send_failed: {
+            zh: '验证码邮件发送失败，请稍后再试。',
+            en: 'The verification email could not be sent. Try again later.'
+        },
+        registration_email_sent: {
+            zh: '验证码已发送，请检查收件箱和垃圾邮件。',
+            en: 'Verification code sent. Check your inbox and spam folder.'
+        },
+        registration_rate_limited: {
+            zh: '注册请求过于频繁，请稍后重试。',
+            en: 'Too many registration attempts. Try again later.'
+        },
+        registration_captcha_invalid: {
+            zh: '图片验证码错误，请刷新后重试。',
+            en: 'The image verification code is incorrect. Refresh it and try again.'
+        },
+        invalid_registration_input: {
+            zh: '请检查注册信息，密码至少需要 6 个字符。',
+            en: 'Check the registration details. The password must contain at least 6 characters.'
+        },
+        username_taken: {
+            zh: '用户名已被使用，请更换后重试。',
+            en: 'This username is already in use. Choose another one.'
+        },
+        email_already_bound: {
+            zh: '邮箱已绑定其他账号，请更换邮箱。',
+            en: 'This email is already linked to another account.'
+        },
+        registration_ip_limit: {
+            zh: '当前来源地址注册账号数量已达上限，请稍后重试。',
+            en: 'The registration limit for this source address has been reached.'
+        },
+        email_code_invalid: {
+            zh: '邮箱验证码错误或已过期，请重新获取。',
+            en: 'The email verification code is incorrect or expired. Request a new one.'
+        },
+        registration_success: {
+            zh: '注册成功，请登录。',
+            en: 'Registration complete. You can now sign in.'
+        },
+        registration_failed: {
+            zh: '注册失败，请稍后重试。',
+            en: 'Registration failed. Try again later.'
+        },
+        login_expired: {
+            zh: '登录请求已过期，请刷新页面。',
+            en: 'The sign-in request expired. Refresh the page.'
+        },
+        register_expired: {
+            zh: '注册请求已过期，请刷新页面。',
+            en: 'The registration request expired. Refresh the page.'
+        },
+        pow_invalid: {
+            zh: '安全校验失败，请重试。',
+            en: 'The security check failed. Try again.'
+        },
+        request_too_large: {
+            zh: '请求内容过大。',
+            en: 'The request is too large.'
+        },
+        method_not_allowed: {
+            zh: '请求方式不正确。',
+            en: 'The request method is not allowed.'
+        }
+    };
+    var localized = messages[response.code];
+    if (localized) return english ? localized.en : localized.zh;
+    if (english && response.msg_en) return response.msg_en;
+    return response.msg || npsRequestErrorMessage();
+}
+
 function npsNotify(type, msg) {
 	msg = msg == null ? '' : String(msg);
 	if (typeof toastr !== 'undefined') {

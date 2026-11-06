@@ -28,32 +28,46 @@
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/toastr.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261106-3" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261026-3" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-login-v2.css?v={{.version}}&ui=20261106-7" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/bootstrap-5.3.3.bundle.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jsencrypt.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20261026-1" type="text/javascript"></script>
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20261106-1" type="text/javascript"></script>
+    <script src="{{.web_base_url}}/static/js/nps-auth-shell.js?v={{.version}}&ui=20261106-4" defer></script>
 </head>
 
-<body class="gray-bg auth-body  nps-bootstrap">
-<div class="auth-page">
-    <header class="auth-page__header">
-        <div class="auth-brand" aria-label="NPS">
-            <span class="auth-brand__mark" aria-hidden="true"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt="NPS"></span>
-            <span class="auth-brand__name" langtag="application"></span>
+<body class="gray-bg auth-body auth-login-page nps-bootstrap">
+<iframe id="auth-network-background" class="auth-network-background"
+        src="{{.web_base_url}}/static/background/nps-network-background.html?v={{.version}}&ui=20261106-5&motion=on"
+        title="" aria-hidden="true" tabindex="-1" loading="eager"></iframe>
+<div class="auth-login-v2">
+    <header class="auth-login-toolbar">
+        <a class="auth-login-toolbar__brand" href="{{.web_base_url}}/login/index" aria-label="NPS">
+            <span class="auth-login-toolbar__mark" aria-hidden="true">
+                <img src="{{.web_base_url}}/static/img/nps-logo.png" alt="">
+            </span>
+            <span class="auth-login-toolbar__brand-copy">
+                <strong langtag="application"></strong>
+                <small>Network Proxy Server</small>
+            </span>
             <span class="nps-pro-badge" aria-label="Pro edition">Pro</span>
-        </div>
+        </a>
 
-        <div class="auth-page__tools">
-            <button type="button" onclick="toggleLoginTheme()" class="auth-icon-button theme-toggle" id="theme-toggle" title="切换主题" data-title-zh="切换主题" data-title-en="Toggle theme" aria-label="切换主题" data-aria-label-zh="切换主题" data-aria-label-en="Toggle theme" aria-pressed="false">
+        <div class="auth-login-toolbar__tools">
+            <button type="button" onclick="toggleLoginTheme()" class="auth-login-tool auth-login-theme" id="theme-toggle"
+                    title="切换主题" data-title-zh="切换主题" data-title-en="Toggle theme"
+                    aria-label="切换主题" data-aria-label-zh="切换主题" data-aria-label-en="Toggle theme" aria-pressed="false">
                 <i class="fa fa-moon" id="theme-icon" aria-hidden="true"></i>
+                <span data-i18n-zh="主题" data-i18n-en="Theme">主题</span>
             </button>
-            <div class="auth-language btn-group dropdown">
-                <button id="languagemenu" class="btn btn-default dropdown-toggle auth-language__toggle" type="button" data-bs-toggle="dropdown"
-                        aria-haspopup="true" aria-expanded="false" title="语言" data-title-zh="语言" data-title-en="Language" aria-label="语言" data-aria-label-zh="语言" data-aria-label-en="Language">
+            <div class="auth-language auth-login-language btn-group dropdown">
+                <button id="languagemenu" class="auth-login-tool dropdown-toggle" type="button" data-bs-toggle="dropdown"
+                        aria-haspopup="true" aria-expanded="false" title="语言" data-title-zh="语言" data-title-en="Language"
+                        aria-label="语言" data-aria-label-zh="语言" data-aria-label-en="Language">
                     <i class="fa fa-globe-asia" aria-hidden="true"></i><span></span>
                 </button>
                 <ul class="dropdown-menu">
@@ -64,124 +78,144 @@
         </div>
     </header>
 
-    <main class="auth-page__main">
-        <div class="auth-layout">
-            <aside class="auth-context" aria-labelledby="auth-context-title">
-                <h1 class="auth-context__title" id="auth-context-title" langtag="application"></h1>
-                <p class="auth-context__description" langtag="info-tagline"></p>
+    <main class="auth-login-stage">
+        <section class="auth-login-shell" aria-labelledby="auth-login-title">
+            <aside class="auth-login-brand" aria-labelledby="auth-login-brand-title">
+                <div class="auth-login-brand__identity">
+                    <span class="auth-login-brand__accent-line" aria-hidden="true"></span>
+                    <div class="auth-login-brand__identity-copy">
+                        <p class="auth-login-brand__wordmark" aria-hidden="true">NPS</p>
+                        <p class="auth-login-brand__product">NETWORK PROXY SERVER</p>
+                        <p class="auth-login-brand__tagline" data-i18n-zh="内网穿透 · 反向代理" data-i18n-en="Tunnels · Reverse proxy">内网穿透 · 反向代理</p>
+                    </div>
+                </div>
+                <h1 class="auth-login-brand__headline" id="auth-login-brand-title">
+                    <span data-i18n-zh="把分散在内网的服务，连成一张可管理的网。" data-i18n-en="Connect every internal service into one managed network.">把分散在内网的服务，连成一张可管理的网。</span>
+                </h1>
 
-                <ul class="auth-context__feature-list">
-                    <li class="auth-feature">
-                        <i class="fa fa-network-wired auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="多协议支持" data-i18n-en="Multi-protocol">多协议支持</span>
+                <ul class="auth-login-capabilities" aria-label="Platform capabilities">
+                    <li>
+                        <span class="auth-login-capabilities__dot" aria-hidden="true"></span>
+                        <strong data-i18n-zh="多协议转发" data-i18n-en="Multi-protocol forwarding">多协议转发</strong>
+                        <small data-i18n-zh="内网任何服务都能映射出去" data-i18n-en="Expose any internal service">内网任何服务都能映射出去</small>
                     </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-desktop auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="全平台兼容" data-i18n-en="Cross-platform">全平台兼容</span>
+                    <li>
+                        <span class="auth-login-capabilities__dot" aria-hidden="true"></span>
+                        <strong data-i18n-zh="域名反代" data-i18n-en="Domain reverse proxy">域名反代</strong>
+                        <small data-i18n-zh="多个站点共用一个公网入口" data-i18n-en="Share one public entry across sites">多个站点共用一个公网入口</small>
                     </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-lock auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="HTTPS 集成" data-i18n-en="HTTPS support">HTTPS 集成</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-tachometer-alt auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="实时监控" data-i18n-en="Live monitoring">实时监控</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-compress auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="压缩加密" data-i18n-en="Encrypt &amp; compress">压缩加密</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-users auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="多用户管理" data-i18n-en="Multi-user">多用户管理</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-globe auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="域名解析" data-i18n-en="Domain routing">域名解析</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-sliders-h auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="流量管控" data-i18n-en="Traffic controls">流量管控</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-cogs auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="一键部署" data-i18n-en="Quick deployment">一键部署</span>
+                    <li>
+                        <span class="auth-login-capabilities__dot" aria-hidden="true"></span>
+                        <strong data-i18n-zh="Web 可视化管理" data-i18n-en="Web management">Web 可视化管理</strong>
+                        <small data-i18n-zh="隧道、域名、流量一处配置" data-i18n-en="Tunnels, domains and traffic in one place">隧道、域名、流量一处配置</small>
                     </li>
                 </ul>
+
+                <div class="auth-login-protocols" aria-label="Supported protocols">
+                    <span>TCP</span>
+                    <span>UDP</span>
+                    <span>HTTP(S)</span>
+                    <span>SOCKS5</span>
+                    <span>P2P</span>
+                    <span data-i18n-zh="域名反代" data-i18n-en="Reverse proxy">域名反代</span>
+                </div>
             </aside>
 
-            <section class="auth-panel login-form-wrap" aria-labelledby="auth-login-title">
-                <header class="auth-panel__header">
-                    <span class="auth-panel__badge nps-pro-badge" aria-label="Pro edition">Pro edition</span>
-                    <h2 class="auth-panel__title" id="auth-login-title" langtag="word-login"></h2>
+            <section class="auth-login-panel login-form-wrap" aria-labelledby="auth-login-title">
+                <header class="auth-login-panel__header">
+                    <div class="auth-login-panel__meta">
+                        <span class="auth-login-panel__eyebrow" data-i18n-zh="IP 登录" data-i18n-en="IP sign-in">IP 登录</span>
+                        <a class="auth-login-panel__ip-link" href="{{.web_base_url}}/ip/register"
+                           data-i18n-zh="IP 登记入口" data-i18n-en="IP registration">IP 登记入口 <i class="fa fa-external-link-alt" aria-hidden="true"></i></a>
+                    </div>
+                    <h2 class="auth-login-panel__title" id="auth-login-title" langtag="word-login"></h2>
                 </header>
 
-                <form class="form auth-form nps-form" onsubmit="return login()">
-                    <div class="form-group auth-field">
-                        <label class="auth-field__label" for="auth-username" langtag="word-username"></label>
-                        <div class="auth-control input-icon-wrap">
-                            <i class="fa fa-user input-icon" aria-hidden="true"></i>
-                            <input id="auth-username" name="username" class="form-control has-icon" placeholder="username" required="" autocomplete="username" langtag="word-username">
-                            <span class="help-block" data-i18n-zh="管理员或普通用户登录面板使用的账号；如果启用了 VKEY 登录，也可以输入客户端 VKEY。" data-i18n-en="The dashboard account for an administrator or regular user. If VKEY login is enabled, a client VKEY can also be used.">管理员或普通用户登录面板使用的账号；如果启用了 VKEY 登录，也可以输入客户端 VKEY。</span>
+                <form id="login-form" class="auth-login-form form nps-form" onsubmit="return login()">
+                    <div class="form-group auth-login-field">
+                        <label class="auth-login-field__label" for="auth-username" langtag="word-username"></label>
+                        <div class="auth-login-control">
+                            <i class="fa fa-user auth-login-control__icon" aria-hidden="true"></i>
+                            <input id="auth-username" name="username" class="form-control" placeholder="username" required autocomplete="username" langtag="word-username">
                         </div>
                     </div>
-                    <div class="form-group auth-field">
-                        <label class="auth-field__label" for="auth-password" langtag="word-password"></label>
-                        <div class="auth-control input-icon-wrap">
-                            <i class="fa fa-lock input-icon" aria-hidden="true"></i>
-                            <input id="auth-password" name="password" type="password" class="form-control has-icon" placeholder="password" required="" autocomplete="current-password" langtag="word-password">
-                            <span class="help-block" data-i18n-zh="输入对应账号的登录密码；密码不会在页面或接口响应中回显。" data-i18n-en="Enter the password for this account. Passwords are never echoed in the page or API responses.">输入对应账号的登录密码；密码不会在页面或接口响应中回显。</span>
+                    <div class="form-group auth-login-field">
+                        <label class="auth-login-field__label" for="auth-password" langtag="word-password"></label>
+                        <div class="auth-login-control">
+                            <i class="fa fa-lock auth-login-control__icon" aria-hidden="true"></i>
+                            <input id="auth-password" name="password" type="password" class="form-control" placeholder="password" required autocomplete="current-password" langtag="word-password">
                         </div>
                     </div>
                     {{if .pow_enabled}}
                     <input type="hidden" name="pow_nonce" id="auth-pow-nonce">
                     <input type="hidden" name="pow_solution" id="auth-pow-solution">
-                    <div class="auth-form-hint" id="auth-pow-status" data-i18n-zh="正在准备登录安全校验…" data-i18n-en="Preparing login security check…">正在准备登录安全校验…</div>
+                    <div class="auth-login-pow-status" id="auth-pow-status" data-state="preparing" role="status" aria-live="polite" aria-atomic="true" aria-busy="true">
+                        <span class="auth-login-pow-status__icon" aria-hidden="true"><i id="auth-pow-status-icon" class="fa fa-circle-notch"></i></span>
+                        <span class="auth-login-pow-status__copy">
+                            <strong class="auth-login-pow-status__message">
+                                <span data-pow-message="preparing" data-i18n-zh="正在获取安全校验挑战" data-i18n-en="Requesting security challenge">正在获取安全校验挑战</span>
+                                <span data-pow-message="calculating" data-i18n-zh="正在计算登录安全校验" data-i18n-en="Calculating login security check">正在计算登录安全校验</span>
+                                <span data-pow-message="ready" data-i18n-zh="登录安全校验完成" data-i18n-en="Login security check complete">登录安全校验完成</span>
+                                <span data-pow-message="error" data-i18n-zh="登录安全校验失败" data-i18n-en="Login security check failed">登录安全校验失败</span>
+                            </strong>
+                            <span class="auth-login-pow-status__meta">SHA-256 · <span id="auth-pow-bits">{{.pow_bits}}</span> bit<span id="auth-pow-progress"></span><span id="auth-pow-timing"></span></span>
+                        </span>
+                        <button class="auth-login-pow-status__retry" id="auth-pow-retry" type="button" hidden>
+                            <i class="fa fa-redo" aria-hidden="true"></i>
+                            <span data-i18n-zh="重试" data-i18n-en="Retry">重试</span>
+                        </button>
+                    </div>
+                    <div class="auth-login-pow-compat" id="auth-pow-compat" role="alert" hidden></div>
                     {{end}}
                     {{if .totp_enabled}}
-                    <div class="form-group auth-field">
-                        <label class="auth-field__label" for="auth-totp" data-i18n-zh="动态验证码" data-i18n-en="Authenticator code">动态验证码</label>
-                        <div class="auth-control input-icon-wrap">
-                            <i class="fa fa-shield-alt input-icon" aria-hidden="true"></i>
-                            <input id="auth-totp" name="totp" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="form-control has-icon" placeholder="000000" autocomplete="one-time-code" required>
-                            <span class="help-block" data-i18n-zh="管理员启用双因素认证时填写认证器应用当前的 6 位验证码。" data-i18n-en="When administrator two-factor authentication is enabled, enter the current 6-digit code from your authenticator app.">管理员启用双因素认证时填写认证器应用当前的 6 位验证码。</span>
+                    <div class="form-group auth-login-field">
+                        <label class="auth-login-field__label" for="auth-totp" data-i18n-zh="动态验证码" data-i18n-en="Authenticator code">动态验证码</label>
+                        <div class="auth-login-control">
+                            <i class="fa fa-shield-alt auth-login-control__icon" aria-hidden="true"></i>
+                            <input id="auth-totp" name="totp" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="form-control" placeholder="000000" autocomplete="one-time-code" required>
                         </div>
+                        <span class="auth-login-field__hint" data-i18n-zh="填写认证器应用当前显示的 6 位验证码。" data-i18n-en="Enter the current 6-digit code from your authenticator app.">填写认证器应用当前显示的 6 位验证码。</span>
                     </div>
                     {{end}}
                     {{if eq true .captcha_open}}
-                    <div class="form-group auth-field auth-field--captcha">
-                        <label class="auth-field__label" for="auth-captcha" langtag="word-captcha"></label>
-                        <div class="auth-captcha">
-                            <div class="auth-captcha__challenge">{{create_captcha}}</div>
-                            <div class="auth-control auth-captcha__input input-icon-wrap">
-                                <i class="fa fa-shield-alt input-icon" aria-hidden="true"></i>
-                                <input id="auth-captcha" name="captcha" class="form-control has-icon" placeholder="captcha" required="" autocomplete="off" langtag="word-captcha">
+                    <div class="form-group auth-login-field auth-login-field--captcha">
+                        <label class="auth-login-field__label" for="auth-captcha" langtag="word-captcha"></label>
+                        <div class="auth-login-captcha">
+                            <div class="auth-login-captcha__challenge">{{create_captcha}}</div>
+                            <div class="auth-login-control">
+                                <i class="fa fa-shield-alt auth-login-control__icon" aria-hidden="true"></i>
+                                <input id="auth-captcha" name="captcha" class="form-control" placeholder="captcha" required autocomplete="off" langtag="word-captcha">
                             </div>
                         </div>
-                        <span class="help-block auth-captcha__hint" data-i18n-zh="按图片中的字符填写验证码；看不清时可刷新页面获取新的题目。" data-i18n-en="Enter the characters shown in the image. Refresh the page if the challenge is difficult to read.">按图片中的字符填写验证码；看不清时可刷新页面获取新的题目。</span>
                     </div>
                     {{end}}
-                    <button type="button" onclick="login()" class="auth-submit login-btn" langtag="word-login"></button>
+                    <button type="submit" class="auth-login-submit login-btn"{{if .pow_enabled}} disabled aria-busy="true"{{end}}>
+                        <span langtag="word-login"></span>
+                        <i class="fa fa-arrow-right" aria-hidden="true"></i>
+                    </button>
+                    <label class="auth-login-remember" for="auth-remember">
+                        <input id="auth-remember" name="remember_login" type="checkbox" value="1">
+                        <span class="auth-login-remember__box" aria-hidden="true"><i class="fa fa-check"></i></span>
+                        <span class="auth-login-remember__copy">
+                            <strong data-i18n-zh="3 天内免登录" data-i18n-en="Stay signed in for 3 days">3 天内免登录</strong>
+                            <small data-i18n-zh="仅限当前浏览器，公共设备请勿勾选。" data-i18n-en="This browser only. Do not use on a shared device.">仅限当前浏览器，公共设备请勿勾选。</small>
+                        </span>
+                    </label>
                 </form>
 
                 {{if eq true .register_allow}}
-                <div class="auth-switch register-link">
-                    <span class="auth-switch__copy" langtag="info-noaccount"></span>
-                    <a class="auth-switch__link" href="{{.web_base_url}}/login/register" langtag="word-register"></a>
+                <div class="auth-login-switch register-link">
+                    <span langtag="info-noaccount"></span>
+                    <a href="{{.web_base_url}}/login/register" langtag="word-register"></a>
                 </div>
                 {{end}}
-                <div class="auth-switch register-link">
-                    <span class="auth-switch__copy" data-i18n-zh="访问前需要登记 IP？" data-i18n-en="Need to register an IP before access?">访问前需要登记 IP？</span>
-                    <a class="auth-switch__link" href="{{.web_base_url}}/ip/register" data-i18n-zh="打开 IP 登记" data-i18n-en="Open IP registration">打开 IP 登记</a>
-                    {{if eq false .ip_registration_configured}}<small class="auth-switch__hint" data-i18n-zh="当前尚未启用，打开页面可查看配置说明" data-i18n-en="Not enabled yet; open the page for configuration details">当前尚未启用，打开页面可查看配置说明</small>{{end}}
-                </div>
             </section>
-        </div>
+        </section>
     </main>
 
-    <footer class="auth-page__footer">
-        <span><strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2026</span>
-        <span class="auth-page__footer-links"><span langtag="word-readmore"></span> <a href="https://github.com/ZiDuNet/nps" langtag="word-go"></a></span>
+    <footer class="auth-login-footer">
+        <span>版权所有 <strong>NPS-Pro</strong> &copy; 2018-2026 By:WuShuo</span>
+        <span><span langtag="word-readmore"></span> <a href="https://github.com/ZiDuNet/nps" langtag="word-go"></a></span>
     </footer>
 </div>
 
@@ -222,13 +256,14 @@
     }());
 
     function login() {
-        if (!validateNpsForm(document.querySelector('.login-form-wrap form'), true)) return false;
-        if (window.npsPowEnabled && (!document.getElementById('auth-pow-nonce').value || !document.getElementById('auth-pow-solution').value)) {
-            prepareLoginPow();
+        var form = document.getElementById('login-form');
+        if (!validateNpsForm(form, true)) return false;
+        if (window.npsPowEnabled && !window.npsPowReady) {
+            if (!window.npsPowRunning) prepareLoginPow();
             return false;
         }
         var data = {};
-        $("form").serializeArray().forEach(function (field) { data[field.name] = field.value; });
+        $('#login-form').serializeArray().forEach(function (field) { data[field.name] = field.value; });
         var encryptedPassword = npsEncryptedPassword(data.password);
         if (!encryptedPassword) {
             npsNotify('error', npsIsEnglish() ? 'Secure password encryption is unavailable. Refresh the page and try again.' : '安全密码加密不可用，请刷新页面后重试。');
@@ -243,7 +278,7 @@
                 if (res.status) {
                     window.location.href = "{{.web_base_url}}/index/index"
                 } else {
-                    npsNotify('error', res.msg);
+                    npsNotify('error', npsAuthErrorMessage(res));
                     // Refresh the challenge after every failed attempt so it cannot be reused.
                     var captchaImg = document.querySelector('img.captcha-img');
                     if (captchaImg) {
@@ -266,6 +301,11 @@
             },
             error: function () {
                 npsNotify('error', npsRequestErrorMessage());
+                if (window.npsPowEnabled) {
+                    document.getElementById('auth-pow-nonce').value = '';
+                    document.getElementById('auth-pow-solution').value = '';
+                    prepareLoginPow();
+                }
             }
         })
         return false
@@ -273,37 +313,189 @@
 
     window.npsPowEnabled = {{if .pow_enabled}}true{{else}}false{{end}};
     window.npsPowBits = {{.pow_bits}};
-    async function prepareLoginPow() {
-        if (!window.npsPowEnabled) return;
-        var status = document.getElementById('auth-pow-status');
-        try {
-            var challenge = await fetch("{{.web_base_url}}/login/pow", {credentials: 'same-origin'}).then(function (response) { return response.json(); });
-            if (!challenge.enabled) return;
-            var nonce = challenge.nonce;
-            var username = document.getElementById('auth-username').value || '';
-            var solution = 0;
-            var digest = new TextEncoder();
-            while (true) {
-                var input = digest.encode(nonce + '\x00' + solution);
-                var hash = new Uint8Array(await crypto.subtle.digest('SHA-256', input));
-                var remaining = challenge.bits;
-                var valid = true;
-                for (var i = 0; i < hash.length && remaining > 0; i++) {
-                    if (remaining >= 8) { if (hash[i] !== 0) { valid = false; break; } remaining -= 8; }
-                    else if ((hash[i] & (255 << (8 - remaining))) !== 0) { valid = false; break; }
-                    else remaining = 0;
-                }
-                if (valid) break;
-                solution++;
-            }
-            document.getElementById('auth-pow-nonce').value = nonce;
-            document.getElementById('auth-pow-solution').value = String(solution);
-            if (status) status.textContent = npsIsEnglish() ? 'Security check ready' : '安全校验完成';
-        } catch (error) {
-            if (status) status.textContent = npsIsEnglish() ? 'Security check failed, retry' : '安全校验失败，请重试';
+    window.npsPowReady = false;
+    window.npsPowRunning = false;
+    window.npsPowUnsupported = false;
+    var npsPowAttempt = 0;
+    var npsPowWorker = null;
+    function loginPowLocalized(zh, en) {
+        return typeof npsIsEnglish === 'function' && npsIsEnglish() ? en : zh;
+    }
+    function setLoginPowCompatibility(messages, blocking) {
+        var notice = document.getElementById('auth-pow-compat');
+        if (!notice) return;
+        notice.innerHTML = '';
+        notice.hidden = !messages.length;
+        notice.classList.toggle('is-error', Boolean(blocking));
+        messages.forEach(function (message) {
+            var line = document.createElement('span');
+            line.textContent = message;
+            notice.appendChild(line);
+        });
+    }
+    function checkLoginPowCompatibility() {
+        var messages = [];
+        var blocking = false;
+        if (!window.fetch || !window.Worker) {
+            blocking = true;
+            messages.push(loginPowLocalized(
+                '当前浏览器不支持 fetch 或 Web Worker，无法完成登录安全校验。请升级浏览器，或由管理员在“全局参数 → 安全”中关闭 PoW。',
+                'This browser does not support fetch or Web Worker, so the sign-in security check cannot run. Upgrade the browser or ask the administrator to disable PoW under Global settings → Security.'
+            ));
+        }
+        if (window.isSecureContext === false) {
+            messages.push(loginPowLocalized(
+                '当前页面不是 HTTPS 安全上下文，登录凭证传输不受浏览器安全保护。建议为管理面板启用 HTTPS。',
+                'This page is not an HTTPS secure context. Browser protections for sign-in credentials are reduced; enable HTTPS for the management panel.'
+            ));
+        }
+        if (!window.crypto || !window.crypto.subtle) {
+            messages.push(loginPowLocalized(
+                '当前浏览器未提供 Web Crypto，将使用纯 JavaScript Worker 兼容计算，速度可能稍慢。',
+                'Web Crypto is unavailable. The compatible pure-JavaScript Worker will be used and may run more slowly.'
+            ));
+        }
+        window.npsPowUnsupported = blocking;
+        setLoginPowCompatibility(messages, blocking);
+        if (blocking) {
+            setLoginPowState('error');
+            var submit = document.querySelector('#login-form button[type="submit"]');
+            if (submit) submit.disabled = true;
+        }
+        return !blocking;
+    }
+    function stopLoginPowWorker() {
+        if (npsPowWorker) {
+            npsPowWorker.terminate();
+            npsPowWorker = null;
         }
     }
-    if (window.npsPowEnabled) prepareLoginPow();
+    function formatLoginPowCount(value) {
+        if (value >= 1000000) return (value / 1000000).toFixed(value >= 10000000 ? 0 : 1) + 'm';
+        if (value >= 1000) return Math.round(value / 1000) + 'k';
+        return String(value);
+    }
+    function setLoginPowProgress(attempts, elapsedMs) {
+        var progress = document.getElementById('auth-pow-progress');
+        var timing = document.getElementById('auth-pow-timing');
+        if (progress) {
+            progress.textContent = attempts ? ' · ' + formatLoginPowCount(attempts) : '';
+        }
+        if (timing) {
+            timing.textContent = elapsedMs >= 0 ? ' · ' + (elapsedMs / 1000).toFixed(elapsedMs < 1000 ? 2 : 1) + 's' : '';
+        }
+    }
+    function setLoginPowState(state) {
+        var status = document.getElementById('auth-pow-status');
+        if (!status) return;
+        var icon = document.getElementById('auth-pow-status-icon');
+        var retry = document.getElementById('auth-pow-retry');
+        var submit = document.querySelector('#login-form button[type="submit"]');
+        var working = state === 'preparing' || state === 'calculating';
+        status.setAttribute('data-state', state);
+        status.setAttribute('aria-busy', working ? 'true' : 'false');
+        window.npsPowReady = state === 'ready';
+        window.npsPowRunning = working;
+        if (working) {
+            var timing = document.getElementById('auth-pow-timing');
+            if (timing) timing.textContent = '';
+        }
+        if (icon) {
+            icon.className = state === 'ready'
+                ? 'fa fa-check'
+                : (state === 'error' ? 'fa fa-exclamation-triangle' : 'fa fa-circle-notch');
+        }
+        if (retry) retry.hidden = state !== 'error';
+        if (submit) {
+            submit.disabled = working;
+            submit.setAttribute('aria-busy', working ? 'true' : 'false');
+        }
+    }
+    function failLoginPow(attempt) {
+        if (attempt !== npsPowAttempt) return;
+        stopLoginPowWorker();
+        var nonceField = document.getElementById('auth-pow-nonce');
+        var solutionField = document.getElementById('auth-pow-solution');
+        nonceField.value = '';
+        solutionField.value = '';
+        setLoginPowState('error');
+    }
+    function startLoginPowWorker(attempt, nonce, bits) {
+        if (!window.Worker) {
+            throw new Error('Web Worker unavailable');
+        }
+        stopLoginPowWorker();
+        var base = (window.nps && window.nps.web_base_url) || '';
+        npsPowWorker = new Worker(base + '/static/js/nps-pow-worker.js?v=' + encodeURIComponent(window.nps.version || '') + '&pow=20261106-1');
+        npsPowWorker.onmessage = function (event) {
+            var data = event.data || {};
+            if (attempt !== npsPowAttempt) return;
+            if (data.type === 'progress') {
+                setLoginPowProgress(Number(data.attempts) || 0, -1);
+                return;
+            }
+            if (data.type === 'error') {
+                failLoginPow(attempt);
+                return;
+            }
+            if (data.type !== 'result') return;
+            document.getElementById('auth-pow-nonce').value = nonce;
+            document.getElementById('auth-pow-solution').value = String(data.solution || '');
+            stopLoginPowWorker();
+            setLoginPowProgress(Number(data.attempts) || 0, Number(data.elapsedMs) || 0);
+            setLoginPowState('ready');
+        };
+        npsPowWorker.onerror = function () {
+            failLoginPow(attempt);
+        };
+        npsPowWorker.postMessage({type: 'solve', nonce: nonce, bits: bits});
+    }
+    function prepareLoginPow() {
+        if (!window.npsPowEnabled) return;
+        if (window.npsPowUnsupported) return;
+        if (window.npsPowRunning) return;
+        var attempt = ++npsPowAttempt;
+        var nonceField = document.getElementById('auth-pow-nonce');
+        var solutionField = document.getElementById('auth-pow-solution');
+        nonceField.value = '';
+        solutionField.value = '';
+        setLoginPowProgress(0, -1);
+        setLoginPowState('preparing');
+        fetch("{{.web_base_url}}/login/pow", {credentials: 'same-origin', cache: 'no-store'})
+        .then(function (response) {
+            if (!response.ok) throw new Error('PoW challenge request failed');
+            return response.json();
+        })
+        .then(function (challenge) {
+            if (attempt !== npsPowAttempt) return;
+            if (!challenge.enabled) {
+                setLoginPowState('ready');
+                return;
+            }
+            var bits = document.getElementById('auth-pow-bits');
+            if (bits && challenge.bits) bits.textContent = String(challenge.bits);
+            setLoginPowState('calculating');
+            startLoginPowWorker(attempt, String(challenge.nonce || ''), Number(challenge.bits) || 1);
+        })
+        .catch(function () {
+            failLoginPow(attempt);
+        });
+    }
+    var npsPowRetry = document.getElementById('auth-pow-retry');
+    if (npsPowRetry) npsPowRetry.addEventListener('click', prepareLoginPow);
+    if (window.npsPowEnabled && checkLoginPowCompatibility()) prepareLoginPow();
+
+    function syncLoginBackgroundTheme() {
+        var frame = document.getElementById('auth-network-background');
+        try {
+            var background = frame && frame.contentWindow && frame.contentWindow.NPS_BG;
+            if (background && typeof background.setTheme === 'function') {
+                background.setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+            }
+        } catch (error) {
+            // The background is decorative; authentication must continue if it fails.
+        }
+    }
 
     function toggleLoginTheme() {
         var html = document.documentElement;
@@ -319,6 +511,7 @@
         var toggle = document.getElementById('theme-toggle');
         if (icon) icon.className = next === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
         if (toggle) toggle.setAttribute('aria-pressed', next === 'dark' ? 'true' : 'false');
+        syncLoginBackgroundTheme();
     }
 
     (function() {
@@ -328,6 +521,12 @@
         var toggle = document.getElementById('theme-toggle');
         if (icon) icon.className = saved === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
         if (toggle) toggle.setAttribute('aria-pressed', saved === 'dark' ? 'true' : 'false');
+    })();
+    (function() {
+        var frame = document.getElementById('auth-network-background');
+        if (!frame) return;
+        frame.addEventListener('load', syncLoginBackgroundTheme, {once: true});
+        if (frame.contentDocument && frame.contentDocument.readyState === 'complete') syncLoginBackgroundTheme();
     })();
 </script>
 </body>

@@ -9,15 +9,17 @@ import (
 	"github.com/astaxie/beego"
 )
 
-// Api renders the standalone API-access page. Regular users manage their
-// personal token; administrators additionally manage the configuration-file
-// key and a web-managed key that is equivalent to it.
+// Api renders the account-management page. Every account manages its personal
+// API token and remembered login devices; administrators additionally manage
+// the configuration-file key, a web-managed key and TOTP.
 func (s *UserController) Api() {
 	s.Data["menu"] = "api"
 	configKey := strings.TrimSpace(beego.AppConfig.String("auth_key"))
 	s.Data["configAPIKeyConfigured"] = configKey != ""
 	s.Data["configAPIKeyMasked"] = maskAPIKey(configKey)
-	s.SetInfo("api")
+	s.Data["totp_bound"] = strings.TrimSpace(beego.AppConfig.String("totp_secret")) != ""
+	s.Data["totp_account"] = strings.TrimSpace(beego.AppConfig.String("web_username"))
+	s.SetInfo("account management")
 	s.display("user/api")
 }
 
@@ -96,7 +98,7 @@ func (s *UserController) AdminAPIKeyGenerate() {
 		return
 	}
 	s.auditMutation("admin.api_key_rotate", "global", 0, 0, "", nil, map[string]string{"source": "web"})
-	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "管理员 API 密钥已生成，可随时在 API 接入页面再次查看", "token": token}
+	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "管理员 API 密钥已生成，可随时在账户管理页面再次查看", "token": token}
 	s.ServeJSON()
 	s.StopRun()
 }

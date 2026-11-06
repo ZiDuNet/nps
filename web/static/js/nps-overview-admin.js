@@ -208,10 +208,11 @@
         state.data.clients.filter(function (client) {
             return !state.selectedOwner || String(client.ownerId) === state.selectedOwner;
         }).forEach(function (client) {
-            clientSelect.innerHTML += '<option value="' + client.id + '">' + esc(client.remark || ("客户端 #" + client.id)) + (client.online ? "" : " ·离线") + '</option>';
+            clientSelect.innerHTML += '<option value="' + client.id + '" data-client-online="' + (client.online ? "true" : "false") + '">' + esc(client.remark || ("客户端 #" + client.id)) + '</option>';
         });
         if (Array.prototype.some.call(clientSelect.options, function (option) { return option.value === selectedClient; })) clientSelect.value = selectedClient;
         else state.selectedClient = clientSelect.value;
+        if (window.NpsClientFilter) window.NpsClientFilter.enhance(clientSelect);
     }
 
     function resourceMatches(resource) {

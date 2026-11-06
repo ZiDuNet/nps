@@ -1,16 +1,20 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script>
         (function () {
             var theme = null;
-            try { theme = window.localStorage && window.localStorage.getItem('nps-theme'); } catch (error) {}
+            try {
+                theme = window.localStorage && window.localStorage.getItem('nps-theme');
+            } catch (error) {}
             theme = theme || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
             document.documentElement.setAttribute('data-theme', theme);
         }());
     </script>
+
     <title data-i18n-zh="IP 登记 - NPS" data-i18n-en="IP registration - NPS">IP 登记 - NPS</title>
     <link rel="icon" type="image/png" href="{{.web_base_url}}/static/img/nps-logo.png">
     <link href="{{.web_base_url}}/static/css/bootstrap-5.3.3.min.css?v={{.version}}" rel="stylesheet">
@@ -18,95 +22,242 @@
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/toastr.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261106-3" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261026-3" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-login-v2.css?v={{.version}}&ui=20261106-6" rel="stylesheet">
+
     <script src="{{.web_base_url}}/static/js/bootstrap-5.3.3.bundle.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20261026-1"></script>
-    <style>
-        .ip-register-card { max-width: 680px; margin: 0 auto; background: var(--nps-surface); color: var(--nps-ink); }
-        .ip-register-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
-        .ip-register-meta__item { padding: 12px 14px; border: 1px solid var(--nps-line); border-radius: 10px; background: var(--nps-surface-subtle); }
-        .ip-register-meta__label { display: block; margin-bottom: 4px; color: var(--nps-muted); font-size: 12px; }
-        .ip-register-meta__value { color: var(--nps-ink); font-weight: 600; word-break: break-all; }
-        .ip-register-meta__source { display: block; margin-top: 5px; color: var(--nps-faint); font-size: 11px; line-height: 1.45; }
-        .ip-register-note { margin: 0 0 18px; padding: 13px 15px; color: var(--nps-muted); background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 10px; line-height: 1.6; }
-        .ip-register-warning { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 18px; line-height: 1.6; }
-        @media (max-width: 640px) { .ip-register-meta { grid-template-columns: 1fr; } .ip-register-card { margin: 0; } }
-    </style>
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20261106-1"></script>
+    <script src="{{.web_base_url}}/static/js/nps-auth-shell.js?v={{.version}}&ui=20261106-4" defer></script>
 </head>
-<body class="gray-bg auth-body  nps-bootstrap">
-<div class="auth-page">
-    <header class="auth-page__header">
-        <div class="auth-brand" aria-label="NPS">
-            <span class="auth-brand__mark" aria-hidden="true"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt="NPS"></span>
-            <span class="auth-brand__name" langtag="application"></span>
+
+<body class="gray-bg auth-body auth-login-page auth-login-page--ip nps-bootstrap">
+<iframe id="auth-network-background" class="auth-network-background"
+        src="{{.web_base_url}}/static/background/nps-network-background.html?v={{.version}}&ui=20261106-5&motion=on"
+        title="" aria-hidden="true" tabindex="-1" loading="eager"></iframe>
+
+<div class="auth-login-v2">
+    <header class="auth-login-toolbar">
+        <a class="auth-login-toolbar__brand" href="{{.web_base_url}}/login/index" aria-label="NPS">
+            <span class="auth-login-toolbar__mark" aria-hidden="true">
+                <img src="{{.web_base_url}}/static/img/nps-logo.png" alt="">
+            </span>
+            <span class="auth-login-toolbar__brand-copy">
+                <strong langtag="application"></strong>
+                <small>Network Proxy Server</small>
+            </span>
             <span class="nps-pro-badge" aria-label="Pro edition">Pro</span>
-        </div>
-        <div class="auth-page__tools">
-            <button type="button" onclick="toggleTheme()" class="auth-icon-button theme-toggle" id="theme-toggle" title="切换主题" aria-label="切换主题" aria-pressed="false"><i class="fa fa-moon" id="theme-icon" aria-hidden="true"></i></button>
-            <div class="auth-language btn-group dropdown">
-                <button id="languagemenu" class="btn btn-default dropdown-toggle auth-language__toggle" type="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" title="语言" aria-label="语言"><i class="fa fa-globe-asia" aria-hidden="true"></i><span></span></button>
-                <ul class="dropdown-menu"><li lang="zh-CN"><a href="#">简体中文</a></li><li lang="en-US"><a href="#">English</a></li></ul>
+        </a>
+        <div class="auth-login-toolbar__tools">
+            <button type="button" onclick="toggleTheme()" class="auth-login-tool auth-login-theme" id="theme-toggle"
+                    title="切换主题" data-title-zh="切换主题" data-title-en="Toggle theme"
+                    aria-label="切换主题" data-aria-label-zh="切换主题" data-aria-label-en="Toggle theme" aria-pressed="false">
+                <i class="fa fa-moon" id="theme-icon" aria-hidden="true"></i>
+                <span data-i18n-zh="主题" data-i18n-en="Theme">主题</span>
+            </button>
+            <div class="auth-language auth-login-language btn-group dropdown">
+                <button id="languagemenu" class="auth-login-tool dropdown-toggle" type="button" data-bs-toggle="dropdown"
+                        aria-haspopup="true" aria-expanded="false" title="语言" data-title-zh="语言" data-title-en="Language"
+                        aria-label="语言" data-aria-label-zh="语言" data-aria-label-en="Language">
+                    <i class="fa fa-globe-asia" aria-hidden="true"></i><span></span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li lang="zh-CN"><a href="#">简体中文</a></li>
+                    <li lang="en-US"><a href="#">English</a></li>
+                </ul>
             </div>
         </div>
     </header>
-    <main class="auth-page__main">
-        <section class="auth-panel login-form-wrap ip-register-card" aria-labelledby="ip-register-title">
-            <header class="auth-panel__header">
-                <span class="auth-panel__badge nps-pro-badge" aria-label="IP registration"><i class="fa fa-shield-alt" aria-hidden="true"></i> IP</span>
-                <h1 class="auth-panel__title" id="ip-register-title" data-i18n-zh="登记访问 IP" data-i18n-en="Register access IP">登记访问 IP</h1>
-                <p class="auth-panel__description" data-i18n-zh="登记成功后，当前公网 IP 才能访问启用了“仅允许已登记 IP”的隧道和域名规则。" data-i18n-en="After registration, this public IP can access tunnels and host rules that require registered IPs.">登记成功后，当前公网 IP 才能访问启用了“仅允许已登记 IP”的隧道和域名规则。</p>
-            </header>
-            <div class="ip-register-meta">
-                <div class="ip-register-meta__item"><span class="ip-register-meta__label" data-i18n-zh="检测到的访问 IP" data-i18n-en="Detected IP">检测到的访问 IP</span><span class="ip-register-meta__value">{{.ip}}</span><small class="ip-register-meta__source">{{.ip_source}}</small></div>
-                <div class="ip-register-meta__item"><span class="ip-register-meta__label" data-i18n-zh="服务端默认最长时长" data-i18n-en="Server default maximum">服务端默认最长时长</span><span class="ip-register-meta__value">{{.default_hours}}h</span></div>
-            </div>
-            {{if .ip_proxy_warning}}
-            <div class="alert alert-warning nps-alert ip-register-warning" role="status">
-                <i class="fa fa-triangle-exclamation" aria-hidden="true"></i>
-                <span data-i18n-zh="检测到的是代理或内网地址（{{.ip}}）。若此页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址，“仅允许已登记 IP”无法区分单个用户。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并确认服务端已开启 allow_x_real_ip（默认开启）后重新打开本页。"
-                      data-i18n-en="The detected address is a proxy or private address ({{.ip}}). When this page sits behind a reverse proxy, every visitor through that hop registers as the same address and &quot;registered IPs only&quot; cannot tell users apart. Make the proxy overwrite X-Real-IP / X-Forwarded-For, confirm allow_x_real_ip is enabled on the server (it is on by default), and reload this page.">检测到的是代理或内网地址（{{.ip}}）。若此页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址，“仅允许已登记 IP”无法区分单个用户。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并确认服务端已开启 allow_x_real_ip（默认开启）后重新打开本页。</span>
-            </div>
-            {{end}}
-            {{if eq false .ip_registration_configured}}
-            <div class="alert alert-warning nps-alert ip-register-warning" role="status">
-                <i class="fa fa-info-circle" aria-hidden="true"></i>
-                <span data-i18n-zh="管理员尚未启用 IP 登记。请先在客户端或全局配置中设置登记密钥，设置完成后此页面即可使用。"
-                      data-i18n-en="IP registration is not enabled yet. An administrator must configure a registration key in the client or global settings before this page can be used.">管理员尚未启用 IP 登记。请先在客户端或全局配置中设置登记密钥，设置完成后此页面即可使用。</span>
-            </div>
-            {{end}}
-            <p class="ip-register-note" data-i18n-zh="访问者输入客户端单独的 IP 登记口令即可登记当前 IP；登记口令留空时，才使用客户端 VKEY。两者彼此独立，登记口令泄露后可单独重置，不影响 NPC 连接。输入 public_vkey 可对所有启用登记的客户端生效。登记记录只保存在服务端内存中，过期或服务端重启后需要重新登记。" data-i18n-en="Enter a client's separate IP registration key to register this IP. When it is empty, the client VKEY can be used instead. They are independent: resetting a leaked registration key does not affect the NPC connection. public_vkey applies to every client that enables registration. Registrations stay in server memory and expire automatically.">访问者输入客户端单独的 IP 登记口令即可登记当前 IP；登记口令留空时，才使用客户端 VKEY。两者彼此独立，登记口令泄露后可单独重置，不影响 NPC 连接。输入 public_vkey 可对所有启用登记的客户端生效。登记记录只保存在服务端内存中，过期或服务端重启后需要重新登记。</p>
-            <form class="form auth-form nps-form" onsubmit="return registerIP()">
-                <div class="form-group auth-field"><label class="auth-field__label" for="ip-register-key" data-i18n-zh="IP 登记口令 / VKEY" data-i18n-en="IP registration key / VKEY">IP 登记口令 / VKEY</label><div class="auth-control input-icon-wrap"><i class="fa fa-key input-icon" aria-hidden="true"></i><input id="ip-register-key" name="key" class="form-control has-icon" type="password" autocomplete="off" required><span class="help-block" data-i18n-zh="优先使用客户端的登记口令；未设置登记口令时使用 VKEY。public_vkey 对所有启用登记的客户端生效。" data-i18n-en="Use the client's registration key first; use its VKEY only when no registration key is set. public_vkey applies to every client that enables registration.">优先使用客户端的登记口令；未设置登记口令时使用 VKEY。public_vkey 对所有启用登记的客户端生效。</span></div></div>
-                <div class="form-group auth-field"><label class="auth-field__label" for="ip-register-hours" data-i18n-zh="登记时长（小时）" data-i18n-en="Registration hours">登记时长（小时）</label><div class="auth-control input-icon-wrap"><i class="fa fa-clock input-icon" aria-hidden="true"></i><input id="ip-register-hours" name="hours" class="form-control has-icon" type="number" min="1" step="1" value="{{.default_hours}}"><span class="help-block" data-i18n-zh="超过客户端或服务端上限时会自动按上限登记；客户端填 0 或留空时跟随服务端 ip_register_max_hours。" data-i18n-en="Values above the client or server limit are capped automatically; a client value of 0 or blank follows ip_register_max_hours.">超过客户端或服务端上限时会自动按上限登记；客户端填 0 或留空时跟随服务端 ip_register_max_hours。</span></div></div>
-                <button type="submit" class="auth-submit login-btn" data-i18n-zh="登记当前 IP" data-i18n-en="Register current IP">登记当前 IP</button>
-            </form>
-            <div class="auth-switch register-link"><a class="auth-switch__link" href="{{.login_url}}" data-i18n-zh="返回登录" data-i18n-en="Back to login">返回登录</a></div>
+
+    <main class="auth-login-stage">
+        <section class="auth-login-shell auth-login-shell--ip" aria-labelledby="ip-register-title">
+            <aside class="auth-login-brand" aria-labelledby="ip-register-brand-title">
+                <div class="auth-login-brand__identity">
+                    <span class="auth-login-brand__accent-line" aria-hidden="true"></span>
+                    <div class="auth-login-brand__identity-copy">
+                        <p class="auth-login-brand__wordmark" aria-hidden="true">NPS</p>
+                        <p class="auth-login-brand__product">NETWORK PROXY SERVER</p>
+                        <p class="auth-login-brand__tagline" data-i18n-zh="内网穿透 · 反向代理" data-i18n-en="Tunnels · Reverse proxy">内网穿透 · 反向代理</p>
+                    </div>
+                </div>
+                <h1 class="auth-login-brand__headline" id="ip-register-brand-title">
+                    <span data-i18n-zh="一次登记，让当前访问地址通过受保护入口。" data-i18n-en="Register once and pass through protected entries from this address.">一次登记，让当前访问地址通过受保护入口。</span>
+                </h1>
+                <ul class="auth-login-capabilities" aria-label="IP registration capabilities">
+                    <li>
+                        <span class="auth-login-capabilities__dot" aria-hidden="true"></span>
+                        <strong data-i18n-zh="自动识别" data-i18n-en="Auto detection">自动识别</strong>
+                        <small data-i18n-zh="服务端识别当前来源地址" data-i18n-en="The server identifies the source address">服务端识别当前来源地址</small>
+                    </li>
+                    <li>
+                        <span class="auth-login-capabilities__dot" aria-hidden="true"></span>
+                        <strong data-i18n-zh="按需授权" data-i18n-en="Scoped access">按需授权</strong>
+                        <small data-i18n-zh="仅放行启用了登记校验的入口" data-i18n-en="Only entries with registration checks are opened">仅放行启用了登记校验的入口</small>
+                    </li>
+                    <li>
+                        <span class="auth-login-capabilities__dot" aria-hidden="true"></span>
+                        <strong data-i18n-zh="自动过期" data-i18n-en="Auto expiry">自动过期</strong>
+                        <small data-i18n-zh="有效期结束后自动撤销授权" data-i18n-en="Access is revoked automatically after the selected period">有效期结束后自动撤销授权</small>
+                    </li>
+                </ul>
+                <div class="auth-login-protocols" aria-label="Access controls">
+                    <span>IP REGISTER</span>
+                    <span>ALLOWLIST</span>
+                    <span>AUTO EXPIRE</span>
+                    <span>AUDIT</span>
+                    <span data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</span>
+                </div>
+            </aside>
+
+            <section class="auth-login-panel auth-login-panel--ip" aria-labelledby="ip-register-title">
+                <header class="auth-login-panel__header">
+                    <div class="auth-login-panel__meta">
+                        <span class="auth-login-panel__eyebrow" data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</span>
+                        <a class="auth-login-panel__ip-link" href="{{.login_url}}" data-i18n-zh="返回登录" data-i18n-en="Back to login">返回登录 <i class="fa fa-arrow-left" aria-hidden="true"></i></a>
+                    </div>
+                    <h2 class="auth-login-panel__title" id="ip-register-title" data-i18n-zh="IP 登记" data-i18n-en="IP registration">IP 登记</h2>
+                    <p class="auth-login-panel__description" data-i18n-zh="登记成功后，当前公网 IP 才能访问启用了“仅允许已登记 IP”的隧道和域名规则。" data-i18n-en="After registration, this public IP can access tunnels and host rules that require registered IPs.">登记成功后，当前公网 IP 才能访问启用了“仅允许已登记 IP”的隧道和域名规则。</p>
+                </header>
+
+                <div class="auth-login-ip-meta">
+                    <div class="auth-login-ip-meta__item">
+                        <span class="auth-login-ip-meta__label" data-i18n-zh="检测到的访问 IP" data-i18n-en="Detected IP">检测到的访问 IP</span>
+                        <strong class="auth-login-ip-meta__value">{{.ip}}</strong>
+                        <small class="auth-login-ip-meta__source">{{.ip_source}}</small>
+                    </div>
+                    <div class="auth-login-ip-meta__item">
+                        <span class="auth-login-ip-meta__label" data-i18n-zh="服务端最长时长" data-i18n-en="Server maximum">服务端最长时长</span>
+                        <strong class="auth-login-ip-meta__value">{{.default_hours}}h</strong>
+                    </div>
+                </div>
+
+                {{if .ip_proxy_warning}}
+                <div class="auth-login-alert auth-login-alert--warning" role="status">
+                    <i class="fa fa-triangle-exclamation" aria-hidden="true"></i>
+                    <span data-i18n-zh="检测到代理或内网地址（{{.ip}}）。若页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并确认服务端已开启 allow_x_real_ip（默认开启）后重新打开本页。"
+                          data-i18n-en="A proxy or private address was detected ({{.ip}}). Behind a reverse proxy, every visitor through that hop may register as the same address. Make the proxy overwrite X-Real-IP / X-Forwarded-For, confirm allow_x_real_ip is enabled on the server (it is on by default), and reload this page.">检测到代理或内网地址（{{.ip}}）。若页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并确认服务端已开启 allow_x_real_ip（默认开启）后重新打开本页。</span>
+                </div>
+                {{end}}
+
+                {{if eq false .ip_registration_configured}}
+                <div class="auth-login-alert auth-login-alert--warning" role="status">
+                    <i class="fa fa-info-circle" aria-hidden="true"></i>
+                    <span data-i18n-zh="管理员尚未启用 IP 登记。请先在客户端或全局配置中设置登记密钥，设置完成后此页面即可使用。"
+                          data-i18n-en="IP registration is not enabled yet. An administrator must configure a registration key in the client or global settings before this page can be used.">管理员尚未启用 IP 登记。请先在客户端或全局配置中设置登记密钥，设置完成后此页面即可使用。</span>
+                </div>
+                {{end}}
+
+                <form id="ip-register-form" class="form auth-login-form nps-form" onsubmit="return registerIP()">
+                    <div class="form-group auth-login-field">
+                        <label class="auth-login-field__label" for="ip-register-key" data-i18n-zh="IP 登记口令 / VKEY" data-i18n-en="IP registration key / VKEY">IP 登记口令 / VKEY</label>
+                        <div class="auth-login-control">
+                            <i class="fa fa-key auth-login-control__icon" aria-hidden="true"></i>
+                            <input id="ip-register-key" name="key" class="form-control" type="password" autocomplete="off" placeholder="Registration key" required>
+                        </div>
+                        <span class="auth-login-field__hint" data-i18n-zh="优先使用客户端的登记口令；未设置登记口令时使用 VKEY。public_vkey 对所有启用登记的客户端生效。"
+                              data-i18n-en="Use the client registration key first; use its VKEY only when no registration key is set. public_vkey applies to every client that enables registration.">优先使用客户端的登记口令；未设置登记口令时使用 VKEY。public_vkey 对所有启用登记的客户端生效。</span>
+                    </div>
+                    <div class="form-group auth-login-field">
+                        <label class="auth-login-field__label" for="ip-register-hours" data-i18n-zh="登记时长（小时）" data-i18n-en="Registration hours">登记时长（小时）</label>
+                        <div class="auth-login-control">
+                            <i class="fa fa-clock auth-login-control__icon" aria-hidden="true"></i>
+                            <input id="ip-register-hours" name="hours" class="form-control" type="number" min="1" step="1" value="{{.default_hours}}">
+                        </div>
+                        <span class="auth-login-field__hint" data-i18n-zh="超过客户端或服务端上限时按上限登记；留空时跟随服务端 ip_register_max_hours。"
+                              data-i18n-en="Values above the client or server limit are capped automatically; a blank value follows ip_register_max_hours.">超过客户端或服务端上限时按上限登记；留空时跟随服务端 ip_register_max_hours。</span>
+                    </div>
+                    <button type="submit" class="auth-login-submit login-btn">
+                        <span data-i18n-zh="登记当前 IP" data-i18n-en="Register current IP">登记当前 IP</span>
+                        <i class="fa fa-arrow-right" aria-hidden="true"></i>
+                    </button>
+                </form>
+
+                <p class="auth-login-ip-note" data-i18n-zh="登记记录只保存在服务端内存中，过期或服务端重启后需要重新登记。" data-i18n-en="Registrations stay in server memory and expire automatically after a restart or their configured lifetime.">登记记录只保存在服务端内存中，过期或服务端重启后需要重新登记。</p>
+                <div class="auth-login-switch register-link">
+                    <a class="auth-switch__link" href="{{.login_url}}" data-i18n-zh="返回登录" data-i18n-en="Back to login">返回登录</a>
+                </div>
+            </section>
         </section>
     </main>
-    <footer class="auth-page__footer"><span><strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2026</span><span><a href="https://github.com/ZiDuNet/nps" target="_blank" rel="noopener">GitHub</a></span></footer>
+
+    <footer class="auth-login-footer">
+        <span>版权所有 <strong>NPS-Pro</strong> &copy; 2018-2026 By:WuShuo</span>
+        <span><span langtag="word-readmore"></span> <a href="https://github.com/ZiDuNet/nps" target="_blank" rel="noopener" langtag="word-go"></a></span>
+    </footer>
 </div>
-<script>
-    window.nps = {web_base_url: "{{.web_base_url}}", version: "{{.version}}"};
+
+<script type="text/javascript">
+    window.nps = {
+        web_base_url: "{{.web_base_url}}",
+        version: "{{.version}}"
+    };
+
     function registerIP() {
-        $.ajax({type: 'POST', url: "{{.web_base_url}}/ip/register", data: $('.auth-form').serializeArray(), dataType: 'json'}).done(function (res) {
+        var form = document.getElementById('ip-register-form');
+        if (!form || !validateNpsForm(form, true)) return false;
+        $.ajax({
+            type: 'POST',
+            url: "{{.web_base_url}}/ip/register",
+            data: $('#ip-register-form').serializeArray(),
+            dataType: 'json'
+        }).done(function (res) {
             if (res && res.status) {
-                npsNotify('success', (res.msg || 'IP 登记成功') + (res.until ? '（有效期至 ' + res.until + '）' : ''));
+                npsNotify('success', (res.msg || (npsIsEnglish() ? 'IP registered' : 'IP 登记成功')) + (res.until ? (npsIsEnglish() ? ' (valid until ' : '（有效期至 ') + res.until + (npsIsEnglish() ? ')' : '）') : ''));
             } else {
-                npsNotify('error', res && res.msg ? res.msg : 'IP 登记失败');
+                npsNotify('error', res && (res.code || res.msg) ? npsAuthErrorMessage(res) : (npsIsEnglish() ? 'IP registration failed' : 'IP 登记失败'));
             }
-        }).fail(function () { npsNotify('error', npsRequestErrorMessage()); });
+        }).fail(function () {
+            npsNotify('error', npsRequestErrorMessage());
+        });
         return false;
     }
-    function toggleTheme() {
-        var html = document.documentElement, dark = html.getAttribute('data-theme') === 'dark', next = dark ? 'light' : 'dark';
-        html.setAttribute('data-theme', next); try { window.localStorage.setItem('nps-theme', next); } catch (error) {}
-        var icon = document.getElementById('theme-icon'), button = document.getElementById('theme-toggle');
-        if (icon) icon.className = next === 'dark' ? 'fa fa-sun' : 'fa fa-moon'; if (button) button.setAttribute('aria-pressed', next === 'dark' ? 'true' : 'false');
+
+    function syncIpBackgroundTheme() {
+        var frame = document.getElementById('auth-network-background');
+        try {
+            var background = frame && frame.contentWindow && frame.contentWindow.NPS_BG;
+            if (background && typeof background.setTheme === 'function') {
+                background.setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+            }
+        } catch (error) {
+            // The background is decorative; IP registration must remain usable if it fails.
+        }
     }
-    (function () { var dark = document.documentElement.getAttribute('data-theme') === 'dark'; var icon = document.getElementById('theme-icon'); if (icon) icon.className = dark ? 'fa fa-sun' : 'fa fa-moon'; }());
+
+    function toggleTheme() {
+        var html = document.documentElement;
+        var isDark = html.getAttribute('data-theme') === 'dark';
+        var next = isDark ? 'light' : 'dark';
+        html.setAttribute('data-theme', next);
+        try {
+            if (window.localStorage) window.localStorage.setItem('nps-theme', next);
+        } catch (error) {
+            // Keep the selected theme for this page if persistent storage is unavailable.
+        }
+        var icon = document.getElementById('theme-icon');
+        var button = document.getElementById('theme-toggle');
+        if (icon) icon.className = next === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
+        if (button) button.setAttribute('aria-pressed', next === 'dark' ? 'true' : 'false');
+        syncIpBackgroundTheme();
+    }
+
+    (function () {
+        var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var icon = document.getElementById('theme-icon');
+        var button = document.getElementById('theme-toggle');
+        if (icon) icon.className = dark ? 'fa fa-sun' : 'fa fa-moon';
+        if (button) button.setAttribute('aria-pressed', dark ? 'true' : 'false');
+    }());
+
+    (function () {
+        var frame = document.getElementById('auth-network-background');
+        if (!frame) return;
+        frame.addEventListener('load', syncIpBackgroundTheme, {once: true});
+        if (frame.contentDocument && frame.contentDocument.readyState === 'complete') syncIpBackgroundTheme();
+    }());
 </script>
 </body>
+
 </html>

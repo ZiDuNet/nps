@@ -43,9 +43,10 @@ type ownerFilterOption struct {
 }
 
 type clientFilterOption struct {
-	Id     int
-	UserId int
-	Remark string
+	Id        int
+	UserId    int
+	Remark    string
+	IsConnect bool
 }
 
 const (
@@ -118,6 +119,22 @@ func (s *BaseController) Prepare() {
 	}
 	authorizedRequest := apiAuthorized || s.userAPIAuthorized || sessionBool(s.GetSession("auth"))
 	if !authorizedRequest {
+		restored, restoreErr := restoreRememberLogin(&s.Controller, s.Ctx, time.Now())
+		if restoreErr != nil {
+			beego.Warn(describeRememberLoginError(restoreErr))
+		}
+		authorizedRequest = restored
+		if restored && sessionBool(s.GetSession("isAdmin")) {
+			server.Bridge.Register.Store(common.GetIpByAddr(s.Ctx.Input.IP()), time.Now().Add(2*time.Hour))
+		}
+	}
+	if !apiAuthorized && !s.userAPIAuthorized && sessionBool(s.GetSession("auth")) &&
+		!browserSessionSecurityValid(&s.Controller, s.Ctx, time.Now()) {
+		clearAuthenticationSession(s.DelSession)
+		clearRememberLoginCookie(s.Ctx.Request, s.Ctx.ResponseWriter)
+		authorizedRequest = false
+	}
+	if !authorizedRequest {
 		// A redirect does not stop Beego from invoking the action by itself, so
 		// StopRun is required before returning from Prepare.
 		s.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
@@ -139,6 +156,7 @@ func (s *BaseController) Prepare() {
 		// cached session alone is not sufficient authorization.
 		if !s.userAPIAuthorized && !s.hasActiveNonAdminPrincipal() {
 			clearAuthenticationSession(s.DelSession)
+			clearRememberLoginCookie(s.Ctx.Request, s.Ctx.ResponseWriter)
 			s.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
 			s.StopRun()
 			return
@@ -925,11 +943,15 @@ func (s *BaseController) setClientFilterData() {
 		}
 		client.RLock()
 		option := clientFilterOption{
-			Id:     client.Id,
-			UserId: client.UserId,
-			Remark: html.UnescapeString(client.Remark),
+			Id:        client.Id,
+			UserId:    client.UserId,
+			Remark:    html.UnescapeString(client.Remark),
+			IsConnect: client.IsConnect,
 		}
 		client.RUnlock()
+		if server.Bridge != nil {
+			option.IsConnect = len(server.Bridge.ActiveClientTransports(option.Id)) > 0
+		}
 		options = append(options, option)
 	}
 	s.Data["clients"] = options

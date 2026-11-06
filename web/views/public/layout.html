@@ -34,7 +34,8 @@
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/flatpickr.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261029-8" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261030-5" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261106-8" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-client-filter.css?v={{.version}}&ui=20261106-3" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261026-3" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/nps-certificate.css?v={{.version}}&ui=20261029-3" rel="stylesheet">
 
@@ -44,7 +45,9 @@
     <script src="{{.web_base_url}}/static/js/toastr.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/flatpickr.min.js?v={{.version}}"></script>
 	    <script src="{{.web_base_url}}/static/js/flatpickr-l10n-zh.js?v={{.version}}"></script>
-    <script src="{{.web_base_url}}/static/js/nps-table.js?v={{.version}}&ui=20261030-1"></script>
+    <script src="{{.web_base_url}}/static/js/nps-client-filter.js?v={{.version}}&ui=20261106-3"></script>
+    <script src="{{.web_base_url}}/static/js/nps-table.js?v={{.version}}&ui=20261106-3"></script>
+    <script src="{{.web_base_url}}/static/js/nps-ip-region.js?v={{.version}}&ui=20261106-1"></script>
 	    <script src="{{.web_base_url}}/static/js/nps-live.js?v={{.version}}&ui=20261029-1"></script>
 	    <script src="{{.web_base_url}}/static/js/traffic-debug.js?v={{.version}}&ui=20260919-1"></script>
     <script src="{{.web_base_url}}/static/js/echarts.min.js?v={{.version}}"></script>
@@ -131,7 +134,7 @@
                 </li>
                 <li class="{{if eq "api" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/user/api"><i class="fa fa-key" aria-hidden="true"></i>
-                    <span class="nav-label" data-i18n-zh="API 接入" data-i18n-en="API access">API 接入</span></a>
+                    <span class="nav-label" data-i18n-zh="账户管理" data-i18n-en="Account management">账户管理</span></a>
                 </li>
                 <li class="{{if eq "help" .menu}}active{{end}}">
                 <a href="{{.web_base_url}}/index/help"><i class="fa fa-lightbulb" aria-hidden="true"></i>
@@ -184,6 +187,7 @@
                 <div class="navbar-header">
                     <button type="button" class="navbar-minimalize minimalize-styl-2 btn btn-primary" aria-label="切换导航" data-aria-label-zh="切换导航" data-aria-label-en="Toggle navigation" data-title-zh="切换导航" data-title-en="Toggle navigation"><i class="fa fa-bars" aria-hidden="true"></i></button>
                 </div>
+                <div id="nps-page-context" class="nps-page-context" aria-live="polite" aria-atomic="true" hidden></div>
                 <ul class="nav navbar-top-links navbar-right">
                     <li>
                         <span class="m-r-sm text-muted welcome-message"><span langtag="word-welcome">欢迎使用</span>
@@ -642,6 +646,68 @@
         }
     })();
 
+    // The page title, context badge and one-line description live in the
+    // persistent top bar. Content-only navigation therefore updates the shell
+    // heading explicitly instead of leaving an empty slot between refreshes.
+    function npsSyncPageContext(root) {
+        var slot = document.getElementById('nps-page-context');
+        var header = root && root.querySelector ? root.querySelector('.dashboard-page-header') : null;
+        if (!slot) return;
+        slot.replaceChildren();
+        slot.hidden = true;
+        if (!header) return;
+
+        header.classList.remove('has-context-in-topbar', 'is-actions-only');
+        header.hidden = false;
+        var source = null;
+        for (var index = 0; index < header.children.length; index++) {
+            var candidate = header.children[index];
+            if (!candidate.classList.contains('dashboard-page-actions')) {
+                source = candidate;
+                break;
+            }
+        }
+        if (!source) return;
+
+        var title = null;
+        var kicker = null;
+        var description = null;
+        for (var childIndex = 0; childIndex < source.children.length; childIndex++) {
+            var child = source.children[childIndex];
+            if (!title && child.tagName === 'H1') title = child;
+            else if (!kicker && child.classList.contains('dashboard-page-kicker')) kicker = child;
+            else if (!description && child.tagName === 'P') description = child;
+        }
+        if (!title) return;
+
+        slot.appendChild(title);
+        if (kicker) slot.appendChild(kicker);
+        if (description) {
+            description.title = description.textContent.trim();
+            slot.appendChild(description);
+        }
+        slot.hidden = false;
+        header.classList.add('has-context-in-topbar');
+        source.classList.add('nps-page-header-source');
+        source.hidden = source.children.length === 0;
+
+        var actions = null;
+        for (var actionIndex = 0; actionIndex < header.children.length; actionIndex++) {
+            if (header.children[actionIndex].classList.contains('dashboard-page-actions')) {
+                actions = header.children[actionIndex];
+                break;
+            }
+        }
+        header.classList.toggle('is-actions-only', Boolean(actions) && source.hidden);
+        header.hidden = !actions && source.hidden;
+    }
+
+    npsSyncPageContext(document.getElementById('nps-content'));
+    document.addEventListener('npsLanguageChanged', function () {
+        var description = document.querySelector('#nps-page-context > p');
+        if (description) description.title = description.textContent.trim();
+    });
+
     // Keep the console shell mounted while menu navigation swaps only the page
     // content. The server still renders a complete document, so this remains
     // compatible with direct links, refreshes, and non-JavaScript clients.
@@ -649,7 +715,6 @@
         var content = document.getElementById('nps-content');
         var menu = document.getElementById('side-menu');
         if (!content || !menu || !window.fetch || !window.DOMParser) return;
-
         // Navigation is latest-request-wins. A user can click several menu
         // items before a slow page response arrives; stale responses must not
         // replace the page or clear the loading state for the current target.
@@ -755,7 +820,7 @@
 
         function focusNewPage() {
             window.scrollTo(0, 0);
-            var heading = content.querySelector('h1, [data-page-title]');
+            var heading = document.querySelector('#nps-page-context h1, #nps-content h1, [data-page-title]');
             if (!heading) return;
             if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
             try { heading.focus({ preventScroll: true }); } catch (error) { heading.focus(); }
@@ -809,9 +874,10 @@
                 var active = extracted.document.querySelector('#side-menu > li.active > a[href]');
                 setActiveMenu(active ? active.href : url.href);
                 if (pushHistory) history.pushState({ npsConsole: true }, '', url.href);
-	                refreshLanguage();
-	                focusNewPage();
-	                document.dispatchEvent(new CustomEvent('nps:content-loaded', { detail: { url: url.href } }));
+                refreshLanguage();
+                npsSyncPageContext(content);
+                focusNewPage();
+                document.dispatchEvent(new CustomEvent('nps:content-loaded', { detail: { url: url.href } }));
 	            }).catch(function (error) {
                 if (serial !== navigationSerial || (error && error.name === 'AbortError')) return;
                 // Keep the current page usable when the asynchronous request
@@ -870,7 +936,6 @@
         window.addEventListener('popstate', function () {
             navigate(window.location.href, false);
         });
-
         var initialState = history.state || {};
         if (!initialState.npsConsole) {
             initialState.npsConsole = true;

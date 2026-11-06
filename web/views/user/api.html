@@ -75,18 +75,198 @@
         align-items: center;
         gap: 0.4rem;
     }
+    .api-session-security {
+        grid-column: 1 / -1;
+    }
+    .api-session-security__header {
+        justify-content: space-between;
+    }
+    .api-session-security__title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-width: 0;
+    }
+    .api-session-list {
+        display: grid;
+        gap: 0.7rem;
+    }
+    .api-session-device {
+        display: grid;
+        grid-template-columns: minmax(12rem, 1.4fr) minmax(10rem, .8fr) minmax(16rem, 1.2fr) auto;
+        align-items: center;
+        gap: .8rem 1rem;
+        padding: .85rem .95rem;
+        border: 1px solid var(--nps-border, #e2e8f0);
+        border-radius: .65rem;
+        background: var(--nps-surface, #fff);
+    }
+    .api-session-device__identity {
+        min-width: 0;
+    }
+    .api-session-device__identity strong {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: .45rem;
+        color: var(--nps-ink, #172033);
+    }
+    .api-session-device__identity small,
+    .api-session-device__times span {
+        display: block;
+        color: var(--nps-muted, #64748b);
+        font-size: .75rem;
+        line-height: 1.55;
+    }
+    .api-session-current {
+        display: inline-flex;
+        align-items: center;
+        padding: .12rem .42rem;
+        color: #047857;
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        border-radius: 999px;
+        font-size: .66rem;
+        font-weight: 700;
+    }
+    .api-session-device__times {
+        min-width: 0;
+    }
+    .api-session-empty {
+        padding: 1.4rem;
+        color: var(--nps-muted, #64748b);
+        text-align: center;
+        border: 1px dashed var(--nps-border, #cbd5e1);
+        border-radius: .65rem;
+    }
+    .api-totp-card {
+        grid-column: 1 / -1;
+    }
+    .api-totp-card__header {
+        justify-content: space-between;
+    }
+    .api-totp-card__status {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .3rem .65rem;
+        color: #b45309;
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 999px;
+        font-size: .74rem;
+        font-weight: 700;
+    }
+    .api-totp-card__status.is-bound {
+        color: #047857;
+        background: #ecfdf5;
+        border-color: #a7f3d0;
+    }
+    .api-totp-grid {
+        display: grid;
+        grid-template-columns: minmax(15rem, .8fr) minmax(20rem, 1.2fr);
+        gap: 1rem;
+        align-items: start;
+    }
+    .api-totp-verify {
+        display: grid;
+        gap: .75rem;
+        padding: 1rem;
+        background: var(--nps-surface-subtle, #f8fafc);
+        border: 1px solid var(--nps-border, #e2e8f0);
+        border-radius: .75rem;
+    }
+    .api-totp-verify label {
+        margin-bottom: .3rem;
+    }
+    .api-totp-setup {
+        display: grid;
+        gap: .8rem;
+        padding: 1rem;
+        background: color-mix(in srgb, #2270f0 5%, var(--nps-surface, #fff));
+        border: 1px solid color-mix(in srgb, #2270f0 22%, var(--nps-border, #e2e8f0));
+        border-radius: .75rem;
+    }
+    .api-totp-secret {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: .5rem;
+    }
+    .api-totp-secret input {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        letter-spacing: .08em;
+    }
+    .api-totp-setup__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+    }
+    .api-totp-danger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-top: .8rem;
+        border-top: 1px solid var(--nps-border, #e2e8f0);
+    }
+    .api-totp-danger p {
+        margin: 0;
+        color: var(--nps-muted, #64748b);
+        font-size: .78rem;
+        line-height: 1.55;
+    }
     [data-theme="dark"] .api-access-card__icon {
         background: rgba(96, 165, 250, 0.14);
         color: #93c5fd;
     }
+    [data-theme="dark"] .api-session-device {
+        background: var(--nps-surface-subtle, #17243a);
+    }
+    [data-theme="dark"] .api-session-current {
+        color: #86efac;
+        background: #102f26;
+        border-color: #246447;
+    }
+    [data-theme="dark"] .api-totp-card__status {
+        color: #fcd34d;
+        background: #382a09;
+        border-color: #6b4e0c;
+    }
+    [data-theme="dark"] .api-totp-card__status.is-bound {
+        color: #86efac;
+        background: #102f26;
+        border-color: #246447;
+    }
+    [data-theme="dark"] .api-totp-verify {
+        background: var(--nps-surface-subtle, #17243a);
+    }
+    @media (max-width: 1080px) {
+        .api-session-device {
+            grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .api-session-device__times {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: .4rem 1rem;
+        }
+    }
+    @media (max-width: 680px) {
+        .api-session-security__header { align-items: flex-start; flex-direction: column; }
+        .api-session-device { grid-template-columns: minmax(0, 1fr); }
+        .api-session-device__times { grid-template-columns: minmax(0, 1fr); }
+        .api-session-device .btn { width: 100%; }
+        .api-totp-grid { grid-template-columns: minmax(0, 1fr); }
+        .api-totp-danger { align-items: stretch; flex-direction: column; }
+    }
 </style>
 
-<main class="wrapper wrapper-content dashboard-page api-access-page" aria-label="API 接入" data-aria-label-zh="API 接入" data-aria-label-en="API access">
+<main class="wrapper wrapper-content dashboard-page api-access-page" aria-label="账户管理" data-aria-label-zh="账户管理" data-aria-label-en="Account management">
     <header class="dashboard-page-header">
         <div>
-            <div class="dashboard-page-kicker" data-i18n-zh="系统接入" data-i18n-en="System integration">系统接入</div>
-            <h1 data-i18n-zh="API 接入" data-i18n-en="API access">API 接入</h1>
-            <p data-i18n-zh="管理用于调用 NPS 管理接口的凭证。Token 生成后可再次查看，重新生成会立即使旧凭证失效。" data-i18n-en="Manage credentials used to call the NPS management API. A token can be viewed again after generation; rotating it immediately revokes the old credential.">管理用于调用 NPS 管理接口的凭证。Token 生成后可再次查看，重新生成会立即使旧凭证失效。</p>
+            <div class="dashboard-page-kicker" data-i18n-zh="账号安全与系统接入" data-i18n-en="Account security and integration">账号安全与系统接入</div>
+            <h1 data-i18n-zh="账户管理" data-i18n-en="Account management">账户管理</h1>
+            <p data-i18n-zh="管理当前账号的 API Token、登录设备和免登凭证；管理员还可在此绑定 TOTP 双因素认证。" data-i18n-en="Manage the current account's API token, signed-in devices and remembered credentials. Administrators can also bind TOTP here.">管理当前账号的 API Token、登录设备和免登凭证；管理员还可在此绑定 TOTP 双因素认证。</p>
         </div>
         <div class="dashboard-page-actions">
             <a class="btn btn-outline btn-primary" href="https://zidunet.github.io/nps/api.html" target="_blank" rel="noopener noreferrer">
@@ -170,6 +350,96 @@
         </article>
         {{end}}
 
+        {{if eq true .isAdmin}}
+        <article class="panel ibox float-e-margins nps-panel api-access-card api-totp-card">
+            <div class="ibox-title api-access-card__header api-totp-card__header">
+                <div class="api-session-security__title">
+                    <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-mobile-alt"></i></span>
+                    <div>
+                        <span class="api-access-card__eyebrow" data-i18n-zh="管理员安全" data-i18n-en="Administrator security">管理员安全</span>
+                        <h2 class="h5" data-i18n-zh="TOTP 双因素认证" data-i18n-en="TOTP two-factor authentication">TOTP 双因素认证</h2>
+                    </div>
+                </div>
+                <span id="totp-status" class="api-totp-card__status{{if .totp_bound}} is-bound{{end}}">
+                    <i class="fa {{if .totp_bound}}fa-check-circle{{else}}fa-exclamation-circle{{end}}" aria-hidden="true"></i>
+                    <span id="totp-status-text" data-i18n-zh="{{if .totp_bound}}已绑定{{else}}未绑定{{end}}" data-i18n-en="{{if .totp_bound}}Enabled{{else}}Not enabled{{end}}">{{if .totp_bound}}已绑定{{else}}未绑定{{end}}</span>
+                </span>
+            </div>
+            <div class="ibox-content api-access-card__body">
+                <div class="api-totp-grid">
+                    <div class="api-totp-verify">
+                        <div>
+                            <label class="form-label" for="totp-admin-password" data-i18n-zh="管理员登录密码" data-i18n-en="Administrator password">管理员登录密码</label>
+                            <input id="totp-admin-password" class="form-control" type="password" autocomplete="current-password" placeholder="当前登录密码">
+                        </div>
+                        <div id="totp-current-code-wrap"{{if not .totp_bound}} hidden{{end}}>
+                            <label class="form-label" for="totp-current-code" data-i18n-zh="当前动态验证码" data-i18n-en="Current authenticator code">当前动态验证码</label>
+                            <input id="totp-current-code" class="form-control" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="000000">
+                        </div>
+                        <button type="button" class="btn btn-primary" id="totp-start">
+                            <i class="fa fa-qrcode" aria-hidden="true"></i>
+                            <span id="totp-start-text" data-i18n-zh="{{if .totp_bound}}重新绑定 TOTP{{else}}开始绑定 TOTP{{end}}" data-i18n-en="{{if .totp_bound}}Replace TOTP{{else}}Bind TOTP{{end}}">{{if .totp_bound}}重新绑定 TOTP{{else}}开始绑定 TOTP{{end}}</span>
+                        </button>
+                        <small class="help-block" data-i18n-zh="密码和当前验证码仅用于本次安全操作，不会写入浏览器存储。" data-i18n-en="The password and current code are used only for this security operation and are not stored in the browser.">密码和当前验证码仅用于本次安全操作，不会写入浏览器存储。</small>
+                    </div>
+
+                    <div id="totp-setup" class="api-totp-setup" hidden>
+                        <strong data-i18n-zh="在认证器应用中添加 NPS" data-i18n-en="Add NPS to your authenticator">在认证器应用中添加 NPS</strong>
+                        <p class="help-block" data-i18n-zh="可点击下方按钮交给本机认证器，或复制密钥后手动添加。算法 SHA-1、6 位、30 秒。" data-i18n-en="Open the URI in a local authenticator or copy the secret manually. SHA-1, 6 digits, 30 seconds.">可点击下方按钮交给本机认证器，或复制密钥后手动添加。算法 SHA-1、6 位、30 秒。</p>
+                        <div class="api-totp-secret">
+                            <input id="totp-new-secret" class="form-control" type="text" readonly spellcheck="false" aria-label="TOTP secret">
+                            <button type="button" class="btn btn-outline btn-primary" id="totp-copy-secret"><i class="fa fa-copy" aria-hidden="true"></i></button>
+                        </div>
+                        <a id="totp-open-uri" class="btn btn-outline btn-primary" href="#" rel="noopener">
+                            <i class="fa fa-mobile-alt" aria-hidden="true"></i>
+                            <span data-i18n-zh="在本机认证器中打开" data-i18n-en="Open in authenticator">在本机认证器中打开</span>
+                        </a>
+                        <div>
+                            <label class="form-label" for="totp-confirm-code" data-i18n-zh="认证器中的 6 位动态验证码" data-i18n-en="6-digit authenticator code">认证器中的 6 位动态验证码</label>
+                            <input id="totp-confirm-code" class="form-control" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="000000">
+                        </div>
+                        <div class="api-totp-setup__actions">
+                            <button type="button" class="btn btn-success" id="totp-confirm">
+                                <i class="fa fa-check" aria-hidden="true"></i>
+                                <span data-i18n-zh="验证并启用" data-i18n-en="Verify and enable">验证并启用</span>
+                            </button>
+                            <button type="button" class="btn btn-outline" id="totp-cancel" data-i18n-zh="取消" data-i18n-en="Cancel">取消</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="totp-disable-row" class="api-totp-danger"{{if not .totp_bound}} hidden{{end}}>
+                    <p data-i18n-zh="关闭后，管理员网页登录将只验证密码。需要当前密码和认证器动态验证码。" data-i18n-en="Disabling TOTP leaves password-only administrator sign-in. The current password and authenticator code are required.">关闭后，管理员网页登录将只验证密码。需要当前密码和认证器动态验证码。</p>
+                    <button type="button" class="btn btn-outline btn-danger" id="totp-disable">
+                        <i class="fa fa-unlink" aria-hidden="true"></i>
+                        <span data-i18n-zh="关闭 TOTP" data-i18n-en="Disable TOTP">关闭 TOTP</span>
+                    </button>
+                </div>
+            </div>
+        </article>
+        {{end}}
+
+        <article class="panel ibox float-e-margins nps-panel api-access-card api-session-security">
+            <div class="ibox-title api-access-card__header api-session-security__header">
+                <div class="api-session-security__title">
+                    <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-laptop"></i></span>
+                    <div>
+                        <span class="api-access-card__eyebrow" data-i18n-zh="当前账号" data-i18n-en="Current account">当前账号</span>
+                        <h2 class="h5" data-i18n-zh="登录设备与免登凭证" data-i18n-en="Sessions and remembered devices">登录设备与免登凭证</h2>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-outline btn-danger" id="session-revoke-all">
+                    <i class="fa fa-power-off" aria-hidden="true"></i>
+                    <span data-i18n-zh="退出所有设备" data-i18n-en="Sign out all devices">退出所有设备</span>
+                </button>
+            </div>
+            <div class="ibox-content api-access-card__body">
+                <p class="help-block" data-i18n-zh="这里只显示当前账号勾选“3 天内免登录”后签发的设备凭证。普通退出只清除当前浏览器；强制退出会撤销本账号的全部免登凭证和网页会话。" data-i18n-en="Only credentials issued after choosing Stay signed in for 3 days are listed. Normal sign-out clears this browser; signing out everywhere revokes every remembered credential and browser session for this account.">这里只显示当前账号勾选“3 天内免登录”后签发的设备凭证。普通退出只清除当前浏览器；强制退出会撤销本账号的全部免登凭证和网页会话。</p>
+                <div id="api-session-list" class="api-session-list" role="list" aria-live="polite">
+                    <div class="api-session-empty" data-i18n-zh="正在读取登录设备…" data-i18n-en="Loading sessions…">正在读取登录设备…</div>
+                </div>
+            </div>
+        </article>
+
         <article class="panel ibox float-e-margins nps-panel api-access-card api-access-card--docs">
             <div class="ibox-title api-access-card__header">
                 <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-code"></i></span>
@@ -227,6 +497,154 @@ $(function () {
     var base = window.nps && window.nps.web_base_url ? window.nps.web_base_url : '';
     function post(path, data) { return $.ajax({ type: 'POST', url: base + path, data: data || {}, dataType: 'json' }); }
     function localized(zh, en) { return typeof npsIsEnglish === 'function' && npsIsEnglish() ? en : zh; }
+    var pendingTOTPSecret = '';
+    function redirectToLogin() {
+        window.location.assign(base + '/login/index');
+    }
+
+    function setTOTPBound(bound) {
+        $('#totp-status').toggleClass('is-bound', bound);
+        $('#totp-status i').attr('class', 'fa ' + (bound ? 'fa-check-circle' : 'fa-exclamation-circle'));
+        $('#totp-status-text').text(bound ? localized('已绑定', 'Enabled') : localized('未绑定', 'Not enabled'));
+        $('#totp-start-text').text(bound ? localized('重新绑定 TOTP', 'Replace TOTP') : localized('开始绑定 TOTP', 'Bind TOTP'));
+        $('#totp-current-code-wrap, #totp-disable-row').prop('hidden', !bound);
+        if (!bound) {
+            $('#totp-setup').prop('hidden', true);
+            pendingTOTPSecret = '';
+        }
+    }
+
+    $('#totp-start').on('click', function () {
+        var button = this;
+        var password = $('#totp-admin-password').val();
+        if (!password) return npsNotify('error', localized('请输入管理员登录密码', 'Enter the administrator password'));
+        button.disabled = true;
+        post('/security/totp/start', {
+            password: password,
+            current_code: $('#totp-current-code').val()
+        }).done(function (response) {
+            if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('生成 TOTP 密钥失败', 'Failed to create a TOTP secret'));
+            pendingTOTPSecret = response.secret || '';
+            $('#totp-new-secret').val(pendingTOTPSecret);
+            $('#totp-open-uri').attr('href', response.uri || '#');
+            $('#totp-confirm-code').val('');
+            $('#totp-setup').prop('hidden', false);
+            npsNotify('success', response.msg || localized('请将密钥添加到认证器', 'Add the secret to your authenticator'));
+        }).always(function () { button.disabled = false; });
+    });
+    $('#totp-copy-secret').on('click', function () {
+        npsCopyText($('#totp-new-secret').val(), localized('TOTP 密钥已复制', 'TOTP secret copied'));
+    });
+    $('#totp-cancel').on('click', function () {
+        $('#totp-setup').prop('hidden', true);
+        $('#totp-confirm-code').val('');
+        pendingTOTPSecret = '';
+    });
+    $('#totp-confirm').on('click', function () {
+        var button = this;
+        var code = String($('#totp-confirm-code').val() || '').trim();
+        if (!pendingTOTPSecret) return npsNotify('error', localized('绑定已失效，请重新开始', 'The setup expired. Start again.'));
+        if (!/^\d{6}$/.test(code)) return npsNotify('error', localized('请输入 6 位动态验证码', 'Enter the 6-digit authenticator code'));
+        button.disabled = true;
+        post('/security/totp/confirm', {
+            password: $('#totp-admin-password').val(),
+            current_code: $('#totp-current-code').val(),
+            secret: pendingTOTPSecret,
+            code: code
+        }).done(function (response) {
+            if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('TOTP 绑定失败', 'Failed to bind TOTP'));
+            setTOTPBound(true);
+            $('#totp-admin-password, #totp-current-code, #totp-confirm-code').val('');
+            npsNotify('success', response.msg || localized('TOTP 已启用', 'TOTP enabled'));
+        }).always(function () { button.disabled = false; });
+    });
+    $('#totp-disable').on('click', function () {
+        if (!window.confirm(localized('关闭 TOTP 后，管理员登录将只验证密码。继续？', 'Disabling TOTP leaves password-only administrator sign-in. Continue?'))) return;
+        var password = $('#totp-admin-password').val();
+        var code = String($('#totp-current-code').val() || '').trim();
+        if (!password) return npsNotify('error', localized('请输入管理员登录密码', 'Enter the administrator password'));
+        if (!/^\d{6}$/.test(code)) return npsNotify('error', localized('请输入当前 6 位动态验证码', 'Enter the current 6-digit code'));
+        var button = this;
+        button.disabled = true;
+        post('/security/totp/disable', { password: password, code: code }).done(function (response) {
+            if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('关闭 TOTP 失败', 'Failed to disable TOTP'));
+            setTOTPBound(false);
+            $('#totp-admin-password, #totp-current-code').val('');
+            npsNotify('success', response.msg || localized('TOTP 已关闭', 'TOTP disabled'));
+        }).always(function () { button.disabled = false; });
+    });
+
+    function renderSessionDevices(devices) {
+        var list = $('#api-session-list').empty();
+        if (!devices || !devices.length) {
+            list.append($('<div class="api-session-empty"></div>').text(
+                localized('当前没有可管理的 3 天免登凭证。', 'No remembered device credentials are active.')
+            ));
+            return;
+        }
+        devices.forEach(function (device) {
+            var item = $('<div class="api-session-device" role="listitem"></div>');
+            var identity = $('<div class="api-session-device__identity"></div>');
+            var title = $('<strong></strong>').text(device.device || localized('未知设备', 'Unknown device'));
+            if (device.is_current) {
+                title.append($('<span class="api-session-current"></span>').text(localized('当前设备', 'This device')));
+            }
+            identity.append(title);
+            identity.append($('<small></small>').text((device.ip || localized('未知 IP', 'Unknown IP')) + ' · ' + (device.browser || '') + ' / ' + (device.os || '')));
+            var activity = $('<div class="api-session-device__times"></div>');
+            activity.append($('<span></span>').text(localized('登录：', 'Signed in: ') + (device.created_at || '-')));
+            activity.append($('<span></span>').text(localized('最近使用：', 'Last used: ') + (device.last_seen_at || '-')));
+            activity.append($('<span></span>').text(localized('到期：', 'Expires: ') + (device.expires_at || '-')));
+            var revoke = $('<button type="button" class="btn btn-outline btn-danger"></button>')
+                .attr('data-device-id', device.id)
+                .append($('<i class="fa fa-sign-out-alt" aria-hidden="true"></i>'))
+                .append($('<span></span>').text(localized('撤销', 'Revoke')));
+            item.append(identity, activity, revoke);
+            list.append(item);
+        });
+    }
+
+    function refreshSessionDevices() {
+        $.get(base + '/security/devices', function (response) {
+            if (!response || !response.status) {
+                npsNotify('error', response && response.msg ? response.msg : localized('读取登录设备失败', 'Failed to load sessions'));
+                return;
+            }
+            renderSessionDevices(response.devices || []);
+        }, 'json').fail(function () {
+            $('#api-session-list').html($('<div class="api-session-empty"></div>').text(localized('读取登录设备失败', 'Failed to load sessions')));
+        });
+    }
+    $('#api-session-list').on('click', '[data-device-id]', function () {
+        var button = this;
+        var isCurrent = $(button).closest('.api-session-device').find('.api-session-current').length > 0;
+        var message = isCurrent
+            ? localized('这是当前设备，撤销后会立即退出。继续？', 'This is the current device. Revoking it signs you out immediately. Continue?')
+            : localized('确认撤销这台设备的 3 天免登凭证？', 'Revoke the remembered credential for this device?');
+        if (!window.confirm(message)) return;
+        button.disabled = true;
+        post('/security/revoke', { id: $(button).attr('data-device-id') }).done(function (response) {
+            if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('撤销失败', 'Revocation failed'));
+            npsNotify('success', response.msg || localized('登录设备已撤销', 'Device revoked'));
+            if (response.logout) return redirectToLogin();
+            refreshSessionDevices();
+        }).always(function () { button.disabled = false; });
+    });
+    $('#session-revoke-all').on('click', function () {
+        if (!window.confirm(localized('这会撤销当前账号的全部免登凭证和网页会话，所有设备都需要重新登录。继续？', 'This revokes every remembered credential and browser session for this account. All devices must sign in again. Continue?'))) return;
+        var button = this;
+        button.disabled = true;
+        post('/security/revoke-all').done(function (response) {
+            if (!response || !response.status) {
+                button.disabled = false;
+                return npsNotify('error', response && response.msg ? response.msg : localized('退出所有设备失败', 'Failed to sign out all devices'));
+            }
+            redirectToLogin();
+        }).fail(function () {
+            button.disabled = false;
+            npsNotify('error', localized('退出所有设备失败', 'Failed to sign out all devices'));
+        });
+    });
 
     function refreshUserAPIKey() {
         $.get(base + '/user/apikeystatus', function (response) {
@@ -306,5 +724,6 @@ $(function () {
 
     if ($('#user-api-status').length) refreshUserAPIKey();
     if ($('#admin-api-status').length) refreshAdminAPIKey();
+    refreshSessionDevices();
 });
 </script>

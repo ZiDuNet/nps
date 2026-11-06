@@ -48,7 +48,9 @@ User
 
 新部署建议使用「用户管理」创建普通用户，不再把 Web 登录账号写在客户端上。
 
-管理员可以在用户列表中生成用户专属 API Token；普通用户也可以在自己的「系统 → API 接入」页面自行生成、撤销 Token。Token 原文以加密形式保存，授权账号登录后可以再次查看。普通用户使用该 Token 调用 API 时自动按当前用户过滤资源，不能读取其他用户或系统级数据。新集成请使用 [`/api/v1`](api.md) 与 `Authorization: Bearer npsu_...`；管理员管理资源时必须使用 `auth_key + timestamp` 签名或等价的网页管理密钥，不能用普通用户 Token 提权。
+管理员可以在用户列表中生成用户专属 API Token；普通用户也可以在自己的「系统 → 账户管理」页面自行生成、查看或撤销 Token。同一页面还提供当前账号的登录设备、3 天免登凭证和“退出所有设备”；管理员可在此绑定或关闭 TOTP。Token 原文以加密形式保存，授权账号登录后可以再次查看。普通用户使用该 Token 调用 API 时自动按当前用户过滤资源，不能读取其他用户或系统级数据。新集成请使用 [`/api/v1`](api.md) 与 `Authorization: Bearer npsu_...`；管理员管理资源时必须使用 `auth_key + timestamp` 签名或等价的网页管理密钥，不能用普通用户 Token 提权。
+
+![账户管理与 TOTP](./assets/screenshots/account-management.jpg)
 
 ## 权限边界
 

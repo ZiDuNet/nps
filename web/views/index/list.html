@@ -37,17 +37,17 @@
                             </select>
                         </label>
                         {{end}}
-                        <label class="nps-table-filter nps-table-filter--identity" for="tunnel-client-filter">
-                            <span class="nps-table-filter__label" data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>
-                            <select id="tunnel-client-filter" class="form-control nps-table-filter__control" data-nps-table-filter="filter_client_id" {{if .client_id}}disabled{{end}}>
+                        <div class="nps-table-filter nps-table-filter--identity">
+                            <span id="tunnel-client-filter-label" class="nps-table-filter__label" data-i18n-zh="客户端" data-i18n-en="Client">客户端</span>
+                            <select id="tunnel-client-filter" class="form-control nps-table-filter__control" data-nps-table-filter="filter_client_id" aria-labelledby="tunnel-client-filter-label" {{if .client_id}}disabled{{end}}>
                                 <option value="0" data-i18n-zh="全部客户端" data-i18n-en="All clients">全部客户端</option>
                                 {{range .clients}}
-                                <option value="{{.Id}}" data-filter-owner-id="{{.UserId}}"
+                                <option value="{{.Id}}" data-filter-owner-id="{{.UserId}}" data-client-online="{{.IsConnect}}"
                                     data-i18n-zh="{{if .Remark}}{{.Remark}}（ID {{.Id}}）{{else}}未命名客户端（ID {{.Id}}）{{end}}"
                                     data-i18n-en="{{if .Remark}}{{.Remark}} (ID {{.Id}}){{else}}Unnamed client (ID {{.Id}}){{end}}">{{if .Remark}}{{.Remark}}（ID {{.Id}}）{{else}}未命名客户端（ID {{.Id}}）{{end}}</option>
                                 {{end}}
                             </select>
-                        </label>
+                        </div>
                     </div>
                     <table id="table"></table>
                 </div>
@@ -291,8 +291,8 @@
             var cmdRow = function (labelText, code) {
                 return '<div class="tunnel-detail__command">'
                     + '<span class="tunnel-detail__command-label">' + labelText + '</span>'
-                    + '<code>' + text(code) + '</code>'
-                    + '<button type="button" class="copy btn btn-outline btn-primary btn-xs tunnel-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button></div>';
+                    + '<div class="nps-detail-command-content"><code>' + text(code) + '</code>'
+                    + '<button type="button" class="copy btn btn-outline btn-primary btn-xs tunnel-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button></div></div>';
             };
             // The identification key is only part of secret/p2p tunnel
             // credentials. Keep it out of the expanded detail for modes that

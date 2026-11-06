@@ -199,7 +199,7 @@ func (s *UserController) RegenerateAPIKey() {
 	user.Unlock()
 	file.GetDb().JsonDb.StoreUsersToJsonFile()
 	s.auditMutation("user.api_key_rotate", "user", targetID, targetID, "", nil, map[string]string{"username": username})
-	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "API Token 已生成，可随时在 API 接入页面再次查看", "token": token}
+	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "API Token 已生成，可随时在账户管理页面再次查看", "token": token}
 	s.ServeJSON()
 	s.StopRun()
 }

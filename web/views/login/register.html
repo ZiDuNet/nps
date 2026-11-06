@@ -27,166 +27,127 @@
     <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261106-3" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261026-3" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-login-v2.css?v={{.version}}&ui=20261106-6" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/bootstrap-5.3.3.bundle.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jsencrypt.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20261026-1" type="text/javascript"></script>
+    <script src="{{.web_base_url}}/static/js/nps-auth-shell.js?v={{.version}}&ui=20261106-4" defer></script>
 </head>
 
-<body class="gray-bg auth-body  nps-bootstrap">
-<div class="auth-page">
-    <header class="auth-page__header">
-        <div class="auth-brand" aria-label="NPS">
-            <span class="auth-brand__mark" aria-hidden="true"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt="NPS"></span>
-            <span class="auth-brand__name" langtag="application"></span>
+<body class="gray-bg auth-body auth-login-page auth-login-page--register nps-bootstrap">
+<iframe id="auth-network-background" class="auth-network-background"
+        src="{{.web_base_url}}/static/background/nps-network-background.html?v={{.version}}&ui=20261106-5&motion=on"
+        title="" aria-hidden="true" tabindex="-1" loading="eager"></iframe>
+<div class="auth-login-v2">
+    <header class="auth-login-toolbar">
+        <a class="auth-login-toolbar__brand" href="{{.web_base_url}}/login/index" aria-label="NPS">
+            <span class="auth-login-toolbar__mark" aria-hidden="true"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt=""></span>
+            <span class="auth-login-toolbar__brand-copy"><strong langtag="application"></strong><small>Network Proxy Server</small></span>
             <span class="nps-pro-badge" aria-label="Pro edition">Pro</span>
-        </div>
-
-        <div class="auth-page__tools">
-            <button type="button" onclick="toggleTheme()" class="auth-icon-button theme-toggle" id="theme-toggle" title="切换主题" data-title-zh="切换主题" data-title-en="Toggle theme" aria-label="切换主题" data-aria-label-zh="切换主题" data-aria-label-en="Toggle theme" aria-pressed="false">
-                <i class="fa fa-moon" id="theme-icon" aria-hidden="true"></i>
+        </a>
+        <div class="auth-login-toolbar__tools">
+            <button type="button" onclick="toggleTheme()" class="auth-login-tool auth-login-theme" id="theme-toggle"
+                    title="切换主题" data-title-zh="切换主题" data-title-en="Toggle theme" aria-label="切换主题"
+                    data-aria-label-zh="切换主题" data-aria-label-en="Toggle theme" aria-pressed="false">
+                <i class="fa fa-moon" id="theme-icon" aria-hidden="true"></i><span data-i18n-zh="主题" data-i18n-en="Theme">主题</span>
             </button>
-            <div class="auth-language btn-group dropdown">
-                <button id="languagemenu" class="btn btn-default dropdown-toggle auth-language__toggle" type="button" data-bs-toggle="dropdown"
-                        aria-haspopup="true" aria-expanded="false" title="语言" data-title-zh="语言" data-title-en="Language" aria-label="语言" data-aria-label-zh="语言" data-aria-label-en="Language">
+            <div class="auth-language auth-login-language btn-group dropdown">
+                <button id="languagemenu" class="auth-login-tool dropdown-toggle" type="button" data-bs-toggle="dropdown"
+                        aria-haspopup="true" aria-expanded="false" title="语言" data-title-zh="语言" data-title-en="Language"
+                        aria-label="语言" data-aria-label-zh="语言" data-aria-label-en="Language">
                     <i class="fa fa-globe-asia" aria-hidden="true"></i><span></span>
                 </button>
-                <ul class="dropdown-menu">
-                    <li lang="zh-CN"><a href="#">简体中文</a></li>
-                    <li lang="en-US"><a href="#">English</a></li>
-                </ul>
+                <ul class="dropdown-menu"><li lang="zh-CN"><a href="#">简体中文</a></li><li lang="en-US"><a href="#">English</a></li></ul>
             </div>
         </div>
     </header>
 
-    <main class="auth-page__main">
-        <div class="auth-layout auth-layout--register">
-            <aside class="auth-context" aria-labelledby="auth-context-title">
-                <h1 class="auth-context__title" id="auth-context-title" langtag="application"></h1>
-                <p class="auth-context__description" langtag="info-tagline"></p>
-
-                <ul class="auth-context__feature-list">
-                    <li class="auth-feature">
-                        <i class="fa fa-network-wired auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="多协议支持" data-i18n-en="Multi-protocol">多协议支持</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-desktop auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="全平台兼容" data-i18n-en="Cross-platform">全平台兼容</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-lock auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="HTTPS 集成" data-i18n-en="HTTPS support">HTTPS 集成</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-tachometer-alt auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="实时监控" data-i18n-en="Live monitoring">实时监控</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-compress auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="压缩加密" data-i18n-en="Encrypt &amp; compress">压缩加密</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-users auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="多用户管理" data-i18n-en="Multi-user">多用户管理</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-globe auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="域名解析" data-i18n-en="Domain routing">域名解析</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-sliders-h auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="流量管控" data-i18n-en="Traffic controls">流量管控</span>
-                    </li>
-                    <li class="auth-feature">
-                        <i class="fa fa-cogs auth-feature__icon" aria-hidden="true"></i>
-                        <span class="auth-feature__label" data-i18n-zh="一键部署" data-i18n-en="Quick deployment">一键部署</span>
-                    </li>
+    <main class="auth-login-stage">
+        <section class="auth-login-shell auth-login-shell--register" aria-labelledby="auth-register-title">
+            <aside class="auth-login-brand" aria-labelledby="auth-register-brand-title">
+                <div class="auth-login-brand__identity">
+                    <span class="auth-login-brand__accent-line" aria-hidden="true"></span>
+                    <div class="auth-login-brand__identity-copy">
+                        <p class="auth-login-brand__wordmark" aria-hidden="true">NPS</p>
+                        <p class="auth-login-brand__product">NETWORK PROXY SERVER</p>
+                        <p class="auth-login-brand__tagline" data-i18n-zh="内网穿透 · 反向代理" data-i18n-en="Tunnels · Reverse proxy">内网穿透 · 反向代理</p>
+                    </div>
+                </div>
+                <h1 class="auth-login-brand__headline" id="auth-register-brand-title">
+                    <span data-i18n-zh="创建你的账号，从一个入口管理所有内网服务。" data-i18n-en="Create your account and manage every internal service from one place.">创建你的账号，从一个入口管理所有内网服务。</span>
+                </h1>
+                <ul class="auth-login-capabilities" aria-label="Registration benefits">
+                    <li><span class="auth-login-capabilities__dot" aria-hidden="true"></span><strong data-i18n-zh="独立账号空间" data-i18n-en="Independent workspace">独立账号空间</strong><small data-i18n-zh="客户端、隧道与域名按账号隔离" data-i18n-en="Clients, tunnels and domains stay scoped to your account">客户端、隧道与域名按账号隔离</small></li>
+                    <li><span class="auth-login-capabilities__dot" aria-hidden="true"></span><strong data-i18n-zh="默认权益清晰可见" data-i18n-en="Transparent default limits">默认权益清晰可见</strong><small data-i18n-zh="配额、带宽与有效期统一配置" data-i18n-en="Quotas, bandwidth and validity are centrally configured">配额、带宽与有效期统一配置</small></li>
+                    <li><span class="auth-login-capabilities__dot" aria-hidden="true"></span><strong data-i18n-zh="安全注册流程" data-i18n-en="Secure registration">安全注册流程</strong><small data-i18n-zh="支持图片验证码与邮箱验证" data-i18n-en="Supports image captcha and email verification">支持图片验证码与邮箱验证</small></li>
                 </ul>
+                <div class="auth-login-protocols" aria-label="Security features"><span>RSA</span><span>CAPTCHA</span><span>EMAIL</span><span>ANTI-ABUSE</span><span>NPS-PRO</span></div>
             </aside>
 
-            <section class="auth-panel login-form-wrap" aria-labelledby="auth-register-title">
-                <header class="auth-panel__header">
-                    <span class="auth-panel__badge nps-pro-badge" aria-label="Pro edition">Pro edition</span>
-                    <h2 class="auth-panel__title" id="auth-register-title" langtag="info-register"></h2>
-                    <p class="auth-panel__description" langtag="info-createaccount"></p>
+            <section class="auth-login-panel login-form-wrap" aria-labelledby="auth-register-title">
+                <header class="auth-login-panel__header">
+                    <div class="auth-login-panel__meta">
+                        <span class="auth-login-panel__eyebrow" data-i18n-zh="创建账号" data-i18n-en="Create account">创建账号</span>
+                        <a class="auth-login-panel__ip-link" href="{{.web_base_url}}/login/index" data-i18n-zh="返回登录" data-i18n-en="Back to login">返回登录 <i class="fa fa-arrow-left" aria-hidden="true"></i></a>
+                    </div>
+                    <h2 class="auth-login-panel__title" id="auth-register-title" langtag="info-register"></h2>
                 </header>
 
-                <div class="auth-form-hint" data-i18n-zh="注册后默认权益：客户端 {{if .register_max_clients}}{{.register_max_clients}}{{else}}不限{{end}}、隧道 {{if .register_max_tunnels}}{{.register_max_tunnels}}{{else}}不限{{end}}、并发连接 {{if .register_max_conn}}{{.register_max_conn}}{{else}}不限{{end}}、上行带宽 {{if .register_upload_limit}}{{.register_upload_limit}} KB/s{{else}}不限{{end}}、下行带宽 {{if .register_download_limit}}{{.register_download_limit}} KB/s{{else}}不限{{end}}；有效期：{{if .register_expire_days}}{{.register_expire_days}} 天{{else}}永久{{end}}。P2P 直连不占用 NPS 转发带宽和并发连接额度。" data-i18n-en="Default registration benefits: {{if .register_max_clients}}{{.register_max_clients}} clients{{else}}unlimited clients{{end}}, {{if .register_max_tunnels}}{{.register_max_tunnels}} tunnels{{else}}unlimited tunnels{{end}}, {{if .register_max_conn}}{{.register_max_conn}} concurrent connections{{else}}unlimited concurrent connections{{end}}, {{if .register_upload_limit}}{{.register_upload_limit}} KB/s upload{{else}}unlimited upload{{end}}, and {{if .register_download_limit}}{{.register_download_limit}} KB/s download{{else}}unlimited download{{end}}; validity: {{if .register_expire_days}}{{.register_expire_days}} days{{else}}permanent{{end}}. Direct P2P traffic does not consume NPS forwarding bandwidth or concurrency quota.">
-                    注册后默认权益：客户端 {{if .register_max_clients}}{{.register_max_clients}}{{else}}不限{{end}}、隧道 {{if .register_max_tunnels}}{{.register_max_tunnels}}{{else}}不限{{end}}、并发连接 {{if .register_max_conn}}{{.register_max_conn}}{{else}}不限{{end}}、上行带宽 {{if .register_upload_limit}}{{.register_upload_limit}} KB/s{{else}}不限{{end}}、下行带宽 {{if .register_download_limit}}{{.register_download_limit}} KB/s{{else}}不限{{end}}；有效期：{{if .register_expire_days}}{{.register_expire_days}} 天{{else}}永久{{end}}。P2P 直连不占用 NPS 转发带宽和并发连接额度。
+                <div class="auth-login-form-hint" data-i18n-zh="默认权益：客户端 {{if .register_max_clients}}{{.register_max_clients}}{{else}}不限{{end}}、隧道 {{if .register_max_tunnels}}{{.register_max_tunnels}}{{else}}不限{{end}}、并发连接 {{if .register_max_conn}}{{.register_max_conn}}{{else}}不限{{end}}、上行带宽 {{if .register_upload_limit}}{{.register_upload_limit}} KB/s{{else}}不限{{end}}、下行带宽 {{if .register_download_limit}}{{.register_download_limit}} KB/s{{else}}不限{{end}}；有效期：{{if .register_expire_days}}{{.register_expire_days}} 天{{else}}永久{{end}}。P2P 直连不占用 NPS 转发带宽和并发连接额度。" data-i18n-en="Defaults: {{if .register_max_clients}}{{.register_max_clients}} clients{{else}}unlimited clients{{end}}, {{if .register_max_tunnels}}{{.register_max_tunnels}} tunnels{{else}}unlimited tunnels{{end}}, {{if .register_max_conn}}{{.register_max_conn}} connections{{else}}unlimited connections{{end}}, {{if .register_upload_limit}}{{.register_upload_limit}} KB/s upload bandwidth{{else}}unlimited upload bandwidth{{end}}, {{if .register_download_limit}}{{.register_download_limit}} KB/s download bandwidth{{else}}unlimited download bandwidth{{end}}; valid for {{if .register_expire_days}}{{.register_expire_days}} days{{else}}permanent{{end}}. Direct P2P does not consume NPS forwarding bandwidth or connection quota.">
+                    默认权益：客户端 {{if .register_max_clients}}{{.register_max_clients}}{{else}}不限{{end}}、隧道 {{if .register_max_tunnels}}{{.register_max_tunnels}}{{else}}不限{{end}}、并发连接 {{if .register_max_conn}}{{.register_max_conn}}{{else}}不限{{end}}、上行带宽 {{if .register_upload_limit}}{{.register_upload_limit}} KB/s{{else}}不限{{end}}、下行带宽 {{if .register_download_limit}}{{.register_download_limit}} KB/s{{else}}不限{{end}}；有效期：{{if .register_expire_days}}{{.register_expire_days}} 天{{else}}永久{{end}}。P2P 直连不占用 NPS 转发带宽和并发连接额度。
                 </div>
                 {{if and .email_verify (not .email_ready)}}
-                <div class="alert alert-warning" role="alert" data-i18n-zh="邮箱验证已启用，但 SMTP 配置不完整：{{.smtp_error}}。请联系管理员修复后再注册。" data-i18n-en="Email verification is enabled but SMTP is incomplete: {{.smtp_error}}. Ask the administrator to fix it before registering.">
-                    邮箱验证已启用，但 SMTP 配置不完整：{{.smtp_error}}。请联系管理员修复后再注册。
-                </div>
+                <div class="auth-login-alert" role="alert" data-i18n-zh="邮箱验证已启用，但 SMTP 配置不完整：{{.smtp_error}}。请联系管理员修复后再注册。" data-i18n-en="Email verification is enabled but SMTP is incomplete: {{.smtp_error}}. Ask the administrator to fix it before registering.">邮箱验证已启用，但 SMTP 配置不完整：{{.smtp_error}}。请联系管理员修复后再注册。</div>
                 {{end}}
 
-                <form id="register-form" class="form auth-form nps-form" onsubmit="return register()">
-                    <div class="form-group auth-field">
-                        <label class="auth-field__label" for="auth-username" langtag="word-username"></label>
-                        <div class="auth-control input-icon-wrap">
-                            <i class="fa fa-user input-icon" aria-hidden="true"></i>
-                            <input id="auth-username" name="username" class="form-control has-icon" placeholder="username" required="" autocomplete="username" langtag="word-username">
-                            <span class="help-block" data-i18n-zh="注册后用于登录面板的唯一用户名；不能与已有账号重复。" data-i18n-en="The unique username used to sign in to the dashboard; it cannot duplicate an existing account.">注册后用于登录面板的唯一用户名；不能与已有账号重复。</span>
+                <form id="register-form" class="form auth-login-form nps-form" onsubmit="return register()">
+                    <div class="auth-login-form-grid">
+                        <div class="form-group auth-login-field">
+                            <label class="auth-login-field__label" for="auth-username" langtag="word-username"></label>
+                            <div class="auth-login-control"><i class="fa fa-user auth-login-control__icon" aria-hidden="true"></i><input id="auth-username" name="username" class="form-control" placeholder="username" required autocomplete="username" langtag="word-username"></div>
+                            <span class="auth-login-field__hint" data-i18n-zh="用于登录面板的唯一用户名。" data-i18n-en="The unique username used to sign in.">用于登录面板的唯一用户名。</span>
                         </div>
-                    </div>
-                    <div class="form-group auth-field">
-                        <label class="auth-field__label" for="auth-password" langtag="word-password"></label>
-                        <div class="auth-control input-icon-wrap">
-                            <i class="fa fa-lock input-icon" aria-hidden="true"></i>
-                            <input id="auth-password" name="password" type="password" class="form-control has-icon" placeholder="password" required="" autocomplete="new-password" langtag="word-password">
-                            <span class="help-block" data-i18n-zh="设置登录密码；提交后只保存加密结果，页面不会回显原文。" data-i18n-en="Set the dashboard password. Only an encrypted result is stored and the original is never echoed.">设置登录密码；提交后只保存加密结果，页面不会回显原文。</span>
+                        <div class="form-group auth-login-field">
+                            <label class="auth-login-field__label" for="auth-password" langtag="word-password"></label>
+                            <div class="auth-login-control"><i class="fa fa-lock auth-login-control__icon" aria-hidden="true"></i><input id="auth-password" name="password" type="password" class="form-control" placeholder="password" required autocomplete="new-password" langtag="word-password"></div>
+                            <span class="auth-login-field__hint" data-i18n-zh="至少 6 个字符，提交后不会回显原文。" data-i18n-en="At least 6 characters; the original is never echoed.">至少 6 个字符，提交后不会回显原文。</span>
                         </div>
                     </div>
                     {{if .email_verify}}
-                    <div class="form-group auth-field">
-                        <label class="auth-field__label" for="auth-email" data-i18n-zh="邮箱" data-i18n-en="Email">邮箱</label>
-                        <div class="auth-control input-icon-wrap">
-                            <i class="fa fa-envelope input-icon" aria-hidden="true"></i>
-                            <input id="auth-email" name="email" type="email" class="form-control has-icon" placeholder="name@example.com" required autocomplete="email">
-                            <span class="help-block" data-i18n-zh="用于接收一次性注册验证码；同一邮箱只能绑定一个账号。" data-i18n-en="Used to receive a one-time registration code; an email can belong to only one account.">用于接收一次性注册验证码；同一邮箱只能绑定一个账号。</span>
-                        </div>
+                    <div class="form-group auth-login-field auth-login-field--wide">
+                        <label class="auth-login-field__label" for="auth-email" data-i18n-zh="邮箱" data-i18n-en="Email">邮箱</label>
+                        <div class="auth-login-control"><i class="fa fa-envelope auth-login-control__icon" aria-hidden="true"></i><input id="auth-email" name="email" type="email" class="form-control" placeholder="name@example.com" required autocomplete="email"></div>
+                        <span class="auth-login-field__hint" data-i18n-zh="用于接收一次性注册验证码；同一邮箱只能绑定一个账号。" data-i18n-en="Used for a one-time registration code; each email can belong to only one account.">用于接收一次性注册验证码；同一邮箱只能绑定一个账号。</span>
                     </div>
-                    <div class="form-group auth-field">
-                        <label class="auth-field__label" for="auth-email-code" data-i18n-zh="邮箱验证码" data-i18n-en="Email code">邮箱验证码</label>
-                        <div class="auth-control">
-                            <div class="input-group">
-                                <input id="auth-email-code" name="email_code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="form-control" placeholder="6 位数字验证码" required autocomplete="one-time-code">
-                                <button id="auth-send-email-code" type="button" class="btn btn-outline btn-primary"{{if not .email_ready}} disabled{{end}} data-cooldown="{{.email_code_cooldown}}">获取验证码</button>
-                            </div>
-                            <span class="help-block" data-i18n-zh="验证码 {{.email_code_ttl_minutes}} 分钟内有效；同一邮箱或来源地址需间隔 {{.email_code_cooldown}} 秒再发送。" data-i18n-en="The code expires in {{.email_code_ttl_minutes}} minutes; wait {{.email_code_cooldown}} seconds before requesting another code for the same email or source address.">验证码 {{.email_code_ttl_minutes}} 分钟内有效；同一邮箱或来源地址需间隔 {{.email_code_cooldown}} 秒再发送。</span>
+                    <div class="form-group auth-login-field auth-login-field--wide">
+                        <label class="auth-login-field__label" for="auth-email-code" data-i18n-zh="邮箱验证码" data-i18n-en="Email code">邮箱验证码</label>
+                        <div class="auth-login-email-row">
+                            <div class="auth-login-control"><i class="fa fa-key auth-login-control__icon" aria-hidden="true"></i><input id="auth-email-code" name="email_code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="form-control" placeholder="6 位数字验证码" data-placeholder-zh="6 位数字验证码" data-placeholder-en="6-digit code" required autocomplete="one-time-code"></div>
+                            <button id="auth-send-email-code" type="button" class="auth-login-email-code-button"{{if not .email_ready}} disabled{{end}} data-cooldown="{{.email_code_cooldown}}">获取验证码</button>
                         </div>
+                        <span class="auth-login-field__hint" data-i18n-zh="验证码 {{.email_code_ttl_minutes}} 分钟内有效；同一邮箱或来源地址需间隔 {{.email_code_cooldown}} 秒。" data-i18n-en="Valid for {{.email_code_ttl_minutes}} minutes; wait {{.email_code_cooldown}} seconds between requests.">验证码 {{.email_code_ttl_minutes}} 分钟内有效；同一邮箱或来源地址需间隔 {{.email_code_cooldown}} 秒。</span>
                     </div>
                     {{end}}
                     {{if .captcha_open}}
-                    <div class="form-group auth-field auth-field--captcha">
-                        <label class="auth-field__label" for="auth-captcha" langtag="word-captcha"></label>
-                        <div class="auth-captcha">
-                            <div class="auth-captcha__challenge">{{create_captcha}}</div>
-                            <div class="auth-control auth-captcha__input input-icon-wrap">
-                                <i class="fa fa-shield-alt input-icon" aria-hidden="true"></i>
-                                <input id="auth-captcha" name="captcha" class="form-control has-icon" placeholder="captcha" required autocomplete="off" langtag="word-captcha">
-                            </div>
-                        </div>
-                        <span class="help-block auth-captcha__hint" data-i18n-zh="按图片中的字符填写验证码；验证失败后可点击图片刷新。" data-i18n-en="Enter the characters shown in the image. Click the image to refresh it after a failed attempt.">按图片中的字符填写验证码；验证失败后可点击图片刷新。</span>
+                    <div class="form-group auth-login-field auth-login-field--captcha auth-login-field--wide">
+                        <label class="auth-login-field__label" for="auth-captcha" langtag="word-captcha"></label>
+                        <div class="auth-login-captcha"><div class="auth-login-captcha__challenge">{{create_captcha}}</div><div class="auth-login-control"><i class="fa fa-shield-alt auth-login-control__icon" aria-hidden="true"></i><input id="auth-captcha" name="captcha" class="form-control" placeholder="captcha" required autocomplete="off" langtag="word-captcha"></div></div>
                     </div>
                     {{end}}
-                    <button type="button" onclick="register()" class="auth-submit login-btn" langtag="word-register"{{if and .email_verify (not .email_ready)}} disabled{{end}}></button>
+                    <button type="submit" class="auth-login-submit login-btn"{{if and .email_verify (not .email_ready)}} disabled{{end}}><span langtag="word-register"></span><i class="fa fa-arrow-right" aria-hidden="true"></i></button>
                 </form>
-
-                <div class="auth-switch register-link">
-                    <span class="auth-switch__copy" langtag="info-haveaccount"></span>
-                    <a class="auth-switch__link" href="{{.web_base_url}}/login/index" langtag="word-login"></a>
-                </div>
+                <div class="auth-login-switch register-link"><span langtag="info-haveaccount"></span><a href="{{.web_base_url}}/login/index" langtag="word-login"></a></div>
             </section>
-        </div>
+        </section>
     </main>
 
-    <footer class="auth-page__footer">
-        <span><strong langtag="word-copyright"></strong> <span langtag="application"></span> &copy; 2018-2026</span>
+    <footer class="auth-login-footer">
+        <span>版权所有 <strong>NPS-Pro</strong> &copy; 2018-2026 By:WuShuo</span>
+        <span><span langtag="word-readmore"></span> <a href="https://github.com/ZiDuNet/nps" langtag="word-go"></a></span>
     </footer>
 </div>
 
@@ -255,20 +216,20 @@
             dataType: 'json'
         }).done(function (response) {
             if (response && response.status) {
-                npsNotify('success', response.msg || (npsIsEnglish() ? 'Verification code sent.' : '验证码已发送。'));
+                npsNotify('success', npsAuthErrorMessage(response));
                 startEmailCodeCountdown(response.retry_after);
             } else {
-                npsNotify('error', (response && response.msg) || (npsIsEnglish() ? 'Failed to send the code.' : '验证码发送失败。'));
+                npsNotify('error', npsAuthErrorMessage(response));
                 button.prop('disabled', false);
             }
         }).fail(function (xhr) {
-            npsNotify('error', (xhr.responseJSON && xhr.responseJSON.msg) || npsRequestErrorMessage());
+            npsNotify('error', npsAuthErrorMessage(xhr.responseJSON));
             button.prop('disabled', false);
         });
     });
 
     function register() {
-        if (!validateNpsForm(document.querySelector('.login-form-wrap form'), true)) return false;
+        if (!validateNpsForm(document.getElementById('register-form'), true)) return false;
         var data = {};
         $("#register-form").serializeArray().forEach(function (field) { data[field.name] = field.value; });
         if (!npsRSAEncryptor || !window.nps.publicKey || !window.nps.loginNonce) {
@@ -290,7 +251,7 @@
             url: "{{.web_base_url}}/login/register",
             data: data,
             success: function (res) {
-                npsNotify(res.status ? 'success' : 'error', res.msg)
+                npsNotify(res.status ? 'success' : 'error', npsAuthErrorMessage(res));
                 if (res.nonce) window.nps.loginNonce = res.nonce;
                 if (res.cert) {
                     window.nps.publicKey = res.cert;
@@ -325,6 +286,19 @@
         var toggle = document.getElementById('theme-toggle');
         if (icon) icon.className = next === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
         if (toggle) toggle.setAttribute('aria-pressed', next === 'dark' ? 'true' : 'false');
+        syncRegisterBackgroundTheme();
+    }
+
+    function syncRegisterBackgroundTheme() {
+        var frame = document.getElementById('auth-network-background');
+        try {
+            var background = frame && frame.contentWindow && frame.contentWindow.NPS_BG;
+            if (background && typeof background.setTheme === 'function') {
+                background.setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+            }
+        } catch (error) {
+            // The background is decorative; registration must continue if it fails.
+        }
     }
 
     (function() {
@@ -334,6 +308,12 @@
         var toggle = document.getElementById('theme-toggle');
         if (icon) icon.className = saved === 'dark' ? 'fa fa-sun' : 'fa fa-moon';
         if (toggle) toggle.setAttribute('aria-pressed', saved === 'dark' ? 'true' : 'false');
+    })();
+    (function() {
+        var frame = document.getElementById('auth-network-background');
+        if (!frame) return;
+        frame.addEventListener('load', syncRegisterBackgroundTheme, {once: true});
+        if (frame.contentDocument && frame.contentDocument.readyState === 'complete') syncRegisterBackgroundTheme();
     })();
 </script>
 </body>

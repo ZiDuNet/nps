@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.41</sub>
+﻿# NPS <sub>v1.1.42</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -14,6 +14,8 @@ Administrators can create users and assign multiple clients to one user; ordinar
 | Login | IP registration |
 | :---: | :---: |
 | ![NPS login page](docs/assets/screenshots/login.jpg) | ![IP registration page](docs/assets/screenshots/ip-register.jpg) |
+| **Dashboard** | **Login security** |
+| ![Management dashboard](docs/assets/screenshots/dashboard.jpg) | ![Login security settings](docs/assets/screenshots/security.jpg) |
 | **Client editing** | **Domain reverse proxy editing** |
 | ![Client editing page](docs/assets/screenshots/client-edit.jpg) | ![Domain reverse proxy editing page](docs/assets/screenshots/host-edit.jpg) |
 
@@ -21,9 +23,9 @@ Administrators can create users and assign multiple clients to one user; ordinar
 
 - 🚀 **Comprehensive Protocols** — TCP, UDP, HTTP(S), SOCKS5, P2P, Secret, File access
 - 🖥️ **Cross-platform** — Linux / Windows / macOS / ARM / Synology, with one-click system service installation
-- 🎨 **Web UI** — Operations-focused console with light/dark theme, responsive layout, Chinese/English localization, keyboard-friendly controls, and real-time traffic monitoring
+- 🎨 **Web UI** — Operations-focused console with a persistent top bar, light/dark theme, responsive layout, Chinese/English localization, keyboard-friendly controls, and real-time traffic monitoring
 - 👥 **User Management** — One user can manage multiple clients, with user-level tunnel quotas and expiration
-- 🔒 **Security** — Random password on first start, IP whitelist/blacklist, CAPTCHA, rate limiting
+- 🔒 **Security** — Random password on first start, IP whitelist/blacklist, CAPTCHA, login PoW, administrator TOTP, remembered-device management, and rate limiting
 - 🌐 **Domain Proxy** — Custom headers, URL routing, platform wildcard domain pools, route diagnostics, auto HTTPS and certificate hot reload
 - 🔐 **TLS Encryption** — TLS encrypted communication between client and server
 - 📦 **Docker** — Multi-arch images (amd64/arm/arm64), one-command deployment
@@ -76,10 +78,12 @@ New installations bind the panel to loopback. For the Docker example above, open
 # Command line
 ./npc -server=<IP>:8024 -vkey=<key>
 
-# TLS mode
+# TLS mode (recommended: a trusted CA certificate matching the server hostname)
 ./npc -server=<IP>:8025 -vkey=<key> -tls_enable=true
 
-# Pin the self-signed server certificate (fingerprint is printed by nps)
+# Private CAs and temporary self-signed certificates can provide a CA or pin
+./npc -server=<IP>:8025 -vkey=<key> -tls_enable=true \
+  -tls_ca_file=/path/to/ca.pem -tls_server_name=nps.example.com
 ./npc -server=<IP>:8025 -vkey=<key> -tls_enable=true \
   -tls_fingerprint=<SHA-256 fingerprint>
 
@@ -193,6 +197,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.42** (2026-11-06) - Added three-day remembered-device registration and individual revocation, in-app administrator TOTP management, a global Security tab with browser PoW compatibility guidance, and the unified Account Management page. Fixed fixed-topbar/page-header overlap, global-settings tab wrapping, and TCP live-connection counts on unlimited tunnels.
 
 - **v1.1.41** (2026-11-06) - Added multi-instance NPC identity, persisted usage history with dashboard trends and scoped API access, complete forwarded-header and HTTP timeout controls, optional isolated backend connection reuse, and Bridge certificate hot reload. Fixed dashboard shortcut URLs and NPC service update paths.
 

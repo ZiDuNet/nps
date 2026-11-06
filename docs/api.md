@@ -14,7 +14,7 @@ API 文档固定发布在：
 1. 只接受 API 凭据，不使用浏览器登录 Session。管理员使用
    `auth_key + timestamp` 签名，普通用户使用
    `Authorization: Bearer npsu_...`；
-2. 管理员可使用 `nps.conf` 的 `auth_key`，也可使用「系统 → API 接入」
+2. 管理员可使用 `nps.conf` 的 `auth_key`，也可使用「系统 → 账户管理」
    生成的等价网页管理密钥 `npsa_...`；签名都按
    `md5(密钥原文 + timestamp)` 计算；
 3. 成功与失败统一返回 `status`、`code`、`msg`，失败额外返回
@@ -22,7 +22,7 @@ API 文档固定发布在：
 4. 请求体支持 `application/json`，也兼容表单与查询参数。
 
 管理员签名时间戳为 Unix 秒，服务端允许约 20 秒误差。普通用户 Token 不携带
-时间戳。Token 可在 API 接入页再次查看；查询参数传递 Token 仅用于无法设置
+时间戳。Token 可在账户管理页再次查看；查询参数传递 Token 仅用于无法设置
 请求头的兼容客户端，并应只走 HTTPS。
 
 详细鉴权、Token 生命周期和历史接口迁移见[API 鉴权](extend/api.md)。

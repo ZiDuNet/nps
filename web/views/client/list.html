@@ -81,10 +81,25 @@
 
 <script>
     /* Remote table backed by server-side pagination and search. */
-    var clientListCompact = window.matchMedia && window.matchMedia('(min-width: 992px) and (max-width: 1599px)').matches;
+    var clientListCardView = window.matchMedia && window.matchMedia('(max-width: 1180px)').matches;
+    var clientListCompact = !clientListCardView && window.matchMedia && window.matchMedia('(min-width: 992px) and (max-width: 1599px)').matches;
 
     function clientUnlimitedText() {
         return npsIsEnglish() ? 'Unlimited' : '永不过期';
+    }
+
+    function clientAddressMarkup(value) {
+        var address = String(value || '').trim() || '-';
+        var safeAddress = npsEscapeHtml(address);
+        if (address === '-') {
+            return '<span class="client-address-cell" title="-"><span class="client-address-cell__ip">-</span></span>';
+        }
+        var output = '<span class="client-address-cell__region" data-ip-region-output aria-busy="true">'
+            + (npsIsEnglish() ? 'Locating…' : '定位中…') + '</span>';
+        return '<span class="client-address-cell" data-ip-region-ip="' + safeAddress + '" title="' + safeAddress + '">'
+            + '<span class="client-address-cell__ip">' + safeAddress + '</span>'
+            + output
+            + '</span>';
     }
 
     $('#table').npsTable({
@@ -110,17 +125,20 @@
         // columns. Administrators can still hide them from the column menu.
         storageKey: 'client-v4',
         detailView: true,
+        cardView: clientListCardView,
         smartDisplay: true, // 智能显示 pagination 和 cardview 等
         formatLoadingMessage: function () { return npsTableState('client', true); },
         formatNoMatches: function () { return npsTableState('client', false); },
-        onExpandRow: function () {
+        onExpandRow: function (index, row, element) {
             $('body').setLang('.detail-view');
             npsDecorateDetailControls('#table');
+            if (window.npsIpRegion) window.npsIpRegion.decorate(element || '#table');
         },
         onCollapseRow: function () { window.setTimeout(function () { npsDecorateDetailControls('#table'); }, 0); },
         onPostBody: function (data) {
             $('body').setLang('#table');
             npsApplyTableState(this, 'client');
+            if (window.npsIpRegion) window.npsIpRegion.decorate('#table');
         },
         detailFormatter: function (index, row, element) {
             var english = npsIsEnglish();
@@ -128,6 +146,11 @@
             var text = function (value, fallback) {
                 if (value == null || value === '') value = fallback == null ? '' : fallback;
                 return npsEscapeHtml(value);
+            };
+            var shortTime = function (value) {
+                var raw = String(value || '').trim();
+                var matched = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}:\d{2}:\d{2})/);
+                return matched ? matched[2] + '-' + matched[3] + ' ' + matched[4] : raw;
             };
             var listText = function (value) {
                 if (!value || !value.length) return '-';
@@ -156,16 +179,11 @@
                     : '<span class="client-detail__chip client-detail__chip--empty">-</span>';
                 return '<div class="client-detail__chips"><span class="client-detail__label">' + label + '</span><div class="client-detail__chip-list">' + content + '</div></div>';
             };
-            var section = function(icon, title, content) {
-                return '<section class="client-detail__section">'
-                    + '<h6 class="client-detail__section-title"><i class="fa fa-' + icon + '" aria-hidden="true"></i>' + title + '</h6>'
-                    + '<div class="client-detail__grid">' + content + '</div></section>';
-            };
             var cmdRow = function(label, code) {
                 return '<div class="client-detail__command">'
                     + '<span class="client-detail__command-label">' + label + '</span>'
-                    + '<code>' + text(code) + '</code>'
-                    + '<button type="button" class="copy btn btn-outline btn-primary btn-xs client-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button></div>';
+                    + '<div class="nps-detail-command-content"><code>' + text(code) + '</code>'
+                    + '<button type="button" class="copy btn btn-outline btn-primary btn-xs client-detail__copy" onclick="copyCommand(this)" data-clipboard-text="" data-title-zh="复制命令" data-title-en="Copy command" data-aria-label-zh="复制命令" data-aria-label-en="Copy command"><i class="fa fa-copy" aria-hidden="true"></i></button></div></div>';
             };
             var connectionCommands = Array.isArray(row.ConnectionCommands) ? row.ConnectionCommands : [];
             var commandSection = '<section class="client-detail__section client-detail__connection-section">'
@@ -204,31 +222,91 @@
             }
             commandSection += '</section>';
             var instances = Array.isArray(row.Instances) ? row.Instances : [];
-            var instanceSection = '<section class="client-detail__section client-instances">'
-                + '<h6 class="client-detail__section-title"><i class="fa fa-layer-group" aria-hidden="true"></i>' + (english ? 'Live instances' : '在线实例') + '</h6>';
+            var instanceSection = '<section class="client-detail__section client-detail__activity-card client-instances">'
+                + '<h6 class="client-detail__section-title"><i class="fa fa-layer-group" aria-hidden="true"></i>'
+                + (english ? 'Live instances' : '在线实例')
+                + '<span class="client-detail__section-count">' + instances.length + '</span></h6>'
+                + '<div class="client-detail__activity-scroll" role="region" tabindex="0" aria-label="' + (english ? 'Live instances' : '在线实例') + '">';
             if (instances.length) {
+                if (instances.length > 1) {
+                    instanceSection += '<aside class="client-instance-notice" role="note">'
+                        + '<i class="fa fa-exclamation-triangle" aria-hidden="true"></i>'
+                        + '<div class="client-instance-notice__body">'
+                        + '<strong>' + (english
+                            ? instances.length + ' NPC instances are connected with the same VKey'
+                            : '同一 VKey 同时连接了 ' + instances.length + ' 个 NPC 实例') + '</strong>'
+                        + '<span>' + (english
+                            ? 'If this is not an intentional multi-host deployment, an NPC client is probably running more than once.'
+                            : '如果不是有意的多机部署，通常说明某台设备重复启动了 NPC 客户端。') + '</span>'
+                        + '<details><summary>' + (english ? 'Troubleshooting' : '查看排查方式') + '</summary>'
+                        + '<ol>'
+                        + '<li>' + (english
+                            ? 'Check whether the same device is running the NPC CLI, GUI client, system service, scheduled task, or container at the same time.'
+                            : '检查同一台设备是否同时运行了 NPC 命令行、GUI 客户端、系统服务、计划任务或容器。') + '</li>'
+                        + '<li>' + (english
+                            ? 'Compare hostname, connection source, LAN IPs, connection time, and process start time to identify the duplicate source.'
+                            : '对比实例的主机名、连接来源、局域网 IP、连接时间和进程启动时间，确认重复来源。') + '</li>'
+                        + '<li>' + (english
+                            ? 'Stop the unneeded NPC process or service. Disconnecting from this panel only closes the current session, and it reconnects in about 5 seconds.'
+                            : '停止不需要的 NPC 进程或系统服务。仅从面板断开只会关闭当前连接，约 5 秒后仍会自动重连。') + '</li>'
+                        + '</ol></details></div></aside>';
+                }
                 instanceSection += '<div class="client-instance-list">' + instances.map(function (instance) {
                     var name = instance.Hostname || instance.InstanceID || '-';
-                    var runtime = [];
-                    if (instance.OS || instance.Arch) runtime.push([instance.OS, instance.Arch].filter(Boolean).join('/'));
-                    if (instance.Version) runtime.push('v' + instance.Version);
-                    if (instance.Transport) runtime.push(instance.Transport);
-                    var endpoint = text(instance.RemoteAddr || '-') + ' · ' + listText(instance.LocalIPs || []);
-                    var legacy = String(instance.InstanceID || '').indexOf('legacy-') === 0;
+                    var system = [instance.OS, instance.Arch].filter(Boolean).join('/') || '-';
+                    var version = instance.Version ? 'v' + instance.Version : '-';
+                    var transport = instance.Transport || '-';
+                    var remoteAddr = instance.RemoteAddr || '-';
+                    var localIPs = listText(instance.LocalIPs || []);
+                    var connectedAt = shortTime(instance.ConnectedAt);
+                    var startedAt = shortTime(instance.StartedAt);
+                    var instanceMeta = function (label, value, title) {
+                        var fullTitle = title == null ? value : title;
+                        return '<div class="client-instance-meta"><span>' + label + '</span><strong title="' + text(fullTitle, '-') + '">' + text(value, '-') + '</strong></div>';
+                    };
                     return '<div class="client-instance-row">'
-                        + '<div class="client-instance-row__identity"><strong>' + text(name) + '</strong><code>' + text(instance.InstanceID || '-') + '</code></div>'
-                        + '<div class="client-instance-row__detail"><span>' + text(runtime.join(' · '), '-') + '</span><span>' + endpoint + '</span></div>'
-                        + '<div class="client-instance-row__actions">'
+                        + '<div class="client-instance-row__identity"><div class="client-instance-row__name"><strong title="' + text(name) + '">' + text(name) + '</strong>'
                         + (instance.Online ? '<span class="client-detail__history-state client-detail__history-state--online">' + (english ? 'Online' : '在线') + '</span>' : '')
-                        + (!legacy && instance.Online
-                            ? '<button type="button" class="btn btn-outline btn-warning btn-xs client-instance-disconnect" data-client-id="' + Number(row.Id) + '" data-instance-id="' + text(instance.InstanceID) + '"><i class="fa fa-plug" aria-hidden="true"></i><span>' + (english ? 'Disconnect' : '断开实例') + '</span></button>'
-                            : '')
-                        + '</div></div>';
+                        + '</div><div class="client-instance-row__id"><span>' + (english ? 'Instance ID' : '实例 ID') + '</span><code title="' + text(instance.InstanceID || '-') + '">' + text(instance.InstanceID || '-') + '</code></div></div>'
+                        + '<div class="client-instance-row__meta">'
+                        + instanceMeta(english ? 'System' : '系统', system)
+                        + instanceMeta(english ? 'Version' : '版本', version)
+                        + instanceMeta(english ? 'Protocol' : '协议', transport)
+                        + instanceMeta(english ? 'Connected' : '连接时间', connectedAt, instance.ConnectedAt)
+                        + instanceMeta(english ? 'Process started' : '进程启动', startedAt, instance.StartedAt)
+                        + instanceMeta(english ? 'Connection source' : '连接来源', remoteAddr)
+                        + instanceMeta(english ? 'LAN IPs' : '局域网 IP', localIPs)
+                        + '</div>'
+                        + '</div>';
                 }).join('') + '</div>';
             } else {
                 instanceSection += '<div class="client-detail__history-empty">' + (english ? 'No live instance information. Upgrade NPC to 1.1.41 or later.' : '暂无在线实例信息；NPC 升级到 1.1.41 或更高版本后会显示。') + '</div>';
             }
-            instanceSection += '</section>';
+            instanceSection += '</div></section>';
+            var historyEvents = (row.ConnectionHistory || []).slice().reverse();
+            var historySection = '<section class="client-detail__section client-detail__activity-card client-history">'
+                + '<h6 class="client-detail__section-title"><i class="fa fa-history" aria-hidden="true"></i>'
+                + (english ? 'Recent connections' : '最近连接记录')
+                + '<span class="client-detail__section-count">' + historyEvents.length + '</span></h6>'
+                + '<div class="client-detail__activity-scroll" role="region" tabindex="0" aria-label="' + (english ? 'Recent connections' : '最近连接记录') + '">';
+            if (historyEvents.length) {
+                historySection += '<div class="client-history-list">' + historyEvents.map(function (event) {
+                    var isOnline = !event.OfflineTime;
+                    var status = isOnline
+                        ? '<span class="client-detail__history-state client-detail__history-state--online">' + (english ? 'Online' : '当前在线') + '</span>'
+                        : '<span class="client-detail__history-state">' + (english ? 'Offline' : '已断开') + '</span>';
+                    var onlineTime = text(event.OnlineTime, '-');
+                    var offlineTime = text(event.OfflineTime, english ? 'Not disconnected yet' : '尚未断开');
+                    return '<article class="client-history-item' + (isOnline ? ' is-online' : '') + '">'
+                        + '<div class="client-history-item__primary">' + status
+                        + '<div class="client-history-item__time"><span>' + (english ? 'Connected' : '上线') + '</span><time title="' + onlineTime + '">' + text(shortTime(event.OnlineTime), '-') + '</time></div></div>'
+                        + '<div class="client-history-item__time"><span>' + (english ? 'Disconnected' : '断开') + '</span><time title="' + offlineTime + '">' + offlineTime + '</time></div>'
+                        + '</article>';
+                }).join('') + '</div>';
+            } else {
+                historySection += '<div class="client-detail__history-empty">' + (english ? 'No connection history yet.' : '暂无连接记录。') + '</div>';
+            }
+            historySection += '</div></section>';
             return '<div class="client-detail">'
                 + commandSection
                 + '<div class="client-detail__cards">'
@@ -255,7 +333,7 @@
                     : (english ? 'Offline' : '离线'))
                 + kv('<span langtag="word-version"></span>', text(row.Version, '-'))
                 + kv('<span langtag="word-verifykey"></span>', text(row.VerifyKey, '-'))
-                + kv('<span langtag="word-address"></span>', text(row.Addr, '-'))
+                + kv('<span langtag="word-address"></span>', clientAddressMarkup(row.Addr))
                 + kv('<span langtag="word-localaddr"></span>', text(row.LocalAddr, '-'))
                 + kv(english ? 'Public verify key' : '公开验证密钥模式', npsBooleanMarkup(!!row.NoStore))
                 + kv('<span langtag="word-inletflow"></span>', text(inletFlow))
@@ -283,18 +361,10 @@
                 + kv(english ? 'Effective expiry' : '实际有效期', effectiveExpiry)
                 + '</div></section>'
                 + '</div>'
+                + '<div class="client-detail__activity-grid">'
                 + instanceSection
-                + section('history', english ? 'Recent connections' : '最近连接记录', (row.ConnectionHistory || []).length
-                    ? row.ConnectionHistory.slice().reverse().slice(0, 3).map(function (event) {
-                        var state = event.OfflineTime
-                            ? '<span class="client-detail__history-state">' + (english ? 'Offline' : '已断开') + '</span>'
-                            : '<span class="client-detail__history-state client-detail__history-state--online">' + (english ? 'Online' : '当前在线') + '</span>';
-                        return '<div class="client-detail__history-row">'
-                            + '<span>' + (english ? 'Connected' : '上线') + '：' + text(event.OnlineTime, '-') + '</span>'
-                            + '<span>' + (english ? 'Disconnected' : '断开') + '：' + text(event.OfflineTime, english ? '—' : '尚未记录') + '</span>'
-                            + state + '</div>';
-                    }).join('')
-                    : '<div class="client-detail__history-empty">' + (english ? 'No connection history yet.' : '暂无连接记录。') + '</div>')
+                + historySection
+                + '</div>'
                 + '</div>';
         },
         //表格的列
@@ -309,7 +379,7 @@
             },
             {
                 field: 'Remark',//域值
-                title: '<span langtag="word-remark"></span>',//标题
+                title: '<span class="client-remark-heading"><span class="client-remark-help" role="img" tabindex="0" aria-label="备注用于识别客户端，不参与连接认证" data-aria-label-zh="备注用于识别客户端，不参与连接认证" data-aria-label-en="Remarks identify clients and are not used for authentication" title="备注用于识别客户端，不参与连接认证，也不会改变 VKey 或隧道行为" data-title-zh="备注用于识别客户端，不参与连接认证，也不会改变 VKey 或隧道行为" data-title-en="Remarks identify clients. They do not affect authentication, the VKey, or tunnel behavior"><i class="fa fa-circle-info" aria-hidden="true"></i></span><span langtag="word-remark"></span></span>',//标题
                 halign: 'center',
                 align: 'center',
                 class: 'client-list__remark',
@@ -385,8 +455,7 @@
                 // address remains available in the column picker and detail.
                 visible: !clientListCompact,
                 formatter: function(value) {
-                    var address = value || '-';
-                    return '<span class="client-address-cell" title="' + npsEscapeHtml(address) + '">' + npsEscapeHtml(address) + '</span>';
+                    return clientAddressMarkup(value);
                 }
             },
             {
@@ -397,7 +466,7 @@
                 visible: true,
                 sortable: true,//启用排序
                 formatter: function (value, row, index) {
-                    return changeunit((row.Flow || {}).InletFlow)
+                    return '<span class="client-table-number">' + npsEscapeHtml(changeunit((row.Flow || {}).InletFlow)) + '</span>';
                 }
             },
             {
@@ -408,13 +477,14 @@
                 visible: true,
                 sortable: true,//启用排序
                 formatter: function (value, row, index) {
-                    return changeunit((row.Flow || {}).ExportFlow)
+                    return '<span class="client-table-number">' + npsEscapeHtml(changeunit((row.Flow || {}).ExportFlow)) + '</span>';
                 }
             },
             {
                 field: 'Rate.UploadRate',//域值
                 title: '<span data-i18n-zh="实时带宽 ↑ / ↓" data-i18n-en="Live bandwidth ↑ / ↓">实时带宽 ↑ / ↓</span>',
                 halign: 'center',
+                class: 'client-list__rate',
                 visible: true,//false表示不显示
                 sortable: true,
                 formatter: function (value, row, index) {
@@ -446,7 +516,7 @@
                 visible: true,
                 formatter: function (value, row) {
                     var limit = Number(row.MaxConn) > 0 ? Number(row.MaxConn) : '∞';
-                    return '<span class="live-connections" data-live-client-id="' + Number(row.Id) + '"><span data-live-client-connections>' + npsEscapeHtml(Number(value) || 0) + ' / ' + npsEscapeHtml(limit) + '</span></span>';
+                    return '<span class="live-connections client-table-number" data-live-client-id="' + Number(row.Id) + '"><span data-live-client-connections>' + npsEscapeHtml(Number(value) || 0) + ' / ' + npsEscapeHtml(limit) + '</span></span>';
                 }
             },
             {
@@ -464,12 +534,13 @@
                 title: '<span langtag="word-status"></span>',//内容
                 align: 'center',
                 halign: 'center',
+                class: 'client-list__status',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
                     if (value) {
-                        return '<span class="badge badge-primary" langtag="word-open"></span>'
+                        return '<span class="client-status-badge client-status-badge--enabled"><span langtag="word-open"></span></span>'
                     } else {
-                        return '<span class="badge badge-badge" langtag="word-close"></span>'
+                        return '<span class="client-status-badge client-status-badge--disabled"><span langtag="word-close"></span></span>'
                     }
                 }
             },
@@ -478,15 +549,16 @@
                 title: '<span langtag="word-connect"></span>',//内容
                 align: 'center',
                 halign: 'center',
+                class: 'client-list__connection',
                 visible: true,//false表示不显示
                 formatter: function (value, row, index) {
                     if (value) {
                         var protocol = row.ConnectionProtocol
                             ? '<span class="client-connection-protocol">' + npsEscapeHtml(row.ConnectionProtocol) + '</span>'
                             : '';
-                        return '<span class="client-connection-state"><span class="badge badge-primary" langtag="word-online"></span>' + protocol + '</span>'
+                        return '<span class="client-connection-state client-connection-state--online"><span class="client-connection-badge"><span langtag="word-online"></span></span>' + protocol + '</span>'
                     } else {
-                        return '<span class="badge badge-badge" langtag="word-offline"></span>'
+                        return '<span class="client-connection-state client-connection-state--offline"><span class="client-connection-badge"><span langtag="word-offline"></span></span></span>'
                     }
                 }
             },
@@ -514,7 +586,7 @@
                     }
                     {{end}}
                     btn_group += '<a href="{{.web_base_url}}/client/edit?id=' + clientId
-                    btn_group += '" class="btn btn-outline btn-success client-action-btn" data-title-zh="编辑客户端" data-title-en="Edit client" data-aria-label-zh="编辑客户端" data-aria-label-en="Edit client"><i class="fa fa-edit" aria-hidden="true"></i></a>'
+                    btn_group += '" class="btn btn-outline btn-primary client-action-btn" data-title-zh="编辑客户端" data-title-en="Edit client" data-aria-label-zh="编辑客户端" data-aria-label-en="Edit client"><i class="fa fa-edit" aria-hidden="true"></i></a>'
                     btn_group += '<button type="button" onclick="submitform(\'delete\', \'{{.web_base_url}}/client/del\', {\'id\':' + clientId
                     btn_group += '})" class="btn btn-outline btn-danger" data-title-zh="删除客户端" data-title-en="Delete client" data-aria-label-zh="删除客户端" data-aria-label-en="Delete client"><i class="fa fa-trash" aria-hidden="true"></i></button>'
                     btn_group += '</div>'
@@ -550,32 +622,6 @@
         $(this).addClass('active').attr('aria-selected', 'true');
         $section.find('.client-detail__protocol-panel').removeClass('active');
         $section.find('[data-client-protocol-panel="' + target + '"]').addClass('active');
-    });
-
-    $(document).on('click', '.client-instance-disconnect', function () {
-        var $button = $(this);
-        var clientId = Number($button.attr('data-client-id'));
-        var instanceId = String($button.attr('data-instance-id') || '');
-        if (!clientId || !instanceId) return;
-        var english = npsIsEnglish();
-        if (!window.confirm(english
-            ? 'Disconnect this NPC instance only? Other instances using the same client will stay online.'
-            : '只断开这个 NPC 实例？同一客户端的其他实例会保持在线。')) return;
-        $button.prop('disabled', true);
-        $.post('{{.web_base_url}}/client/disconnectinstance', {
-            id: clientId,
-            instance_id: instanceId
-        }).done(function (response) {
-            if (response && response.status === 0) {
-                window.alert(response.msg || (english ? 'Disconnect failed' : '断开失败'));
-                return;
-            }
-            $('#table').npsTable('refresh');
-        }).fail(function () {
-            window.alert(english ? 'Disconnect failed' : '断开失败');
-        }).always(function () {
-            $button.prop('disabled', false);
-        });
     });
 
     var clientUpdateState = null;

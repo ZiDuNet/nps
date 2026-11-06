@@ -1,0 +1,217 @@
+/* Rich client filter with explicit online/offline labels. Native options stay
+   in the DOM as the form value; this surface is a synchronized accessible
+   listbox that can render status pills consistently across browsers. */
+.nps-client-filter {
+    position: relative;
+    flex: 0 1 220px;
+    width: 100%;
+    min-width: 152px;
+    max-width: 244px;
+    color: var(--nps-ink, var(--ink, #101828));
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.nps-client-filter__native {
+    display: none !important;
+}
+
+.nps-client-filter__trigger {
+    display: grid;
+    width: 100%;
+    min-height: 36px;
+    grid-template-columns: minmax(0, 1fr) auto 12px;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
+    padding: 6px 9px 6px 10px;
+    color: var(--nps-ink, var(--ink, #101828));
+    background: var(--nps-surface, var(--card, #fff));
+    border: 1px solid var(--nps-line-strong, var(--line, #c4d3e3));
+    border-radius: 6px;
+    box-shadow: none;
+    font: inherit;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.nps-client-filter__trigger:hover {
+    background: var(--nps-surface-hover, #f7faff);
+    border-color: var(--nps-primary, var(--accent, #2563eb));
+}
+
+.nps-client-filter__trigger:focus-visible {
+    outline: 0;
+    border-color: var(--nps-primary, var(--accent, #2563eb));
+    box-shadow: var(--nps-focus, 0 0 0 3px rgba(37, 99, 235, .2));
+}
+
+.nps-client-filter__trigger:disabled {
+    color: var(--nps-muted, var(--ink2, #536985));
+    background: var(--nps-surface-subtle, #f7faff);
+    cursor: not-allowed;
+    opacity: .78;
+}
+
+.nps-client-filter__label,
+.nps-client-filter__option-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.nps-client-filter__status-slot {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+}
+
+.nps-client-filter__status {
+    display: inline-flex;
+    min-height: 18px;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.nps-client-filter__status::before {
+    width: 5px;
+    height: 5px;
+    flex: 0 0 auto;
+    content: "";
+    background: currentColor;
+    border-radius: 50%;
+}
+
+.nps-client-filter__status.is-online {
+    color: #0f6b49;
+    background: var(--nps-success-soft, var(--online-soft, #e6f7ef));
+}
+
+.nps-client-filter__status.is-offline {
+    color: var(--nps-muted, var(--offline, #7b8ea8));
+    background: var(--nps-surface-subtle, #f7faff);
+    border-color: var(--nps-line, var(--line, #dce6f1));
+}
+
+[data-theme="dark"] .nps-client-filter__status.is-online {
+    color: var(--nps-success, #66d5a1);
+}
+
+.nps-client-filter__caret {
+    width: 7px;
+    height: 7px;
+    margin-top: -4px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform .15s ease, margin-top .15s ease;
+}
+
+.nps-client-filter.is-open .nps-client-filter__caret {
+    margin-top: 4px;
+    transform: rotate(225deg);
+}
+
+.nps-client-filter__menu {
+    position: absolute;
+    z-index: 1080;
+    top: calc(100% + 6px);
+    right: 0;
+    width: max-content;
+    min-width: 100%;
+    max-width: min(360px, calc(100vw - 24px));
+    max-height: 320px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 5px;
+    color: var(--nps-ink, var(--ink, #101828));
+    background: var(--nps-surface, var(--card, #fff));
+    border: 1px solid var(--nps-line-strong, var(--line, #c4d3e3));
+    border-radius: 8px;
+    box-shadow: var(--nps-shadow, var(--shadow, 0 12px 30px rgba(34, 64, 101, .14)));
+}
+
+.nps-client-filter__option {
+    display: grid;
+    min-height: 36px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px;
+    color: var(--nps-ink, var(--ink, #101828));
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.nps-client-filter__option:hover,
+.nps-client-filter__option:focus-visible {
+    outline: 0;
+    background: var(--nps-surface-hover, #eef6ff);
+}
+
+.nps-client-filter__option[aria-selected="true"] {
+    color: var(--nps-primary, var(--accent, #2563eb));
+    background: var(--nps-primary-soft, var(--accent-soft, #e8f1ff));
+}
+
+.nps-client-filter__option[aria-selected="true"] .nps-client-filter__option-label {
+    font-weight: 700;
+}
+
+body.nps-bootstrap .nps-table__filters .nps-client-filter {
+    min-width: 164px !important;
+    max-width: 220px !important;
+}
+
+body.nps-bootstrap .nps-table__filters .nps-client-filter__trigger {
+    height: 36px;
+}
+
+.tools > .nps-client-filter {
+    min-width: 0;
+    max-width: 190px;
+}
+
+.tools > .nps-client-filter .nps-client-filter__trigger {
+    min-height: 30px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    border-radius: 8px;
+}
+
+@media (max-width: 991px) {
+    body.nps-bootstrap .nps-table__filters .nps-client-filter {
+        flex: 1 1 220px !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+}
+
+@media (max-width: 560px) {
+    .tools > .nps-client-filter {
+        max-width: calc(50vw - 18px);
+    }
+
+    .nps-client-filter__menu {
+        right: auto;
+        left: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .nps-client-filter__trigger,
+    .nps-client-filter__caret {
+        transition: none;
+    }
+}

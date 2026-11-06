@@ -344,6 +344,11 @@ func TestServerConfigVisualSectionsExcludeCertificateSettings(t *testing.T) {
 			t.Fatalf("server configuration visual editor still contains registration setting %q", key)
 		}
 	}
+	for _, key := range []string{"force_pow", "pow_bits"} {
+		if _, exists := fields[key]; exists {
+			t.Fatalf("server configuration visual editor still contains Security setting %q", key)
+		}
+	}
 	for _, key := range []string{"http_proxy_port", "bridge_port", "web_password", "allow_ports"} {
 		if _, exists := fields[key]; !exists {
 			t.Fatalf("general server configuration unexpectedly lost %q after registration filtering", key)

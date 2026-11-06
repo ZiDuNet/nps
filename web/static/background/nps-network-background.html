@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>NPS · 万物互联 / 万网互联 · 登录背景</title>
+<script>
+  if (new URLSearchParams(location.search).get('motion') === 'on') {
+    document.documentElement.setAttribute('data-motion', 'on');
+  }
+</script>
+<!--
+  纯背景页，不含任何登录框。
+  用法：把 #stage 整块复制到你的登录页里当最底层（position:fixed / z-index:0），
+        表单容器给 position:relative; z-index:1 即可。
+  中心是「1 个桥 → N 个客户端节点 → N×N 个服务」的业务环：
+  每个节点带 TCP / UDP / 域名反代 / HTTP / SOCKS5 / P2P / TLS / WebSocket 标签，
+  节点与服务点都绕开登录卡片（保护框大小见 CFG.cardW / cardH，按你的卡片尺寸改），
+  所以卡片叠上去干净，卡片四周又有一圈可读的拓扑，中间不会变成一块黑斑。
+  中心只做极轻的压暗（#safezone）+ 一圈冷光（#halo），不再有硬边界。
+  深浅色：默认跟随系统 prefers-color-scheme。
+          预览浅色在地址后加 ?theme=light（?theme=dark 强制深色，?theme=auto 恢复跟随）；
+          页面里也可调 NPS_BG.setTheme('light'|'dark'|'auto')、NPS_BG.getTheme() 查状态。
+          手动选择会记住；浅色模式只换配色与明暗逻辑，构图、动画、密度完全一致。
+  想调整密度 / 速度 / 配色，改下面脚本里的 CFG 就行。
+  单文件、零外部依赖、无 CDN、无字体外链。
+-->
+<style>
+  :root{
+    --bg-deep:#03060d;
+    --bg-mid:#071224;
+    --line:rgba(90,160,220,.055);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-deep)}
+  body{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono","Microsoft YaHei",monospace}
+
+  #stage{
+    position:fixed;inset:0;overflow:hidden;isolation:isolate;
+    background:
+      radial-gradient(ellipse 62% 72% at 50% 46%, #0b1b32 0%, #071224 45%, #03060d 100%);
+  }
+  .layer{position:absolute;inset:0;pointer-events:none}
+
+  /* 底层点阵网格：越靠中心越淡，避免和登录框打架 */
+  #grid{
+    background-image:
+      linear-gradient(to right,var(--line) 1px,transparent 1px),
+      linear-gradient(to bottom,var(--line) 1px,transparent 1px);
+    background-size:48px 48px;
+    -webkit-mask-image:radial-gradient(ellipse 70% 78% at 50% 50%,rgba(0,0,0,.62) 0%,#000 88%);
+    mask-image:radial-gradient(ellipse 70% 78% at 50% 50%,rgba(0,0,0,.62) 0%,#000 88%);
+    opacity:.9;
+  }
+  /* 缓慢游走的冷色辉光 */
+  #ambient{
+    background:
+      radial-gradient(ellipse 38% 46% at 14% 22%,rgba(32,190,255,.10),transparent 70%),
+      radial-gradient(ellipse 36% 44% at 88% 26%,rgba(120,110,255,.09),transparent 70%),
+      radial-gradient(ellipse 40% 46% at 12% 82%,rgba(30,220,175,.075),transparent 70%),
+      radial-gradient(ellipse 40% 46% at 88% 80%,rgba(170,100,255,.085),transparent 70%);
+    animation:breathe 18s ease-in-out infinite alternate;
+  }
+  @keyframes breathe{from{opacity:.55;transform:scale(1)}to{opacity:1;transform:scale(1.06)}}
+
+  #net{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+  /* 父页面通过 NPS_BG.setPointer 转发的鼠标位置 */
+  #cursorGlow{
+    opacity:0;
+    background:radial-gradient(230px circle at var(--cursor-x,50vw) var(--cursor-y,50vh),
+      rgba(96,205,255,.16) 0%,
+      rgba(86,155,255,.07) 38%,
+      transparent 72%);
+    mix-blend-mode:screen;
+    transition:opacity .16s ease;
+  }
+  :root[data-theme="light"] #cursorGlow{
+    background:radial-gradient(230px circle at var(--cursor-x,50vw) var(--cursor-y,50vh),
+      rgba(42,112,220,.16) 0%,
+      rgba(52,132,225,.06) 42%,
+      transparent 72%);
+    mix-blend-mode:normal;
+  }
+  :root[data-pointer-active="true"] #cursorGlow{opacity:1}
+
+  /* 慢速扫描光带 */
+  #sweep{
+    inset:0 auto 0 -45%;width:45%;
+    background:linear-gradient(90deg,transparent,rgba(90,200,255,.045) 45%,rgba(120,170,255,.06) 55%,transparent);
+    filter:blur(12px);
+    animation:sweep 22s linear infinite;
+  }
+  @keyframes sweep{from{transform:translateX(0)}to{transform:translateX(330%)}}
+
+  /* 四角暗角 */
+  #vignette{
+    background:radial-gradient(ellipse 78% 82% at 50% 50%,transparent 38%,rgba(2,5,11,.42) 78%,rgba(2,5,11,.82) 100%);
+  }
+  /* 登录卡片安全区：再加一层柔和压暗，保证白字可读 */
+  /* 中心只极轻地"沉底"，不再挖黑洞：登录卡片本身不透明，不需要压暗 */
+  #safezone{
+    background:radial-gradient(ellipse 40vmin 32vmin at 50% 50%,rgba(4,10,20,.26) 0%,rgba(4,10,20,.10) 58%,transparent 88%);
+  }
+  /* 一圈若有若无的冷光，把中心和外围网络缝在一起 */
+  #halo{
+    background:radial-gradient(ellipse 54vmin 42vmin at 50% 50%,transparent 54%,rgba(70,160,230,.055) 68%,transparent 86%);
+    animation:haloPulse 9s ease-in-out infinite alternate;
+  }
+  @keyframes haloPulse{from{opacity:.45}to{opacity:1}}
+  /* 极淡扫描线，控制台质感 */
+  #scan{
+    background:repeating-linear-gradient(to bottom,rgba(255,255,255,.018) 0px,rgba(255,255,255,.018) 1px,transparent 1px,transparent 4px);
+    opacity:.5;
+  }
+  /* ===== 浅色模式：只换配色与明暗逻辑，构图 / 动画完全不变 ===== */
+  :root[data-theme="light"]{
+    --bg-deep:#eef3f9;
+    --line:rgba(28,76,132,.065);
+  }
+  :root[data-theme="light"] #stage{
+    background:radial-gradient(ellipse 62% 72% at 50% 46%,#ffffff 0%,#f3f7fc 46%,#dfe9f5 100%);
+  }
+  :root[data-theme="light"] #ambient{
+    background:
+      radial-gradient(ellipse 38% 46% at 14% 22%,rgba(0,150,210,.075),transparent 70%),
+      radial-gradient(ellipse 36% 44% at 88% 26%,rgba(90,100,225,.065),transparent 70%),
+      radial-gradient(ellipse 40% 46% at 12% 82%,rgba(0,180,140,.055),transparent 70%),
+      radial-gradient(ellipse 40% 46% at 88% 80%,rgba(150,90,225,.06),transparent 70%);
+  }
+  :root[data-theme="light"] #sweep{
+    background:linear-gradient(90deg,transparent,rgba(60,140,220,.045) 45%,rgba(80,120,220,.055) 55%,transparent);
+  }
+  :root[data-theme="light"] #vignette{
+    background:radial-gradient(ellipse 78% 82% at 50% 50%,transparent 38%,rgba(120,155,200,.10) 78%,rgba(110,145,190,.22) 100%);
+  }
+  :root[data-theme="light"] #safezone{
+    background:radial-gradient(ellipse 40vmin 32vmin at 50% 50%,rgba(255,255,255,.55) 0%,rgba(255,255,255,.22) 58%,transparent 88%);
+  }
+  :root[data-theme="light"] #halo{
+    background:radial-gradient(ellipse 54vmin 42vmin at 50% 50%,transparent 54%,rgba(60,140,210,.05) 68%,transparent 86%);
+  }
+  :root[data-theme="light"] #scan{
+    background:repeating-linear-gradient(to bottom,rgba(20,60,110,.022) 0px,rgba(20,60,110,.022) 1px,transparent 1px,transparent 4px);
+    opacity:.45;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    #ambient,#sweep,#halo{animation:none}
+  }
+  :root[data-motion="on"] #ambient{animation:breathe 18s ease-in-out infinite alternate}
+  :root[data-motion="on"] #sweep{animation:sweep 22s linear infinite}
+  :root[data-motion="on"] #halo{animation:haloPulse 9s ease-in-out infinite alternate}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="layer" id="grid"></div>
+  <div class="layer" id="ambient"></div>
+  <canvas id="net"></canvas>
+  <div class="layer" id="cursorGlow"></div>
+  <div class="layer" id="sweep"></div>
+  <div class="layer" id="halo"></div>
+  <div class="layer" id="vignette"></div>
+  <div class="layer" id="safezone"></div>
+  <div class="layer" id="scan"></div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ============ 可调参数 ============ */
+  const CFG = {
+    devicePerCluster : 32,   // 每个子网的终端设备数（"万物"）
+    crossLinks       : 12,   // 跨网长弧（压得极淡，只当背景纹理）
+    packets          : 70,   // 普通数据流光点
+    tunnelPackets    : 0,    // 大弧已移除，不再生成隧道流光
+    dust             : 130,  // 远景尘点
+    mouseRadius      : 270,  // 鼠标感应半径
+    keepOutW         : .205, // 中心留白宽（相对视口）
+    keepOutH         : .280, // 中心留白高（相对视口）
+    ringClients      : 8,    // 中心业务环的客户端节点数 N
+    ringServices     : 8,    // 每个节点挂的服务数 N（合计 N×N）
+    ringPackets      : 26,   // 业务环上的调度流光
+    mist             : 70,   // 中心过渡带的粉尘颗粒
+    cardW            : .54,  // 登录卡片保护框宽（相对视口，卡片不透明，元素绕开它）
+    cardH            : .56,  // 登录卡片保护框高
+    globalSpeed      : 1.0
+  };
+
+  const DARK_PALETTE = {
+    cyan  : [ 56,230,255],
+    blue  : [110,145,255],
+    mint  : [ 52,226,174],
+    violet: [172,120,255],
+    amber : [255,182,108],
+    white : [215,240,255]
+  };
+  /* 浅底要用同色系但更深的色，亮色点在白底上会消失 */
+  const LIGHT_PALETTE = {
+    cyan  : [ 12,152,192],
+    blue  : [ 68,102,214],
+    mint  : [ 10,158,124],
+    violet: [142, 86,214],
+    amber : [196,124, 28],
+    white : [ 48, 84,132]
+  };
+  /* PALETTE 保持"活引用"：切主题时原地改数值，簇 / 协议 / 节点 / 连线自动跟着变 */
+  const PALETTE = {
+    cyan  : DARK_PALETTE.cyan.slice(),
+    blue  : DARK_PALETTE.blue.slice(),
+    mint  : DARK_PALETTE.mint.slice(),
+    violet: DARK_PALETTE.violet.slice(),
+    amber : DARK_PALETTE.amber.slice(),
+    white : DARK_PALETTE.white.slice()
+  };
+  const THEME = {alphaScale:1,textBoost:1,glowScale:1,
+                 dust:'rgba(160,210,255,',mist:'rgba(150,205,255,'};
+
+  const themeMQ = window.matchMedia?window.matchMedia('(prefers-color-scheme: light)'):null;
+  let themeMode='auto', isLight=false;
+  try{
+    const q=new URLSearchParams(location.search).get('theme');
+    const saved=localStorage.getItem('nps-bg-theme');
+    if(q==='light'||q==='dark'||q==='auto') themeMode=q;
+    else if(saved==='light'||saved==='dark') themeMode=saved;
+  }catch(e){}
+
+  function applyPalette(light){
+    const src=light?LIGHT_PALETTE:DARK_PALETTE;
+    Object.keys(PALETTE).forEach(function(k){
+      PALETTE[k][0]=src[k][0]; PALETTE[k][1]=src[k][1]; PALETTE[k][2]=src[k][2];
+    });
+  }
+  function resolveTheme(){
+    isLight = themeMode==='light' || (themeMode==='auto'&&themeMQ&&themeMQ.matches);
+    document.documentElement.setAttribute('data-theme',isLight?'light':'dark');
+    THEME.alphaScale=isLight?.72:1;   // 浅底上线条淡一档，避免糊
+    THEME.textBoost=isLight?1.9:1;    // 文字反而要更清楚
+    THEME.glowScale=isLight?.35:1;    // 浅底不要彩色晕染
+    THEME.dust=isLight?'rgba(40,90,150,':'rgba(160,210,255,';
+    THEME.mist=isLight?'rgba(50,100,160,':'rgba(150,205,255,';
+    applyPalette(isLight);
+    glowCache.clear();
+  }
+
+  /* 五张独立的"网"：不同网段 / 不同色系，最后被隧道打通 */
+  const CLUSTERS = [
+    {x:.15,y:.27,r:.20,c:PALETTE.cyan,  tag:'10.0.0.0/8       LAN · A'},
+    {x:.85,y:.23,r:.19,c:PALETTE.blue,  tag:'172.16.0.0/12    LAN · B'},
+    {x:.13,y:.77,r:.19,c:PALETTE.mint,  tag:'192.168.1.0/24   EDGE'},
+    {x:.87,y:.79,r:.20,c:PALETTE.violet,tag:'192.168.8.0/24   EDGE'},
+    {x:.50,y:.065,r:.13,c:PALETTE.amber,tag:'IoT / SENSOR MESH'}
+  ];
+  /* 骨干枢纽围成一个环，把中心让出来 */
+  const HUB_POS = [[.50,.135],[.145,.50],[.855,.50],[.50,.875]];
+
+  /* 业务语义：一个中心桥 → N 个客户端 → N×N 个服务 */
+  const PROTOS = [
+    {name:'TCP  TUNNEL',   c:PALETTE.cyan,   tag:'tcp://:8080'},
+    {name:'UDP  FORWARD',  c:PALETTE.violet, tag:'udp://:5353'},
+    {name:'域名反代',       c:PALETTE.amber,  tag:'*.nps.io → :80'},
+    {name:'HTTP  PROXY',   c:PALETTE.blue,   tag:'http://:80'},
+    {name:'SOCKS5',        c:PALETTE.mint,   tag:'socks5://:1080'},
+    {name:'P2P  穿透',      c:PALETTE.white,  tag:'p2p  ·  relay'},
+    {name:'TLS  终结',      c:PALETTE.cyan,   tag:'tls://:443'},
+    {name:'WebSocket',     c:PALETTE.blue,   tag:'ws://:8024'}
+  ];
+
+  const cv = document.getElementById('net');
+  const ctx = cv.getContext('2d');
+  const TAU = Math.PI*2;
+  const reduced = document.documentElement.getAttribute('data-motion') !== 'on' &&
+                  window.matchMedia &&
+                  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let W=0,H=0,DPR=1;
+  let nodes=[], edges=[], packetEdges=[], tunnels=[], hubs=[], gateways=[];
+  let packets=[], ripples=[], dust=[], labels=[], mist=[];
+  let svcClients=[], svcDots=[], svcPackets=[], ringActive=0, lastActive=-1;
+  let mouse={x:-9999,y:-9999,on:false};
+  let raf=0,last=0,running=false,time=0,resizeTimer=0;
+
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+  const clamp01=v=>v<0?0:(v>1?1:v);
+  const pick=arr=>arr[(Math.random()*arr.length)|0];
+  const rgba=(c,a)=>'rgba('+c[0]+','+c[1]+','+c[2]+','+clamp(a*THEME.alphaScale,0,1).toFixed(3)+')';
+
+  /* 光晕贴图缓存：避免每帧给上百个节点创建渐变 */
+  const glowCache=new Map();
+  function glowSprite(c){
+    const k=c.join(',');
+    if(glowCache.has(k)) return glowCache.get(k);
+    const s=document.createElement('canvas'); s.width=s.height=128;
+    const g=s.getContext('2d');
+    const grd=g.createRadialGradient(64,64,0,64,64,64);
+    grd.addColorStop(0,rgba(c,.95));
+    grd.addColorStop(.16,rgba(c,.55));
+    grd.addColorStop(.42,rgba(c,.14));
+    grd.addColorStop(1,rgba(c,0));
+    g.fillStyle=grd; g.fillRect(0,0,128,128);
+    glowCache.set(k,s); return s;
+  }
+  function blob(x,y,r,a,c){
+    if(a<=0||r<=0) return;
+    ctx.globalAlpha=a*THEME.glowScale;
+    ctx.drawImage(glowSprite(c),x-r,y-r,r*2,r*2);
+    ctx.globalAlpha=1;
+  }
+
+  /* 中心留白椭圆 */
+  function inKeepOut(x,y,cx,cy,rx,ry){
+    const dx=(x-cx)/rx, dy=(y-cy)/ry;
+    return dx*dx+dy*dy<1;
+  }
+  function pushOut(p,cx,cy,rx,ry){
+    const dx=(p.x-cx)/rx, dy=(p.y-cy)/ry;
+    let d=Math.hypot(dx,dy);
+    if(d>=1) return;
+    if(d<1e-5){ p.x=cx+rx*1.03; return; }
+    const k=1.03/d;
+    p.x=cx+(p.x-cx)*k;
+    p.y=cy+(p.y-cy)*k;
+  }
+
+  function makeNode(x,y,kind,c,ci,shape){
+    return {
+      x:x,y:y,dx:x,dy:y,kind:kind,c:c,ci:ci,
+      shape:shape||pick(['dot','square','diamond','tri','cross']),
+      phase:rand(0,TAU), drift:rand(1.2,4.2),
+      size:kind==='hub'?1:(kind==='gateway'?1:rand(.8,1.5)),
+      glow:0, dir:Math.random()<.5?-1:1
+    };
+  }
+
+  function addEdge(a,b,kind,c,alpha,width,bend,outward,fixedCtl){
+    let cx=(a.x+b.x)/2, cy=(a.y+b.y)/2;
+    if(!fixedCtl){
+      const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1;
+      const nx=-dy/len, ny=dx/len;
+      const ox=cx-W/2, oy=cy-H/2, ol=Math.hypot(ox,oy)||1;
+      cx+=nx*(bend||0)+ox/ol*(outward||0);
+      cy+=ny*(bend||0)+oy/ol*(outward||0);
+    }
+    const e={a:a,b:b,cx:cx,cy:cy,kind:kind,c:c,alpha:alpha,width:width,seed:rand(0,TAU)};
+    edges.push(e);
+    if(kind==='tunnel') tunnels.push(e);
+    else packetEdges.push(e);
+    return e;
+  }
+
+  function buildScene(){
+    nodes=[];edges=[];packetEdges=[];tunnels=[];hubs=[];gateways=[];
+    packets=[];ripples=[];dust=[];labels=[];mist=[];
+    svcClients=[];svcDots=[];svcPackets=[];ringActive=0;lastActive=-1;
+
+    const cx=W/2, cy=H/2;
+    const kr=Math.max(150,Math.min(W*CFG.keepOutW,330));
+    const ky=Math.max(130,Math.min(H*CFG.keepOutH,255));
+
+    /* 骨干枢纽 */
+    HUB_POS.forEach(function(p,i){
+      const n=makeNode(p[0]*W,p[1]*H,'hub',i===3?PALETTE.violet:PALETTE.white,-1,'hex');
+      n.phase=i*1.7; hubs.push(n); nodes.push(n);
+    });
+
+    /* 五张子网 */
+    CLUSTERS.forEach(function(cl,ci){
+      const ccx=cl.x*W, ccy=cl.y*H;
+      /* 顶部 IoT 簇拉成一条横向设备带，其余四簇是椭圆子网 */
+      const Rx=ci===4?W*.31:W*cl.r;
+      const Ry=ci===4?H*.075:H*cl.r*1.15;
+      const members=[];
+
+      for(let i=0;i<CFG.devicePerCluster;i++){
+        let px=0,py=0,tries=0;
+        do{
+          const a=rand(0,TAU), rr=Math.sqrt(Math.random())*rand(.22,1);
+          px=ccx+Math.cos(a)*Rx*rr;
+          py=ccy+Math.sin(a)*Ry*rr;
+          tries++;
+        }while(inKeepOut(px,py,cx,cy,kr+14,ky+14)&&tries<12);
+        const p={x:px,y:py};
+        if(inKeepOut(p.x,p.y,cx,cy,kr+14,ky+14)){
+          pushOut(p,cx,cy,kr+14,ky+14);
+          /* 抖动一下，避免节点沿留白椭圆边缘排成一条假弧线 */
+          p.x+=rand(-32,32); p.y+=rand(-32,32);
+        }
+        const n=makeNode(clamp(p.x,6,W-6),clamp(p.y,6,H-6),'device',cl.c,ci);
+        nodes.push(n); members.push(n);
+      }
+
+      /* 子网网关 */
+      const gp={x:ccx,y:ccy};
+      pushOut(gp,cx,cy,kr+24,ky+24);
+      const gw=makeNode(clamp(gp.x,10,W-10),clamp(gp.y,10,H-10),'gateway',cl.c,ci,'hex');
+      nodes.push(gw); gateways.push(gw); members.push(gw);
+
+      /* 辐条：每台设备 → 网关 */
+      members.forEach(function(n){
+        if(n===gw) return;
+        addEdge(n,gw,'intra',cl.c,.19,.8,rand(-14,14),0);
+      });
+      /* Mesh：设备之间互相连，制造"网"而不是"星" */
+      for(let k=0;k<members.length*2.3;k++){
+        const a=pick(members), b=pick(members);
+        if(a===b) continue;
+        if(Math.hypot(a.x-b.x,a.y-b.y)>Math.min(W,H)*.26) continue;
+        addEdge(a,b,'intra',cl.c,.14,.65,rand(-18,18),0);
+      }
+
+      /* 网关接入最近的骨干枢纽 */
+      let best=hubs[0],bd=Infinity;
+      hubs.forEach(function(h){
+        const d=Math.hypot(h.x-gw.x,h.y-gw.y);
+        if(d<bd){bd=d;best=h;}
+      });
+      addEdge(gw,best,'backbone',cl.c,.26,.8,rand(-26,26),Math.min(W,H)*.045);
+
+      labels.push({x:clamp(ccx-Rx*.62,14,W-230),y:clamp(ccy-Ry*.86,20,H-14),text:cl.tag,c:cl.c});
+    });
+
+    /* 中间不再放粗骨架：原来的菱形骨干环会框死中心，交给业务环去表达 */
+
+    /* 跨网长弧：不同子网之间的"万网互联" */
+    for(let i=0;i<CFG.crossLinks;i++){
+      const ca=pick(nodes.filter(function(n){return n.kind==='device';}));
+      let cb=pick(nodes.filter(function(n){return n.kind==='device'&&n.ci!==ca.ci;}));
+      if(!cb) continue;
+      addEdge(ca,cb,'cross',PALETTE.white,.05,.55,rand(-90,90),Math.min(W,H)*.10);
+    }
+
+    /* 上下两条大弧已移除：中心只留业务环与均匀细线网 */
+
+    labels.push({x:W*.5,y:H*.168,text:'N P S   ·   S E C U R E   T U N N E L   /   E N C R Y P T E D',c:PALETTE.cyan,center:true,big:true});
+    labels.push({x:W*.5,y:H*.855,text:'A N Y - T O - A N Y   ·   M E S H   B A C K B O N E',c:PALETTE.violet,center:true,big:true});
+
+    /* 远景尘点 */
+    for(let i=0;i<CFG.dust;i++){
+      dust.push({x:Math.random()*W,y:Math.random()*H,r:rand(.4,1.25),a:rand(.08,.38),
+                 s:rand(.004,.017),ph:rand(0,TAU)});
+    }
+    /* 中心过渡带的细粉尘：把留白和四周的星尘接上，不再是一块死黑 */
+    for(let i=0;i<CFG.mist;i++){
+      const a=rand(0,TAU), rr=Math.sqrt(Math.random());
+      mist.push({x:cx+Math.cos(a)*kr*1.6*rr,y:cy+Math.sin(a)*ky*1.8*rr,
+                 r:rand(.4,1.05),a:rand(.05,.17),ph:rand(0,TAU)});
+    }
+
+    buildServiceRing(cx,cy);
+
+    labels.push({x:W*.5,y:Math.min(H-16,cy+Math.min(H*CFG.cardH,360)/2+22),
+      text:'01 BRIDGE  ·  '+String(CFG.ringClients).padStart(2,'0')+' CLIENTS  ·  '+(CFG.ringClients*CFG.ringServices)+' SERVICES',
+      c:PALETTE.white,center:true,big:false,strong:true});
+
+    /* 数据流光点 */
+    for(let i=0;i<CFG.packets;i++) packets.push(makePacket(false));
+    for(let i=0;i<CFG.tunnelPackets;i++) packets.push(makePacket(true));
+  }
+
+  function makePacket(isTunnel){
+    const pool=isTunnel?tunnels:packetEdges;
+    const e=pick(pool)||pick(edges);
+    const c=isTunnel?(Math.random()<.5?PALETTE.white:PALETTE.cyan):(Math.random()<.4?PALETTE.white:e.c);
+    return {
+      e:e, t:Math.random(), isTunnel:isTunnel, c:c,
+      speed:(isTunnel?rand(.00055,.00105):rand(.0009,.0026))*CFG.globalSpeed,
+      size:isTunnel?rand(1.8,2.8):rand(.9,1.7),
+      trail:isTunnel?.016:.012,
+      burst:Math.random()<.42
+    };
+  }
+
+  function bez(e,t){
+    const mt=1-t, a=e.a, b=e.b;
+    return {
+      x:mt*mt*a.dx+2*mt*t*e.cx+t*t*b.dx,
+      y:mt*mt*a.dy+2*mt*t*e.cy+t*t*b.dy
+    };
+  }
+
+  function addRipple(x,y,c){
+    ripples.push({x:x,y:y,r:4,max:rand(26,52),a:.55,c:c});
+    if(ripples.length>26) ripples.shift();
+  }
+
+  /* ============ 中心业务环：1 个桥 / N 个客户端 / N×N 个服务 ============ */
+  /* 所有元素绕开登录卡片的矩形，沿径向推到卡片外圈，形成"卡片就是核心"的观感 */
+  function outsideCard(p,cx,cy,hx,hy,pad){
+    const dx=p.x-cx, dy=p.y-cy;
+    const HX=hx+pad, HY=hy+pad;
+    if(Math.abs(dx)<HX&&Math.abs(dy)<HY){
+      const k=Math.min(HX/(Math.abs(dx)||1),HY/(Math.abs(dy)||1),2.2)*1.07;
+      p.x=cx+dx*k; p.y=cy+dy*k;
+    }
+    p.x=clamp(p.x,26,W-26); p.y=clamp(p.y,20,H-20);
+    return p;
+  }
+
+  function buildServiceRing(cx,cy){
+    const hx=Math.min(W*CFG.cardW,660)/2;
+    const hy=Math.min(H*CFG.cardH,380)/2;
+    const rx=W*.265, ry=H*.29;
+    const N=CFG.ringClients, M=CFG.ringServices;
+
+    for(let i=0;i<N;i++){
+      const a=i*TAU/N+.16;
+      const p=outsideCard({x:cx+Math.cos(a)*rx,y:cy+Math.sin(a)*ry},cx,cy,hx,hy,22);
+      const proto=PROTOS[i%PROTOS.length];
+      const cl={x:p.x,y:p.y,dx:p.x,dy:p.y,c:proto.c,proto:proto,
+                phase:rand(0,TAU),glow:0,idx:i,dots:[]};
+      svcClients.push(cl);
+
+      /* 每个客户端挂 M 个服务：TCP / UDP / 域名反代 ... 混合分发 */
+      const ox=p.x-cx, oy=p.y-cy, ol=Math.hypot(ox,oy)||1;
+      const ux=ox/ol, uy=oy/ol, tx=-uy, ty=ux;
+      for(let j=0;j<M;j++){
+        const sp=(j/(M-1)-.5)*2;
+        const dist=rand(34,96);
+        const q=outsideCard({
+          x:p.x+ux*dist+tx*sp*66+rand(-14,14),
+          y:p.y+uy*dist+ty*sp*66+rand(-14,14)
+        },cx,cy,hx,hy,12);
+        const sProto=PROTOS[(i+j)%PROTOS.length];
+        const dot={x:q.x,y:q.y,dx:q.x,dy:q.y,c:sProto.c,phase:rand(0,TAU),
+                   r:rand(.8,1.6),parent:cl,glow:0};
+        svcDots.push(dot); cl.dots.push(dot);
+      }
+    }
+
+    for(let i=0;i<CFG.ringPackets;i++) svcPackets.push(makeRingPacket());
+  }
+
+  function makeRingPacket(){
+    const cl=pick(svcClients);
+    const dot=(cl&&cl.dots.length)?pick(cl.dots):null;
+    return {cl:cl,dot:dot,t:Math.random(),speed:rand(.0007,.0016)*CFG.globalSpeed,
+            c:cl?cl.c:PALETTE.white,size:rand(.7,1.3)};
+  }
+
+  function ringPos(p,t){
+    const cx=W/2, cy=H/2;
+    if(t<.42){
+      const k=t/.42;
+      return {x:cx+(p.cl.dx-cx)*k,y:cy+(p.cl.dy-cy)*k};
+    }
+    const k=(t-.42)/.58;
+    return {x:p.cl.dx+(p.dot.dx-p.cl.dx)*k,y:p.cl.dy+(p.dot.dy-p.cl.dy)*k};
+  }
+
+  function drawRing(dt){
+    const cx=W/2, cy=H/2;
+    ringActive=Math.floor(time/1900)%Math.max(1,CFG.ringClients);
+    if(ringActive!==lastActive){
+      const c=svcClients[ringActive];
+      if(c) addRipple(c.dx,c.dy,c.c);
+      lastActive=ringActive;
+    }
+
+    /* 漂移 + 轮流点亮的调度节点 */
+    for(let i=0;i<svcClients.length;i++){
+      const cl=svcClients[i];
+      cl.dx=cl.x+Math.sin(time*.0004+cl.phase)*3.2;
+      cl.dy=cl.y+Math.cos(time*.00034+cl.phase)*3.2;
+      const target=i===ringActive?1:0;
+      cl.glow+=(target-cl.glow)*Math.min(1,dt*.005);
+      if(mouse.on){
+        const d=Math.hypot(cl.dx-mouse.x,cl.dy-mouse.y);
+        if(d<CFG.mouseRadius) cl.glow=Math.max(cl.glow,(1-d/CFG.mouseRadius)*.8);
+      }
+    }
+    for(let i=0;i<svcDots.length;i++){
+      const d=svcDots[i];
+      d.dx=d.x+Math.sin(time*.0006+d.phase)*2.6;
+      d.dy=d.y+Math.cos(time*.0005+d.phase)*2.6;
+      d.glow=d.parent.glow;
+    }
+
+    /* 中心桥：缓慢转动的虚线刻度环（卡片背后，边缘露出一圈） */
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(time*.00006);
+    ctx.setLineDash([2,11]);
+    ctx.beginPath();
+    ctx.ellipse(0,0,Math.min(W*.27,400),Math.min(H*.34,260),0,0,TAU);
+    ctx.strokeStyle=rgba(PALETTE.cyan,.19);
+    ctx.lineWidth=1.1;ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    /* 核心 → N 个客户端：从卡片背后放射出来 */
+    ctx.lineCap='round';
+    for(let i=0;i<svcClients.length;i++){
+      const cl=svcClients[i];
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cl.dx,cl.dy);
+      ctx.strokeStyle=rgba(cl.c,.13+cl.glow*.24);
+      ctx.lineWidth=.9+cl.glow*.6;ctx.stroke();
+    }
+
+    /* 每个客户端 → N 个服务：N×N 条细线 */
+    for(let i=0;i<svcDots.length;i++){
+      const d=svcDots[i], cl=d.parent;
+      ctx.beginPath();ctx.moveTo(cl.dx,cl.dy);ctx.lineTo(d.dx,d.dy);
+      ctx.strokeStyle=rgba(d.c,.10+d.glow*.22);
+      ctx.lineWidth=.7;ctx.stroke();
+    }
+
+    /* 服务点：按协议着色，轻微闪烁 */
+    for(let i=0;i<svcDots.length;i++){
+      const d=svcDots[i];
+      const tw=.55+.45*Math.sin(time*.0018+d.phase);
+      blob(d.dx,d.dy,5+d.glow*6,.18+tw*.12+d.glow*.22,d.c);
+      ctx.fillStyle=rgba(d.c,.46+tw*.20+d.glow*.34);
+      ctx.beginPath();ctx.arc(d.dx,d.dy,d.r,0,TAU);ctx.fill();
+    }
+
+    /* 客户端节点 + 协议标签 */
+    ctx.textBaseline='middle';
+    for(let i=0;i<svcClients.length;i++){
+      const cl=svcClients[i];
+      blob(cl.dx,cl.dy,16+cl.glow*15,.34+cl.glow*.30,cl.c);
+      ctx.save();ctx.translate(cl.dx,cl.dy);ctx.rotate(time*.00025+cl.phase);
+      poly(0,0,7+cl.glow*1.5,6,0);
+      ctx.strokeStyle=rgba(cl.c,.65+cl.glow*.35);ctx.lineWidth=1.1;ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle=rgba(cl.c,.85);
+      ctx.beginPath();ctx.arc(cl.dx,cl.dy,1.9,0,TAU);ctx.fill();
+
+      const ox=cl.dx-cx, oy=cl.dy-cy, ol=Math.hypot(ox,oy)||1;
+      const rawLx=cl.dx+ox/ol*15;
+      const lx=clamp(rawLx,10,W-10), ly=clamp(cl.dy+oy/ol*15,16,H-16);
+      /* 文字一律朝远离卡片的方向展开，避免被卡片切掉半截 */
+      const alignRight=rawLx<W*.5;
+      const tx=alignRight?lx-6:lx+6;
+      const main='#'+String(i+1).padStart(2,'0')+'  '+cl.proto.name;
+      const sub=cl.proto.tag+'   x'+CFG.ringServices+' SVC';
+      ctx.textAlign=alignRight?'right':'left';
+      ctx.font='10px ui-monospace,Consolas,monospace';
+      ctx.fillStyle=rgba(cl.c,(.46+cl.glow*.42)*THEME.textBoost);
+      ctx.fillText(main,tx,ly-6);
+      ctx.font='9px ui-monospace,Consolas,monospace';
+      ctx.fillStyle=rgba(cl.c,(.27+cl.glow*.30)*THEME.textBoost);
+      ctx.fillText(sub,tx,ly+8);
+    }
+
+    /* 调度流光：核心 → 客户端 → 服务点 */
+    for(let i=0;i<svcPackets.length;i++){
+      let p=svcPackets[i];
+      p.t+=p.speed*dt;
+      if(p.t>=1||!p.dot){svcPackets[i]=makeRingPacket();continue;}
+      const P=ringPos(p,p.t), A=ringPos(p,Math.max(0,p.t-.035));
+      ctx.beginPath();ctx.moveTo(A.x,A.y);ctx.lineTo(P.x,P.y);
+      ctx.strokeStyle=rgba(p.c,.42);ctx.lineWidth=p.size;ctx.stroke();
+      blob(P.x,P.y,6,.32,p.c);
+      ctx.fillStyle=rgba(p.c,.85);
+      ctx.beginPath();ctx.arc(P.x,P.y,p.size,0,TAU);ctx.fill();
+    }
+  }
+
+  /* 每帧更新节点位置：呼吸漂移 + 鼠标引力 */
+  function updateNodes(){
+    for(let i=0;i<nodes.length;i++){
+      const n=nodes[i];
+      n.dx=n.x+Math.sin(time*.00042+n.phase)*n.drift;
+      n.dy=n.y+Math.cos(time*.00036+n.phase*1.3)*n.drift;
+      n.glow=0;
+      if(mouse.on){
+        const d=Math.hypot(n.dx-mouse.x,n.dy-mouse.y);
+        if(d<CFG.mouseRadius){
+          const f=1-d/CFG.mouseRadius;
+          n.glow=f*f;
+          n.dx+=(mouse.x-n.dx)*f*.045;
+          n.dy+=(mouse.y-n.dy)*f*.045;
+        }
+      }
+    }
+  }
+
+  function drawDust(){
+    for(let i=0;i<dust.length;i++){
+      const d=dust[i];
+      const y=(d.y+Math.sin(time*.00025+d.ph)*14+time*d.s)%H;
+      const x=d.x+Math.cos(time*.0002+d.ph)*10;
+      ctx.fillStyle=THEME.dust+(d.a*THEME.alphaScale*(.65+.35*Math.sin(time*.001+d.ph))).toFixed(3)+')';
+      ctx.fillRect(x,y,d.r,d.r);
+    }
+    for(let i=0;i<mist.length;i++){
+      const m=mist[i];
+      const tw=.45+.55*Math.sin(time*.0011+m.ph);
+      ctx.fillStyle=THEME.mist+(m.a*THEME.alphaScale*tw).toFixed(3)+')';
+      ctx.fillRect(m.x+Math.sin(time*.0002+m.ph)*6,m.y+Math.cos(time*.00018+m.ph)*6,m.r,m.r);
+    }
+  }
+
+  function strokeEdge(e,alpha,width){
+    ctx.beginPath();
+    ctx.moveTo(e.a.dx,e.a.dy);
+    ctx.quadraticCurveTo(e.cx,e.cy,e.b.dx,e.b.dy);
+    ctx.strokeStyle=rgba(e.c,alpha);
+    ctx.lineWidth=width;
+    ctx.stroke();
+  }
+
+  function drawEdges(){
+    /* 跨网长弧 */
+    ctx.lineCap='round';
+    for(let i=0;i<edges.length;i++){
+      const e=edges[i];
+      if(e.kind!=='cross') continue;
+      strokeEdge(e,e.alpha,e.width);
+    }
+    /* 子网内连线 */
+    for(let i=0;i<edges.length;i++){
+      const e=edges[i];
+      if(e.kind!=='intra') continue;
+      const lift=Math.max(e.a.glow,e.b.glow);
+      strokeEdge(e,e.alpha+lift*.30,e.width+lift*.5);
+    }
+    /* 骨干：只留发丝细线，不做辉光描边 */
+    for(let i=0;i<edges.length;i++){
+      const e=edges[i];
+      if(e.kind!=='backbone') continue;
+      const lift=Math.max(e.a.glow,e.b.glow);
+      strokeEdge(e,e.alpha+lift*.30,e.width+lift*.3);
+    }
+  }
+
+  function drawPackets(dt){
+    for(let i=0;i<packets.length;i++){
+      let p=packets[i];
+      p.t+=p.speed*dt;
+      if(p.t>=1){
+        if(p.burst){
+          const end=bez(p.e,1);
+          addRipple(end.x,end.y,p.c);
+        }
+        packets[i]=makePacket(p.isTunnel);
+        continue;
+      }
+      const e=p.e;
+      ctx.lineCap='round';
+      for(let k=6;k>=1;k--){
+        const t1=p.t-k*p.trail, t2=p.t-(k-1)*p.trail;
+        if(t1<0) continue;
+        const A=bez(e,clamp01(t1)), B=bez(e,clamp01(t2));
+        ctx.beginPath();
+        ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y);
+        ctx.strokeStyle=rgba(p.c,(1-k/7)*(p.isTunnel?.5:.32));
+        ctx.lineWidth=p.size*(1-k/8);
+        ctx.stroke();
+      }
+      const P=bez(e,p.t);
+      blob(P.x,P.y,p.size*(p.isTunnel?9:6),p.isTunnel?.55:.35,p.c);
+      ctx.fillStyle=rgba(p.c,.95);
+      ctx.beginPath();ctx.arc(P.x,P.y,p.size,0,TAU);ctx.fill();
+    }
+  }
+
+  function drawRipples(dt){
+    for(let i=ripples.length-1;i>=0;i--){
+      const r=ripples[i];
+      r.r+=dt*.055;
+      r.a-=dt*.0011;
+      if(r.a<=0||r.r>r.max){ripples.splice(i,1);continue;}
+      ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,TAU);
+      ctx.strokeStyle=rgba(r.c,r.a*.5);
+      ctx.lineWidth=1.1;ctx.stroke();
+      blob(r.x,r.y,r.r*.75,r.a*.13,r.c);
+    }
+  }
+
+  function poly(x,y,r,sides,rot){
+    ctx.beginPath();
+    for(let i=0;i<sides;i++){
+      const a=rot+i*TAU/sides;
+      const px=x+Math.cos(a)*r, py=y+Math.sin(a)*r;
+      if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+    }
+    ctx.closePath();
+  }
+
+  function drawNodes(){
+    for(let i=0;i<nodes.length;i++){
+      const n=nodes[i], c=n.c, g=n.glow;
+      const pulse=.5+.5*Math.sin(time*.0016+n.phase);
+
+      if(n.kind==='hub'){
+        blob(n.dx,n.dy,36+pulse*9+g*14,.42+g*.25,c);
+        ctx.save();
+        ctx.translate(n.dx,n.dy);
+        ctx.rotate(time*.00016*n.dir);
+        ctx.setLineDash([2,9]);
+        ctx.beginPath();ctx.arc(0,0,19,0,TAU);
+        ctx.strokeStyle=rgba(c,.55+g*.35);ctx.lineWidth=1;ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.rotate(-time*.00035*n.dir);
+        poly(0,0,10,6,0);
+        ctx.strokeStyle=rgba(c,.85);ctx.lineWidth=1.2;ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle=rgba(PALETTE.white,.95);
+        ctx.beginPath();ctx.arc(n.dx,n.dy,2.6,0,TAU);ctx.fill();
+      }else if(n.kind==='gateway'){
+        blob(n.dx,n.dy,17+pulse*4+g*10,.34+g*.3,c);
+        ctx.save();ctx.translate(n.dx,n.dy);ctx.rotate(time*.0003+n.phase);
+        poly(0,0,6.5,6,0);
+        ctx.strokeStyle=rgba(c,.7+g*.3);ctx.lineWidth=1;ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle=rgba(c,.9);
+        ctx.beginPath();ctx.arc(n.dx,n.dy,1.8,0,TAU);ctx.fill();
+      }else{
+        const r=(2.1+pulse*.8)*n.size;
+        blob(n.dx,n.dy,8+g*9+pulse*2,.20+g*.38,c);
+        ctx.fillStyle=rgba(c,.58+g*.4);
+        ctx.strokeStyle=rgba(c,.58+g*.4);
+        ctx.lineWidth=1;
+        const s=r*1.5;
+        switch(n.shape){
+          case 'square': ctx.fillRect(n.dx-s*.6,n.dy-s*.6,s*1.2,s*1.2); break;
+          case 'diamond': poly(n.dx,n.dy,s,4,Math.PI/4); ctx.stroke(); break;
+          case 'tri': poly(n.dx,n.dy,s,3,-Math.PI/2); ctx.stroke(); break;
+          case 'cross':
+            ctx.beginPath();
+            ctx.moveTo(n.dx-s,n.dy);ctx.lineTo(n.dx+s,n.dy);
+            ctx.moveTo(n.dx,n.dy-s);ctx.lineTo(n.dx,n.dy+s);
+            ctx.stroke(); break;
+          default:
+            ctx.beginPath();ctx.arc(n.dx,n.dy,s*.62,0,TAU);ctx.fill();
+        }
+        if(g>.25){
+          ctx.beginPath();ctx.arc(n.dx,n.dy,7+g*4,0,TAU);
+          ctx.strokeStyle=rgba(c,g*.35);ctx.lineWidth=.8;ctx.stroke();
+        }
+      }
+    }
+  }
+
+  function drawLabels(){
+    ctx.textBaseline='middle';
+    labels.forEach(function(l){
+      ctx.font=(l.big?'10px ':'9px ')+'ui-monospace,Consolas,monospace';
+      ctx.textAlign=l.center?'center':'left';
+      const a=l.big?.32:(l.strong?.30:.17);
+      ctx.fillStyle=rgba(l.c,a*THEME.textBoost*(.75+.25*Math.sin(time*.0008)));
+      ctx.fillText(l.text,l.x,l.y);
+      if(l.big){
+        const w=ctx.measureText(l.text).width;
+        ctx.fillStyle=rgba(l.c,.16);
+        ctx.fillRect(l.center?l.x-w/2:l.x,l.y+9,w*.35,.6);
+      }
+    });
+  }
+
+  function drawMouse(){
+    if(!mouse.on) return;
+    blob(mouse.x,mouse.y,190,.10,PALETTE.cyan);
+  }
+
+  function render(dt){
+    ctx.clearRect(0,0,W,H);
+    updateNodes();
+    drawDust();
+    drawEdges();
+    drawRing(dt);
+    drawPackets(dt);
+    drawRipples(dt);
+    drawNodes();
+    drawLabels();
+    drawMouse();
+  }
+
+  function frame(now){
+    if(!running) return;
+    if(!last) last=now;
+    const dt=Math.min(48,now-last);
+    last=now;
+    time+=dt*CFG.globalSpeed;
+    render(dt);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){
+    if(running) return;
+    if(reduced){ render(0); return; }
+    running=true; last=0;
+    raf=requestAnimationFrame(frame);
+  }
+  function stop(){
+    running=false;
+    cancelAnimationFrame(raf);
+  }
+
+  function setup(){
+    resolveTheme();
+    W=window.innerWidth; H=window.innerHeight;
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    cv.width=Math.round(W*DPR);
+    cv.height=Math.round(H*DPR);
+    cv.style.width=W+'px';
+    cv.style.height=H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    buildScene();
+    render(0);
+  }
+
+  window.addEventListener('pointermove',function(e){
+    mouse.x=e.clientX;mouse.y=e.clientY;mouse.on=true;
+  },{passive:true});
+  window.addEventListener('pointerleave',function(){mouse.on=false;});
+  window.addEventListener('blur',function(){mouse.on=false;});
+  window.addEventListener('resize',function(){
+    clearTimeout(resizeTimer);
+    resizeTimer=setTimeout(setup,140);
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) stop();
+    else { if(reduced) render(0); else start(); }
+  });
+
+  /* 主题切换：默认跟随系统；?theme=light / ?theme=dark 可强制；运行时可调 API */
+  if(themeMQ&&themeMQ.addEventListener){
+    themeMQ.addEventListener('change',function(){
+      if(themeMode==='auto'){resolveTheme();render(0);}
+    });
+  }
+  window.NPS_BG={
+    setTheme:function(m){
+      if(m!=='light'&&m!=='dark'&&m!=='auto') return;
+      themeMode=m;
+      try{
+        if(m==='auto') localStorage.removeItem('nps-bg-theme');
+        else localStorage.setItem('nps-bg-theme',m);
+      }catch(e){}
+      resolveTheme();
+      render(0);
+    },
+    getTheme:function(){return {mode:themeMode,active:isLight?'light':'dark'};},
+    setPointer:function(x,y,active){
+      const px=Number(x), py=Number(y);
+      if(active!==false&&Number.isFinite(px)&&Number.isFinite(py)){
+        mouse.x=clamp(px,0,W);
+        mouse.y=clamp(py,0,H);
+        mouse.on=true;
+        document.documentElement.style.setProperty('--cursor-x',mouse.x+'px');
+        document.documentElement.style.setProperty('--cursor-y',mouse.y+'px');
+        document.documentElement.setAttribute('data-pointer-active','true');
+        return;
+      }
+      mouse.on=false;
+      document.documentElement.setAttribute('data-pointer-active','false');
+    }
+  };
+
+  setup();
+  start();
+})();
+</script>
+</body>
+</html>

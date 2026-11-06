@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,6 +65,7 @@ func TestProcessTunnelForwardsBufferedBytesWhenAuthProbeFails(t *testing.T) {
 	client.Cnf.P = "pass"
 	task := &file.Tunnel{
 		Id:     1,
+		Mode:   "tcp",
 		Client: client,
 		Target: &file.Target{
 			TargetStr: "127.0.0.1:22",
@@ -91,6 +93,9 @@ func TestProcessTunnelForwardsBufferedBytesWhenAuthProbeFails(t *testing.T) {
 	if !bytes.Equal(got, payload) {
 		t.Fatalf("expected forwarded payload %q, got %q", payload, got)
 	}
+	if got := atomic.LoadInt32(&task.CurrentConnections); got != 1 {
+		t.Fatalf("active TCP tunnel connections = %d, want 1", got)
+	}
 
 	clientConn.Close()
 	targetClient.Close()
@@ -101,6 +106,9 @@ func TestProcessTunnelForwardsBufferedBytesWhenAuthProbeFails(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("ProcessTunnel did not exit after connections closed")
+	}
+	if got := atomic.LoadInt32(&task.CurrentConnections); got != 0 {
+		t.Fatalf("TCP tunnel connections after close = %d, want 0", got)
 	}
 }
 

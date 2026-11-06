@@ -49,6 +49,35 @@ func TestClientGetConnReservesSlotsAtomically(t *testing.T) {
 	}
 }
 
+func TestTunnelConnectionCountTracksUnlimitedAndLimitedConnections(t *testing.T) {
+	tunnel := &Tunnel{}
+	if err := tunnel.TryAcquireConn(); err != nil {
+		t.Fatalf("unlimited tunnel rejected a connection: %v", err)
+	}
+	if got := atomic.LoadInt32(&tunnel.CurrentConnections); got != 1 {
+		t.Fatalf("unlimited tunnel current connections = %d, want 1", got)
+	}
+	tunnel.ReleaseConn()
+	if got := atomic.LoadInt32(&tunnel.CurrentConnections); got != 0 {
+		t.Fatalf("unlimited tunnel current connections after release = %d, want 0", got)
+	}
+
+	tunnel.MaxConn = 1
+	if err := tunnel.TryAcquireConn(); err != nil {
+		t.Fatalf("limited tunnel rejected its first connection: %v", err)
+	}
+	if got := atomic.LoadInt32(&tunnel.CurrentConnections); got != 1 {
+		t.Fatalf("limited tunnel current connections = %d, want 1", got)
+	}
+	if err := tunnel.TryAcquireConn(); err == nil {
+		t.Fatal("limited tunnel accepted a connection above its limit")
+	}
+	tunnel.ReleaseConn()
+	if got := atomic.LoadInt32(&tunnel.CurrentConnections); got != 0 {
+		t.Fatalf("limited tunnel current connections after release = %d, want 0", got)
+	}
+}
+
 func TestFlowRateSnapshotUsesCounterDelta(t *testing.T) {
 	flow := &Flow{InletFlow: 100, ExportFlow: 40}
 	if inRate, outRate := flow.RateSnapshot(); inRate != 0 || outRate != 0 {

@@ -639,9 +639,10 @@ func (t *Tunnel) AllowsDestination(addr string) bool {
 	return compiled != nil && compiled.Allows(addr)
 }
 
-// TryAcquireConn atomically admits one connection when the tunnel has a
-// configured MaxConn limit. It reuses CurrentConnections so topology views
-// keep reporting the same live count. A zero or negative limit is unlimited.
+// TryAcquireConn atomically admits and counts one connection. CurrentConnections
+// is runtime state used by the management and topology views, so it must also
+// advance for unlimited tunnels. A zero or negative MaxConn limit permits the
+// connection without applying an admission cap.
 func (t *Tunnel) TryAcquireConn() error {
 	if t == nil {
 		return nil
@@ -649,12 +650,9 @@ func (t *Tunnel) TryAcquireConn() error {
 	t.RLock()
 	limit := t.MaxConn
 	t.RUnlock()
-	if limit <= 0 {
-		return nil
-	}
 	for {
 		current := atomic.LoadInt32(&t.CurrentConnections)
-		if int(current) >= limit {
+		if limit > 0 && int(current) >= limit {
 			return errors.New("隧道连接数已达上限")
 		}
 		if atomic.CompareAndSwapInt32(&t.CurrentConnections, current, current+1) {

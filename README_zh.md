@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.41</sub>
+﻿# NPS <sub>v1.1.42</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -14,6 +14,8 @@ NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务
 | 登录页 | IP 登记页 |
 | :---: | :---: |
 | ![NPS 登录页](docs/assets/screenshots/login.jpg) | ![IP 登记页](docs/assets/screenshots/ip-register.jpg) |
+| **仪表盘** | **登录安全** |
+| ![管理仪表盘](docs/assets/screenshots/dashboard.jpg) | ![登录安全设置](docs/assets/screenshots/security.jpg) |
 | **客户端编辑** | **域名反代编辑** |
 | ![客户端编辑页](docs/assets/screenshots/client-edit.jpg) | ![域名反代编辑页](docs/assets/screenshots/host-edit.jpg) |
 
@@ -32,9 +34,9 @@ NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务
 
 - 🚀 **协议全面** — TCP、UDP、HTTP(S)、SOCKS5、P2P、Secret、文件访问
 - 🖥️ **跨平台** — Linux / Windows / macOS / ARM / 群晖，支持一键安装为系统服务
-- 🎨 **Web 管理** — 面向运维的控制台，支持明暗主题、响应式布局、中英文切换、键盘可访问交互和实时流量监控
+- 🎨 **Web 管理** — 面向运维的控制台，支持固定顶栏、明暗主题、响应式布局、中英文切换、键盘可访问交互和实时流量监控
 - 👥 **用户体系** — 支持一个用户管理多个客户端，支持客户端自建配额、用户级隧道配额和到期管理
-- 🔒 **安全增强** — 首次启动随机密码、IP 白名单/黑名单、验证码、限速限流
+- 🔒 **安全增强** — 首次启动随机密码、IP 白名单/黑名单、验证码、登录 PoW、管理员 TOTP、3 天免登设备管理和限速限流
 - 🌐 **域名代理** — 自定义 Header、URL 路由、平台泛域名池、规则诊断、自动 HTTPS 与证书热更新
 - 🔐 **TLS 加密** — 客户端与服务端之间 TLS 加密通信
 - 📦 **Docker 部署** — 多平台镜像（amd64/arm/arm64），一键启动
@@ -87,10 +89,12 @@ docker run -d --name nps \
 # 命令行模式
 ./npc -server=<IP>:8024 -vkey=<密钥>
 
-# TLS 加密模式
+# TLS 加密模式（推荐使用受信任 CA 签发、与服务器主机名匹配的证书）
 ./npc -server=<IP>:8025 -vkey=<密钥> -tls_enable=true
 
-# 自签名证书建议固定服务端指纹（指纹见 nps 启动日志）
+# 私有 CA 或临时自签名证书可按需指定 CA 或固定服务端指纹
+./npc -server=<IP>:8025 -vkey=<密钥> -tls_enable=true \
+  -tls_ca_file=/path/to/ca.pem -tls_server_name=nps.example.com
 ./npc -server=<IP>:8025 -vkey=<密钥> -tls_enable=true \
   -tls_fingerprint=<SHA-256指纹>
 
@@ -208,6 +212,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.42** (2026-11-06) - 新增 3 天免登设备登记与单独撤销、管理员页面化 TOTP、全局安全 Tab 和浏览器 PoW 兼容提示；原「API 接入」统一为「账户管理」，并将所有页面标题、状态与说明统一到固定顶栏，修复顶部重叠、全局参数页签换行和 TCP 当前连接数不计入不限速隧道的问题。
 
 - **v1.1.41** (2026-11-06) - 新增同一 VKey 多实例身份、持久化历史用量与账号范围趋势 API，完善 HTTP 请求头、分阶段超时和可选隔离连接池，并支持 Bridge 证书热加载；修复大屏快捷地址和 NPC 系统服务更新路径。
 

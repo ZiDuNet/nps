@@ -1,0 +1,205 @@
+<style>
+    .security-settings-page { max-width: 1680px; margin: 0 auto; }
+    .security-settings-page .system-settings-tabs { margin-bottom: 14px; }
+    .security-overview {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(360px, .8fr);
+        gap: 14px;
+        margin-bottom: 14px;
+        padding: 14px;
+        background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 5%, var(--nps-surface-subtle)), var(--nps-surface) 58%);
+        border: 1px solid color-mix(in srgb, var(--nps-primary) 16%, var(--nps-line));
+        border-radius: 14px;
+    }
+    .security-overview__copy { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .security-overview__icon {
+        display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center;
+        width: 38px; height: 38px; color: var(--nps-primary);
+        background: color-mix(in srgb, var(--nps-primary) 10%, var(--nps-surface));
+        border: 1px solid color-mix(in srgb, var(--nps-primary) 24%, var(--nps-line));
+        border-radius: 11px; font-size: 16px;
+    }
+    .security-overview__copy strong { display: block; color: var(--nps-ink); font-size: 12.5px; }
+    .security-overview__copy p { margin: 4px 0 0; color: var(--nps-muted); font-size: 10.5px; line-height: 1.55; }
+    .security-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+    .security-summary__item {
+        min-width: 0; padding: 9px 10px; background: color-mix(in srgb, var(--nps-surface) 88%, transparent);
+        border: 1px solid var(--nps-line); border-radius: 9px;
+    }
+    .security-summary__item strong { display: block; color: var(--nps-ink); font-size: 17px; line-height: 1.08; }
+    .security-summary__item span { display: block; margin-top: 4px; color: var(--nps-muted); font-size: 9.5px; }
+    .security-card {
+        overflow: hidden; background: var(--nps-surface); border: 1px solid var(--nps-line);
+        border-radius: 14px; box-shadow: 0 8px 28px rgba(15, 23, 42, .055);
+    }
+    .security-card + .security-card { margin-top: 14px; }
+    .security-card__header {
+        display: flex; align-items: center; gap: 11px; min-height: 68px; padding: 13px 16px;
+        background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 5%, var(--nps-surface)), var(--nps-surface) 52%);
+        border-bottom: 1px solid var(--nps-line);
+    }
+    .security-card__icon {
+        display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center;
+        width: 34px; height: 34px; color: var(--nps-primary);
+        background: color-mix(in srgb, var(--nps-primary) 10%, var(--nps-surface));
+        border: 1px solid color-mix(in srgb, var(--nps-primary) 22%, var(--nps-line));
+        border-radius: 10px;
+    }
+    .security-card__header > div { min-width: 0; }
+    .security-card__header h2 { margin: 0; color: var(--nps-ink); font-size: 14px; font-weight: 760; }
+    .security-card__header p { margin: 3px 0 0; color: var(--nps-muted); font-size: 11px; line-height: 1.5; }
+    .security-card__body { display: grid; gap: 14px; padding: 15px 16px 16px; }
+    .security-pow-grid { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr); gap: 14px; }
+    .security-pow-option {
+        display: flex; align-items: flex-start; gap: 11px; padding: 13px;
+        background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 10px;
+    }
+    .security-pow-option input { margin-top: 3px; }
+    .security-pow-option strong { display: block; color: var(--nps-ink); font-size: 11.5px; }
+    .security-pow-option span { display: block; margin-top: 3px; color: var(--nps-muted); font-size: 10px; line-height: 1.5; }
+    .security-field { display: grid; gap: 7px; min-width: 0; }
+    .security-field label { margin: 0; color: var(--nps-ink); font-size: 11.5px; font-weight: 720; }
+    .security-field input { width: 100%; }
+    .security-field small { color: var(--nps-muted); font-size: 10px; line-height: 1.5; }
+    .security-account-link {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px;
+        color: var(--nps-info); background: color-mix(in srgb, var(--nps-info-soft) 72%, var(--nps-surface));
+        border: 1px solid color-mix(in srgb, var(--nps-info) 24%, var(--nps-line)); border-radius: 10px;
+        font-size: 10.5px; line-height: 1.55;
+    }
+    .security-account-link > div { min-width: 0; }
+    .security-account-link strong { display: block; margin-bottom: 2px; color: var(--nps-ink); font-size: 11.5px; }
+    .security-savebar {
+        display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 14px;
+        padding: 12px 14px; background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 12px;
+    }
+    .security-savebar strong { display: block; color: var(--nps-ink); font-size: 11.5px; }
+    .security-savebar span { display: block; margin-top: 2px; color: var(--nps-muted); font-size: 10px; }
+    @media (max-width: 1100px) {
+        .security-overview, .security-pow-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 680px) {
+        .security-summary { grid-template-columns: minmax(0, 1fr); }
+        .security-account-link, .security-savebar { align-items: stretch; flex-direction: column; }
+        .security-savebar .btn { width: 100%; }
+    }
+</style>
+
+<section class="form-page form-page-global security-settings-page" aria-labelledby="security-settings-title">
+    <header class="dashboard-page-header form-page-header">
+        <div class="form-page-heading">
+            <div class="dashboard-page-kicker" data-i18n-zh="系统配置" data-i18n-en="System settings">系统配置</div>
+            <h1 id="security-settings-title" data-i18n-zh="安全" data-i18n-en="Security">安全</h1>
+            <p data-i18n-zh="维护全局登录防护。管理员 TOTP、登录设备和免登凭证统一在“账户管理”中操作。"
+               data-i18n-en="Manage global sign-in protection. Administrator TOTP, signed-in devices and remembered credentials are managed under Account management.">维护全局登录防护。管理员 TOTP、登录设备和免登凭证统一在“账户管理”中操作。</p>
+        </div>
+    </header>
+
+    <nav class="system-settings-tabs" aria-label="系统配置页面" data-aria-label-zh="系统配置页面" data-aria-label-en="System settings pages">
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/index" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-sliders-h" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="全局参数" data-i18n-en="Global settings">全局参数</strong><small data-i18n-zh="业务设置与内容管理" data-i18n-en="Business settings and content">业务设置与内容管理</small></span>
+        </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/registration" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-user-plus" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="用户注册" data-i18n-en="User registration">用户注册</strong><small data-i18n-zh="入口、默认权益与邮箱" data-i18n-en="Access, defaults and email">入口、默认权益与邮箱</small></span>
+        </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/config" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-code" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="服务端配置" data-i18n-en="Server configuration">服务端配置</strong><small data-i18n-zh="nps.conf 在线维护" data-i18n-en="Maintain nps.conf online">nps.conf 在线维护</small></span>
+        </a>
+        <a class="system-settings-tab" href="{{.web_base_url}}/global/certificate" data-console-navigate>
+            <span class="system-settings-tab__icon"><i class="fa fa-certificate" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="证书设置" data-i18n-en="Certificate settings">证书设置</strong><small data-i18n-zh="证书、私钥与 ACME" data-i18n-en="Certificates, keys and ACME">证书、私钥与 ACME</small></span>
+        </a>
+        <a class="system-settings-tab is-active" href="{{.web_base_url}}/global/security" data-console-navigate aria-current="page">
+            <span class="system-settings-tab__icon"><i class="fa fa-shield-alt" aria-hidden="true"></i></span>
+            <span class="system-settings-tab__copy"><strong data-i18n-zh="安全" data-i18n-en="Security">安全</strong><small data-i18n-zh="登录防护与 PoW" data-i18n-en="Sign-in protection and PoW">登录防护与 PoW</small></span>
+        </a>
+    </nav>
+
+    <div class="security-overview">
+        <div class="security-overview__copy">
+            <span class="security-overview__icon"><i class="fa fa-lock" aria-hidden="true"></i></span>
+            <div>
+                <strong data-i18n-zh="登录防护会立即生效" data-i18n-en="Sign-in protection applies immediately">登录防护会立即生效</strong>
+                <p data-i18n-zh="PoW 在浏览器本地计算，不占用服务端 CPU。修改难度前请考虑低性能终端和自动化登录脚本。" data-i18n-en="PoW is computed in the browser and does not consume server CPU. Consider low-power devices and automation before increasing difficulty.">PoW 在浏览器本地计算，不占用服务端 CPU。修改难度前请考虑低性能终端和自动化登录脚本。</p>
+            </div>
+        </div>
+        <div class="security-summary">
+            <div class="security-summary__item"><strong id="security-pow-state">{{if .pow_enabled}}ON{{else}}OFF{{end}}</strong><span data-i18n-zh="PoW 防护" data-i18n-en="PoW protection">PoW 防护</span></div>
+            <div class="security-summary__item"><strong id="security-pow-bit-summary">{{.pow_bits}}</strong><span data-i18n-zh="当前难度（bit）" data-i18n-en="Current difficulty (bit)">当前难度（bit）</span></div>
+            <div class="security-summary__item"><strong>SHA-256</strong><span data-i18n-zh="浏览器计算算法" data-i18n-en="Browser algorithm">浏览器计算算法</span></div>
+        </div>
+    </div>
+
+    <section class="security-card" aria-labelledby="pow-settings-title">
+        <header class="security-card__header">
+            <span class="security-card__icon"><i class="fa fa-fingerprint" aria-hidden="true"></i></span>
+            <div>
+                <h2 id="pow-settings-title" data-i18n-zh="登录工作量证明（PoW）" data-i18n-en="Sign-in proof of work (PoW)">登录工作量证明（PoW）</h2>
+                <p data-i18n-zh="增加自动化密码尝试成本；只影响交互式网页登录，不影响 API Token、API 签名、IP 登记或有效的 3 天免登会话。" data-i18n-en="Raises the cost of automated password attempts. It does not affect API tokens, API signatures, IP registration or valid three-day remembered sessions.">增加自动化密码尝试成本；只影响交互式网页登录，不影响 API Token、API 签名、IP 登记或有效的 3 天免登会话。</p>
+            </div>
+        </header>
+        <div class="security-card__body">
+            <div class="security-pow-grid">
+                <label class="security-pow-option" for="security-pow-enabled">
+                    <input id="security-pow-enabled" type="checkbox"{{if .pow_enabled}} checked{{end}}>
+                    <div><strong data-i18n-zh="要求网页登录完成 PoW" data-i18n-en="Require PoW for web sign-in">要求网页登录完成 PoW</strong><span data-i18n-zh="关闭后登录页不再显示计算步骤。" data-i18n-en="The login page hides the calculation step when disabled.">关闭后登录页不再显示计算步骤。</span></div>
+                </label>
+                <div class="security-field">
+                    <label for="security-pow-bits" data-i18n-zh="PoW 难度（bit）" data-i18n-en="PoW difficulty (bit)">PoW 难度（bit）</label>
+                    <input id="security-pow-bits" class="form-control" type="number" min="8" max="28" step="1" value="{{.pow_bits}}">
+                    <small data-i18n-zh="推荐 18-22。数值越高计算越久；当前实现限制为 8-28，避免误配导致所有浏览器长时间等待。" data-i18n-en="18-22 is recommended. Higher values take longer; the UI limits this to 8-28 to prevent accidental excessively slow sign-ins.">推荐 18-22。数值越高计算越久；当前实现限制为 8-28，避免误配导致所有浏览器长时间等待。</small>
+                </div>
+            </div>
+            <div class="security-account-link">
+                <div>
+                    <strong data-i18n-zh="TOTP 与登录设备已移至“账户管理”" data-i18n-en="TOTP and sessions are now under Account management">TOTP 与登录设备已移至“账户管理”</strong>
+                    <span data-i18n-zh="管理员可绑定 TOTP；所有账号可查看自己的 3 天免登凭证并退出所有设备。" data-i18n-en="Administrators can bind TOTP; every account can review its own remembered devices and sign out everywhere.">管理员可绑定 TOTP；所有账号可查看自己的 3 天免登凭证并退出所有设备。</span>
+                </div>
+                <a class="btn btn-outline btn-primary" href="{{.web_base_url}}/user/api" data-console-navigate>
+                    <i class="fa fa-user-shield" aria-hidden="true"></i>
+                    <span data-i18n-zh="打开账户管理" data-i18n-en="Open Account management">打开账户管理</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <div class="security-savebar">
+        <div>
+            <strong data-i18n-zh="保存登录 PoW 配置" data-i18n-en="Save sign-in PoW settings">保存登录 PoW 配置</strong>
+            <span data-i18n-zh="保存后立即生效，不需要重启 NPS。" data-i18n-en="Applies immediately without restarting NPS.">保存后立即生效，不需要重启 NPS。</span>
+        </div>
+        <button class="btn btn-success" type="button" id="security-pow-save">
+            <i class="fa fa-save" aria-hidden="true"></i>
+            <span data-i18n-zh="保存安全配置" data-i18n-en="Save security settings">保存安全配置</span>
+        </button>
+    </div>
+</section>
+
+<script>
+$(function () {
+    var base = window.nps && window.nps.web_base_url ? window.nps.web_base_url : '';
+    function localized(zh, en) { return typeof npsIsEnglish === 'function' && npsIsEnglish() ? en : zh; }
+    $('#security-pow-enabled, #security-pow-bits').on('change input', function () {
+        $('#security-pow-state').text($('#security-pow-enabled').prop('checked') ? 'ON' : 'OFF');
+        $('#security-pow-bit-summary').text($('#security-pow-bits').val() || '-');
+    });
+    $('#security-pow-save').on('click', function () {
+        var button = this;
+        button.disabled = true;
+        $.post(base + '/security/pow/save', {
+            force_pow: $('#security-pow-enabled').prop('checked') ? 'true' : 'false',
+            pow_bits: $('#security-pow-bits').val()
+        }, function (response) {
+            if (!response || !response.status) {
+                return npsNotify('error', response && response.msg ? response.msg : localized('保存安全配置失败', 'Failed to save security settings'));
+            }
+            npsNotify('success', response.msg || localized('安全配置已保存', 'Security settings saved'));
+        }, 'json').fail(function () {
+            npsNotify('error', localized('保存安全配置失败', 'Failed to save security settings'));
+        }).always(function () { button.disabled = false; });
+    });
+});
+</script>

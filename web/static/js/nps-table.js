@@ -106,10 +106,10 @@
         // Smart tables switch to labelled cards on narrow screens so dense
         // operational data remains readable without introducing page scroll.
         // The content viewport is narrower than the browser viewport while
-        // the desktop sidebar is open. Switch to labelled cards early enough
-        // to keep a 1024px workspace readable instead of compressing every
-        // column into unreadable slivers.
-        if (this.options.smartDisplay && window.matchMedia && window.matchMedia('(max-width: 991px)').matches) {
+        // the desktop sidebar is open. Use the same card-view breakpoint as
+        // the client inventory so every smart list remains readable around
+        // 1024px instead of compressing columns into unreadable slivers.
+        if (this.options.smartDisplay && window.matchMedia && window.matchMedia('(max-width: 1180px)').matches) {
             this.options.cardView = true;
         }
         this.pageNumber = Number(this.options.pageNumber) > 0 ? Number(this.options.pageNumber) : 1;
@@ -190,7 +190,11 @@
             this.$el.wrap('<div class="nps-table" role="region"></div>');
             this.$root = this.$el.parent();
         }
-        this.$root.attr('aria-live', 'polite');
+        document.documentElement.classList.add('nps-table-viewport');
+        document.body.classList.add('nps-table-viewport');
+        this.$root
+            .attr('aria-live', 'polite')
+            .attr('data-detail-view', this.options.detailView ? 'true' : 'false');
         this.$el.empty();
 
         var toolbarSelector = this.options.toolbar;
@@ -331,6 +335,9 @@
     NpsTable.prototype.refreshFilterTitles = function () {
         this.$filters.find('select[data-nps-table-filter]').each(function () {
             var $select = $(this);
+            if ($select.is('[data-nps-table-filter="filter_client_id"]') && window.NpsClientFilter) {
+                window.NpsClientFilter.refresh(this);
+            }
             var value = $.trim($select.find('option:selected').first().text());
             var label = $.trim($select.closest('.nps-table-filter').find('.nps-table-filter__label').first().text());
             if (value) $select.attr('title', value);
@@ -356,6 +363,9 @@
             };
             this.refreshOwnerClientOptions();
         }
+        this.$filters.find('select[data-nps-table-filter="filter_client_id"]').each(function () {
+            if (window.NpsClientFilter) window.NpsClientFilter.enhance(this);
+        });
         this.refreshFilterTitles();
     };
 
@@ -376,6 +386,7 @@
         state.$client.empty().append(fragment);
         if (!selectedVisible) selected = '0';
         state.$client.val(selected);
+        if (window.NpsClientFilter) window.NpsClientFilter.refresh(state.$client[0]);
         this.refreshFilterTitles();
     };
 
@@ -672,6 +683,11 @@
         this.$root.off('.npsTable');
         this.$el.removeData('nps.table').removeData('npsTable');
         this.$el.unwrap('.nps-table__body').unwrap('.nps-table__container').unwrap('.nps-table');
+        var content = document.getElementById('nps-content');
+        if (content && !content.querySelector('.nps-table')) {
+            document.documentElement.classList.remove('nps-table-viewport');
+            document.body.classList.remove('nps-table-viewport');
+        }
     };
 
     $.fn.npsTable = function (option) {

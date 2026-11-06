@@ -377,6 +377,12 @@ var registrationConfigKeySet = func() map[string]struct{} {
 	return keys
 }()
 
+// Login PoW is maintained exclusively from the dedicated Security tab.
+var securityConfigKeySet = map[string]struct{}{
+	"force_pow": {},
+	"pow_bits":  {},
+}
+
 var serverConfigCategoryOrder = []string{
 	"HTTP(S) 入口", "Bridge 与传输", "客户端认证与 IP 登记", "日志与审计", "P2P 与调试",
 	"Web 管理面板", "Web API 认证", "注册配置", "用户与资源权限", "HTTP 转发与缓存", "运行与安全", "兼容/自定义",
@@ -802,11 +808,14 @@ func registrationConfigSections(content string) ([]serverConfigSectionView, serv
 }
 
 func generalServerConfigExcludedKeys() map[string]struct{} {
-	excluded := make(map[string]struct{}, len(certificateConfigKeySet)+len(registrationConfigKeySet))
+	excluded := make(map[string]struct{}, len(certificateConfigKeySet)+len(registrationConfigKeySet)+len(securityConfigKeySet))
 	for key := range certificateConfigKeySet {
 		excluded[key] = struct{}{}
 	}
 	for key := range registrationConfigKeySet {
+		excluded[key] = struct{}{}
+	}
+	for key := range securityConfigKeySet {
 		excluded[key] = struct{}{}
 	}
 	return excluded

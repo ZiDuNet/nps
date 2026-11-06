@@ -586,3 +586,76 @@ func TestSetNoStoreDisablesProxyCaching(t *testing.T) {
 		t.Fatalf("Expires = %q", got)
 	}
 }
+
+func TestLoginVerifyReturnsLocalizedInvalidCredentialMessage(t *testing.T) {
+	oldCaptcha := beego.AppConfig.String("open_captcha")
+	oldPow := beego.AppConfig.String("force_pow")
+	oldUserLogin := beego.AppConfig.String("allow_user_login")
+	oldUsername := beego.AppConfig.String("web_username")
+	oldPassword := beego.AppConfig.String("web_password")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("open_captcha", oldCaptcha)
+		_ = beego.AppConfig.Set("force_pow", oldPow)
+		_ = beego.AppConfig.Set("allow_user_login", oldUserLogin)
+		_ = beego.AppConfig.Set("web_username", oldUsername)
+		_ = beego.AppConfig.Set("web_password", oldPassword)
+		loginAttempts.removeAllBans()
+	})
+	_ = beego.AppConfig.Set("open_captcha", "false")
+	_ = beego.AppConfig.Set("force_pow", "false")
+	_ = beego.AppConfig.Set("allow_user_login", "false")
+	_ = beego.AppConfig.Set("web_username", "admin")
+	_ = beego.AppConfig.Set("web_password", "correct-password")
+	loginAttempts.removeAllBans()
+
+	form := url.Values{"username": {"admin"}, "password": {"wrong-password"}}
+	request := httptest.NewRequest(http.MethodPost, "http://console.test/login/verify", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.RemoteAddr = "198.51.100.77:43210"
+	recorder := httptest.NewRecorder()
+	ctx := beecontext.NewContext()
+	ctx.Reset(recorder, request)
+	controller := &LoginController{Controller: beego.Controller{
+		Ctx:        ctx,
+		Data:       make(map[interface{}]interface{}),
+		CruSession: &clientPermissionSession{values: make(map[interface{}]interface{})},
+	}}
+
+	controller.Verify()
+	response, ok := controller.Data["json"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("login response = %#v", controller.Data["json"])
+	}
+	if response["code"] != "invalid_credentials" ||
+		response["msg"] != "用户名或密码错误。" ||
+		response["msg_en"] != "The username or password is incorrect." {
+		t.Fatalf("localized login response = %#v", response)
+	}
+}
+
+func TestAuthJSONResponsesCarryStableLocalizationFields(t *testing.T) {
+	errorResponse := authJSONError(
+		"registration_captcha_invalid",
+		"图片验证码错误，请刷新后重试。",
+		"The image verification code is incorrect. Refresh it and try again.",
+	)
+	if errorResponse["status"] != 0 ||
+		errorResponse["code"] != "registration_captcha_invalid" ||
+		errorResponse["msg"] == "" ||
+		errorResponse["msg_en"] == "" {
+		t.Fatalf("localized auth error = %#v", errorResponse)
+	}
+
+	successResponse := authJSONResponse(
+		1,
+		"registration_success",
+		"注册成功，请登录。",
+		"Registration complete. You can now sign in.",
+	)
+	if successResponse["status"] != 1 ||
+		successResponse["code"] != "registration_success" ||
+		successResponse["msg"] == "" ||
+		successResponse["msg_en"] == "" {
+		t.Fatalf("localized auth success = %#v", successResponse)
+	}
+}

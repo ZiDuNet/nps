@@ -331,6 +331,15 @@ func captchaFilterPath(webBaseURL string) string {
 
 func (self *LoginController) Index() {
 	setNoStore(self.Ctx)
+	if restored, err := restoreRememberLogin(&self.Controller, self.Ctx, time.Now()); err != nil {
+		beego.Warn(describeRememberLoginError(err))
+	} else if restored {
+		if sessionBool(self.GetSession("isAdmin")) {
+			server.Bridge.Register.Store(common.GetIpByAddr(self.Ctx.Input.IP()), time.Now().Add(2*time.Hour))
+		}
+		self.Redirect(beego.AppConfig.String("web_base_url")+"/index/index", 302)
+		return
+	}
 	// Try login implicitly, will succeed if it's configured as no-auth(empty username&password).
 	webBaseUrl := beego.AppConfig.String("web_base_url")
 	if self.doLogin("", "", false) {
@@ -441,17 +450,19 @@ func IPRegisterStandaloneHandler() http.Handler {
 const ipRegisterStandaloneHTML = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>IP 地址登记</title><style>
-:root{color-scheme:light;--ink:#182230;--muted:#687386;--line:#dce3ec;--accent:#1769e0;--bg:#f3f6fb}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 15% 5%,#e1edff,transparent 42%),var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
-.card{width:min(100%,440px);padding:32px;border:1px solid #fff;border-radius:20px;background:#ffffffed;box-shadow:0 20px 60px #19345516}.eyebrow{margin:0 0 8px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}h1{margin:0;font-size:25px;letter-spacing:-.03em}.intro{margin:8px 0 24px;color:var(--muted)}label{display:block;margin:17px 0 7px;font-size:13px;font-weight:650}input{width:100%;height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit}input[readonly]{background:#f5f7fa;color:var(--muted)}button{width:100%;height:46px;margin-top:22px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.65;cursor:wait}.hint{margin:14px 0 0;color:var(--muted);font-size:12px}.result{min-height:24px;margin-top:14px;font-size:13px}.result.error{color:#b42318}.result.success{color:#147a45}
+:root{color-scheme:light;--ink:#182230;--muted:#687386;--line:#dce3ec;--accent:#1769e0;--bg:#f3f6fb;--network-line:rgba(23,105,224,.2);--network-node:rgba(23,105,224,.42)}
+*{box-sizing:border-box}body{position:relative;isolation:isolate;margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;overflow-x:hidden;background:radial-gradient(ellipse at 15% 5%,#e1edff,transparent 42%),var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+#network-bg{position:fixed;inset:0;z-index:-1;width:100%;height:100%;pointer-events:none}
+.card{position:relative;z-index:1;width:min(100%,440px);padding:32px;border:1px solid #fff;border-radius:20px;background:#ffffffed;box-shadow:0 20px 60px #19345516}.eyebrow{margin:0 0 8px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}h1{margin:0;font-size:25px;letter-spacing:-.03em}.intro{margin:8px 0 24px;color:var(--muted)}label{display:block;margin:17px 0 7px;font-size:13px;font-weight:650}input{width:100%;height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit}input[readonly]{background:#f5f7fa;color:var(--muted)}button{width:100%;height:46px;margin-top:22px;border:0;border-radius:10px;background:var(--accent);color:#fff;font:inherit;font-weight:700;cursor:pointer}button:disabled{opacity:.65;cursor:wait}.hint{margin:14px 0 0;color:var(--muted);font-size:12px}.result{min-height:24px;margin-top:14px;font-size:13px}.result.error{color:#b42318}.result.success{color:#147a45}
 .warn{margin:0 0 20px;padding:10px 12px;border:1px solid #f2c14e;border-radius:10px;background:#fff7e0;color:#8a5b00;font-size:12.5px;line-height:1.55}
-</style></head><body><main class="card"><p class="eyebrow">NPS · ACCESS</p><h1>登记访问 IP</h1><p class="intro">登记后，管理员启用“仅允许已登记 IP”的资源才会接受此地址的访问。</p>
+@media(prefers-reduced-motion:reduce){#network-bg{display:none}}
+</style></head><body><canvas id="network-bg" aria-hidden="true"></canvas><main class="card"><p class="eyebrow">NPS · ACCESS</p><h1>登记访问 IP</h1><p class="intro">登记后，管理员启用“仅允许已登记 IP”的资源才会接受此地址的访问。</p>
 {{if .ProxyWarning}}<p class="warn">检测到的是代理或内网地址（{{.IP}}）。若此页面经过反向代理，登记后所有经该代理的访问者都会被当成同一地址，“仅允许已登记 IP”无法区分单个用户。请让代理覆盖传递 X-Real-IP / X-Forwarded-For，并确认服务端已开启 allow_x_real_ip（默认开启）后重新打开本页。</p>{{end}}
 <form id="register-form"><label for="visitor-ip">当前访问地址</label><input id="visitor-ip" value="{{.IP}}" readonly><p class="hint">地址来源：{{.IPSource}}。仅当服务端允许真实 IP 头（allow_x_real_ip，默认开启）且前置代理覆盖传递时，才会显示反代传递的公网 IP。</p>
 <label for="register-key">登记密钥</label><input id="register-key" name="key" type="password" autocomplete="off" required placeholder="输入管理员或客户端提供的登记密钥">
 <label for="register-hours">有效时长（小时）</label><input id="register-hours" name="hours" type="number" min="1" max="{{.DefaultHours}}" value="{{.DefaultHours}}">
 <button id="register-submit" type="submit">登记此 IP</button><p class="hint">登记有效时长受服务端配置限制。此页不会保存密钥。</p><div id="register-result" class="result" role="status" aria-live="polite"></div></form></main>
-<script>(function(){var form=document.getElementById('register-form'),button=document.getElementById('register-submit'),result=document.getElementById('register-result');form.addEventListener('submit',function(event){event.preventDefault();button.disabled=true;result.className='result';result.textContent='正在登记…';fetch('/ip/register',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams(new FormData(form))}).then(function(response){if(!response.ok)throw new Error('请求失败（HTTP '+response.status+'）');return response.json()}).then(function(data){result.className='result '+(data.status?'success':'error');result.textContent=data.status?'登记成功：'+data.ip+'，有效至 '+data.until:(data.msg||'登记失败')}).catch(function(error){result.className='result error';result.textContent=error.message||'登记请求失败'}).finally(function(){button.disabled=false})})})();</script></body></html>`
+<script>(function(){var canvas=document.getElementById('network-bg'),context=canvas.getContext('2d'),points=[],width=0,height=0,frame=0,last=0,reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;function colors(){var css=getComputedStyle(document.documentElement);return{line:css.getPropertyValue('--network-line').trim(),node:css.getPropertyValue('--network-node').trim()}}var palette=colors();function resize(){var ratio=Math.min(2,window.devicePixelRatio||1);width=window.innerWidth;height=window.innerHeight;canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);context.setTransform(ratio,0,0,ratio,0,0);var count=Math.max(16,Math.min(60,Math.round(width*height/20000)));points=[];for(var i=0;i<count;i++)points.push({x:Math.random()*width,y:Math.random()*height,vx:Math.random()*12-6,vy:Math.random()*12-6,r:1+Math.random()*1.2});draw(0)}function draw(dt){context.clearRect(0,0,width,height);var limit=Math.min(150,Math.max(105,width/8)),i,j;for(i=0;i<points.length;i++){var p=points[i];if(!reduced&&dt){p.x+=p.vx*dt;p.y+=p.vy*dt;if(p.x<-10)p.x=width+10;if(p.x>width+10)p.x=-10;if(p.y<-10)p.y=height+10;if(p.y>height+10)p.y=-10}}context.strokeStyle=palette.line;context.lineWidth=1;for(i=0;i<points.length;i++)for(j=i+1;j<points.length;j++){var a=points[i],b=points[j],dx=a.x-b.x,dy=a.y-b.y,d=Math.sqrt(dx*dx+dy*dy);if(d>=limit)continue;context.globalAlpha=(1-d/limit)*.65;context.beginPath();context.moveTo(a.x,a.y);context.lineTo(b.x,b.y);context.stroke()}context.globalAlpha=1;context.fillStyle=palette.node;for(i=0;i<points.length;i++){var node=points[i];context.beginPath();context.arc(node.x,node.y,node.r,0,Math.PI*2);context.fill()}}function tick(now){frame=0;draw(last?Math.min(.05,(now-last)/1000):0);last=now;if(!reduced)frame=requestAnimationFrame(tick)}resize();if(!reduced)frame=requestAnimationFrame(tick);window.addEventListener('resize',resize,{passive:true});document.addEventListener('visibilitychange',function(){cancelAnimationFrame(frame);last=0;if(!document.hidden&&!reduced)frame=requestAnimationFrame(tick)})})();</script><script>(function(){var form=document.getElementById('register-form'),button=document.getElementById('register-submit'),result=document.getElementById('register-result');form.addEventListener('submit',function(event){event.preventDefault();button.disabled=true;result.className='result';result.textContent='正在登记…';fetch('/ip/register',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams(new FormData(form))}).then(function(response){if(!response.ok)throw new Error('请求失败（HTTP '+response.status+'）');return response.json()}).then(function(data){result.className='result '+(data.status?'success':'error');result.textContent=data.status?'登记成功：'+data.ip+'，有效至 '+data.until:(data.msg||'登记失败')}).catch(function(error){result.className='result error';result.textContent=error.message||'登记请求失败'}).finally(function(){button.disabled=false})})})();</script></body></html>`
 
 func registerVisitorIP(key string, hours int, visitorIP string) map[string]interface{} {
 	ip, validIP := ipreg.ParseIP(strings.TrimSpace(visitorIP))
@@ -645,14 +656,20 @@ func (self *LoginController) Verify() {
 	if self.Ctx != nil && self.Ctx.Request != nil {
 		if self.Ctx.Request.ContentLength > maxBody {
 			self.Ctx.Output.SetStatus(http.StatusRequestEntityTooLarge)
-			self.Data["json"] = map[string]interface{}{"status": 0, "msg": "登录请求过大"}
+			self.Data["json"] = map[string]interface{}{
+				"status": 0, "code": "request_too_large",
+				"msg": "登录请求过大。", "msg_en": "The sign-in request is too large.",
+			}
 			self.ServeJSON()
 			return
 		}
 		self.Ctx.Request.Body = http.MaxBytesReader(self.Ctx.ResponseWriter, self.Ctx.Request.Body, maxBody)
 		if err := self.Ctx.Request.ParseForm(); err != nil {
 			self.Ctx.Output.SetStatus(http.StatusRequestEntityTooLarge)
-			self.Data["json"] = map[string]interface{}{"status": 0, "msg": "登录请求过大"}
+			self.Data["json"] = map[string]interface{}{
+				"status": 0, "code": "request_too_large",
+				"msg": "登录请求过大。", "msg_en": "The sign-in request is too large.",
+			}
 			self.ServeJSON()
 			return
 		}
@@ -661,22 +678,29 @@ func (self *LoginController) Verify() {
 	rawPassword := self.GetString("password")
 	password := rawPassword
 	totpCode := strings.TrimSpace(self.GetString("totp"))
+	rememberLogin := strings.TrimSpace(self.GetString("remember_login")) == "1"
 	if beego.AppConfig.DefaultBool("force_pow", false) && !verifyLoginPoW(username, self.GetString("pow_nonce"), self.GetString("pow_solution")) {
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "工作量证明校验失败，请重试"}
+		self.Data["json"] = map[string]interface{}{
+			"status": 0, "code": "pow_invalid",
+			"msg": "工作量证明校验失败，请重试", "msg_en": "The security check failed. Try again.",
+		}
 		self.ServeJSON()
 		return
 	}
 	captchaOpen, _ := beego.AppConfig.Bool("open_captcha")
 	if captchaOpen {
 		if !cpt.VerifyReq(self.Ctx.Request) {
-			self.Data["json"] = map[string]interface{}{"status": 0, "msg": "the verification code is wrong, please get it again and try again"}
+			self.Data["json"] = map[string]interface{}{
+				"status": 0, "code": "captcha_invalid",
+				"msg": "验证码错误，请刷新后重试。", "msg_en": "The verification code is incorrect. Refresh it and try again.",
+			}
 			self.ServeJSON()
 			return
 		}
 	}
 	if payload, err := crypt.ParseLoginPayload(rawPassword); err == nil {
 		if !self.verifyLoginPayload(payload) {
-			self.Data["json"] = self.loginPayloadError("登录请求已过期，请刷新页面")
+			self.Data["json"] = self.loginPayloadError("login_expired", "登录请求已过期，请刷新页面。", "The sign-in request expired. Refresh the page.")
 			self.releaseCookieSession()
 			self.ServeJSON()
 			return
@@ -684,11 +708,23 @@ func (self *LoginController) Verify() {
 		password = payload.Password
 	}
 	if self.doLoginWithTOTP(username, password, totpCode, true) {
+		if rememberLogin {
+			if err := issueRememberLoginCookie(&self.Controller, self.Ctx, time.Now()); err != nil {
+				beego.Error("issue remember login cookie:", err)
+			}
+		} else {
+			clearRememberLoginCookie(self.Ctx.Request, self.Ctx.ResponseWriter)
+		}
 		appendLoginAudit(self, username, true, "")
-		self.Data["json"] = map[string]interface{}{"status": 1, "msg": "login success"}
+		self.Data["json"] = map[string]interface{}{
+			"status": 1, "msg": "登录成功", "msg_en": "Signed in successfully",
+		}
 	} else {
 		appendLoginAudit(self, username, false, "username or password incorrect")
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "username or password incorrect"}
+		self.Data["json"] = map[string]interface{}{
+			"status": 0, "code": "invalid_credentials",
+			"msg": "用户名或密码错误。", "msg_en": "The username or password is incorrect.",
+		}
 	}
 	self.ServeJSON()
 }
@@ -723,16 +759,31 @@ func (self *LoginController) verifyLoginPayload(payload *crypt.LoginPayload) boo
 	return true
 }
 
-func (self *LoginController) loginPayloadError(message string) map[string]interface{} {
+func (self *LoginController) loginPayloadError(code, message, messageEN string) map[string]interface{} {
 	nonce := crypt.GetRandomString(16)
 	self.SetSession("login_nonce", nonce)
 	publicKey, _ := crypt.GetRSAPublicKeyPEM()
 	return map[string]interface{}{
 		"status": 0,
+		"code":   code,
 		"msg":    message,
+		"msg_en": messageEN,
 		"nonce":  nonce,
 		"cert":   publicKey,
 	}
+}
+
+func authJSONResponse(status int, code, message, messageEN string) map[string]interface{} {
+	return map[string]interface{}{
+		"status": status,
+		"code":   code,
+		"msg":    message,
+		"msg_en": messageEN,
+	}
+}
+
+func authJSONError(code, message, messageEN string) map[string]interface{} {
+	return authJSONResponse(0, code, message, messageEN)
 }
 
 // Pow returns a short-lived login challenge. It is intentionally a separate
@@ -963,6 +1014,9 @@ func (self *LoginController) doLoginWithTOTP(username, password, totpCode string
 	}
 	if auth {
 		self.SetSession("auth", true)
+		if principalKey := currentSessionPrincipalKey(&self.Controller); principalKey != "" {
+			self.SetSession(sessionSecurityEpochKey, int(rememberLoginDevices.Epoch(principalKey)))
+		}
 		// Cookie sessions are serialized by Beego's deferred router hook.  That
 		// hook runs after ServeJSON/Redirect has already started the response, so
 		// the Set-Cookie header would be discarded.  Persist the authenticated
@@ -1024,32 +1078,42 @@ func (self *LoginController) RegisterEmailCode() {
 	}
 	if allowed, err := beego.AppConfig.Bool("allow_user_register"); err != nil || !allowed {
 		self.Ctx.Output.SetStatus(http.StatusForbidden)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "当前未开放用户注册"}
+		self.Data["json"] = authJSONError(
+			"registration_disabled", "当前未开放用户注册。", "Self-registration is currently disabled.",
+		)
 		self.ServeJSON()
 		return
 	}
 	if !registrationEmailVerifyEnabled() {
 		self.Ctx.Output.SetStatus(http.StatusBadRequest)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "当前注册不要求邮箱验证"}
+		self.Data["json"] = authJSONError(
+			"email_verification_disabled", "当前注册不要求邮箱验证。", "Email verification is not required for registration.",
+		)
 		self.ServeJSON()
 		return
 	}
 	emailAddress, err := file.NormalizeUserEmail(self.GetString("email"))
 	if err != nil {
 		self.Ctx.Output.SetStatus(http.StatusBadRequest)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": err.Error()}
+		self.Data["json"] = authJSONError(
+			"invalid_email", err.Error(), "Enter a valid email address.",
+		)
 		self.ServeJSON()
 		return
 	}
 	if emailAddress == "" {
 		self.Ctx.Output.SetStatus(http.StatusBadRequest)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "邮箱不能为空"}
+		self.Data["json"] = authJSONError(
+			"email_required", "邮箱不能为空。", "An email address is required.",
+		)
 		self.ServeJSON()
 		return
 	}
 	if !file.GetDb().VerifyUserEmail(emailAddress, 0) {
 		self.Ctx.Output.SetStatus(http.StatusConflict)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "该邮箱已绑定其他账号，请直接登录"}
+		self.Data["json"] = authJSONError(
+			"email_in_use", "该邮箱已绑定其他账号，请直接登录。", "This email is already linked to another account. Sign in instead.",
+		)
 		self.ServeJSON()
 		return
 	}
@@ -1063,7 +1127,15 @@ func (self *LoginController) RegisterEmailCode() {
 			status = http.StatusServiceUnavailable
 		}
 		self.Ctx.Output.SetStatus(status)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": err.Error(), "retry_after": int((retryAfter + time.Second - 1) / time.Second)}
+		code := "email_code_rate_limited"
+		messageEN := "Too many verification code requests. Try again later."
+		if retryAfter <= 0 {
+			code = "email_code_unavailable"
+			messageEN = "A verification code cannot be issued right now. Try again later."
+		}
+		response := authJSONError(code, err.Error(), messageEN)
+		response["retry_after"] = int((retryAfter + time.Second - 1) / time.Second)
+		self.Data["json"] = response
 		self.ServeJSON()
 		return
 	}
@@ -1072,7 +1144,9 @@ func (self *LoginController) RegisterEmailCode() {
 		registrationEmailCodes.discard(emailAddress, ip)
 		appendAuthAudit(self, "auth.register.email_code", emailAddress, false, err.Error())
 		self.Ctx.Output.SetStatus(http.StatusServiceUnavailable)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "邮件服务未配置完整：" + err.Error()}
+		self.Data["json"] = authJSONError(
+			"smtp_incomplete", "邮件服务配置不完整，请联系管理员。", "Email service configuration is incomplete. Contact the administrator.",
+		)
 		self.ServeJSON()
 		return
 	}
@@ -1080,17 +1154,21 @@ func (self *LoginController) RegisterEmailCode() {
 		registrationEmailCodes.discard(emailAddress, ip)
 		appendAuthAudit(self, "auth.register.email_code", emailAddress, false, err.Error())
 		self.Ctx.Output.SetStatus(http.StatusBadGateway)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "验证码邮件发送失败，请检查 SMTP 配置"}
+		self.Data["json"] = authJSONError(
+			"email_send_failed", "验证码邮件发送失败，请稍后再试。", "The verification email could not be sent. Try again later.",
+		)
 		self.ServeJSON()
 		return
 	}
 	appendAuthAudit(self, "auth.register.email_code", emailAddress, true, "")
-	self.Data["json"] = map[string]interface{}{
-		"status":      1,
-		"msg":         "验证码已发送，请检查收件箱和垃圾邮件",
-		"retry_after": int(registrationEmailCodeCooldown() / time.Second),
-		"expires_in":  int(registrationEmailCodeTTL() / time.Second),
-	}
+	response := authJSONResponse(
+		1, "registration_email_sent",
+		"验证码已发送，请检查收件箱和垃圾邮件。",
+		"Verification code sent. Check your inbox and spam folder.",
+	)
+	response["retry_after"] = int(registrationEmailCodeCooldown() / time.Second)
+	response["expires_in"] = int(registrationEmailCodeTTL() / time.Second)
+	self.Data["json"] = response
 	self.ServeJSON()
 }
 
@@ -1135,7 +1213,9 @@ func (self *LoginController) Register() {
 	}
 	if allowErr != nil || !allowed {
 		self.Ctx.Output.SetStatus(http.StatusForbidden)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "当前未开放用户注册"}
+		self.Data["json"] = authJSONError(
+			"registration_disabled", "当前未开放用户注册。", "Self-registration is currently disabled.",
+		)
 		self.ServeJSON()
 		return
 	}
@@ -1144,13 +1224,17 @@ func (self *LoginController) Register() {
 	ip := requestVisitorIP(self.Ctx)
 	if !registrationAttempts.reserveAttempt(ip, username, now, configuredRegistrationPolicy()) {
 		self.Ctx.Output.SetStatus(http.StatusTooManyRequests)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "注册请求过于频繁，请稍后重试"}
+		self.Data["json"] = authJSONError(
+			"registration_rate_limited", "注册请求过于频繁，请稍后重试。", "Too many registration attempts. Try again later.",
+		)
 		self.ServeJSON()
 		return
 	}
 	if registrationCaptchaEnabled() {
 		if cpt == nil || !cpt.VerifyReq(self.Ctx.Request) {
-			self.Data["json"] = map[string]interface{}{"status": 0, "msg": "图片验证码错误，请刷新后重试"}
+			self.Data["json"] = authJSONError(
+				"registration_captcha_invalid", "图片验证码错误，请刷新后重试。", "The image verification code is incorrect. Refresh it and try again.",
+			)
 			self.ServeJSON()
 			return
 		}
@@ -1164,7 +1248,13 @@ func (self *LoginController) Register() {
 			if err == nil {
 				err = fmt.Errorf("启用邮箱验证时必须填写邮箱")
 			}
-			self.Data["json"] = map[string]interface{}{"status": 0, "msg": err.Error()}
+			code := "invalid_email"
+			messageEN := "Enter a valid email address."
+			if emailAddress == "" {
+				code = "email_required"
+				messageEN = "An email address is required when email verification is enabled."
+			}
+			self.Data["json"] = authJSONError(code, err.Error(), messageEN)
 			self.ServeJSON()
 			return
 		}
@@ -1173,7 +1263,9 @@ func (self *LoginController) Register() {
 	password := rawPassword
 	if payload, err := crypt.ParseLoginPayload(rawPassword); err == nil {
 		if !self.verifyLoginPayload(payload) {
-			self.Data["json"] = self.loginPayloadError("注册请求已过期，请刷新页面")
+			self.Data["json"] = self.loginPayloadError(
+				"register_expired", "注册请求已过期，请刷新页面。", "The registration request expired. Refresh the page.",
+			)
 			self.releaseCookieSession()
 			self.ServeJSON()
 			return
@@ -1182,29 +1274,45 @@ func (self *LoginController) Register() {
 	}
 	adminUsername := strings.TrimSpace(beego.AppConfig.String("web_username"))
 	if username == "" || len(username) > 64 || password == "" || len(password) < 6 || strings.EqualFold(username, adminUsername) {
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "please check your input (password min 6 chars)"}
+		self.Data["json"] = authJSONError(
+			"invalid_registration_input",
+			"请检查注册信息，密码至少需要 6 个字符。",
+			"Check the registration details. The password must contain at least 6 characters.",
+		)
 		self.ServeJSON()
 		return
 	}
 	if !file.GetDb().VerifyUserLoginName(username, 0) {
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "用户名已被使用，请更换后重试"}
+		self.Data["json"] = authJSONError(
+			"username_taken", "用户名已被使用，请更换后重试。", "This username is already in use. Choose another one.",
+		)
 		self.ServeJSON()
 		return
 	}
 	if emailVerify && !file.GetDb().VerifyUserEmail(emailAddress, 0) {
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "邮箱已绑定其他账号，请更换邮箱"}
+		self.Data["json"] = authJSONError(
+			"email_already_bound", "邮箱已绑定其他账号，请更换邮箱。", "This email is already linked to another account.",
+		)
 		self.ServeJSON()
 		return
 	}
 	if !registrationAttempts.reserveSuccess(ip, now, configuredRegistrationPolicy()) {
 		self.Ctx.Output.SetStatus(http.StatusTooManyRequests)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "当前来源地址注册账号数量已达上限，请稍后重试"}
+		self.Data["json"] = authJSONError(
+			"registration_ip_limit",
+			"当前来源地址注册账号数量已达上限，请稍后重试。",
+			"The registration limit for this source address has been reached.",
+		)
 		self.ServeJSON()
 		return
 	}
 	if emailVerify && !registrationEmailCodes.verify(emailAddress, self.GetString("email_code"), now) {
 		registrationAttempts.releaseSuccess(ip)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "邮箱验证码错误或已过期，请重新获取"}
+		self.Data["json"] = authJSONError(
+			"email_code_invalid",
+			"邮箱验证码错误或已过期，请重新获取。",
+			"The email verification code is incorrect or expired. Request a new one.",
+		)
 		self.ServeJSON()
 		return
 	}
@@ -1239,15 +1347,19 @@ func (self *LoginController) Register() {
 	if err := file.GetDb().NewUser(user); err != nil {
 		registrationAttempts.releaseSuccess(ip)
 		appendAuthAudit(self, "auth.register", username, false, err.Error())
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": err.Error()}
+		self.Data["json"] = authJSONError(
+			"registration_failed", "注册失败，请稍后重试。", "Registration failed. Try again later.",
+		)
 	} else {
 		appendAuthAudit(self, "auth.register", username, true, "")
-		self.Data["json"] = map[string]interface{}{
-			"status": 1,
-			"msg":    "注册成功，请登录",
-			"id":     user.Id,
-			"expire": user.ExpireTime,
-		}
+		response := authJSONResponse(
+			1, "registration_success",
+			"注册成功，请登录。",
+			"Registration complete. You can now sign in.",
+		)
+		response["id"] = user.Id
+		response["expire"] = user.ExpireTime
+		self.Data["json"] = response
 	}
 	self.ServeJSON()
 }
@@ -1255,7 +1367,9 @@ func (self *LoginController) Register() {
 func (self *LoginController) Out() {
 	setNoStore(self.Ctx)
 	appendAuthAudit(self, "auth.logout", "", true, "")
+	revokeCurrentRememberLoginDevice(&self.Controller, self.Ctx, time.Now())
 	clearAuthenticationSession(self.DelSession)
+	clearRememberLoginCookie(self.Ctx.Request, self.Ctx.ResponseWriter)
 	self.releaseCookieSession()
 	self.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
 }
@@ -1339,7 +1453,9 @@ func (self *LoginController) requirePost() bool {
 	if self.Ctx.Request.Method != http.MethodPost {
 		setNoStore(self.Ctx)
 		self.Ctx.Output.SetStatus(http.StatusMethodNotAllowed)
-		self.Data["json"] = map[string]interface{}{"status": 0, "msg": "method not allowed"}
+		self.Data["json"] = authJSONError(
+			"method_not_allowed", "请求方式不正确。", "The request method is not allowed.",
+		)
 		self.ServeJSON()
 		return false
 	}
