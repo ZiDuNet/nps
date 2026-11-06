@@ -1,371 +1,182 @@
-<style>
-    .api-access-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-        gap: 1.25rem;
-    }
-    .api-access-card {
-        margin-bottom: 0;
-    }
-    .api-access-card__header {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        border-bottom: 1px solid var(--nps-border, #e2e8f0);
-    }
-    .api-access-card__icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 2.5rem;
-        height: 2.5rem;
-        border-radius: 0.75rem;
-        background: rgba(34, 112, 240, 0.1);
-        color: #2270f0;
-        flex: 0 0 auto;
-    }
-    .api-access-card__eyebrow {
-        display: block;
-        color: #64748b;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
-    .api-access-card__body {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    .api-access-facts {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1rem 2rem;
-        margin: 0;
-    }
-    .api-access-facts dt {
-        color: #64748b;
-        font-size: 0.8125rem;
-        font-weight: normal;
-    }
-    .api-access-facts dd {
-        margin: 0;
-        font-weight: 600;
-    }
-    .api-access-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-    .api-access-code {
-        background: #0f172a;
-        color: #e2e8f0;
-        border-radius: 0.5rem;
-        padding: 1rem;
-        margin: 0;
-        font-size: 0.8125rem;
-        overflow-x: auto;
-    }
-    .api-access-code code {
-        background: transparent;
-        color: inherit;
-        padding: 0;
-    }
-    .api-access-docs-link {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-    }
-    .api-session-security {
-        grid-column: 1 / -1;
-    }
-    .api-session-security__header {
-        justify-content: space-between;
-    }
-    .api-session-security__title {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        min-width: 0;
-    }
-    .api-session-list {
-        display: grid;
-        gap: 0.7rem;
-    }
-    .api-session-device {
-        display: grid;
-        grid-template-columns: minmax(12rem, 1.4fr) minmax(10rem, .8fr) minmax(16rem, 1.2fr) auto;
-        align-items: center;
-        gap: .8rem 1rem;
-        padding: .85rem .95rem;
-        border: 1px solid var(--nps-border, #e2e8f0);
-        border-radius: .65rem;
-        background: var(--nps-surface, #fff);
-    }
-    .api-session-device__identity {
-        min-width: 0;
-    }
-    .api-session-device__identity strong {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: .45rem;
-        color: var(--nps-ink, #172033);
-    }
-    .api-session-device__identity small,
-    .api-session-device__times span {
-        display: block;
-        color: var(--nps-muted, #64748b);
-        font-size: .75rem;
-        line-height: 1.55;
-    }
-    .api-session-current {
-        display: inline-flex;
-        align-items: center;
-        padding: .12rem .42rem;
-        color: #047857;
-        background: #ecfdf5;
-        border: 1px solid #a7f3d0;
-        border-radius: 999px;
-        font-size: .66rem;
-        font-weight: 700;
-    }
-    .api-session-device__times {
-        min-width: 0;
-    }
-    .api-session-empty {
-        padding: 1.4rem;
-        color: var(--nps-muted, #64748b);
-        text-align: center;
-        border: 1px dashed var(--nps-border, #cbd5e1);
-        border-radius: .65rem;
-    }
-    .api-totp-card {
-        grid-column: 1 / -1;
-    }
-    .api-totp-card__header {
-        justify-content: space-between;
-    }
-    .api-totp-card__status {
-        display: inline-flex;
-        align-items: center;
-        gap: .4rem;
-        padding: .3rem .65rem;
-        color: #b45309;
-        background: #fffbeb;
-        border: 1px solid #fde68a;
-        border-radius: 999px;
-        font-size: .74rem;
-        font-weight: 700;
-    }
-    .api-totp-card__status.is-bound {
-        color: #047857;
-        background: #ecfdf5;
-        border-color: #a7f3d0;
-    }
-    .api-totp-grid {
-        display: grid;
-        grid-template-columns: minmax(15rem, .8fr) minmax(20rem, 1.2fr);
-        gap: 1rem;
-        align-items: start;
-    }
-    .api-totp-verify {
-        display: grid;
-        gap: .75rem;
-        padding: 1rem;
-        background: var(--nps-surface-subtle, #f8fafc);
-        border: 1px solid var(--nps-border, #e2e8f0);
-        border-radius: .75rem;
-    }
-    .api-totp-verify label {
-        margin-bottom: .3rem;
-    }
-    .api-totp-setup {
-        display: grid;
-        gap: .8rem;
-        padding: 1rem;
-        background: color-mix(in srgb, #2270f0 5%, var(--nps-surface, #fff));
-        border: 1px solid color-mix(in srgb, #2270f0 22%, var(--nps-border, #e2e8f0));
-        border-radius: .75rem;
-    }
-    .api-totp-secret {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: .5rem;
-    }
-    .api-totp-secret input {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        letter-spacing: .08em;
-    }
-    .api-totp-setup__actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .5rem;
-    }
-    .api-totp-danger {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        padding-top: .8rem;
-        border-top: 1px solid var(--nps-border, #e2e8f0);
-    }
-    .api-totp-danger p {
-        margin: 0;
-        color: var(--nps-muted, #64748b);
-        font-size: .78rem;
-        line-height: 1.55;
-    }
-    [data-theme="dark"] .api-access-card__icon {
-        background: rgba(96, 165, 250, 0.14);
-        color: #93c5fd;
-    }
-    [data-theme="dark"] .api-session-device {
-        background: var(--nps-surface-subtle, #17243a);
-    }
-    [data-theme="dark"] .api-session-current {
-        color: #86efac;
-        background: #102f26;
-        border-color: #246447;
-    }
-    [data-theme="dark"] .api-totp-card__status {
-        color: #fcd34d;
-        background: #382a09;
-        border-color: #6b4e0c;
-    }
-    [data-theme="dark"] .api-totp-card__status.is-bound {
-        color: #86efac;
-        background: #102f26;
-        border-color: #246447;
-    }
-    [data-theme="dark"] .api-totp-verify {
-        background: var(--nps-surface-subtle, #17243a);
-    }
-    @media (max-width: 1080px) {
-        .api-session-device {
-            grid-template-columns: minmax(0, 1fr) auto;
-        }
-        .api-session-device__times {
-            grid-column: 1 / -1;
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: .4rem 1rem;
-        }
-    }
-    @media (max-width: 680px) {
-        .api-session-security__header { align-items: flex-start; flex-direction: column; }
-        .api-session-device { grid-template-columns: minmax(0, 1fr); }
-        .api-session-device__times { grid-template-columns: minmax(0, 1fr); }
-        .api-session-device .btn { width: 100%; }
-        .api-totp-grid { grid-template-columns: minmax(0, 1fr); }
-        .api-totp-danger { align-items: stretch; flex-direction: column; }
-    }
-</style>
+<link href="{{.web_base_url}}/static/css/nps-account.css?v={{.version}}&ui=20261106-1" rel="stylesheet">
 
-<main class="wrapper wrapper-content dashboard-page api-access-page" aria-label="账户管理" data-aria-label-zh="账户管理" data-aria-label-en="Account management">
+<main class="wrapper wrapper-content dashboard-page account-page" aria-label="账户管理" data-aria-label-zh="账户管理" data-aria-label-en="Account management">
     <header class="dashboard-page-header">
         <div>
             <div class="dashboard-page-kicker" data-i18n-zh="账号安全与系统接入" data-i18n-en="Account security and integration">账号安全与系统接入</div>
             <h1 data-i18n-zh="账户管理" data-i18n-en="Account management">账户管理</h1>
-            <p data-i18n-zh="管理当前账号的 API Token、登录设备和免登凭证；管理员还可在此绑定 TOTP 双因素认证。" data-i18n-en="Manage the current account's API token, signed-in devices and remembered credentials. Administrators can also bind TOTP here.">管理当前账号的 API Token、登录设备和免登凭证；管理员还可在此绑定 TOTP 双因素认证。</p>
+            <p data-i18n-zh="集中管理 API 凭证、登录设备与账号安全。" data-i18n-en="Manage API credentials, signed-in devices and account security.">集中管理 API 凭证、登录设备与账号安全。</p>
         </div>
         <div class="dashboard-page-actions">
-            <a class="btn btn-outline btn-primary" href="https://zidunet.github.io/nps/api.html" target="_blank" rel="noopener noreferrer">
+            <a class="btn btn-outline btn-primary account-header-action" href="https://zidunet.github.io/nps/api.html" target="_blank" rel="noopener noreferrer">
                 <i class="fa fa-book" aria-hidden="true"></i><span data-i18n-zh="API 文档" data-i18n-en="API documentation">API 文档</span>
             </a>
         </div>
     </header>
 
-    <section class="api-access-grid">
-        {{if eq false .isAdmin}}
-        <article class="panel ibox float-e-margins nps-panel api-access-card">
-            <div class="ibox-title api-access-card__header">
-                <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-key"></i></span>
-                <div>
-                    <span class="api-access-card__eyebrow" data-i18n-zh="个人凭证" data-i18n-en="Personal credential">个人凭证</span>
-                    <h2 class="h5" data-i18n-zh="用户 API Token" data-i18n-en="User API token">用户 API Token</h2>
-                </div>
+    <section class="account-overview" aria-labelledby="account-overview-title">
+        <div class="account-overview__identity">
+            <span class="account-overview__mark" aria-hidden="true"><i class="fa fa-shield-alt"></i></span>
+            <div>
+                <span class="account-overview__eyebrow" data-i18n-zh="当前登录账号" data-i18n-en="Signed-in account">当前登录账号</span>
+                <h2 id="account-overview-title">{{.username}}</h2>
+                <p>
+                    {{if eq true .isAdmin}}
+                    <span data-i18n-zh="管理员账号 · 可管理全局资源与平台安全设置" data-i18n-en="Administrator · Manages global resources and platform security">管理员账号 · 可管理全局资源与平台安全设置</span>
+                    {{else}}
+                    <span data-i18n-zh="普通账号 · 仅可管理本人名下的资源与凭证" data-i18n-en="User account · Manages only your own resources and credentials">普通账号 · 仅可管理本人名下的资源与凭证</span>
+                    {{end}}
+                </p>
             </div>
-            <div class="ibox-content api-access-card__body">
-                <dl class="api-access-facts">
-                    <div><dt data-i18n-zh="状态" data-i18n-en="Status">状态</dt><dd id="user-api-status">读取中…</dd></div>
-                </dl>
-                <div id="user-api-result" class="credential-result" hidden>
-                    <label class="form-label" for="user-api-value" data-i18n-zh="Token" data-i18n-en="Token">Token</label>
-                    <div class="input-group">
-                        <input id="user-api-value" class="form-control" type="text" readonly>
-                        <button id="user-api-copy" type="button" class="btn btn-outline btn-primary" title="复制 Token" data-title-zh="复制 Token" data-title-en="Copy token" aria-label="复制 Token" data-aria-label-zh="复制 Token" data-aria-label-en="Copy token"><i class="fa fa-copy" aria-hidden="true"></i></button>
+        </div>
+        <div class="account-overview__signals">
+            <div class="account-signal">
+                <span class="account-signal__icon" aria-hidden="true"><i class="fa fa-key"></i></span>
+                <span class="account-signal__label" data-i18n-zh="凭证范围" data-i18n-en="Credential scope">凭证范围</span>
+                <strong>{{if eq true .isAdmin}}<span data-i18n-zh="全局" data-i18n-en="Global">全局</span>{{else}}<span data-i18n-zh="个人" data-i18n-en="Personal">个人</span>{{end}}</strong>
+            </div>
+            <div class="account-signal">
+                <span class="account-signal__icon" aria-hidden="true"><i class="fa fa-mobile-alt"></i></span>
+                {{if eq true .isAdmin}}
+                <span class="account-signal__label" data-i18n-zh="双因素" data-i18n-en="Two-factor">双因素</span>
+                <strong id="account-totp-state" class="{{if .totp_bound}}is-good{{else}}is-warn{{end}}">
+                    <span data-i18n-zh="{{if .totp_bound}}已启用{{else}}未启用{{end}}" data-i18n-en="{{if .totp_bound}}Enabled{{else}}Not enabled{{end}}">{{if .totp_bound}}已启用{{else}}未启用{{end}}</span>
+                </strong>
+                {{else}}
+                <span class="account-signal__label" data-i18n-zh="会话安全" data-i18n-en="Session security">会话安全</span>
+                <strong class="is-good"><span data-i18n-zh="设备级撤销" data-i18n-en="Revocable">设备级撤销</span></strong>
+                {{end}}
+            </div>
+            <div class="account-signal">
+                <span class="account-signal__icon" aria-hidden="true"><i class="fa fa-laptop"></i></span>
+                <span class="account-signal__label" data-i18n-zh="免登设备" data-i18n-en="Devices">免登设备</span>
+                <strong id="account-device-total">…</strong>
+            </div>
+        </div>
+    </section>
+
+    <div class="account-workbench{{if eq false .isAdmin}} account-workbench--single{{end}}">
+        <section class="account-surface account-credentials" aria-labelledby="account-credentials-title">
+            <header class="account-section-head">
+                <div>
+                    <span class="account-section-head__eyebrow" data-i18n-zh="API ACCESS" data-i18n-en="API ACCESS">API ACCESS</span>
+                    <h2 id="account-credentials-title" data-i18n-zh="访问凭证" data-i18n-en="Access credentials">访问凭证</h2>
+                    <p data-i18n-zh="用于脚本、CLI 和第三方系统访问本平台。重新生成后旧凭证立即失效。" data-i18n-en="Used by scripts, CLIs and third-party systems. Rotating a credential immediately revokes the previous value.">用于脚本、CLI 和第三方系统访问本平台。重新生成后旧凭证立即失效。</p>
+                </div>
+                <span class="account-section-head__meta">{{if eq true .isAdmin}}<span data-i18n-zh="2 个入口" data-i18n-en="2 channels">2 个入口</span>{{else}}<span data-i18n-zh="1 个入口" data-i18n-en="1 channel">1 个入口</span>{{end}}</span>
+            </header>
+
+            <div class="account-credential-grid">
+                {{if eq false .isAdmin}}
+                <article class="account-credential account-credential--single">
+                    <header class="account-credential__head">
+                        <span class="account-credential__icon" aria-hidden="true"><i class="fa fa-key"></i></span>
+                        <div class="account-credential__heading">
+                            <span data-i18n-zh="个人访问" data-i18n-en="Personal access">个人访问</span>
+                            <h3 data-i18n-zh="用户 API Token" data-i18n-en="User API token">用户 API Token</h3>
+                        </div>
+                        <span id="user-api-status" class="account-status is-loading">读取中…</span>
+                    </header>
+                    <div class="account-credential__body">
+                        <p data-i18n-zh="调用接口时会自动限定为当前账号的资源，不会获得管理员权限。" data-i18n-en="Requests are automatically scoped to this account's resources and never gain administrator privileges.">调用接口时会自动限定为当前账号的资源，不会获得管理员权限。</p>
+                        <div class="account-capabilities">
+                            <span><i class="fa fa-check" aria-hidden="true"></i><span data-i18n-zh="按账号自动隔离" data-i18n-en="Account-scoped">按账号自动隔离</span></span>
+                            <span><i class="fa fa-eye" aria-hidden="true"></i><span data-i18n-zh="登录后可再次查看" data-i18n-en="Viewable while signed in">登录后可再次查看</span></span>
+                        </div>
+                        <div id="user-api-result" class="credential-result account-secret" hidden>
+                            <div class="account-secret__label">
+                                <label class="form-label" for="user-api-value" data-i18n-zh="Bearer Token" data-i18n-en="Bearer token">Bearer Token</label>
+                                <span data-i18n-zh="请勿分享" data-i18n-en="Keep private">请勿分享</span>
+                            </div>
+                            <div class="input-group account-secret__control">
+                                <input id="user-api-value" class="form-control" type="text" readonly>
+                                <button id="user-api-copy" type="button" class="btn btn-outline btn-primary" title="复制 Token" data-title-zh="复制 Token" data-title-en="Copy token" aria-label="复制 Token" data-aria-label-zh="复制 Token" data-aria-label-en="Copy token"><i class="fa fa-copy" aria-hidden="true"></i></button>
+                            </div>
+                            <small class="help-block" data-i18n-zh="重新生成会立即使旧 Token 失效。" data-i18n-en="Rotating the token immediately revokes the previous value.">重新生成会立即使旧 Token 失效。</small>
+                        </div>
                     </div>
-                    <small class="help-block" data-i18n-zh="请妥善保存。当前账号登录后可再次查看；重新生成会立即使旧 Token 失效。" data-i18n-en="Store it safely. You can view it again while signed in; rotating it immediately revokes the old token.">请妥善保存。当前账号登录后可再次查看；重新生成会立即使旧 Token 失效。</small>
-                </div>
-                <div class="api-access-actions">
-                    <button type="button" class="btn btn-primary" id="user-api-generate" data-i18n-zh="生成 / 重新生成" data-i18n-en="Generate / rotate">生成 / 重新生成</button>
-                    <button type="button" class="btn btn-outline btn-danger" id="user-api-revoke" data-i18n-zh="撤销 Token" data-i18n-en="Revoke token">撤销 Token</button>
-                </div>
-            </div>
-        </article>
-        {{else}}
-        <article class="panel ibox float-e-margins nps-panel api-access-card">
-            <div class="ibox-title api-access-card__header">
-                <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-cog"></i></span>
-                <div>
-                    <span class="api-access-card__eyebrow" data-i18n-zh="配置文件凭证" data-i18n-en="Configuration credential">配置文件凭证</span>
-                    <h2 class="h5" data-i18n-zh="API Key（nps.conf）" data-i18n-en="API key (nps.conf)">API Key（nps.conf）</h2>
-                </div>
-            </div>
-            <div class="ibox-content api-access-card__body">
-                <dl class="api-access-facts">
-                    <div><dt data-i18n-zh="当前值" data-i18n-en="Current value">当前值</dt><dd><code>{{.configAPIKeyMasked}}</code></dd></div>
-                </dl>
-                <p class="help-block" data-i18n-zh="来自服务端 nps.conf 的 auth_key。密钥不在页面明文显示，查看需要再次验证管理员登录密码；修改它需要编辑配置文件并重启 NPS。" data-i18n-en="The auth_key from the server's nps.conf. The key is never shown on the page; viewing it requires the administrator login password again, and changing it requires editing the configuration file and restarting NPS.">来自服务端 nps.conf 的 auth_key。密钥不在页面明文显示，查看需要再次验证管理员登录密码；修改它需要编辑配置文件并重启 NPS。</p>
-                <div class="api-access-actions">
-                    <button type="button" class="btn btn-outline btn-primary" id="config-api-view" data-i18n-zh="查看完整 Key" data-i18n-en="View full key">查看完整 Key</button>
-                </div>
-            </div>
-        </article>
-        <article class="panel ibox float-e-margins nps-panel api-access-card">
-            <div class="ibox-title api-access-card__header">
-                <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-shield-alt"></i></span>
-                <div>
-                    <span class="api-access-card__eyebrow" data-i18n-zh="Web 托管凭证" data-i18n-en="Web-managed credential">Web 托管凭证</span>
-                    <h2 class="h5" data-i18n-zh="管理员 API 密钥" data-i18n-en="Administrator API key">管理员 API 密钥</h2>
-                </div>
-            </div>
-            <div class="ibox-content api-access-card__body">
-                <dl class="api-access-facts">
-                    <div><dt data-i18n-zh="状态" data-i18n-en="Status">状态</dt><dd id="admin-api-status">读取中…</dd></div>
-                </dl>
-                <div id="admin-api-result" class="credential-result" hidden>
-                    <label class="form-label" for="admin-api-value" data-i18n-zh="密钥" data-i18n-en="Key">密钥</label>
-                    <div class="input-group">
-                        <input id="admin-api-value" class="form-control" type="text" readonly>
-                        <button id="admin-api-copy" type="button" class="btn btn-outline btn-primary" title="复制密钥" data-title-zh="复制密钥" data-title-en="Copy key" aria-label="复制密钥" data-aria-label-zh="复制密钥" data-aria-label-en="Copy key"><i class="fa fa-copy" aria-hidden="true"></i></button>
+                    <footer class="account-credential__footer">
+                        <button type="button" class="btn btn-primary" id="user-api-generate" data-i18n-zh="生成 / 重新生成" data-i18n-en="Generate / rotate">生成 / 重新生成</button>
+                        <button type="button" class="btn btn-outline btn-danger" id="user-api-revoke" data-i18n-zh="撤销 Token" data-i18n-en="Revoke token">撤销 Token</button>
+                    </footer>
+                </article>
+                {{else}}
+                <article class="account-credential">
+                    <header class="account-credential__head">
+                        <span class="account-credential__icon" aria-hidden="true"><i class="fa fa-cog"></i></span>
+                        <div class="account-credential__heading">
+                            <span data-i18n-zh="配置来源" data-i18n-en="Configuration source">配置来源</span>
+                            <h3 data-i18n-zh="API Key（nps.conf）" data-i18n-en="API key (nps.conf)">API Key（nps.conf）</h3>
+                        </div>
+                        <span class="account-status {{if .configAPIKeyConfigured}}is-good{{else}}is-warn{{end}}">{{if .configAPIKeyConfigured}}<span data-i18n-zh="已配置" data-i18n-en="Configured">已配置</span>{{else}}<span data-i18n-zh="未配置" data-i18n-en="Not configured">未配置</span>{{end}}</span>
+                    </header>
+                    <div class="account-credential__body">
+                        <p data-i18n-zh="服务端配置文件中的长期管理凭证，修改后需要重启 NPS。" data-i18n-en="A long-lived management credential from the server configuration. Changes require an NPS restart.">服务端配置文件中的长期管理凭证，修改后需要重启 NPS。</p>
+                        <div class="account-key-preview">
+                            <span data-i18n-zh="当前 Key" data-i18n-en="Current key">当前 Key</span>
+                            <code>{{.configAPIKeyMasked}}</code>
+                        </div>
+                        <div class="account-security-note">
+                            <i class="fa fa-lock" aria-hidden="true"></i>
+                            <span data-i18n-zh="查看完整 Key 前必须再次验证管理员密码。" data-i18n-en="Re-authentication is required before revealing the full key.">查看完整 Key 前必须再次验证管理员密码。</span>
+                        </div>
                     </div>
-                    <small class="help-block" data-i18n-zh="与 nps.conf 的 auth_key 权限相同，可用于全部管理接口。密钥加密保存在服务端，可再次查看；重新生成会立即使旧密钥失效。" data-i18n-en="It has the same privileges as auth_key in nps.conf and works for every management API. The key is encrypted at rest and can be viewed again; rotating it immediately revokes the old value.">与 nps.conf 的 auth_key 权限相同，可用于全部管理接口。密钥加密保存在服务端，可再次查看；重新生成会立即使旧密钥失效。</small>
-                </div>
-                <div class="api-access-actions">
-                    <button type="button" class="btn btn-primary" id="admin-api-generate" data-i18n-zh="生成 / 重新生成" data-i18n-en="Generate / rotate">生成 / 重新生成</button>
-                    <button type="button" class="btn btn-outline btn-danger" id="admin-api-revoke" data-i18n-zh="撤销密钥" data-i18n-en="Revoke key">撤销密钥</button>
-                </div>
+                    <footer class="account-credential__footer">
+                        <button type="button" class="btn btn-outline btn-primary" id="config-api-view" data-i18n-zh="查看完整 Key" data-i18n-en="View full key">查看完整 Key</button>
+                    </footer>
+                </article>
+                <article class="account-credential">
+                    <header class="account-credential__head">
+                        <span class="account-credential__icon" aria-hidden="true"><i class="fa fa-shield-alt"></i></span>
+                        <div class="account-credential__heading">
+                            <span data-i18n-zh="Web 托管" data-i18n-en="Web managed">Web 托管</span>
+                            <h3 data-i18n-zh="管理员 API 密钥" data-i18n-en="Administrator API key">管理员 API 密钥</h3>
+                        </div>
+                        <span id="admin-api-status" class="account-status is-loading">读取中…</span>
+                    </header>
+                    <div class="account-credential__body">
+                        <p data-i18n-zh="与 nps.conf 的 auth_key 权限相同，可随时在面板中轮换和撤销。" data-i18n-en="Has the same permissions as auth_key in nps.conf and can be rotated or revoked here.">与 nps.conf 的 auth_key 权限相同，可随时在面板中轮换和撤销。</p>
+                        <div id="admin-api-result" class="credential-result account-secret" hidden>
+                            <div class="account-secret__label">
+                                <label class="form-label" for="admin-api-value" data-i18n-zh="管理员密钥" data-i18n-en="Administrator key">管理员密钥</label>
+                                <span data-i18n-zh="全局权限" data-i18n-en="Global access">全局权限</span>
+                            </div>
+                            <div class="input-group account-secret__control">
+                                <input id="admin-api-value" class="form-control" type="text" readonly>
+                                <button id="admin-api-copy" type="button" class="btn btn-outline btn-primary" title="复制密钥" data-title-zh="复制密钥" data-title-en="Copy key" aria-label="复制密钥" data-aria-label-zh="复制密钥" data-aria-label-en="Copy key"><i class="fa fa-copy" aria-hidden="true"></i></button>
+                            </div>
+                            <small class="help-block" data-i18n-zh="重新生成会立即使旧密钥失效。" data-i18n-en="Rotating the key immediately revokes the previous value.">重新生成会立即使旧密钥失效。</small>
+                        </div>
+                    </div>
+                    <footer class="account-credential__footer">
+                        <button type="button" class="btn btn-primary" id="admin-api-generate" data-i18n-zh="生成 / 重新生成" data-i18n-en="Generate / rotate">生成 / 重新生成</button>
+                        <button type="button" class="btn btn-outline btn-danger" id="admin-api-revoke" data-i18n-zh="撤销密钥" data-i18n-en="Revoke key">撤销密钥</button>
+                    </footer>
+                </article>
+                {{end}}
             </div>
-        </article>
-        {{end}}
+        </section>
 
         {{if eq true .isAdmin}}
-        <article class="panel ibox float-e-margins nps-panel api-access-card api-totp-card">
-            <div class="ibox-title api-access-card__header api-totp-card__header">
-                <div class="api-session-security__title">
-                    <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-mobile-alt"></i></span>
+        <aside class="account-security-column" aria-label="管理员双因素认证">
+            <section class="account-surface account-security api-totp-card">
+                <header class="account-security__head">
                     <div>
-                        <span class="api-access-card__eyebrow" data-i18n-zh="管理员安全" data-i18n-en="Administrator security">管理员安全</span>
-                        <h2 class="h5" data-i18n-zh="TOTP 双因素认证" data-i18n-en="TOTP two-factor authentication">TOTP 双因素认证</h2>
+                        <span class="account-section-head__eyebrow" data-i18n-zh="SIGN-IN PROTECTION" data-i18n-en="SIGN-IN PROTECTION">SIGN-IN PROTECTION</span>
+                        <h2 data-i18n-zh="登录保护" data-i18n-en="Sign-in protection">登录保护</h2>
+                    </div>
+                    <span id="totp-status" class="account-status api-totp-card__status{{if .totp_bound}} is-bound is-good{{else}} is-warn{{end}}">
+                        <i class="fa {{if .totp_bound}}fa-check-circle{{else}}fa-exclamation-circle{{end}}" aria-hidden="true"></i>
+                        <span id="totp-status-text" data-i18n-zh="{{if .totp_bound}}已绑定{{else}}未绑定{{end}}" data-i18n-en="{{if .totp_bound}}Enabled{{else}}Not enabled{{end}}">{{if .totp_bound}}已绑定{{else}}未绑定{{end}}</span>
+                    </span>
+                </header>
+                <div class="account-security__intro">
+                    <span aria-hidden="true"><i class="fa fa-mobile-alt"></i></span>
+                    <div>
+                        <strong data-i18n-zh="TOTP 双因素认证" data-i18n-en="TOTP two-factor authentication">TOTP 双因素认证</strong>
+                        <p data-i18n-zh="登录时增加一次性动态码，降低密码泄露后的风险。" data-i18n-en="Adds a one-time code to sign-in and reduces the impact of a leaked password.">登录时增加一次性动态码，降低密码泄露后的风险。</p>
                     </div>
                 </div>
-                <span id="totp-status" class="api-totp-card__status{{if .totp_bound}} is-bound{{end}}">
-                    <i class="fa {{if .totp_bound}}fa-check-circle{{else}}fa-exclamation-circle{{end}}" aria-hidden="true"></i>
-                    <span id="totp-status-text" data-i18n-zh="{{if .totp_bound}}已绑定{{else}}未绑定{{end}}" data-i18n-en="{{if .totp_bound}}Enabled{{else}}Not enabled{{end}}">{{if .totp_bound}}已绑定{{else}}未绑定{{end}}</span>
-                </span>
-            </div>
-            <div class="ibox-content api-access-card__body">
                 <div class="api-totp-grid">
                     <div class="api-totp-verify">
                         <div>
@@ -376,16 +187,19 @@
                             <label class="form-label" for="totp-current-code" data-i18n-zh="当前动态验证码" data-i18n-en="Current authenticator code">当前动态验证码</label>
                             <input id="totp-current-code" class="form-control" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="000000">
                         </div>
-                        <button type="button" class="btn btn-primary" id="totp-start">
+                        <button type="button" class="btn btn-primary account-security__primary" id="totp-start">
                             <i class="fa fa-qrcode" aria-hidden="true"></i>
                             <span id="totp-start-text" data-i18n-zh="{{if .totp_bound}}重新绑定 TOTP{{else}}开始绑定 TOTP{{end}}" data-i18n-en="{{if .totp_bound}}Replace TOTP{{else}}Bind TOTP{{end}}">{{if .totp_bound}}重新绑定 TOTP{{else}}开始绑定 TOTP{{end}}</span>
                         </button>
-                        <small class="help-block" data-i18n-zh="密码和当前验证码仅用于本次安全操作，不会写入浏览器存储。" data-i18n-en="The password and current code are used only for this security operation and are not stored in the browser.">密码和当前验证码仅用于本次安全操作，不会写入浏览器存储。</small>
+                        <small class="help-block" data-i18n-zh="密码和验证码仅用于本次操作。" data-i18n-en="The password and code are used only for this operation.">密码和验证码仅用于本次操作。</small>
                     </div>
 
                     <div id="totp-setup" class="api-totp-setup" hidden>
-                        <strong data-i18n-zh="在认证器应用中添加 NPS" data-i18n-en="Add NPS to your authenticator">在认证器应用中添加 NPS</strong>
-                        <p class="help-block" data-i18n-zh="可点击下方按钮交给本机认证器，或复制密钥后手动添加。算法 SHA-1、6 位、30 秒。" data-i18n-en="Open the URI in a local authenticator or copy the secret manually. SHA-1, 6 digits, 30 seconds.">可点击下方按钮交给本机认证器，或复制密钥后手动添加。算法 SHA-1、6 位、30 秒。</p>
+                        <div class="account-security__setup-title">
+                            <span>02</span>
+                            <strong data-i18n-zh="添加到认证器" data-i18n-en="Add to authenticator">添加到认证器</strong>
+                        </div>
+                        <p class="help-block" data-i18n-zh="支持 SHA-1、6 位、30 秒；可打开本机认证器或复制密钥。" data-i18n-en="Supports SHA-1, 6 digits and 30 seconds. Open a local authenticator or copy the secret.">支持 SHA-1、6 位、30 秒；可打开本机认证器或复制密钥。</p>
                         <div class="api-totp-secret">
                             <input id="totp-new-secret" class="form-control" type="text" readonly spellcheck="false" aria-label="TOTP secret">
                             <button type="button" class="btn btn-outline btn-primary" id="totp-copy-secret"><i class="fa fa-copy" aria-hidden="true"></i></button>
@@ -396,7 +210,7 @@
                         </a>
                         <div>
                             <label class="form-label" for="totp-confirm-code" data-i18n-zh="认证器中的 6 位动态验证码" data-i18n-en="6-digit authenticator code">认证器中的 6 位动态验证码</label>
-                            <input id="totp-confirm-code" class="form-control" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="000000">
+                            <input id="totp-confirm-code" class="form-control account-code-input" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="000000">
                         </div>
                         <div class="api-totp-setup__actions">
                             <button type="button" class="btn btn-success" id="totp-confirm">
@@ -408,56 +222,55 @@
                     </div>
                 </div>
                 <div id="totp-disable-row" class="api-totp-danger"{{if not .totp_bound}} hidden{{end}}>
-                    <p data-i18n-zh="关闭后，管理员网页登录将只验证密码。需要当前密码和认证器动态验证码。" data-i18n-en="Disabling TOTP leaves password-only administrator sign-in. The current password and authenticator code are required.">关闭后，管理员网页登录将只验证密码。需要当前密码和认证器动态验证码。</p>
+                    <div>
+                        <strong data-i18n-zh="关闭双因素认证" data-i18n-en="Disable two-factor authentication">关闭双因素认证</strong>
+                        <p data-i18n-zh="关闭后管理员登录只验证密码。" data-i18n-en="Administrator sign-in will use the password only.">关闭后管理员登录只验证密码。</p>
+                    </div>
                     <button type="button" class="btn btn-outline btn-danger" id="totp-disable">
                         <i class="fa fa-unlink" aria-hidden="true"></i>
                         <span data-i18n-zh="关闭 TOTP" data-i18n-en="Disable TOTP">关闭 TOTP</span>
                     </button>
                 </div>
-            </div>
-        </article>
+            </section>
+        </aside>
         {{end}}
+    </div>
 
-        <article class="panel ibox float-e-margins nps-panel api-access-card api-session-security">
-            <div class="ibox-title api-access-card__header api-session-security__header">
-                <div class="api-session-security__title">
-                    <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-laptop"></i></span>
-                    <div>
-                        <span class="api-access-card__eyebrow" data-i18n-zh="当前账号" data-i18n-en="Current account">当前账号</span>
-                        <h2 class="h5" data-i18n-zh="登录设备与免登凭证" data-i18n-en="Sessions and remembered devices">登录设备与免登凭证</h2>
-                    </div>
+    <section class="account-surface account-sessions api-session-security" aria-labelledby="account-sessions-title">
+        <header class="account-section-head account-sessions__head">
+            <div>
+                <span class="account-section-head__eyebrow" data-i18n-zh="REMEMBERED DEVICES" data-i18n-en="REMEMBERED DEVICES">REMEMBERED DEVICES</span>
+                <div class="account-sessions__title-row">
+                    <h2 id="account-sessions-title" data-i18n-zh="登录设备与免登凭证" data-i18n-en="Sessions and remembered devices">登录设备与免登凭证</h2>
+                    <span id="api-session-count" class="account-section-head__meta" data-i18n-zh="读取中" data-i18n-en="Loading">读取中</span>
                 </div>
-                <button type="button" class="btn btn-outline btn-danger" id="session-revoke-all">
-                    <i class="fa fa-power-off" aria-hidden="true"></i>
-                    <span data-i18n-zh="退出所有设备" data-i18n-en="Sign out all devices">退出所有设备</span>
-                </button>
+                <p data-i18n-zh="仅展示勾选“3 天内免登录”后签发的设备；可逐台撤销，也可一次退出全部设备。" data-i18n-en="Shows devices issued with Stay signed in for 3 days. Revoke them individually or sign out everywhere.">仅展示勾选“3 天内免登录”后签发的设备；可逐台撤销，也可一次退出全部设备。</p>
             </div>
-            <div class="ibox-content api-access-card__body">
-                <p class="help-block" data-i18n-zh="这里只显示当前账号勾选“3 天内免登录”后签发的设备凭证。普通退出只清除当前浏览器；强制退出会撤销本账号的全部免登凭证和网页会话。" data-i18n-en="Only credentials issued after choosing Stay signed in for 3 days are listed. Normal sign-out clears this browser; signing out everywhere revokes every remembered credential and browser session for this account.">这里只显示当前账号勾选“3 天内免登录”后签发的设备凭证。普通退出只清除当前浏览器；强制退出会撤销本账号的全部免登凭证和网页会话。</p>
-                <div id="api-session-list" class="api-session-list" role="list" aria-live="polite">
-                    <div class="api-session-empty" data-i18n-zh="正在读取登录设备…" data-i18n-en="Loading sessions…">正在读取登录设备…</div>
-                </div>
+            <button type="button" class="btn btn-outline btn-danger" id="session-revoke-all">
+                <i class="fa fa-power-off" aria-hidden="true"></i>
+                <span data-i18n-zh="退出所有设备" data-i18n-en="Sign out all devices">退出所有设备</span>
+            </button>
+        </header>
+        <div id="api-session-list" class="api-session-list" role="list" aria-live="polite">
+            <div class="api-session-empty">
+                <span class="api-session-empty__icon" aria-hidden="true"><i class="fa fa-circle-notch fa-spin"></i></span>
+                <strong data-i18n-zh="正在读取登录设备" data-i18n-en="Loading sessions">正在读取登录设备</strong>
+                <small data-i18n-zh="请稍候…" data-i18n-en="Please wait…">请稍候…</small>
             </div>
-        </article>
+        </div>
+    </section>
 
-        <article class="panel ibox float-e-margins nps-panel api-access-card api-access-card--docs">
-            <div class="ibox-title api-access-card__header">
-                <span class="api-access-card__icon" aria-hidden="true"><i class="fa fa-code"></i></span>
-                <div>
-                    <span class="api-access-card__eyebrow" data-i18n-zh="调用说明" data-i18n-en="Usage">调用说明</span>
-                    <h2 class="h5" data-i18n-zh="接口鉴权方式" data-i18n-en="API authentication">接口鉴权方式</h2>
-                </div>
-            </div>
-            <div class="ibox-content api-access-card__body">
-                <p class="help-block" data-i18n-zh="管理员密钥使用时间戳签名：auth_key = MD5(密钥 + timestamp)，并把 timestamp 一并提交，时间差需在 20 秒内。用户 Token 使用 Bearer 头或 api_token 参数。" data-i18n-en="Administrator keys use a timestamp signature: auth_key = MD5(key + timestamp), submitted together with timestamp, within 20 seconds. User tokens use the Bearer header or the api_token parameter.">管理员密钥使用时间戳签名：auth_key = MD5(密钥 + timestamp)，并把 timestamp 一并提交，时间差需在 20 秒内。用户 Token 使用 Bearer 头或 api_token 参数。</p>
-                <pre class="api-access-code"><code>auth_key = md5(key + timestamp)
+    <section class="account-surface account-api-guide" aria-labelledby="account-api-guide-title">
+        <div class="account-api-guide__copy">
+            <span class="account-section-head__eyebrow" data-i18n-zh="INTEGRATION" data-i18n-en="INTEGRATION">INTEGRATION</span>
+            <h2 id="account-api-guide-title" data-i18n-zh="接口鉴权方式" data-i18n-en="API authentication">接口鉴权方式</h2>
+            <p data-i18n-zh="管理员密钥使用时间戳签名，时间差需在 20 秒内；用户 Token 通过 Bearer 头或 api_token 参数传递。" data-i18n-en="Administrator keys use a timestamp signature valid for 20 seconds. User tokens are passed through the Bearer header or api_token parameter.">管理员密钥使用时间戳签名，时间差需在 20 秒内；用户 Token 通过 Bearer 头或 api_token 参数传递。</p>
+            <a class="account-api-guide__link" href="https://github.com/{{.github_repository}}" target="_blank" rel="noopener noreferrer"><i class="fa fa-external-link" aria-hidden="true"></i><span data-i18n-zh="查看完整接口说明" data-i18n-en="View the complete API documentation">查看完整接口说明</span></a>
+        </div>
+        <pre class="account-api-guide__code"><code>auth_key = md5(key + timestamp)
 GET/POST /index/clientlist?auth_key=&lt;签名&gt;&amp;timestamp=&lt;unix 秒&gt;
 
-用户 Token:
 Authorization: Bearer npsu_xxx</code></pre>
-                <a class="api-access-docs-link" href="https://github.com/{{.github_repository}}" target="_blank" rel="noopener noreferrer"><i class="fa fa-external-link" aria-hidden="true"></i><span data-i18n-zh="在 GitHub 查看完整接口说明" data-i18n-en="See the full API documentation on GitHub">在 GitHub 查看完整接口说明</span></a>
-            </div>
-        </article>
     </section>
 </main>
 
@@ -501,12 +314,30 @@ $(function () {
     function redirectToLogin() {
         window.location.assign(base + '/login/index');
     }
+    function setLocalizedText(element, zh, en) {
+        var target = $(element);
+        target.attr({ 'data-i18n-zh': zh, 'data-i18n-en': en }).text(localized(zh, en));
+    }
 
     function setTOTPBound(bound) {
-        $('#totp-status').toggleClass('is-bound', bound);
+        $('#totp-status')
+            .toggleClass('is-bound', bound)
+            .toggleClass('is-good', bound)
+            .toggleClass('is-warn', !bound);
         $('#totp-status i').attr('class', 'fa ' + (bound ? 'fa-check-circle' : 'fa-exclamation-circle'));
-        $('#totp-status-text').text(bound ? localized('已绑定', 'Enabled') : localized('未绑定', 'Not enabled'));
-        $('#totp-start-text').text(bound ? localized('重新绑定 TOTP', 'Replace TOTP') : localized('开始绑定 TOTP', 'Bind TOTP'));
+        setLocalizedText('#totp-status-text', bound ? '已绑定' : '未绑定', bound ? 'Enabled' : 'Not enabled');
+        var overviewState = $('#account-totp-state');
+        overviewState.toggleClass('is-good', bound).toggleClass('is-warn', !bound);
+        if (overviewState.length) {
+            var overviewText = overviewState.find('span');
+            if (!overviewText.length) overviewText = $('<span></span>').appendTo(overviewState);
+            setLocalizedText(overviewText, bound ? '已启用' : '未启用', bound ? 'Enabled' : 'Not enabled');
+        }
+        $('#totp-start-text').text(bound ? localized('重新绑定 TOTP', 'Replace TOTP') : localized('开始绑定 TOTP', 'Bind TOTP'))
+            .attr({
+                'data-i18n-zh': bound ? '重新绑定 TOTP' : '开始绑定 TOTP',
+                'data-i18n-en': bound ? 'Replace TOTP' : 'Bind TOTP'
+            });
         $('#totp-current-code-wrap, #totp-disable-row').prop('hidden', !bound);
         if (!bound) {
             $('#totp-setup').prop('hidden', true);
@@ -574,11 +405,37 @@ $(function () {
         }).always(function () { button.disabled = false; });
     });
 
+    function setSessionTotals(count) {
+        var countText = localized(count + ' 台设备', count === 1 ? '1 device' : count + ' devices');
+        var totalText = localized(count + ' 台', count === 1 ? '1 device' : count + ' devices');
+        $('#api-session-count').attr({
+            'data-i18n-zh': count + ' 台设备',
+            'data-i18n-en': count === 1 ? '1 device' : count + ' devices'
+        }).text(countText);
+        $('#account-device-total').attr({
+            'data-i18n-zh': count + ' 台',
+            'data-i18n-en': count === 1 ? '1 device' : count + ' devices'
+        }).text(totalText);
+    }
+
+    function sessionListState(icon, titleZh, titleEn, detailZh, detailEn) {
+        return $('<div class="api-session-empty"></div>')
+            .append($('<span class="api-session-empty__icon" aria-hidden="true"></span>').append($('<i class="fa"></i>').addClass(icon)))
+            .append($('<strong></strong>').text(localized(titleZh, titleEn)))
+            .append($('<small></small>').text(localized(detailZh, detailEn)));
+    }
+
     function renderSessionDevices(devices) {
+        devices = devices || [];
         var list = $('#api-session-list').empty();
-        if (!devices || !devices.length) {
-            list.append($('<div class="api-session-empty"></div>').text(
-                localized('当前没有可管理的 3 天免登凭证。', 'No remembered device credentials are active.')
+        setSessionTotals(devices.length);
+        if (!devices.length) {
+            list.append(sessionListState(
+                'fa-laptop',
+                '暂无免登设备',
+                'No remembered devices',
+                '勾选“3 天内免登录”后，设备会显示在这里。',
+                'Devices appear here after you choose “Stay signed in for 3 days”.'
             ));
             return;
         }
@@ -604,15 +461,27 @@ $(function () {
         });
     }
 
+    function renderSessionLoadFailure() {
+        $('#api-session-count, #account-device-total').text('—');
+        $('#api-session-list').empty().append(sessionListState(
+            'fa-exclamation-triangle',
+            '读取登录设备失败',
+            'Could not load sessions',
+            '请刷新页面后重试。',
+            'Refresh the page and try again.'
+        ));
+    }
+
     function refreshSessionDevices() {
         $.get(base + '/security/devices', function (response) {
             if (!response || !response.status) {
                 npsNotify('error', response && response.msg ? response.msg : localized('读取登录设备失败', 'Failed to load sessions'));
+                renderSessionLoadFailure();
                 return;
             }
             renderSessionDevices(response.devices || []);
         }, 'json').fail(function () {
-            $('#api-session-list').html($('<div class="api-session-empty"></div>').text(localized('读取登录设备失败', 'Failed to load sessions')));
+            renderSessionLoadFailure();
         });
     }
     $('#api-session-list').on('click', '[data-device-id]', function () {
@@ -646,14 +515,31 @@ $(function () {
         });
     });
 
+    function setCredentialStatus(selector, state) {
+        var copies = {
+            loading: ['读取中…', 'Loading…'],
+            enabled: ['已启用', 'Enabled'],
+            empty: ['未生成', 'Not generated'],
+            error: ['读取失败', 'Load failed']
+        };
+        var copy = copies[state] || copies.error;
+        $(selector)
+            .removeClass('is-loading is-good is-warn')
+            .addClass(state === 'loading' ? 'is-loading' : (state === 'enabled' ? 'is-good' : 'is-warn'))
+            .attr({ 'data-i18n-zh': copy[0], 'data-i18n-en': copy[1] })
+            .text(localized(copy[0], copy[1]));
+    }
+
     function refreshUserAPIKey() {
         $.get(base + '/user/apikeystatus', function (response) {
             var enabled = Boolean(response && response.enabled);
-            $('#user-api-status').text(enabled ? localized('已启用', 'Enabled') : localized('未生成', 'Not generated'));
+            setCredentialStatus('#user-api-status', enabled ? 'enabled' : 'empty');
             var token = enabled && response.token ? response.token : '';
             $('#user-api-value').val(token);
             $('#user-api-result').prop('hidden', !token);
-        }, 'json');
+        }, 'json').fail(function () {
+            setCredentialStatus('#user-api-status', 'error');
+        });
     }
     $('#user-api-generate').on('click', function () {
         var button = this; button.disabled = true;
@@ -661,7 +547,7 @@ $(function () {
             if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('生成失败', 'Generation failed'));
             $('#user-api-value').val(response.token || '');
             $('#user-api-result').prop('hidden', false);
-            $('#user-api-status').text(localized('已启用', 'Enabled'));
+            setCredentialStatus('#user-api-status', 'enabled');
             npsNotify('success', response.msg || localized('Token 已生成', 'Token generated'));
         }).always(function () { button.disabled = false; });
     });
@@ -671,7 +557,7 @@ $(function () {
             if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('撤销失败', 'Revocation failed'));
             $('#user-api-value').val('');
             $('#user-api-result').prop('hidden', true);
-            $('#user-api-status').text(localized('未生成', 'Not generated'));
+            setCredentialStatus('#user-api-status', 'empty');
             npsNotify('success', response.msg || localized('Token 已撤销', 'Token revoked'));
         }).always(function () { button.disabled = false; });
     });
@@ -680,11 +566,13 @@ $(function () {
     function refreshAdminAPIKey() {
         $.get(base + '/user/adminapikeystatus', function (response) {
             var enabled = Boolean(response && response.enabled);
-            $('#admin-api-status').text(enabled ? localized('已启用', 'Enabled') : localized('未生成', 'Not generated'));
+            setCredentialStatus('#admin-api-status', enabled ? 'enabled' : 'empty');
             var token = enabled && response.token ? response.token : '';
             $('#admin-api-value').val(token);
             $('#admin-api-result').prop('hidden', !token);
-        }, 'json');
+        }, 'json').fail(function () {
+            setCredentialStatus('#admin-api-status', 'error');
+        });
     }
     $('#admin-api-generate').on('click', function () {
         var button = this; button.disabled = true;
@@ -692,7 +580,7 @@ $(function () {
             if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('生成失败', 'Generation failed'));
             $('#admin-api-value').val(response.token || '');
             $('#admin-api-result').prop('hidden', false);
-            $('#admin-api-status').text(localized('已启用', 'Enabled'));
+            setCredentialStatus('#admin-api-status', 'enabled');
             npsNotify('success', response.msg || localized('管理员 API 密钥已生成', 'Administrator API key generated'));
         }).always(function () { button.disabled = false; });
     });
@@ -702,7 +590,7 @@ $(function () {
             if (!response || !response.status) return npsNotify('error', response && response.msg ? response.msg : localized('撤销失败', 'Revocation failed'));
             $('#admin-api-value').val('');
             $('#admin-api-result').prop('hidden', true);
-            $('#admin-api-status').text(localized('未生成', 'Not generated'));
+            setCredentialStatus('#admin-api-status', 'empty');
             npsNotify('success', response.msg || localized('管理员 API 密钥已撤销', 'Administrator API key revoked'));
         }).always(function () { button.disabled = false; });
     });
@@ -725,5 +613,11 @@ $(function () {
     if ($('#user-api-status').length) refreshUserAPIKey();
     if ($('#admin-api-status').length) refreshAdminAPIKey();
     refreshSessionDevices();
+    $(document).on('npsLanguageChanged.account', function () {
+        if ($('#totp-status').length) setTOTPBound($('#totp-status').hasClass('is-bound'));
+        if ($('#user-api-status').length) refreshUserAPIKey();
+        if ($('#admin-api-status').length) refreshAdminAPIKey();
+        refreshSessionDevices();
+    });
 });
 </script>
