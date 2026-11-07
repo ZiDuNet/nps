@@ -2,7 +2,12 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"log"
+	"os"
+
+	"ehang.io/nps/lib/install"
+	"ehang.io/nps/lib/version"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -15,6 +20,13 @@ var assets embed.FS
 var trayIcon []byte
 
 func main() {
+	if plan := install.UpdatePlanArgument(os.Args[1:]); plan != "" {
+		os.Exit(install.RunUpdateHelper(plan))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "-version" {
+		fmt.Printf("Version: %s\n", version.VERSION)
+		return
+	}
 	app := application.New(application.Options{
 		Name: "NPS 客户端",
 		Assets: application.AssetOptions{

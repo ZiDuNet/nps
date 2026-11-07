@@ -618,6 +618,9 @@ func TestClientFiltersExposeOnlineStatusThroughAccessibleListbox(t *testing.T) {
 		"ArrowDown",
 		"Escape",
 		"NpsClientFilter",
+		"positionMenu",
+		"window.innerHeight",
+		"visualViewport",
 	} {
 		if !strings.Contains(script, marker) {
 			t.Fatalf("client filter script misses accessible status marker %q", marker)
@@ -634,6 +637,9 @@ func TestClientFiltersExposeOnlineStatusThroughAccessibleListbox(t *testing.T) {
 		".nps-client-filter__status.is-offline",
 		".nps-client-filter__trigger:focus-visible",
 		".nps-client-filter__menu",
+		"position: fixed",
+		"100dvh",
+		"overscroll-behavior: contain",
 	} {
 		if !strings.Contains(stylesheet, marker) {
 			t.Fatalf("client filter stylesheet misses status marker %q", marker)

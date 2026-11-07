@@ -26,6 +26,7 @@ import (
 )
 
 type Conn struct {
+	writeMu         sync.Mutex
 	Conn            net.Conn
 	Rb              []byte
 	PeerFingerprint []byte
@@ -142,7 +143,8 @@ func (s *Conn) WriteLenContent(buf []byte) (err error) {
 	if b, err = GetLenBytes(buf); err != nil {
 		return
 	}
-	return binary.Write(s.Conn, binary.LittleEndian, b)
+	_, err = s.Write(b)
+	return err
 }
 
 // read flag
@@ -311,6 +313,18 @@ func (s *Conn) Close() error {
 
 // write
 func (s *Conn) Write(b []byte) (int, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.Conn.Write(b)
+}
+
+// WriteTimeout serializes a complete control frame with health/identity
+// reports; its deadline must not leak to later writers.
+func (s *Conn) WriteTimeout(b []byte, timeout time.Duration) (int, error) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	_ = s.Conn.SetWriteDeadline(time.Now().Add(timeout))
+	defer s.Conn.SetWriteDeadline(time.Time{})
 	return s.Conn.Write(b)
 }
 

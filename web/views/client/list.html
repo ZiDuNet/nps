@@ -69,6 +69,11 @@
                     <p id="client-update-summary" class="client-update-summary" hidden></p>
                     <p id="client-update-hint" class="help-block client-update-hint" data-i18n-zh="远程升级依赖 GitHub Release；客户端会下载、校验并自动重启，隧道可能短暂中断。" data-i18n-en="Remote update uses the GitHub Release; the client downloads, verifies, and restarts itself, so tunnels may briefly disconnect.">远程升级依赖 GitHub Release；客户端会下载、校验并自动重启，隧道可能短暂中断。</p>
                     <p id="client-update-error" class="client-update-error" hidden></p>
+					<div id="client-update-progress" class="client-update-progress" role="status" aria-live="polite" hidden>
+						<strong id="client-update-stage"></strong>
+						<p id="client-update-message"></p>
+						<small id="client-update-job"></small>
+					</div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline btn-secondary" data-bs-dismiss="modal" data-i18n-zh="关闭" data-i18n-en="Close">关闭</button>
@@ -625,9 +630,53 @@
     });
 
     var clientUpdateState = null;
+	var clientUpdateTimer = null;
+	function stopClientUpdatePolling() { if (clientUpdateTimer) window.clearTimeout(clientUpdateTimer); clientUpdateTimer = null; }
+	function showClientUpdateJob(job) {
+		if (!job) return;
+		var english = npsIsEnglish();
+		var stages = {
+			sent: ['指令已发送', 'Request sent'], accepted: ['客户端已接收', 'Accepted'],
+			checking: ['检查版本', 'Checking release'], downloading: ['下载更新包', 'Downloading'],
+			verifying: ['校验更新包', 'Verifying'], installing: ['安装更新', 'Installing'],
+			restarting: ['等待重启上线', 'Waiting for reconnection'], completed: ['升级完成 · 新版本已上线', 'Updated · version confirmed'],
+			failed: ['升级失败', 'Update failed'], unconfirmed: ['未确认完成', 'Not confirmed'], no_update: ['无需更新', 'No update required']
+		};
+		var text = stages[job.stage] || [job.stage, job.stage];
+		$('#client-update-progress').prop('hidden', false).attr('data-stage', job.stage);
+		$('#client-update-stage').text(text[english ? 1 : 0]);
+		$('#client-update-message').text(job.message || '');
+		$('#client-update-job').text((english ? 'Task ' : '任务 ') + job.job_id + ' · ' + job.current + ' → ' + job.target);
+		$('#client-update-send').prop('hidden', true).removeAttr('aria-busy');
+		if (!job.finished) return;
+		stopClientUpdatePolling();
+		if (job.stage === 'completed') {
+			$('#client-update-current').text(job.target);
+			if ($('#table').data('npsTable')) $('#table').npsTable('refresh');
+		} else if (job.stage === 'failed' || job.stage === 'unconfirmed') {
+			$('#client-update-error').text(english ? 'Check npc-updater.log or the client log. Close and recheck before retrying.' : '请检查客户端 npc-updater.log 或连接日志；关闭后重新检测，再决定是否重试。').prop('hidden', false);
+		}
+	}
+	function pollClientUpdate(state) {
+		stopClientUpdatePolling();
+		clientUpdateTimer = window.setTimeout(function () {
+			if (clientUpdateState !== state) return;
+			$.get('{{.web_base_url}}/client/updatestatus', {id: state.id}).done(function (response) {
+				if (clientUpdateState !== state) return;
+				if (response && response.job) { showClientUpdateJob(response.job); if (!response.job.finished) pollClientUpdate(state); }
+				else { $('#client-update-error').text(npsIsEnglish() ? 'No task record. The server may have restarted; completion is not confirmed.' : '暂无任务记录，服务端可能已重启；未确认升级完成，请重新检查运行版本。').prop('hidden', false); }
+			}).fail(function () {
+				if (clientUpdateState !== state) return;
+				$('#client-update-error').text(npsIsEnglish() ? 'Status check interrupted. Reopen this window to check again.' : '进度查询中断，可重新打开此窗口继续查看；未判定为升级成功。').prop('hidden', false);
+			});
+		}, 2000);
+	}
+	$('#client-update-modal').on('hidden.bs.modal', function () { stopClientUpdatePolling(); clientUpdateState = null; });
 
     function resetClientUpdateModal() {
         var english = npsIsEnglish();
+		stopClientUpdatePolling();
+		$('#client-update-progress').prop('hidden', true);
         $('#client-update-current').text('-');
         $('#client-update-latest').html('<span class="client-update-loading"><i class="fa fa-spinner fa-spin" aria-hidden="true"></i><span>' + (english ? 'Checking…' : '检测中…') + '</span></span>');
         $('#client-update-summary').text('').prop('hidden', true);
@@ -637,12 +686,16 @@
 
     function openClientUpdateModal(clientId, version) {
         var english = npsIsEnglish();
-        clientUpdateState = { id: clientId, version: version };
+        var state = { id: clientId, version: version };
+        clientUpdateState = state;
         resetClientUpdateModal();
         $('#client-update-current').text(version || '-');
         $('#client-update-modal').modal('show');
         $.get('{{.web_base_url}}/client/updatecheck', { id: clientId }).done(function (response) {
-            if (!response) return;
+			if (clientUpdateState !== state) return;
+			if (!response || response.status !== 1) { $('#client-update-latest').text('-'); $('#client-update-error').text(response && response.msg ? response.msg : npsRequestErrorMessage()).prop('hidden', false); return; }
+			clientUpdateState.target = response.latest;
+			if (response.job) { showClientUpdateJob(response.job); if (!response.job.finished) { pollClientUpdate(state); $('#client-update-latest').text(response.job.target); return; } }
             if (response.check_error) {
                 $('#client-update-latest').html('<span>' + (english ? 'Unavailable' : '不可用') + '</span>');
                 $('#client-update-error').text(english
@@ -658,15 +711,16 @@
                 if (response.can_remote_update && response.enabled && response.online) {
                     $('#client-update-send').prop('hidden', false);
                 } else {
-                    var reason = !response.can_remote_update
+                    var reason = response.update_reason || (!response.can_remote_update
                         ? (english ? 'This client must be updated manually once before remote updates are available.' : '该客户端需先手动升级一次，之后才能远程升级。')
-                        : (!response.enabled ? (english ? 'The client is disabled.' : '客户端已停用，请先启用。') : (english ? 'The client is offline.' : '客户端当前离线。'));
+                        : (!response.enabled ? (english ? 'The client is disabled.' : '客户端已停用，请先启用。') : (english ? 'The client is offline.' : '客户端当前离线。')));
                     $('#client-update-error').text(reason).prop('hidden', false);
                 }
             } else {
                 $('#client-update-summary').html('<span class="client-update-up-to-date"><i class="fa fa-check-circle" aria-hidden="true"></i>' + npsEscapeHtml(english ? 'Already up to date.' : '已是最新版本。') + '</span>').prop('hidden', false);
             }
         }).fail(function (xhr) {
+            if (clientUpdateState !== state) return;
             var message = xhr && xhr.responseJSON && xhr.responseJSON.msg;
             $('#client-update-latest').html('<span>' + (english ? 'Unavailable' : '不可用') + '</span>');
             $('#client-update-error').text(message || npsRequestErrorMessage()).prop('hidden', false);
@@ -681,27 +735,25 @@
 
     $('#client-update-send').on('click', function () {
         if (!clientUpdateState || !clientUpdateState.id) return;
+        var state = clientUpdateState;
         var english = npsIsEnglish();
         var $button = $(this);
         $button.prop('disabled', true).attr('aria-busy', 'true').html('<i class="fa fa-spinner fa-spin" aria-hidden="true"></i>');
         $.ajax({
             type: 'POST',
             url: '{{.web_base_url}}/client/upgrade',
-            data: { id: clientUpdateState.id }
+            data: { id: state.id, version: state.target }
         }).done(function (response) {
+            if (clientUpdateState !== state) return;
             if (response && response.status === 1) {
-                $('#client-update-modal').modal('hide');
-                npsNotify('success', english
-                    ? 'Update request sent. The client restarts after downloading and verifying the release.'
-                    : '升级指令已下发，客户端将在下载并校验完成后自动重启。');
-                resetClientUpdateModal();
-                var $table = $('#table');
-                if ($table.data('npsTable')) $table.npsTable('refresh');
+				showClientUpdateJob(response.job);
+				if (response.job && !response.job.finished) pollClientUpdate(state);
             } else {
                 $button.prop('disabled', false).removeAttr('aria-busy').html(english ? 'Send update' : '下发升级');
                 npsNotify('error', response && response.msg ? response.msg : npsRequestErrorMessage());
             }
         }).fail(function (xhr) {
+            if (clientUpdateState !== state) return;
             $button.prop('disabled', false).removeAttr('aria-busy').html(english ? 'Send update' : '下发升级');
             var message = xhr && xhr.responseJSON && xhr.responseJSON.msg;
             npsNotify('error', message || npsRequestErrorMessage());

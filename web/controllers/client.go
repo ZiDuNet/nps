@@ -656,13 +656,52 @@ func (s *ClientController) Upgrade() {
 		s.AjaxErr(err.Error())
 		return
 	}
-	if err = server.RequestClientUpdate(id); err != nil {
+	if server.Bridge == nil {
+		s.AjaxErr("Bridge 尚未初始化")
+		return
+	}
+	target := strings.TrimSpace(s.GetString("version"))
+	if target == "" {
+		target, err = install.LatestVersion()
+		if err != nil {
+			s.AjaxErr(err.Error())
+			return
+		}
+	}
+	job, err := server.Bridge.StartClientUpdate(id, target)
+	if err != nil {
 		s.auditMutation("client.remote_update", "client", id, ownerID, "", err, map[string]string{"version": clientVersion})
 		s.AjaxErr(err.Error())
 		return
 	}
 	s.auditMutation("client.remote_update", "client", id, ownerID, "", nil, map[string]string{"version": clientVersion})
-	s.AjaxOk("升级指令已下发；客户端下载并校验新版本后将自动重启")
+	s.Data["json"] = s.withRequestMeta(map[string]interface{}{"status": 1, "msg": "升级任务已创建，等待客户端结果", "job": job})
+	s.ServeJSON()
+	s.StopRun()
+}
+
+// UpdateStatus deliberately does not query GitHub, so polling cannot exhaust
+// rate limits or stall behind an unavailable external network.
+func (s *ClientController) UpdateStatus() {
+	if !s.RequireAdmin() {
+		return
+	}
+	id := s.GetIntNoErr("id")
+	if id <= 0 {
+		s.AjaxErr("客户端编号无效")
+		return
+	}
+	if _, err := file.GetDb().GetClient(id); err != nil {
+		s.AjaxErr("客户端不存在")
+		return
+	}
+	var job interface{}
+	if server.Bridge != nil {
+		job = server.Bridge.ClientUpdateStatus(id)
+	}
+	s.Data["json"] = map[string]interface{}{"status": 1, "job": job}
+	s.ServeJSON()
+	s.StopRun()
 }
 
 // UpdateCheck compares a connected client's version with the latest stable
@@ -695,6 +734,21 @@ func (s *ClientController) UpdateCheck() {
 		"can_remote_update": supportsRemoteClientUpdate(currentVersion),
 		"online":            isConnect,
 		"enabled":           enabled && !noStore,
+	}
+	if !beego.AppConfig.DefaultBool("allow_remote_update", true) {
+		result["can_remote_update"] = false
+		result["update_reason"] = "管理员已全局禁止远程升级"
+	}
+	if server.Bridge != nil {
+		capability, reason := server.Bridge.ClientUpdater(id)
+		result["updater"] = capability
+		result["job"] = server.Bridge.ClientUpdateStatus(id)
+		if reason != "" {
+			result["update_reason"] = reason
+		}
+		if capability == nil || !capability.Enabled {
+			result["can_remote_update"] = false
+		}
 	}
 	if latest, latestErr := install.LatestVersion(); latestErr != nil {
 		result["check_error"] = latestErr.Error()

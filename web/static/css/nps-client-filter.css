@@ -124,16 +124,18 @@
 }
 
 .nps-client-filter__menu {
-    position: absolute;
+    position: fixed;
     z-index: 1080;
-    top: calc(100% + 6px);
-    right: 0;
+    top: 0;
+    left: 0;
     width: max-content;
-    min-width: 100%;
+    min-width: 0;
     max-width: min(360px, calc(100vw - 24px));
-    max-height: 320px;
+    max-height: calc(100dvh - 24px);
     overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     padding: 5px;
     color: var(--nps-ink, var(--ink, #101828));
     background: var(--nps-surface, var(--card, #fff));
@@ -204,8 +206,7 @@ body.nps-bootstrap .nps-table__filters .nps-client-filter__trigger {
     }
 
     .nps-client-filter__menu {
-        right: auto;
-        left: 0;
+        max-width: calc(100vw - 24px);
     }
 }
 

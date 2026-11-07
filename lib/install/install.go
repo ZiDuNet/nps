@@ -365,14 +365,28 @@ var releaseHTTPClient = &http.Client{Timeout: 30 * time.Second}
 var npcUpdateMu sync.Mutex
 
 func fetchLatestRelease() (*release, error) {
-	req, err := http.NewRequest(http.MethodGet, latestReleaseAPI, nil)
+	return fetchRelease("", nil)
+}
+
+func fetchRelease(tag string, client *http.Client) (*release, error) {
+	endpoint := latestReleaseAPI
+	if tag != "" {
+		if _, err := version.Compare(tag, tag); err != nil {
+			return nil, err
+		}
+		endpoint = strings.TrimSuffix(latestReleaseAPI, "latest") + "tags/v" + strings.TrimPrefix(tag, "v")
+	}
+	if client == nil {
+		client = releaseHTTPClient
+	}
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", updaterUserAgent)
 
-	resp, err := releaseHTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -391,6 +405,11 @@ func fetchLatestRelease() (*release, error) {
 	if rl.TagName == "" {
 		return nil, errors.New("无法解析最新版本号")
 	}
+	if tag != "" {
+		if cmp, err := version.Compare(rl.TagName, tag); err != nil || cmp != 0 {
+			return nil, errors.New("Release 与指定升级版本不符")
+		}
+	}
 	return rl, nil
 }
 
@@ -408,6 +427,13 @@ func findReleaseAsset(rl *release, name string) (*releaseAsset, error) {
 }
 
 func releaseAssetChecksum(rl *release, name string) (string, error) {
+	return releaseAssetChecksumWithClient(rl, name, nil)
+}
+
+func releaseAssetChecksumWithClient(rl *release, name string, client *http.Client) (string, error) {
+	if client == nil {
+		client = releaseHTTPClient
+	}
 	checksums, err := findReleaseAsset(rl, "checksums.txt")
 	if err != nil {
 		return "", fmt.Errorf("Release %s 缺少 checksums.txt: %w", rl.TagName, err)
@@ -418,7 +444,7 @@ func releaseAssetChecksum(rl *release, name string) (string, error) {
 		return "", err
 	}
 	req.Header.Set("User-Agent", updaterUserAgent)
-	resp, err := releaseHTTPClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -465,6 +491,10 @@ func downloadAndUnpack(bin, unpackPath string) (string, error) {
 // second GitHub API request, which is important for unauthenticated clients
 // sharing GitHub's 60-request/hour limit.
 func downloadAndUnpackRelease(rl *release, bin, unpackPath string) (string, error) {
+	return downloadReleaseWithClient(rl, bin, unpackPath, nil, nil)
+}
+
+func downloadReleaseWithClient(rl *release, bin, unpackPath string, client *http.Client, report UpdateReporter) (string, error) {
 	if rl == nil || rl.TagName == "" {
 		return "", errors.New("Release 信息为空")
 	}
@@ -474,7 +504,7 @@ func downloadAndUnpackRelease(rl *release, bin, unpackPath string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	checksum, err := releaseAssetChecksum(rl, filename)
+	checksum, err := releaseAssetChecksumWithClient(rl, filename, client)
 	if err != nil {
 		return "", err
 	}
@@ -499,7 +529,13 @@ func downloadAndUnpackRelease(rl *release, bin, unpackPath string) (string, erro
 		return "", err
 	}
 	req.Header.Set("User-Agent", updaterUserAgent)
-	downloadClient := &http.Client{Timeout: 10 * time.Minute}
+	if report != nil {
+		report("downloading", rl.TagName, "正在下载并校验更新包，现有连接保持运行")
+	}
+	downloadClient := client
+	if downloadClient == nil {
+		downloadClient = &http.Client{Timeout: 10 * time.Minute}
+	}
 	resp, err := downloadClient.Do(req)
 	if err != nil {
 		return "", err
@@ -518,6 +554,9 @@ func downloadAndUnpackRelease(rl *release, bin, unpackPath string) (string, erro
 	}
 	if _, err := archive.Seek(0, io.SeekStart); err != nil {
 		return "", err
+	}
+	if report != nil {
+		report("verifying", rl.TagName, "SHA-256 校验通过，正在解包")
 	}
 	destPath, err := unpackit.Unpack(archive, unpackPath)
 	if err != nil {
@@ -777,6 +816,13 @@ func replaceExecutable(srcBin, destBin string) error {
 	if err := os.MkdirAll(filepath.Dir(destBin), 0755); err != nil {
 		return err
 	}
+	var permissions func(*os.File) error
+	if _, err := os.Stat(destBin); err == nil {
+		permissions, err = captureExecutablePermissions(destBin)
+		if err != nil {
+			return fmt.Errorf("无法保留原程序权限：%w", err)
+		}
+	}
 
 	// Move the current binary out of the way when present (required on Windows
 	// while the process is still running). On Unix, the atomic copy below can
@@ -799,7 +845,7 @@ func replaceExecutable(srcBin, destBin string) error {
 	// Copy through a temporary file beside the destination. This keeps the
 	// replacement atomic and leaves the downloaded source available when one
 	// update must refresh multiple installed copies.
-	if err := copyFileAtomic(srcBin, destBin); err != nil {
+	if err := copyFileAtomicConfigured(srcBin, destBin, permissions); err != nil {
 		// Best-effort restore of previous binary
 		if backupPath != "" {
 			_ = os.Rename(backupPath, destBin)
@@ -835,6 +881,10 @@ func executableBackupPath(destBin string) (string, error) {
 // EXDEV); directly truncating a running Unix executable could otherwise leave
 // the process with a partially written image.
 func copyFileAtomic(src, dest string) error {
+	return copyFileAtomicConfigured(src, dest, nil)
+}
+
+func copyFileAtomicConfigured(src, dest string, permissions func(*os.File) error) error {
 	tmp, err := os.CreateTemp(filepath.Dir(dest), "."+filepath.Base(dest)+".update-*")
 	if err != nil {
 		return err
@@ -858,6 +908,27 @@ func copyFileAtomic(src, dest string) error {
 		return err
 	}
 	if err := srcFile.Close(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	info, err := os.Stat(src)
+	if err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	// Set permissions before publishing the replacement. A service manager
+	// must never see a complete but temporarily non-executable new binary.
+	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if permissions != nil {
+		if err := permissions(tmp); err != nil {
+			_ = tmp.Close()
+			return err
+		}
+	}
+	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
 		return err
 	}

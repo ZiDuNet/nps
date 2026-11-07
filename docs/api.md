@@ -46,7 +46,7 @@ API 文档固定发布在：
 | 客户端 | `/api/v1/clients` | `GET`、`POST` |
 | 客户端 | `/api/v1/clients/{id}` | `GET`、`PATCH`、`PUT`、`DELETE` |
 | 客户端 | `/api/v1/clients/{id}/status`、`/upgrade` | `POST` |
-| 客户端 | `/api/v1/clients/{id}/update-check` | `GET` |
+| 客户端 | `/api/v1/clients/{id}/update-check`、`/update-status` | `GET`（管理员） |
 | 隧道 | `/api/v1/tunnels` | `GET`、`POST` |
 | 隧道 | `/api/v1/tunnels/{id}` | `GET`、`PATCH`、`PUT`、`DELETE` |
 | 隧道 | `/api/v1/tunnels/{id}/start`、`/stop`、`/copy` | `POST` |
@@ -71,7 +71,7 @@ API 文档固定发布在：
 | 连接日志 | `/api/v1/audit/connections` | `GET`、`POST`（管理员查看全部；普通用户仅查看所属客户端） |
 
 审计和连接日志使用相同的分页参数。连接日志支持
-`kind=bridge|tunnel|host`、`action=bridge.connected|bridge.disconnected|bridge.auth_failed|bridge.failed|bridge.channel|proxy.connection`、`result=success|failure`、
+`kind=bridge|tunnel|host`、`action=bridge.connected|bridge.disconnected|bridge.auth_failed|bridge.failed|bridge.channel|bridge.update|proxy.connection`、`result=success|failure`、
 `bridge_transport=tcp|tls|kcp|ws|wss|quic|http3` 和 `search`。
 普通用户凭据不能通过筛选参数扩大资源范围。连接日志记录 Bridge 上下线、
 子通道、认证或握手失败，以及隧道和域名反代的来源、目标、耗时与双向字节数；不会保存
@@ -85,6 +85,24 @@ Basic 密码、API Token、验证密钥、请求头或代理正文。
 成功主连接可标记为 `current_report`，子通道或代理会话通常标记为
 `client_record`，认证失败时若只能读取历史值则标记为
 `last_successful`。认证前失败或旧 NPC 未上报时该字段为空。
+
+### 客户端升级接口
+
+以下均需管理员凭据：
+
+- `GET /api/v1/clients/{id}/update-check` 返回现有版本比较结果，以及 `updater`
+  能力、`update_reason` 和最近 `job`；检测 GitHub 版本可能返回 `check_error`。
+- `POST /api/v1/clients/{id}/upgrade` 可传 `version`（如 `1.1.43`）固定正式目标
+  版本；不传则检查最新正式版。成功响应含 `job`，仅表示任务已创建。
+- `GET /api/v1/clients/{id}/update-status` 返回 `job`，不会请求 GitHub，适合
+  每两秒轮询。`job=null` 表示本次 NPS 运行期间没有记录，不代表成功。
+
+任务字段包括 `job_id`、`client_id`、`current`、`target`、`stage`、`message`、
+`legacy`、`created_at`、`updated_at` 和 `finished`。阶段包括 `sent`、`accepted`、
+`checking`、`downloading`、`verifying`、`installing`、`restarting`，终态为
+`completed`、`failed`、`no_update` 或 `unconfirmed`。`completed` 才表示目标版本
+已重新上线；`legacy=true` 不具备新版任务回执的严格关联能力。同一 VKey
+多个在线实例和重复任务都会拒绝下发。完整流程见[客户端更新](client-update.md)。
 
 ### Bridge TLS 证书接口
 

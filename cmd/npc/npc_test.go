@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/quickcommand"
@@ -205,8 +206,8 @@ func TestStableNpcExecutablePathForRemoteUpdater(t *testing.T) {
 			t.Fatalf("StableExecutablePath(%q) = %q, want %q", input, got, want)
 		}
 	}
-	if !waitForWindowsProcessExit(0) {
-		t.Fatal("waitForWindowsProcessExit(0) should report the parent exited")
+	if err := install.WaitProcessExit(0, time.Second); err != nil {
+		t.Fatal(err)
 	}
 }
 

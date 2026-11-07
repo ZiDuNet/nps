@@ -138,6 +138,11 @@
 
     ClientFilter.prototype.bind = function () {
         var self = this;
+        this.reposition = function (event) {
+            if (!self.open) return;
+            if (event && event.target === self.listbox) return;
+            self.positionMenu();
+        };
         this.trigger.addEventListener('click', function () {
             if (self.select.disabled) return;
             self.toggle();
@@ -163,6 +168,12 @@
         document.addEventListener('click', function (event) {
             if (self.open && !self.wrapper.contains(event.target)) self.close(false);
         });
+        window.addEventListener('resize', this.reposition, {passive: true});
+        window.addEventListener('scroll', this.reposition, true);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', this.reposition, {passive: true});
+            window.visualViewport.addEventListener('scroll', this.reposition, {passive: true});
+        }
     };
 
     ClientFilter.prototype.refresh = function () {
@@ -197,6 +208,7 @@
         }, this);
         this.listbox.appendChild(fragment);
         if (this.select.disabled && this.open) this.close(false);
+        if (this.open) this.positionMenu();
     };
 
     ClientFilter.prototype.toggle = function () {
@@ -210,6 +222,7 @@
         this.listbox.hidden = false;
         this.trigger.setAttribute('aria-expanded', 'true');
         this.wrapper.classList.add('is-open');
+        this.positionMenu();
 
         var selected = this.options[this.activeIndex] || this.options[0];
         if (key === 'Home') selected = this.options[0];
@@ -224,8 +237,51 @@
         this.open = false;
         this.listbox.hidden = true;
         this.trigger.setAttribute('aria-expanded', 'false');
-        this.wrapper.classList.remove('is-open');
+        this.wrapper.classList.remove('is-open', 'opens-up');
+        this.listbox.style.removeProperty('visibility');
         if (returnFocus) this.trigger.focus();
+    };
+
+    ClientFilter.prototype.positionMenu = function () {
+        if (!this.open || this.listbox.hidden) return;
+
+        var margin = 12;
+        var gap = 6;
+        var triggerRect = this.trigger.getBoundingClientRect();
+        var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        if (!viewportWidth || !viewportHeight) return;
+
+        var maxWidth = Math.max(0, Math.min(360, viewportWidth - margin * 2));
+        this.listbox.style.visibility = 'hidden';
+        this.listbox.style.maxHeight = 'none';
+        this.listbox.style.minWidth = Math.round(Math.min(triggerRect.width, maxWidth)) + 'px';
+        this.listbox.style.maxWidth = Math.round(maxWidth) + 'px';
+        this.listbox.style.left = '0px';
+        this.listbox.style.right = 'auto';
+        this.listbox.style.top = '0px';
+
+        var naturalHeight = Math.ceil(this.listbox.scrollHeight);
+        var availableBelow = Math.max(0, viewportHeight - triggerRect.bottom - gap - margin);
+        var availableAbove = Math.max(0, triggerRect.top - gap - margin);
+        var openAbove = availableBelow < naturalHeight && availableAbove > availableBelow;
+        var availableHeight = openAbove ? availableAbove : availableBelow;
+        this.listbox.style.maxHeight = Math.floor(availableHeight) + 'px';
+
+        var menuRect = this.listbox.getBoundingClientRect();
+        var menuWidth = Math.min(menuRect.width, maxWidth);
+        var menuHeight = Math.min(naturalHeight, Math.ceil(menuRect.height), availableHeight);
+        var preferredLeft = triggerRect.right - menuWidth;
+        var left = Math.max(margin, Math.min(preferredLeft, viewportWidth - margin - menuWidth));
+        var preferredTop = openAbove
+            ? triggerRect.top - gap - menuHeight
+            : triggerRect.bottom + gap;
+        var top = Math.max(margin, Math.min(preferredTop, viewportHeight - margin - menuHeight));
+
+        this.listbox.style.left = Math.round(left) + 'px';
+        this.listbox.style.top = Math.round(top) + 'px';
+        this.listbox.style.visibility = 'visible';
+        this.wrapper.classList.toggle('opens-up', openAbove);
     };
 
     ClientFilter.prototype.focusOption = function (row) {

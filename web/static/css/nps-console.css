@@ -1091,6 +1091,12 @@ body.nps-bootstrap .client-update-up-to-date { color: var(--nps-success, #218838
 body.nps-bootstrap .client-update-up-to-date i { margin-right: 5px; }
 body.nps-bootstrap .client-update-hint { margin: 6px 0 0; }
 body.nps-bootstrap .client-update-error { margin: 10px 0 0; padding: 8px 10px; color: var(--nps-danger); background: var(--nps-danger-soft); border-radius: 5px; font-size: 12px; line-height: 1.5; }
+body.nps-bootstrap .client-update-progress { margin-top: 12px; padding: 12px; border: 1px solid var(--nps-line); border-radius: 6px; background: var(--nps-surface-subtle); overflow-wrap: anywhere; }
+body.nps-bootstrap .client-update-progress strong { color: var(--nps-ink); font-size: 14px; }
+body.nps-bootstrap .client-update-progress p { margin: 6px 0; font-size: 13px; color: var(--nps-ink); }
+body.nps-bootstrap .client-update-progress small { color: var(--nps-muted); font-size: 12px; }
+body.nps-bootstrap .client-update-progress[data-stage="completed"] strong { color: var(--nps-success); }
+body.nps-bootstrap .client-update-progress[data-stage="failed"] strong { color: var(--nps-danger); }
 body.nps-bootstrap .help-guide-card__icon, body.nps-bootstrap .error-page-card__icon { color: var(--nps-primary); background: var(--nps-primary-soft); }
 body.nps-bootstrap .help-guide-card__title, body.nps-bootstrap .error-page-card h1, body.nps-bootstrap .tile-title { color: var(--nps-ink) !important; }
 body.nps-bootstrap .help-guide-card__scope { color: var(--nps-muted); background: var(--nps-surface-subtle); border-left-color: var(--nps-primary); }

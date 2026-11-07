@@ -6,7 +6,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,7 +16,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -36,43 +34,39 @@ import (
 )
 
 var (
-	serverAddr           = flag.String("server", "", "Server addr (ip:port)")
-	configPath           = flag.String("config", "", "Configuration file path")
-	verifyKey            = flag.String("vkey", "", "Authentication key")
-	logType              = flag.String("log", "stdout", "Log output mode（stdout|file）")
-	connType             = flag.String("type", "tcp", "Connection type with the server (tcp|kcp|ws|wss|quic)")
-	bridgePath           = flag.String("bridge_path", "/ws", "WebSocket Bridge URL path")
-	quicALPN             = flag.String("quic_alpn", "nps", "QUIC ALPN protocol")
-	proxyUrl             = flag.String("proxy", "", "outbound proxy URL (http/https/socks4/socks4a/socks5/socks5h)")
-	localIP              = flag.String("local_ip", "", "local source IP for outbound connections")
-	localIPForward       = flag.Bool("local_ip_forward", false, "apply local_ip to tunnel forwarding egress for public targets")
-	dnsServer            = flag.String("dns_server", "", "custom DNS server(s), comma separated")
-	logLevel             = flag.String("log_level", "7", "log level 0~7")
-	registerTime         = flag.Int("time", 2, "register time long /h")
-	localPort            = flag.Int("local_port", 2000, "p2p local port")
-	password             = flag.String("password", "", "p2p password flag")
-	target               = flag.String("target", "", "p2p target")
-	localType            = flag.String("local_type", "p2p", "p2p target")
-	targetType           = flag.String("target_type", "all", "P2P target connection type (all|tcp|udp)")
-	fallbackSecret       = flag.Bool("fallback_secret", true, "P2P fallback secret (true or false)")
-	logPath              = flag.String("log_path", "", "npc log path")
-	debug                = flag.Bool("debug", true, "npc debug")
-	pprofAddr            = flag.String("pprof", "", "PProf debug addr (ip:port)")
-	stunAddr             = flag.String("stun_addr", "stun.stunprotocol.org:3478", "stun server address (eg:stun.stunprotocol.org:3478)")
-	ver                  = flag.Bool("version", false, "show current version")
-	disconnectTime       = flag.Int("disconnect_timeout", 60, "not receiving check packet times, until timeout will disconnect the client")
-	serviceName          = flag.String("service_name", "Npc", "system service name")
-	remoteUpdateHelper   = flag.Bool("remote_update_helper", false, "internal Windows remote update helper")
-	remoteUpdateTarget   = flag.String("remote_update_target", "", "internal remote update target executable")
-	remoteUpdateParent   = flag.Int("remote_update_parent", 0, "internal remote update parent PID")
-	remoteUpdateService  = flag.String("remote_update_service", "", "internal remote update service name")
-	remoteUpdateArgsFile = flag.String("remote_update_args_file", "", "internal remote update argument file")
-	disableRemoteUpdate  = flag.Bool("disable_remote_update", false, "ignore update requests from the server")
-	tlsEnable            = flag.Bool("tls_enable", false, "enable tls")
-	tlsCAFile            = flag.String("tls_ca_file", "", "TLS CA certificate file")
-	tlsServerName        = flag.String("tls_server_name", "", "TLS server name")
-	tlsFingerprint       = flag.String("tls_fingerprint", "", "TLS server SHA-256 certificate fingerprint")
-	tlsInsecure          = flag.Bool("tls_insecure_skip_verify", false, "explicitly disable TLS certificate verification")
+	serverAddr          = flag.String("server", "", "Server addr (ip:port)")
+	configPath          = flag.String("config", "", "Configuration file path")
+	verifyKey           = flag.String("vkey", "", "Authentication key")
+	logType             = flag.String("log", "stdout", "Log output mode（stdout|file）")
+	connType            = flag.String("type", "tcp", "Connection type with the server (tcp|kcp|ws|wss|quic)")
+	bridgePath          = flag.String("bridge_path", "/ws", "WebSocket Bridge URL path")
+	quicALPN            = flag.String("quic_alpn", "nps", "QUIC ALPN protocol")
+	proxyUrl            = flag.String("proxy", "", "outbound proxy URL (http/https/socks4/socks4a/socks5/socks5h)")
+	localIP             = flag.String("local_ip", "", "local source IP for outbound connections")
+	localIPForward      = flag.Bool("local_ip_forward", false, "apply local_ip to tunnel forwarding egress for public targets")
+	dnsServer           = flag.String("dns_server", "", "custom DNS server(s), comma separated")
+	logLevel            = flag.String("log_level", "7", "log level 0~7")
+	registerTime        = flag.Int("time", 2, "register time long /h")
+	localPort           = flag.Int("local_port", 2000, "p2p local port")
+	password            = flag.String("password", "", "p2p password flag")
+	target              = flag.String("target", "", "p2p target")
+	localType           = flag.String("local_type", "p2p", "p2p target")
+	targetType          = flag.String("target_type", "all", "P2P target connection type (all|tcp|udp)")
+	fallbackSecret      = flag.Bool("fallback_secret", true, "P2P fallback secret (true or false)")
+	logPath             = flag.String("log_path", "", "npc log path")
+	debug               = flag.Bool("debug", true, "npc debug")
+	pprofAddr           = flag.String("pprof", "", "PProf debug addr (ip:port)")
+	stunAddr            = flag.String("stun_addr", "stun.stunprotocol.org:3478", "stun server address (eg:stun.stunprotocol.org:3478)")
+	ver                 = flag.Bool("version", false, "show current version")
+	disconnectTime      = flag.Int("disconnect_timeout", 60, "not receiving check packet times, until timeout will disconnect the client")
+	serviceName         = flag.String("service_name", "Npc", "system service name")
+	resumeCommands      = flag.String("resume_commands", "", "internal one-shot connection restore file")
+	disableRemoteUpdate = flag.Bool("disable_remote_update", false, "ignore update requests from the server")
+	tlsEnable           = flag.Bool("tls_enable", false, "enable tls")
+	tlsCAFile           = flag.String("tls_ca_file", "", "TLS CA certificate file")
+	tlsServerName       = flag.String("tls_server_name", "", "TLS server name")
+	tlsFingerprint      = flag.String("tls_fingerprint", "", "TLS server SHA-256 certificate fingerprint")
+	tlsInsecure         = flag.Bool("tls_insecure_skip_verify", false, "explicitly disable TLS certificate verification")
 )
 
 func currentTLSOptions() client.TLSOptions {
@@ -119,11 +113,10 @@ func findNpcCommand(args []string) (string, int) {
 }
 
 func main() {
-	flag.Parse()
-	if *remoteUpdateHelper {
-		runWindowsRemoteUpdateHelper()
-		return
+	if plan := install.UpdatePlanArgument(os.Args[1:]); plan != "" {
+		os.Exit(install.RunUpdateHelper(plan))
 	}
+	flag.Parse()
 	logs.Reset()
 	logs.EnableFuncCallDepth(true)
 	logs.SetLogFuncCallDepth(3)
@@ -131,6 +124,7 @@ func main() {
 		common.PrintVersion()
 		return
 	}
+	loadNpcUpdateReceipt()
 	if *logPath == "" {
 		*logPath = common.GetNpcLogPath()
 	}
@@ -194,10 +188,16 @@ func main() {
 			flag.CommandLine.Parse(os.Args[commandArgIndex+1:])
 			client.RegisterLocalIpWithTLS(*serverAddr, *verifyKey, *connType, *proxyUrl, *registerTime, *tlsEnable, currentTLSOptions())
 		case "update":
-			install.UpdateNpc()
+			if err := updateNpcManually(false); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 			return
 		case "update-force":
-			install.ForceUpdateNpc()
+			if err := updateNpcManually(true); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 			return
 		case "nat":
 			c := stun.NewClient()
@@ -211,6 +211,17 @@ func main() {
 			fmt.Printf("nat type: %s \npublic address: %s\n", nat.String(), host.String())
 			os.Exit(0)
 		case "start", "stop", "restart":
+			if runtime.GOOS == "windows" && command == "restart" {
+				if err := install.StopUpdateService(svcConfig.Name); err != nil {
+					logs.Error(err)
+					os.Exit(1)
+				}
+				if err := install.StartUpdateService(svcConfig.Name); err != nil {
+					logs.Error(err)
+					os.Exit(1)
+				}
+				return
+			}
 			// support busyBox and sysV, for openWrt
 			if service.Platform() == "unix-systemv" {
 				logs.Info("unix-systemv service")
@@ -218,12 +229,14 @@ func main() {
 				err := cmd.Run()
 				if err != nil {
 					logs.Error(err)
+					os.Exit(1)
 				}
 				return
 			}
 			err := service.Control(s, command)
 			if err != nil {
 				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
+				os.Exit(1)
 			}
 			return
 		case "install":
@@ -265,42 +278,24 @@ func main() {
 }
 
 func registerRemoteUpdateHandler(s service.Service) {
-	if *disableRemoteUpdate {
-		client.SetRemoteUpdateHandler(nil)
-		return
+	capability := common.UpdateCapability{Protocol: 2, Kind: "cli", Mode: "foreground", Enabled: true}
+	if !service.Interactive() {
+		capability.Mode = "service"
 	}
-	client.SetRemoteUpdateHandler(func(vKey string) (bool, error) {
-		if runtime.GOOS == "windows" {
-			if s == nil {
-				return false, fmt.Errorf("Windows 客户端服务对象不可用")
-			}
-			serviceMode := !service.Interactive()
-			restartName := remoteUpdateServiceName(*serviceName, vKey, npcServiceInstalled("Npc"))
-			if err := spawnWindowsRemoteUpdateHelper(restartName, serviceMode); err != nil {
-				return false, fmt.Errorf("无法启动 Windows 客户端更新器：%w", err)
-			}
-			if serviceMode {
-				// The helper waits for this process to exit before replacing the
-				// executable, then starts the registered service again.
-				if err := s.Stop(); err != nil {
-					return false, fmt.Errorf("更新器已启动，但无法停止当前 Windows 服务：%w", err)
-				}
-				return true, nil
-			}
-			// A foreground process has no service manager to stop it. The
-			// helper will relaunch the same command line after replacement.
-			os.Exit(0)
-			return true, nil
+	if containerNpc() {
+		capability.Mode = "container"
+		capability.Enabled = false
+		capability.Reason = "容器客户端请拉取新镜像并重建容器"
+	}
+	if *disableRemoteUpdate {
+		capability.Enabled = false
+		capability.Reason = "本地启动参数已禁止远程升级"
+	}
+	client.ConfigureRemoteUpdater(capability, func(ctx client.UpdateContext) (bool, error) {
+		if !capability.Enabled {
+			return false, errors.New(capability.Reason)
 		}
-		updated, err := install.UpdateNpcResult()
-		if err != nil || !updated {
-			return false, err
-		}
-		logs.Info("NPC update verified and installed; restarting client process")
-		if err := install.RestartNpcProcess(); err != nil {
-			return false, fmt.Errorf("客户端已更新，但自动重启失败：%w", err)
-		}
-		return true, nil
+		return performNpcRemoteUpdate(ctx)
 	})
 }
 
@@ -332,187 +327,6 @@ func npcServiceInstalled(name string) bool {
 	}
 	_, err = s.Status()
 	return err == nil
-}
-
-// spawnWindowsRemoteUpdateHelper copies the current executable to a temporary
-// updater path. Windows keeps the running image locked, so the helper waits
-// for the NPC process to exit, updates the original executable, and then
-// restarts either the registered service or the original foreground command.
-func spawnWindowsRemoteUpdateHelper(name string, serviceMode bool) error {
-	executable, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	targetPath := install.StableExecutablePath(executable)
-	source, err := os.Open(executable)
-	if err != nil {
-		return err
-	}
-	helper, err := os.CreateTemp("", "nps-npc-updater-*.exe")
-	if err != nil {
-		_ = source.Close()
-		return err
-	}
-	helperPath := helper.Name()
-	if _, err := io.Copy(helper, source); err != nil {
-		_ = source.Close()
-		_ = helper.Close()
-		_ = os.Remove(helperPath)
-		return err
-	}
-	if err := source.Close(); err != nil {
-		_ = helper.Close()
-		_ = os.Remove(helperPath)
-		return err
-	}
-	if err := helper.Close(); err != nil {
-		_ = os.Remove(helperPath)
-		return err
-	}
-
-	args := []string{
-		"-remote_update_helper=true",
-		"-remote_update_target=" + targetPath,
-		"-remote_update_parent=" + strconv.Itoa(os.Getpid()),
-	}
-	var argsFile string
-	if serviceMode {
-		args = append(args, "-remote_update_service="+name)
-	} else {
-		file, createErr := os.CreateTemp("", "nps-npc-update-args-*.json")
-		if createErr != nil {
-			_ = os.Remove(helperPath)
-			return createErr
-		}
-		argsFile = file.Name()
-		if encodeErr := json.NewEncoder(file).Encode(os.Args[1:]); encodeErr != nil {
-			_ = file.Close()
-			_ = os.Remove(argsFile)
-			_ = os.Remove(helperPath)
-			return encodeErr
-		}
-		if closeErr := file.Close(); closeErr != nil {
-			_ = os.Remove(argsFile)
-			_ = os.Remove(helperPath)
-			return closeErr
-		}
-		args = append(args, "-remote_update_args_file="+argsFile)
-	}
-
-	cmd := exec.Command(helperPath, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		if argsFile != "" {
-			_ = os.Remove(argsFile)
-		}
-		_ = os.Remove(helperPath)
-		return err
-	}
-	return cmd.Process.Release()
-}
-
-func runWindowsRemoteUpdateHelper() {
-	if runtime.GOOS != "windows" {
-		fmt.Fprintln(os.Stderr, "remote update helper is only supported on Windows")
-		return
-	}
-	if *remoteUpdateTarget == "" {
-		fmt.Fprintln(os.Stderr, "remote update helper target is missing")
-		return
-	}
-	targetPath := filepath.Clean(*remoteUpdateTarget)
-	writeNpcUpdaterLog("更新器已启动，目标=%s，服务=%s，父进程=%d", targetPath, *remoteUpdateService, *remoteUpdateParent)
-	if !waitForWindowsProcessExit(*remoteUpdateParent) {
-		err := fmt.Errorf("等待父进程 %d 退出超时", *remoteUpdateParent)
-		fmt.Fprintln(os.Stderr, "NPC 远程更新失败：", err)
-		writeNpcUpdaterLog("远程更新失败：%v", err)
-		return
-	}
-	updated, err := install.UpdateNpcResultAt(targetPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "NPC 远程更新失败：", err)
-		writeNpcUpdaterLog("远程更新失败：%v", err)
-		restartNpcAfterRemoteUpdate(targetPath)
-		return
-	}
-	if !updated {
-		writeNpcUpdaterLog("当前已是最新版本，无需替换")
-		restartNpcAfterRemoteUpdate(targetPath)
-		return
-	}
-	writeNpcUpdaterLog("远程更新文件替换完成")
-	restartNpcAfterRemoteUpdate(targetPath)
-}
-
-func restartNpcAfterRemoteUpdate(targetPath string) {
-	if *remoteUpdateService != "" {
-		cmd := exec.Command(targetPath, "-service_name="+*remoteUpdateService, "restart")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			fmt.Fprintln(os.Stderr, "NPC Windows 服务重启失败：", err)
-			writeNpcUpdaterLog("服务 %s 重启失败：%v", *remoteUpdateService, err)
-		} else {
-			writeNpcUpdaterLog("服务 %s 已重启", *remoteUpdateService)
-		}
-		return
-	}
-	if *remoteUpdateArgsFile == "" {
-		fmt.Fprintln(os.Stderr, "remote update helper arguments are missing")
-		writeNpcUpdaterLog("前台客户端启动参数缺失，无法重启")
-		return
-	}
-	data, err := os.ReadFile(*remoteUpdateArgsFile)
-	_ = os.Remove(*remoteUpdateArgsFile)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "读取 NPC 启动参数失败：", err)
-		writeNpcUpdaterLog("前台客户端启动参数读取失败：%v", err)
-		return
-	}
-	var args []string
-	if err := json.Unmarshal(data, &args); err != nil {
-		fmt.Fprintln(os.Stderr, "解析 NPC 启动参数失败：", err)
-		writeNpcUpdaterLog("前台客户端启动参数解析失败：%v", err)
-		return
-	}
-	cmd := exec.Command(targetPath, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, "NPC 重启失败：", err)
-		writeNpcUpdaterLog("前台客户端重启失败：%v", err)
-	} else {
-		writeNpcUpdaterLog("前台客户端已重新启动")
-	}
-}
-
-func writeNpcUpdaterLog(format string, args ...interface{}) {
-	logPath := common.GetNpcLogPath()
-	if *remoteUpdateTarget != "" {
-		logPath = filepath.Join(filepath.Dir(*remoteUpdateTarget), "npc-updater.log")
-	}
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return
-	}
-	defer file.Close()
-	_, _ = fmt.Fprintf(file, "%s [updater] %s\n", time.Now().Format("2006-01-02 15:04:05"), fmt.Sprintf(format, args...))
-}
-
-func waitForWindowsProcessExit(pid int) bool {
-	if pid <= 0 {
-		return true
-	}
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
-		output, err := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/NH").CombinedOutput()
-		if err != nil || !strings.Contains(string(output), strconv.Itoa(pid)) {
-			return true
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	return false
 }
 
 type npc struct {
@@ -644,6 +458,17 @@ func run() bool {
 	common.InitPProfFromArg(*pprofAddr)
 	if err := common.SetCustomDNS(*dnsServer); err != nil {
 		logs.Warn("[配置] DNS 服务器配置无效，继续使用当前系统解析器：%v", err)
+	}
+	if *resumeCommands != "" {
+		commands, err := readResumeCommands(*resumeCommands)
+		if err != nil {
+			logs.Error("恢复升级前连接失败：%v", err)
+			return false
+		}
+		for _, command := range commands {
+			startNpcServer(command)
+		}
+		return len(commands) > 0
 	}
 	//p2p or secret command
 	if *password != "" {
@@ -898,7 +723,9 @@ func inputCmdFrom(stdin *bufio.Reader) bool {
 		}
 
 		if input == "5" {
-			install.UpdateNpcNew()
+			if err := updateNpcManuallyFrom(false, stdin); err != nil {
+				fmt.Println("更新失败：", err)
+			}
 			continue
 		}
 
@@ -953,6 +780,7 @@ func startNpcServer(command quickcommand.Command) {
 		logs.Error("快捷启动命令格式错误：%v", err)
 		return
 	}
+	rememberRuntimeCommand(command)
 
 	go func() {
 		registerNpcConn()
@@ -1432,8 +1260,14 @@ func restartAllNpcServices() {
 }
 
 func controlNpcService(name, action string) error {
-	if !strings.HasPrefix(name, "nps-client-") || strings.ContainsAny(name, `/\\`) {
+	if (name != "Npc" && !strings.HasPrefix(name, "nps-client-")) || strings.ContainsAny(name, `/\\`) {
 		return fmt.Errorf("无效的 NPC 服务名 %q", name)
+	}
+	if runtime.GOOS == "windows" && action == "restart" {
+		if err := install.StopUpdateService(name); err != nil {
+			return err
+		}
+		return install.StartUpdateService(name)
 	}
 	if service.Platform() == "unix-systemv" {
 		cmd := exec.Command("/etc/init.d/"+name, action)

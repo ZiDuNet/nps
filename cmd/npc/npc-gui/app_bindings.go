@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"ehang.io/nps/client"
+	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/quickcommand"
 	"ehang.io/nps/lib/version"
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -25,7 +26,9 @@ type App struct {
 	// updateMu serializes manual and server-triggered updates.  Both paths
 	// replace the running executable and must never write the same binary at
 	// the same time.
-	updateMu sync.Mutex
+	updateMu         sync.Mutex
+	pendingUpdate    *install.RestartPlan
+	pendingUpdateDir string
 }
 
 // ShortClient 与前端结构对应
@@ -150,6 +153,11 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 	// updater. Register it before any saved client shortcut can connect so a
 	// server-issued CLIENT_UPDATE signal is handled instead of being dropped.
 	a.registerRemoteUpdateHandler()
+	client.SetUpdateResult(readGUIUpdateReceipt())
+	if err := a.restoreUpdateConnections(); err != nil {
+		slog.Error("恢复升级前连接失败", "err", err)
+	}
+	install.AcknowledgeUpdateStartup(guiUpdateReceiptPath(), version.VERSION)
 
 	// 同步开机启动状态：检查配置与实际注册表是否一致
 	go func() {
@@ -203,7 +211,7 @@ func getLogsPath() string {
 		dir = "."
 	}
 	cfgDir := filepath.Join(dir, "npc")
-	_ = os.MkdirAll(cfgDir, 0o755)
+	_ = os.MkdirAll(cfgDir, 0o700)
 	logsDir := filepath.Join(cfgDir, "logs")
 	_ = os.MkdirAll(logsDir, 0o755)
 	return logsDir
@@ -250,14 +258,30 @@ func getStoragePath() string {
 		dir = "."
 	}
 	cfgDir := filepath.Join(dir, "npc")
-	_ = os.MkdirAll(cfgDir, 0o755)
+	_ = os.MkdirAll(cfgDir, 0o700)
 	return filepath.Join(cfgDir, "npc_data.json")
+}
+
+func readPrivateGUIStore(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("GUI 连接配置必须是普通文件，请检查配置路径")
+	}
+	// Migrate old 0644 stores on read, without modifying their contents or
+	// following a symlink into another file. Windows needs an actual ACL.
+	if err := install.SecureUpdateFile(path); err != nil {
+		return nil, fmt.Errorf("无法保护 GUI 连接配置，请由原运行账户打开：%w", err)
+	}
+	return os.ReadFile(path)
 }
 
 // 读取持久化 store，向后兼容：如果是数组则解析为 shortcuts
 func loadPersistentStore() (PersistentStore, error) {
 	p := getStoragePath()
-	b, err := os.ReadFile(p)
+	b, err := readPrivateGUIStore(p)
 	if err != nil {
 		return PersistentStore{}, err
 	}
@@ -283,18 +307,20 @@ func loadPersistentStore() (PersistentStore, error) {
 }
 
 // 保存整个 store，保持 settings 与 clientStates
-func savePersistentStoreLocked(store PersistentStore) {
+func savePersistentStoreLocked(store PersistentStore) error {
 	p := getStoragePath()
-	if data, err := json.MarshalIndent(store, "", "  "); err == nil {
-		_ = os.WriteFile(p, data, 0o644)
+	data, err := json.MarshalIndent(store, "", "  ")
+	if err != nil {
+		return err
 	}
+	return writeGUIStateAtomic(p, data)
 }
 
 func loadShortcuts() {
 	shortcutsMu.Lock()
 	defer shortcutsMu.Unlock()
 	p := getStoragePath()
-	b, err := os.ReadFile(p)
+	b, err := readPrivateGUIStore(p)
 	if err != nil {
 		shortcuts = []ShortClient{}
 		return
@@ -319,28 +345,28 @@ func loadShortcuts() {
 	shortcuts = normalizeShortcutList(s)
 }
 
-func saveShortcuts() {
+func saveShortcuts() error {
 	shortcutsMu.Lock()
 	defer shortcutsMu.Unlock()
-	saveShortcutsLocked()
+	return saveShortcutsLocked()
 }
 
-func saveShortcutsLocked() {
-	p := getStoragePath()
-
-	var store PersistentStore
-	// 尝试读取已有 store 以保留 settings/clientStates
-	if b, err := os.ReadFile(p); err == nil {
-		_ = json.Unmarshal(b, &store) // ignore errors, we'll overwrite shortcuts
+func saveShortcutsLocked() error {
+	store, err := loadPersistentStore()
+	if err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	store.Shortcuts = shortcuts
-	savePersistentStoreLocked(store)
+	return savePersistentStoreLocked(store)
 }
 
 // 以下为对 settings 与 clientStates 的访问方法（供前端调用）
 func (a *App) GetGuiSettings() (GuiSettings, error) {
 	store, err := loadPersistentStore()
 	if err != nil {
+		if !os.IsNotExist(err) {
+			return GuiSettings{}, err
+		}
 		// 返回默认值
 		return GuiSettings{StartupEnabled: true, RememberClientState: true, LogDir: getLogsPath(), ThemeMode: "auto"}, nil
 	}
@@ -369,7 +395,10 @@ func (a *App) GetGuiSettings() (GuiSettings, error) {
 func (a *App) SaveGuiSettings(s GuiSettings) error {
 	shortcutsMu.Lock()
 	defer shortcutsMu.Unlock()
-	store, _ := loadPersistentStore()
+	store, err := loadPersistentStore()
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
 
 	// 保存之前检查开机启动设置是否有变化
 	oldStartupEnabled := store.Settings.StartupEnabled
@@ -379,7 +408,9 @@ func (a *App) SaveGuiSettings(s GuiSettings) error {
 	if store.Settings.LogDir == "" {
 		store.Settings.LogDir = getLogsPath()
 	}
-	savePersistentStoreLocked(store)
+	if err := savePersistentStoreLocked(store); err != nil {
+		return fmt.Errorf("保存 GUI 设置失败：%w", err)
+	}
 
 	// 如果开机启动设置发生变化，应用到系统
 	if oldStartupEnabled != s.StartupEnabled {
@@ -404,6 +435,9 @@ func (a *App) SaveGuiSettings(s GuiSettings) error {
 func (a *App) GetClientStates() (map[string]string, error) {
 	store, err := loadPersistentStore()
 	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
 		return map[string]string{}, nil
 	}
 	if store.ClientStates == nil {
@@ -415,10 +449,12 @@ func (a *App) GetClientStates() (map[string]string, error) {
 func (a *App) SaveClientStates(m map[string]string) error {
 	shortcutsMu.Lock()
 	defer shortcutsMu.Unlock()
-	store, _ := loadPersistentStore()
+	store, err := loadPersistentStore()
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
 	store.ClientStates = m
-	savePersistentStoreLocked(store)
-	return nil
+	return savePersistentStoreLocked(store)
 }
 
 // GetDefaultLogDir 获取默认日志目录路径
@@ -468,15 +504,20 @@ func (a *App) GetAppVersion() string {
 	return version.VERSION
 }
 
-func addShortcut(sc ShortClient) {
+func addShortcut(sc ShortClient) error {
 	if err := normalizeShortcut(&sc); err != nil {
 		slog.Warn("拒绝无效的客户端快捷项", "err", err)
-		return
+		return err
 	}
 	shortcutsMu.Lock()
+	defer shortcutsMu.Unlock()
+	previousLen := len(shortcuts)
 	shortcuts = append(shortcuts, sc)
-	shortcutsMu.Unlock()
-	saveShortcuts()
+	if err := saveShortcutsLocked(); err != nil {
+		shortcuts = shortcuts[:previousLen]
+		return fmt.Errorf("保存客户端连接失败：%w", err)
+	}
+	return nil
 }
 
 func findShortcutIndexByID(id string) int {
@@ -502,8 +543,7 @@ func (a *App) AddShortcut(arg string) error {
 	if findShortcutIndexByID(shortcutID(sc)) >= 0 {
 		return errors.New("该协议连接已存在")
 	}
-	addShortcut(sc)
-	return nil
+	return addShortcut(sc)
 }
 
 func (a *App) AddShortcutFromBase64(s string) error {
@@ -533,8 +573,7 @@ func (a *App) AddShortcutFromBase64(s string) error {
 		return errors.New("该协议连接已存在")
 	}
 
-	addShortcut(sc)
-	return nil
+	return addShortcut(sc)
 }
 
 func (a *App) GetShortcuts() ([]ShortClient, error) {
@@ -638,8 +677,12 @@ func (a *App) RemoveShortcut(name, addr, key string) error {
 	if idx == -1 {
 		return nil
 	}
+	previous := append([]ShortClient(nil), shortcuts...)
 	shortcuts = append(shortcuts[:idx], shortcuts[idx+1:]...)
-	saveShortcutsLocked()
+	if err := saveShortcutsLocked(); err != nil {
+		shortcuts = previous
+		return fmt.Errorf("保存客户端删除操作失败：%w", err)
+	}
 	return nil
 }
 

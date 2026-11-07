@@ -174,6 +174,7 @@
                             <option value="bridge.auth_failed" data-i18n-zh="认证失败" data-i18n-en="Authentication failed">认证失败</option>
                             <option value="bridge.failed" data-i18n-zh="Bridge 阶段失败" data-i18n-en="Bridge stage failed">Bridge 阶段失败</option>
                             <option value="bridge.channel" data-i18n-zh="子通道" data-i18n-en="Bridge channel">子通道</option>
+                            <option value="bridge.update" data-i18n-zh="客户端升级结果" data-i18n-en="Client update result">客户端升级结果</option>
                             <option value="proxy.connection" data-i18n-zh="代理会话" data-i18n-en="Proxy session">代理会话</option>
                         </select>
                     </label>
@@ -208,6 +209,7 @@ $(function () {
             'bridge.auth_failed': 'Authentication failed',
             'bridge.failed': 'Bridge stage failed',
             'bridge.channel': 'Bridge channel',
+            'bridge.update': 'Client update result',
             'proxy.connection': 'Proxy session'
         } : {
             'bridge.connected': '主连接成功',
@@ -215,6 +217,7 @@ $(function () {
             'bridge.auth_failed': '认证失败',
             'bridge.failed': 'Bridge 阶段失败',
             'bridge.channel': '子通道',
+            'bridge.update': '客户端升级结果',
             'proxy.connection': '代理会话'
         };
         return labels[value] || value || '-';

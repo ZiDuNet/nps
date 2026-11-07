@@ -14,20 +14,21 @@ const (
 	// WORK_P2P_SESSION is the provider-side control stream used by the
 	// modern hole-punch protocol.  Older clients never send this value and
 	// continue to use the historical UDP/KCP P2P flow.
-	WORK_P2P_SESSION  = "p2sj"
-	WORK_P2P_VISITOR  = "p2pv"
-	WORK_P2P_PROVIDER = "p2pp"
-	WORK_P2P_CONNECT  = "p2pc"
-	WORK_P2P_SUCCESS  = "p2ps"
-	WORK_P2P_END      = "p2pe"
-	WORK_P2P_LAST     = "p2pl"
-	WORK_STATUS       = "stus"
-	RES_MSG           = "msg0"
-	RES_CLOSE         = "clse"
-	NEW_UDP_CONN      = "udpc" //p2p udp conn
-	CLIENT_UPDATE     = "updt" //server asks the client to run its built-in updater
-	P2P_PUNCH_START   = "p2st" //server asks the provider NPC to join a P2P session
-	CONN_ACK          = "ACK"  //optional Secret/P2P metadata acknowledgement
+	WORK_P2P_SESSION      = "p2sj"
+	WORK_P2P_VISITOR      = "p2pv"
+	WORK_P2P_PROVIDER     = "p2pp"
+	WORK_P2P_CONNECT      = "p2pc"
+	WORK_P2P_SUCCESS      = "p2ps"
+	WORK_P2P_END          = "p2pe"
+	WORK_P2P_LAST         = "p2pl"
+	WORK_STATUS           = "stus"
+	RES_MSG               = "msg0"
+	RES_CLOSE             = "clse"
+	NEW_UDP_CONN          = "udpc" //p2p udp conn
+	CLIENT_UPDATE         = "updt" //server asks the client to run its built-in updater
+	CLIENT_UPDATE_REQUEST = "upv2" // negotiated JSON request with task ID and pinned release
+	P2P_PUNCH_START       = "p2st" //server asks the provider NPC to join a P2P session
+	CONN_ACK              = "ACK"  //optional Secret/P2P metadata acknowledgement
 	// CLIENT_CLOSE is sent on the WORK_MAIN channel right before the server
 	// removes a client registration. New NPCs stop their reconnect loop when
 	// they see it; older NPCs ignore the flag and rely on the subsequent

@@ -17,8 +17,10 @@ replace (
 
 require (
 	github.com/adrg/xdg v0.5.3 // indirect
+	github.com/c4milo/unpackit v0.0.0-20170704181138-4ed373e9ef1c // indirect
 	github.com/coder/websocket v1.8.14 // indirect
 	github.com/djylb/holepunch v0.0.0-20261018033353-48c6e4cf6d9e // indirect
+	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/golang/snappy v0.0.3 // indirect
@@ -26,7 +28,9 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
+	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/klauspost/reedsolomon v1.9.12 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
@@ -47,6 +51,7 @@ require (
 	github.com/tjfoc/gmsm v1.4.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
+	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/xtaci/kcp-go v5.4.20+incompatible // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/crypto v0.58.0 // indirect

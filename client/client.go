@@ -78,23 +78,44 @@ func requestRemoteUpdate(client *TRPClient) {
 		return
 	}
 	go func() {
+		keepLock := false
+		defer func() {
+			if r := recover(); r != nil {
+				client.logError("[更新异常] 客户端升级器发生异常，旧连接保持运行")
+			}
+			if !keepLock {
+				remoteUpdateInProgress.Store(false)
+			}
+		}()
 		remoteUpdateHandler.RLock()
 		handler := remoteUpdateHandler.fn
 		remoteUpdateHandler.RUnlock()
-		if handler == nil {
+		updaterMetadata.RLock()
+		modernHandler := updaterMetadata.handler
+		capability := updaterMetadata.capability
+		updaterMetadata.RUnlock()
+		if capability.Protocol > 0 && !capability.Enabled {
+			client.logInfo("[升级] 当前进程不允许远程升级：%s", capability.Reason)
+			return
+		}
+		if handler == nil && modernHandler == nil {
 			client.logError("[更新异常] 服务端请求客户端升级，但当前进程没有注册升级器")
-			remoteUpdateInProgress.Store(false)
 			return
 		}
-		restartRequested, err := handler(client.vKey)
+		var restartRequested bool
+		var err error
+		if modernHandler != nil {
+			httpClient := UpdateHTTPClient(client.proxyUrl, client.localIP)
+			defer httpClient.CloseIdleConnections()
+			restartRequested, err = modernHandler(UpdateContext{VKey: client.vKey, HTTPClient: httpClient, Report: func(string, string, string) {}})
+		} else {
+			restartRequested, err = handler(client.vKey)
+		}
 		if err != nil {
-			client.logError("[更新异常] 服务端下发的客户端升级失败：%s", err.Error())
-			remoteUpdateInProgress.Store(false)
+			client.logError("[更新异常] 服务端下发的客户端升级失败：%s", safeUpdateError(err.Error(), client.vKey, client.proxyUrl))
 			return
 		}
-		if !restartRequested {
-			remoteUpdateInProgress.Store(false)
-		}
+		keepLock = restartRequested
 	}()
 }
 
@@ -437,6 +458,16 @@ mainLoop:
 			// main control reader or tunnel traffic. The process is restarted only
 			// after the new binary has been downloaded and verified.
 			requestRemoteUpdate(s)
+		case common.CLIENT_UPDATE_REQUEST:
+			raw, readErr := signal.GetShortLenContent()
+			if readErr != nil {
+				break mainLoop
+			}
+			var request common.ClientUpdateRequest
+			if json.Unmarshal(raw, &request) != nil {
+				break mainLoop
+			}
+			requestRemoteUpdateV2(s, signal, request)
 		case common.P2P_PUNCH_START:
 			raw, readErr := signal.GetShortLenContent()
 			if readErr != nil {
@@ -494,6 +525,10 @@ mainLoop:
 				Arch:       runtime.GOARCH,
 				Version:    version.VERSION,
 				StartedAt:  s.instanceStart.Format(time.RFC3339),
+			}
+			identity.Updater, identity.UpdateResult = s.updateIdentity()
+			if identity.UpdateResult != nil {
+				identity.UpdateJobID = identity.UpdateResult.JobID
 			}
 			for _, value := range strings.FieldsFunc(common.GetLocalIPs(signal.Conn), func(r rune) bool {
 				return r == ',' || r == ';' || r == '\n' || r == ' ' || r == '\t'

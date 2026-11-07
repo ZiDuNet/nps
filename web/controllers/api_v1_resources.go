@@ -63,6 +63,14 @@ func (s *ApiV1Controller) ClientUpdateCheck() {
 	s.emitLegacy(s.invokeSafe("client", "UpdateCheck", &ClientController{}, false))
 }
 
+func (s *ApiV1Controller) ClientUpdateStatus() {
+	if !s.requireAdmin() {
+		return
+	}
+	s.pathFormValue("id")
+	s.emitLegacy(s.invokeSafe("client", "UpdateStatus", &ClientController{}, false))
+}
+
 // ClientInstances lists each live NPC process for one client.
 func (s *ApiV1Controller) ClientInstances() {
 	s.pathFormValue("id")

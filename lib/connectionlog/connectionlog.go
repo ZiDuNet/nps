@@ -35,6 +35,7 @@ const (
 	ActionBridgeAuthFailed   = "bridge.auth_failed"
 	ActionBridgeFailed       = "bridge.failed"
 	ActionBridgeChannel      = "bridge.channel"
+	ActionBridgeUpdate       = "bridge.update"
 	ActionProxyConnection    = "proxy.connection"
 
 	ClientLocalAddrSourceCurrentReport  = "current_report"

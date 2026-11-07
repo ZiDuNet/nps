@@ -43,6 +43,7 @@ type Client struct {
 	file         *nps_mux.Mux
 	fileChannels map[string]*nps_mux.Mux
 	Version      string
+	DataVersion  string
 	Transport    string
 	Instance     common.ClientIdentity
 	RemoteAddr   string
@@ -124,12 +125,16 @@ type clientSessionSnapshot struct {
 }
 
 func NewClient(t, f *nps_mux.Mux, s *conn.Conn, vs string) *Client {
-	return &Client{
+	c := &Client{
 		signal:  s,
 		tunnel:  t,
 		file:    f,
 		Version: vs,
 	}
+	if t != nil {
+		c.DataVersion = vs
+	}
+	return c
 }
 
 func (c *Client) rootClient() *Client {
@@ -393,9 +398,9 @@ func (c *Client) GetNode() *Node {
 	return &Node{client: c}
 }
 
-// RequestClientUpdate asks a connected NPC to execute its built-in updater.
-// The client version gate is enforced by the Web controller because the
-// bridge only owns the live signal connection.
+// RequestClientUpdate preserves the historical internal signal API.
+// Deprecated: management actions must use StartClientUpdate, which negotiates
+// capabilities, rejects ambiguous instances and tracks actual completion.
 func (s *Bridge) RequestClientUpdate(id int) error {
 	if !beego.AppConfig.DefaultBool("allow_remote_update", true) {
 		return errors.New("服务端已全局禁止远程升级")
@@ -746,6 +751,8 @@ func (s *Bridge) requestClientHealthConfig(id int, db *file.DbUtils) error {
 }
 
 type Bridge struct {
+	updateMu       sync.Mutex
+	updateJobs     map[int]*ClientUpdateJob
 	TunnelPort     int //通信隧道端口
 	Client         sync.Map
 	p2p            atomic.Pointer[p2pService]
@@ -1193,6 +1200,9 @@ func (s *Bridge) GetHealthFromClient(id int, c *conn.Conn) {
 		info, healthy, err := c.GetHealthInfo()
 		if err != nil {
 			break
+		}
+		if s.receiveUpdateProgress(id, c, info) {
+			continue
 		}
 		file.GetDb().JsonDb.Tasks.Range(func(_, value interface{}) bool {
 			tunnel, ok := value.(*file.Tunnel)
@@ -2090,6 +2100,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 			}
 			selected.mu.Unlock()
 		}
+		s.confirmClientUpdate(id)
 		if clientLocalAddr != "" {
 			if client, err := file.GetDb().GetClient(id); err == nil {
 				client.Lock()
@@ -2133,6 +2144,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 				selected.mu.Lock()
 				oldTunnel = selected.tunnel
 				selected.tunnel = muxConn
+				selected.DataVersion = vs
 				if selected.Version == "" {
 					selected.Version = vs
 				}
@@ -2157,6 +2169,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 		if oldTunnel != nil {
 			_ = oldTunnel.Close()
 		}
+		s.confirmClientUpdate(id)
 		if version.SupportsModernP2P(vs) && s.p2p.Load() != nil {
 			go s.acceptModernP2PStreams(id, vs, transportType, muxConn)
 		}

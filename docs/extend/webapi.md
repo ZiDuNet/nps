@@ -61,6 +61,12 @@
 
 ## Client 客户端管理
 
+客户端升级维护还提供管理员接口：`GET /client/updatecheck?id=<id>` 检查版本与
+升级能力、`POST /client/upgrade` 创建升级任务、`GET /client/updatestatus?id=<id>`
+查询最近进度（不请求 GitHub）。`upgrade` 可传 `version` 固定目标正式版本。
+响应保留 `status`、`msg` 并附加 `job`；下发成功不代表升级完成，详见
+[新版升级 API](../api.md#客户端升级接口)。
+
 ### 客户端列表
 
 ```

@@ -252,7 +252,7 @@
             <div class="setting-row">
               <div class="setting-info">
                 <div class="setting-label">记住客户端状态</div>
-                <div class="setting-desc">下次启动时自动恢复已连接客户端</div>
+                <div class="setting-desc">下次启动时恢复运行中的客户端，包括正在重试的连接</div>
               </div>
               <span class="switch">
                 <input type="checkbox" v-model="rememberClientState" />
@@ -796,7 +796,7 @@ export default {
               for (const c of clients.value) {
                 const id = clientIdentity(c)
                 const legacyId = `${c.addr}|${c.key}`
-                if ((map[id] === 'connected' || map[legacyId] === 'connected') && c.status !== 'connected') {
+                if ((['connected', 'connecting'].includes(map[id]) || ['connected', 'connecting'].includes(map[legacyId])) && c.status === 'stopped') {
                   console.log('恢复客户端连接:', c.name)
                   try {
                     await ToggleClient(id, '', '', c.tls, true)
@@ -1110,14 +1110,8 @@ export default {
       updating.value = true
       try {
         await DownloadAndInstallUpdate()
-        showMessage('更新成功，正在重启程序...', 'success')
-        setTimeout(async () => {
-          try {
-            await RestartApp()
-          } catch (e) {
-            console.error('重启失败:', e)
-          }
-        }, 800)
+        showMessage('更新包已校验，正在准备安全重启...', 'info')
+        await RestartApp()
       } catch (error) {
         console.error('更新失败:', error)
         showMessage('更新失败: ' + extractErrorMessage(error), 'error')

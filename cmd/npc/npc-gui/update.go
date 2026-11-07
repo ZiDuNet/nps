@@ -11,13 +11,14 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"ehang.io/nps/client"
+	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/version"
 )
 
@@ -60,14 +61,31 @@ func guiAssetNameFor(goos, goarch string) string {
 
 // fetchLatestRelease 拉取 GitHub 最新 release 信息
 func fetchLatestRelease() (*ghRelease, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, updateAPIURL, nil)
+	return fetchGUIRelease("")
+}
+
+func fetchGUIRelease(tag string) (*ghRelease, error) {
+	return fetchGUIReleaseWithClient(tag, nil)
+}
+
+func fetchGUIReleaseWithClient(tag string, httpClient *http.Client) (*ghRelease, error) {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 15 * time.Second}
+	}
+	endpoint := updateAPIURL
+	if tag != "" {
+		if _, err := version.Compare(tag, tag); err != nil {
+			return nil, err
+		}
+		endpoint = strings.TrimSuffix(updateAPIURL, "latest") + "tags/v" + strings.TrimPrefix(tag, "v")
+	}
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "npc-gui-updater")
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +102,11 @@ func fetchLatestRelease() (*ghRelease, error) {
 	}
 	if rl.TagName == "" {
 		return nil, errors.New("无法解析最新版本号")
+	}
+	if tag != "" {
+		if cmp, err := version.Compare(tag, rl.TagName); err != nil || cmp != 0 {
+			return nil, errors.New("Release 与指定升级版本不符")
+		}
 	}
 	return rl, nil
 }
@@ -106,18 +129,24 @@ func updateAvailable(current, latest string) (bool, error) {
 }
 
 func releaseAssetChecksum(rl *ghRelease, assetName string) (string, error) {
+	return releaseAssetChecksumWithClient(rl, assetName, nil)
+}
+
+func releaseAssetChecksumWithClient(rl *ghRelease, assetName string, httpClient *http.Client) (string, error) {
 	checksums, err := findAsset(rl, "checksums.txt")
 	if err != nil {
 		return "", fmt.Errorf("Release %s 缺少 checksums.txt: %w", rl.TagName, err)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 30 * time.Second}
+	}
 	req, err := http.NewRequest(http.MethodGet, checksums.BrowserDownloadURL, nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("User-Agent", "npc-gui-updater")
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -184,7 +213,7 @@ func (a *App) CheckForUpdate() (*UpdateInfo, error) {
 // replacement and restart work.  A GUI process has one executable shared by
 // all of its saved connections, so updating once restarts the whole GUI.
 func (a *App) registerRemoteUpdateHandler() {
-	client.SetRemoteUpdateHandler(func(_ string) (bool, error) {
+	client.ConfigureRemoteUpdater(common.UpdateCapability{Protocol: 2, Kind: "gui", Mode: "desktop", Enabled: true}, func(ctx client.UpdateContext) (bool, error) {
 		if a == nil {
 			return false, errors.New("GUI 应用不可用，无法执行远程升级")
 		}
@@ -192,7 +221,8 @@ func (a *App) registerRemoteUpdateHandler() {
 		a.updateMu.Lock()
 		defer a.updateMu.Unlock()
 
-		rl, err := fetchLatestRelease()
+		ctx.Report("checking", ctx.Version, "正在检查 GUI 正式版本")
+		rl, err := fetchGUIReleaseWithClient(ctx.Version, ctx.HTTPClient)
 		if err != nil {
 			return false, err
 		}
@@ -205,10 +235,13 @@ func (a *App) registerRemoteUpdateHandler() {
 			return false, nil
 		}
 
-		if err := a.downloadAndInstallRelease(rl); err != nil {
+		ctx.Report("downloading", rl.TagName, "正在下载 GUI 更新包，现有连接保持运行")
+		if err := a.stageGUIRelease(rl, ctx.HTTPClient); err != nil {
 			return false, err
 		}
-		if err := a.RestartApp(); err != nil {
+		a.pendingUpdate.Result = common.ClientUpdateProgress{JobID: ctx.JobID, Version: rl.TagName, Stage: "restarted"}
+		ctx.Report("verifying", rl.TagName, "更新包已校验，即将保存当前运行的连接")
+		if err := a.restartAppLocked(func() { ctx.Report("restarting", rl.TagName, "正在退出旧 GUI 并恢复原有连接") }); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -235,6 +268,10 @@ func (a *App) downloadAndInstallUpdate() error {
 }
 
 func (a *App) downloadAndInstallRelease(rl *ghRelease) error {
+	return a.stageGUIRelease(rl, nil)
+}
+
+func (a *App) stageGUIRelease(rl *ghRelease, httpClient *http.Client) error {
 	if rl == nil || rl.TagName == "" {
 		return errors.New("Release 信息为空")
 	}
@@ -245,23 +282,33 @@ func (a *App) downloadAndInstallRelease(rl *ghRelease) error {
 	if !available {
 		return fmt.Errorf("当前已是最新版本 %s，无需更新", version.VERSION)
 	}
+	exePath, err := getExecutablePath()
+	if err != nil {
+		return fmt.Errorf("获取当前程序路径失败: %w", err)
+	}
+	target := exePath
+	if runtime.GOOS == "darwin" {
+		bundle, ok := macAppBundlePath(exePath)
+		if !ok || strings.Contains(filepath.ToSlash(exePath), "/AppTranslocation/") || strings.HasPrefix(filepath.ToSlash(exePath), "/Volumes/") {
+			return errors.New("请先退出并将应用移至可写的 Applications 目录，再手动打开更新；不在只读磁盘映像或临时转位目录内替换")
+		}
+		target = bundle
+	}
+	if err := install.PreflightUpdateTarget(target, guiUpdateReceiptPath()); err != nil {
+		return err
+	}
 
 	assetName := guiAssetName()
 	asset, err := findAsset(rl, assetName)
 	if err != nil {
 		return err
 	}
-	checksum, err := releaseAssetChecksum(rl, assetName)
+	checksum, err := releaseAssetChecksumWithClient(rl, assetName, httpClient)
 	if err != nil {
 		return err
 	}
 
 	slog.Info("开始下载更新包", "url", asset.BrowserDownloadURL)
-
-	exePath, err := getExecutablePath()
-	if err != nil {
-		return fmt.Errorf("获取当前程序路径失败: %w", err)
-	}
 
 	tempParent := ""
 	if runtime.GOOS == "darwin" {
@@ -269,58 +316,83 @@ func (a *App) downloadAndInstallRelease(rl *ghRelease) error {
 			tempParent = filepath.Dir(appBundle)
 		}
 	}
-	tempDir, err := os.MkdirTemp(tempParent, ".npc-gui-update-*")
+	tempDir, err := install.CreatePrivateUpdateDirectory(tempParent, ".npc-gui-update-*")
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tempDir)
+	keep := false
+	defer func() {
+		if !keep {
+			_ = os.RemoveAll(tempDir)
+		}
+	}()
 
 	zipPath := filepath.Join(tempDir, assetName)
-	if err := downloadFile(asset.BrowserDownloadURL, zipPath, checksum); err != nil {
+	if err := downloadFileWithClient(asset.BrowserDownloadURL, zipPath, checksum, httpClient); err != nil {
 		return err
 	}
 
-	if err := replaceFromZip(zipPath, exePath, tempDir); err != nil {
-		return err
+	plan := install.RestartPlan{Target: exePath, Version: rl.TagName, ParentPID: os.Getpid(), Receipt: guiUpdateReceiptPath(), RequireStartup: true}
+	plan.WorkingDir, _ = os.Getwd()
+	if runtime.GOOS == "darwin" {
+		bundle, ok := macAppBundlePath(exePath)
+		if !ok {
+			return errors.New("当前程序不在可更新的 .app 包中")
+		}
+		source, err := extractMacAppBundle(zipPath, filepath.Join(tempDir, "bundle"))
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(bundle, exePath)
+		if err != nil {
+			return err
+		}
+		if err = install.VerifyNpcBinary(filepath.Join(source, rel), rl.TagName); err != nil {
+			return err
+		}
+		plan.Target, plan.Source, plan.MacBundle = bundle, source, bundle
+		plan.BundleExecutable = rel
+	} else {
+		source := filepath.Join(tempDir, "npc-gui"+guiExeExt())
+		if err := extractGUIExecutable(zipPath, source, filepath.Base(exePath)); err != nil {
+			return err
+		}
+		if err := install.VerifyNpcBinary(source, rl.TagName); err != nil {
+			return err
+		}
+		plan.Source = source
 	}
-
-	slog.Info("更新完成，请重启程序生效")
+	if a.pendingUpdateDir != "" {
+		_ = os.RemoveAll(a.pendingUpdateDir)
+	}
+	a.pendingUpdate = &plan
+	a.pendingUpdateDir = tempDir
+	keep = true
+	slog.Info("GUI 更新包已校验，等待安全重启")
 	return nil
 }
 
 // RestartApp 重启当前程序（更新完成后调用）
 func (a *App) RestartApp() error {
-	exePath, err := getExecutablePath()
-	if err != nil {
-		return fmt.Errorf("获取当前程序路径失败: %w", err)
-	}
-	cmd := exec.Command(exePath)
-	if runtime.GOOS == "darwin" {
-		if appBundle, ok := macAppBundlePath(exePath); ok {
-			cmd = exec.Command("open", "-n", appBundle)
-		}
-	}
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("启动新版本失败: %w", err)
-	}
-	// 延迟退出当前进程，确保新进程已启动
-	go func() {
-		time.Sleep(800 * time.Millisecond)
-		if a.app != nil {
-			a.app.Quit()
-		}
-	}()
-	return nil
+	a.updateMu.Lock()
+	defer a.updateMu.Unlock()
+	return a.restartAppLocked(func() {})
 }
 
 func downloadFile(url, dest, checksum string) error {
-	client := &http.Client{Timeout: 10 * time.Minute}
+	return downloadFileWithClient(url, dest, checksum, nil)
+}
+
+func downloadFileWithClient(url, dest, checksum string, httpClient *http.Client) error {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 10 * time.Minute}
+	}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("User-Agent", "npc-gui-updater")
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}

@@ -31,6 +31,7 @@ Administrators can create users and assign multiple clients to one user; ordinar
 - 📦 **Docker** — Multi-arch images (amd64/arm/arm64), one-command deployment
 - 🔌 **Open API** — Versioned `/api/v1` for clients, tunnels, hosts, users, global settings and audit, with administrator signatures and scoped user tokens
 - 💻 **GUI Client** — Wails-based desktop client for Windows/macOS/Linux desktop environments
+- ⬆️ **Client maintenance** — Staged downloads and verification, actual service-path updates, GUI connection recovery, and progress/reconnection confirmation; see [update behavior and migration limits](docs/client-update.md)
 
 ## Quick Start
 
