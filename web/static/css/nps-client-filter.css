@@ -12,7 +12,8 @@
     line-height: 1.35;
 }
 
-.nps-client-filter__native {
+.nps-client-filter__native,
+body.nps-bootstrap .form-page .form-workflow-form select.nps-client-filter__native {
     display: none !important;
 }
 
@@ -53,6 +54,53 @@
     background: var(--nps-surface-subtle, #f7faff);
     cursor: not-allowed;
     opacity: .78;
+}
+
+.nps-client-filter--form {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    font-size: 13px;
+}
+
+.nps-client-filter--form .nps-client-filter__trigger {
+    min-height: 44px;
+}
+
+.nps-client-filter__trigger[aria-invalid="true"] {
+    border-color: var(--nps-danger, #dc3545);
+}
+
+.nps-client-filter__identity {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 7px;
+}
+
+.nps-client-filter__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.nps-client-filter__id {
+    flex: 0 0 auto;
+    color: var(--nps-muted, var(--ink2, #536985));
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.nps-client-filter__owner {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 38%;
+    overflow: hidden;
+    padding-left: 7px;
+    color: var(--nps-muted, var(--ink2, #536985));
+    border-left: 1px solid var(--nps-line, var(--line, #dce6f1));
+    font-size: 12px;
+    text-overflow: ellipsis;
 }
 
 .nps-client-filter__label,
@@ -171,6 +219,11 @@
     font-weight: 700;
 }
 
+.nps-client-filter__option[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: .65;
+}
+
 body.nps-bootstrap .nps-table__filters .nps-client-filter {
     min-width: 164px !important;
     max-width: 220px !important;
@@ -201,6 +254,13 @@ body.nps-bootstrap .nps-table__filters .nps-client-filter__trigger {
 }
 
 @media (max-width: 560px) {
+    /* Reserve a full line for rich form selections; the desktop label gutter
+       would otherwise squeeze the client name and owner out on small phones. */
+    .form-workflow-form > .form-group--client-select > .form-label,
+    .form-workflow-form > .form-group--client-select > .form-group-wrapper {
+        grid-column: 1 / -1;
+    }
+
     .tools > .nps-client-filter {
         max-width: calc(50vw - 18px);
     }

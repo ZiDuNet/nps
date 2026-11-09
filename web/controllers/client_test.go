@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -140,6 +141,63 @@ func TestClientFormTemplatesExposeUserSelect(t *testing.T) {
 	}
 }
 
+func TestClientEditTemplateAllowsRenamingIdentity(t *testing.T) {
+	tpl, err := template.ParseFiles("../views/client/edit.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name    string
+		isAdmin bool
+		remark  string
+	}{
+		{name: "administrator", isAdmin: true, remark: "办公电脑"},
+		{name: "owner", remark: "家中电脑"},
+		{name: "unnamed client"},
+		{name: "escaped name", remark: `研发 "A" <内网> & 备份`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var output bytes.Buffer
+			if err := tpl.Execute(&output, map[string]interface{}{
+				"c":       &file.Client{Id: 42, Remark: tt.remark, Cnf: &file.Config{}, Flow: &file.Flow{}},
+				"isAdmin": tt.isAdmin,
+			}); err != nil {
+				t.Fatalf("render client edit: %v", err)
+			}
+			content := output.String()
+			if strings.Count(content, `name="remark"`) != 1 {
+				t.Fatal("client edit must expose a single name field without a duplicate remark field")
+			}
+			start := strings.Index(content, `<input id="client-remark"`)
+			if start < 0 {
+				t.Fatal("client edit is missing the name input")
+			}
+			end := strings.Index(content[start:], ">")
+			if end < 0 {
+				t.Fatal("client name input is malformed")
+			}
+			input := content[start : start+end+1]
+			if strings.Contains(input, " readonly") || strings.Contains(input, " disabled") {
+				t.Fatalf("client name must be editable: %s", input)
+			}
+			if !strings.Contains(input, `value="`+template.HTMLEscapeString(tt.remark)+`"`) {
+				t.Fatalf("client name must be prefilled and safely escaped: %s", input)
+			}
+			for _, marker := range []string{
+				`for="client-remark" data-i18n-zh="客户端标识（备注）"`,
+				`aria-describedby="client-remark-hint"`,
+				`id="client-remark-hint"`,
+				`<strong>ID 42</strong>`,
+				`<input type="hidden" name="id" value="42">`,
+			} {
+				if !strings.Contains(content, marker) {
+					t.Errorf("client edit misses identity marker %q", marker)
+				}
+			}
+		})
+	}
+}
+
 func TestLegacyClientLoginMergePreservesAndClearsExplicitly(t *testing.T) {
 	username, password, err := mergeLegacyClientLogin("legacy-user", "legacy-pass", "", "", false)
 	if err != nil || username != "legacy-user" || password != "legacy-pass" {
@@ -214,7 +272,7 @@ func TestClientListTemplateUsesSafeAccessibleControls(t *testing.T) {
 		`data-title-en="Disable client"`,
 		`data-title-en="Delete client"`,
 		`data-title-en="Copy command"`,
-		`storageKey: 'client-v4'`,
+		`storageKey: 'client-v5'`,
 		`client-version-pill`,
 		`npsNotify('success', npsIsEnglish() ? 'Copied' : '复制成功')`,
 	} {

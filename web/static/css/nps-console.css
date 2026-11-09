@@ -5183,7 +5183,26 @@ body.nps-bootstrap .client-address-cell__region {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+body.nps-bootstrap .client-address-cell__location {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+body.nps-bootstrap .client-address-cell__flag {
+    display: block;
+    width: 16px;
+    height: 12px;
+    flex: 0 0 16px;
+    object-fit: contain;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px var(--nps-line);
+}
+body.nps-bootstrap .client-address-cell__flag[hidden] { display: none; }
 body.nps-bootstrap .client-address-cell__region {
+    min-width: 0;
     min-height: 13px;
     color: var(--nps-muted);
     font-size: 10px;
@@ -5220,30 +5239,48 @@ body.nps-bootstrap .management-page--client .client-list__owner .client-owner-ce
     }
 }
 
-/* Direction labels are subordinate to the metric name instead of forcing one
-   long, hard-to-scan column heading. */
-body.nps-bootstrap .client-flow-heading {
-    display: grid;
-    justify-items: center;
-    gap: 1px;
+/* Directions live in the compact two-row readout; explanatory headings are
+   available on hover and to keyboard/screen-reader users. */
+body.nps-bootstrap .client-metric-heading {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
     white-space: nowrap;
-    line-height: 1.15;
+    cursor: help;
 }
-body.nps-bootstrap .client-flow-heading small {
-    color: var(--nps-faint);
+body.nps-bootstrap .client-metric-heading i {
+    flex: 0 0 auto;
+    color: var(--nps-muted);
     font-size: 9px;
+}
+body.nps-bootstrap .client-metric-heading:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid var(--nps-primary);
+    outline-offset: 2px;
+}
+body.nps-bootstrap .client-metric-pair {
+    display: inline-grid;
+    min-width: 0;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-content: center;
+    gap: 2px 4px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+body.nps-bootstrap .client-metric-pair__direction {
+    color: var(--nps-muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+body.nps-bootstrap .client-metric-pair__value {
+    color: var(--nps-ink);
+    font-size: 11px;
     font-weight: 650;
-    letter-spacing: 0;
-}
-body.nps-bootstrap .nps-table__grid th.client-list__inlet-flow .nps-table__header-inner,
-body.nps-bootstrap .nps-table__grid th.client-list__export-flow .nps-table__header-inner {
-    overflow: visible;
-    text-overflow: clip;
-}
-body.nps-bootstrap .nps-table__grid th.client-list__inlet-flow .nps-table__header-inner > .client-flow-heading,
-body.nps-bootstrap .nps-table__grid th.client-list__export-flow .nps-table__header-inner > .client-flow-heading {
-    overflow: visible;
-    text-overflow: clip;
+    text-align: right;
 }
 
 /* Domain source tags and public entry actions use explicit control styling so
@@ -5361,6 +5398,13 @@ body.nps-bootstrap .host-endpoint i {
         overflow: hidden !important;
         text-overflow: ellipsis !important;
     }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__traffic .nps-table__header-inner,
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__rate .nps-table__header-inner,
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__connections .nps-table__header-inner {
+        gap: 4px;
+        padding-right: 4px !important;
+        padding-left: 4px !important;
+    }
     body.nps-bootstrap .management-page--client .nps-table__grid tbody td {
         height: 50px;
         padding: 7px 6px !important;
@@ -5404,17 +5448,15 @@ body.nps-bootstrap .host-endpoint i {
     }
     body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__address,
     body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__address {
-        width: 104px !important;
-        min-width: 104px !important;
-        max-width: 104px !important;
+        width: 124px !important;
+        min-width: 124px !important;
+        max-width: 124px !important;
     }
-    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__inlet-flow,
-    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__inlet-flow,
-    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__export-flow,
-    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__export-flow {
-        width: 68px !important;
-        min-width: 68px !important;
-        max-width: 68px !important;
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__traffic,
+    body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__traffic {
+        width: 86px !important;
+        min-width: 86px !important;
+        max-width: 86px !important;
     }
     body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__rate,
     body.nps-bootstrap .management-page--client .nps-table__grid td.client-list__rate {
@@ -5468,22 +5510,20 @@ body.nps-bootstrap .host-endpoint i {
     body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td.client-list__option {
         right: 64px !important;
     }
-    body.nps-bootstrap .management-page--client .nps-table__grid tbody td.client-list__inlet-flow,
-    body.nps-bootstrap .management-page--client .nps-table__grid tbody td.client-list__export-flow,
+    body.nps-bootstrap .management-page--client .nps-table__grid tbody td.client-list__traffic,
     body.nps-bootstrap .management-page--client .nps-table__grid tbody td.client-list__rate,
     body.nps-bootstrap .management-page--client .nps-table__grid tbody td.client-list__connections {
         text-align: right !important;
     }
-    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__inlet-flow .nps-table__header-inner,
-    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__export-flow .nps-table__header-inner,
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__traffic .nps-table__header-inner,
     body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__rate .nps-table__header-inner,
     body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__connections .nps-table__header-inner {
         justify-content: flex-end !important;
     }
-    body.nps-bootstrap .management-page--client .client-actions {
+    body.nps-bootstrap .management-page--client .nps-table__grid tbody td .client-actions {
         gap: 2px;
     }
-    body.nps-bootstrap .management-page--client .client-actions > .btn {
+    body.nps-bootstrap .management-page--client .nps-table__grid tbody td .client-actions > .btn {
         width: 28px;
         min-width: 28px;
         height: 28px;
@@ -5500,6 +5540,45 @@ body.nps-bootstrap .host-endpoint i {
     }
 }
 
+/* Keep every default column, including geolocation, available immediately
+   above the card-view breakpoint without the sticky actions covering data. */
+@media (min-width: 1181px) and (max-width: 1259px) {
+    body.nps-bootstrap .management-page--client .nps-table__grid .nps-table__detail-cell {
+        width: 30px !important; min-width: 30px !important; max-width: 30px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__id {
+        width: 36px !important; min-width: 36px !important; max-width: 36px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__remark {
+        width: 84px !important; min-width: 84px !important; max-width: 84px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__owner {
+        width: 88px !important; min-width: 88px !important; max-width: 88px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__address {
+        width: 112px !important; min-width: 112px !important; max-width: 112px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__version,
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__connections,
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__connection,
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__view {
+        width: 60px !important; min-width: 60px !important; max-width: 60px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__rate {
+        width: 88px !important; min-width: 88px !important; max-width: 88px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__status {
+        width: 44px !important; min-width: 44px !important; max-width: 44px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid :is(th, td).client-list__option {
+        width: 96px !important; min-width: 96px !important; max-width: 96px !important;
+    }
+    body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__option,
+    body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td.client-list__option {
+        right: 60px !important;
+    }
+}
+
 /* Identity and resource columns stay centered; telemetry reads as a compact
    numeric block with stable digit widths. */
 body.nps-bootstrap .management-page--client .client-table-number {
@@ -5509,7 +5588,7 @@ body.nps-bootstrap .management-page--client .client-table-number {
     font-weight: 650;
     white-space: nowrap;
 }
-body.nps-bootstrap .management-page--client .client-live-rate {
+body.nps-bootstrap .management-page--client .client-live-rate:not(.client-metric-pair) {
     display: inline-grid;
     grid-template-columns: auto auto;
     justify-content: end;
@@ -5520,14 +5599,6 @@ body.nps-bootstrap .management-page--client .client-live-rate__value {
     font-size: 10px;
 }
 body.nps-bootstrap .management-page--client .client-live-rate__direction {
-    font-size: 8px;
-}
-body.nps-bootstrap .management-page--client .client-flow-heading {
-    justify-items: end;
-    gap: 0;
-    line-height: 1.1;
-}
-body.nps-bootstrap .management-page--client .client-flow-heading small {
     font-size: 8px;
 }
 
@@ -6194,14 +6265,10 @@ body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row >
 body.nps-bootstrap .management-page--client .nps-table__grid thead th .nps-table__header-inner {
     justify-content: center !important;
 }
-body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__inlet-flow .nps-table__header-inner,
-body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__export-flow .nps-table__header-inner,
+body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__traffic .nps-table__header-inner,
 body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__rate .nps-table__header-inner,
 body.nps-bootstrap .management-page--client .nps-table__grid th.client-list__connections .nps-table__header-inner {
     justify-content: center !important;
-}
-body.nps-bootstrap .management-page--client .nps-table__grid .client-flow-heading {
-    justify-items: center;
 }
 body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td .client-remark-cell,
 body.nps-bootstrap .management-page--client .nps-table__grid tr.nps-table__row > td .client-owner-cell,

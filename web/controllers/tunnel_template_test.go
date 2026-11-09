@@ -317,7 +317,7 @@ func TestTunnelEditProxyAuthIsWriteOnly(t *testing.T) {
 func TestTunnelEditTemplateAllowsClientMigration(t *testing.T) {
 	content := readTemplateForTest(t, "../views/index/edit.html")
 	for _, marker := range []string{
-		`<select id="tunnel-client" class="form-control" name="client_id" required>`,
+		`<select id="tunnel-client" class="form-control" name="client_id" required data-nps-client-select>`,
 		`/client/list`,
 		`Changing the client moves this tunnel`,
 	} {
@@ -795,15 +795,27 @@ func TestHostListTemplateEscapesRuntimeJavaScriptValues(t *testing.T) {
 }
 
 func TestClientSelectorTemplatesUseTextNodes(t *testing.T) {
-	for _, path := range []string{"../views/index/add.html", "../views/index/hadd.html"} {
+	script := readTemplateForTest(t, "../static/js/nps-client-filter.js")
+	for _, marker := range []string{`document.createElement('option')`, `option.textContent =`, `option.selected =`, `data-client-name`, `data-client-owner`, `data-client-online`} {
+		if !strings.Contains(script, marker) {
+			t.Fatalf("shared client selector must construct rich options with DOM text nodes: %s", marker)
+		}
+	}
+	if strings.Contains(script, `.innerHTML`) {
+		t.Fatal("shared client selector must not render client or owner metadata as HTML")
+	}
+	for _, path := range []string{"../views/index/add.html", "../views/index/hadd.html", "../views/index/edit.html", "../views/index/hedit.html"} {
 		content := readTemplateForTest(t, path)
-		for _, marker := range []string{`document.createElement('option')`, `option.textContent =`, `option.selected =`} {
+		for _, marker := range []string{`form-group--client-select`, `data-nps-client-select`, `NpsClientFilter.load(select,`, `/client/list`, `name="client_id"`, `required`} {
 			if !strings.Contains(content, marker) {
-				t.Fatalf("%s must construct client options with DOM text nodes: %s", path, marker)
+				t.Fatalf("%s must reuse the accessible client selector: %s", path, marker)
 			}
 		}
 		if strings.Contains(content, `option += ">" + data.rows[i].Id + '-' + data.rows[i].Remark`) {
 			t.Fatalf("%s must not concatenate a client remark into option HTML", path)
+		}
+		if strings.Contains(path, "edit.html") && !strings.Contains(content, `preserveSelection: true`) {
+			t.Fatalf("%s must preserve the original client on incomplete responses", path)
 		}
 	}
 }

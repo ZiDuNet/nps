@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.42</sub>
+﻿# NPS <sub>v1.1.43</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -198,6 +198,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.43** (2026-11-10) - Improved mobile login, registration and IP registration without changing desktop glass styling; unified client selectors with owner context and online badges, compact traffic/rate readouts, and browser-only IPv4/IPv6 geolocation with bundled country flags. Includes cross-platform NPC update/restart recovery fixes and the refreshed Account Management page. See the [upgrade notes](docs/upgrade-1.1.43.md).
 
 - **v1.1.42** (2026-11-06) - Added three-day remembered-device registration and individual revocation, in-app administrator TOTP management, a global Security tab with browser PoW compatibility guidance, and the unified Account Management page. Fixed fixed-topbar/page-header overlap, global-settings tab wrapping, and TCP live-connection counts on unlimited tunnels.
 

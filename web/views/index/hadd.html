@@ -19,9 +19,9 @@
                     <form id="host-form" class="form form-horz form-workflow-form nps-form" data-form-workflow="host-create" autocomplete="off">
                         <div class="form-section-title" data-section-tier="primary" data-section-summary-zh="客户端和访问域名（必填）" data-section-summary-en="Client and public domain (required)"><i class="fa fa-sitemap" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
 
-                        <div class="form-group">
+                        <div class="form-group form-group--client-select">
                             <label class="form-label font-bold" for="host-client" data-i18n-zh="所属客户端" data-i18n-en="Client">所属客户端</label>
-                            <div class="form-group-wrapper"><select id="host-client" class="form-control" name="client_id" required></select><span class="help-block" data-i18n-zh="选择承载这条域名规则的 NPC 客户端；内网目标由该客户端访问。" data-i18n-en="Select the NPC client that will carry this host rule; the target is reached from that client's private network.">选择承载这条域名规则的 NPC 客户端；内网目标由该客户端访问。</span></div>
+                            <div class="form-group-wrapper"><select id="host-client" class="form-control" name="client_id" required data-nps-client-select></select><span class="help-block" data-i18n-zh="选择承载这条域名规则的 NPC 客户端；内网目标由该客户端访问。" data-i18n-en="Select the NPC client that will carry this host rule; the target is reached from that client's private network.">选择承载这条域名规则的 NPC 客户端；内网目标由该客户端访问。</span></div>
                         </div>
                         <div class="form-group">
                             <label class="form-label font-bold" for="host-remark" data-i18n-zh="规则备注" data-i18n-en="Remark">规则备注</label>
@@ -232,9 +232,8 @@ $(function () {
     }
     function getClientList() {
         var select = document.getElementById('host-client'); if (!select) return;
-        var selectedID = Number('{{.client_id}}'); if (!isFinite(selectedID) || selectedID < 0) selectedID = 0;
-        $.ajax({type: 'POST', url: '{{.web_base_url}}/client/list', data: {order: 'asc', offset: 0, limit: 999}, dataType: 'json'}).done(function (data) {
-            select.textContent = ''; (data && Array.isArray(data.rows) ? data.rows : []).forEach(function (client) { var id = Number(client.Id); if (!isFinite(id) || id <= 0) return; var option = document.createElement('option'); option.value = String(id); option.textContent = id + ' · ' + (client.Remark || localized('未命名客户端', 'Unnamed client')); option.selected = id === selectedID; select.appendChild(option); });
+        NpsClientFilter.load(select, {
+            url: '{{.web_base_url}}/client/list', selectedId: '{{.client_id}}'
         });
     }
     function syncHostHealthCheckFields() {

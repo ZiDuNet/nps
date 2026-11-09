@@ -216,6 +216,11 @@
 		npsRefreshToggleLabels(dom);
 		npsDecorateForms(dom);
 		npsDecorateDetailControls(dom);
+		// Form client selectors keep native options for submission, but their
+		// visible labels and status pills must follow language changes as well.
+		$(dom || document).find('select[data-nps-client-select]').each(function () {
+			if (this.__npsClientFilter) this.__npsClientFilter.refresh();
+		});
 		// Column titles are generated before the asynchronous language file may
 		// finish loading; rebuild the filter menu after labels are translated.
 		var tableInstance = $('#table').data('nps.table');
@@ -702,6 +707,7 @@ function npsSetFieldValidity(field, valid) {
     if (!group) return valid;
     group.classList.toggle('has-field-error', !valid);
     field.classList.toggle('is-invalid', !valid);
+    if (field.__npsClientFilter) field.__npsClientFilter.syncValidity();
     var message = group.querySelector('.field-validation-message');
     if (!valid && !message) {
         message = document.createElement('span');
@@ -720,12 +726,13 @@ function validateNpsForm(form, announce) {
     var first = null;
     for (var i = 0; i < required.length; i++) {
         var field = required[i];
-        if (field.type === 'checkbox' || field.type === 'radio' || field.offsetParent === null) continue;
+        var surface = field.__npsClientFilter ? field.__npsClientFilter.trigger : field;
+        if (field.disabled || field.type === 'checkbox' || field.type === 'radio' || surface.offsetParent === null) continue;
         var valid = !!field.value && field.value.trim() !== '';
         npsSetFieldValidity(field, valid);
         if (!valid) {
             missing.push(npsFieldLabel(field));
-            if (!first) first = field;
+            if (!first) first = surface;
         }
     }
     if (first) {

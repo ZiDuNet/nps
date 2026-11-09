@@ -20,19 +20,12 @@
                     <input type="hidden" name="id" value="{{.c.Id}}">
 
                     <div class="form-section-title" data-section-tier="primary"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="基本信息" data-i18n-en="Basic information">基本信息</span></div>
-                    <div class="form-group form-group--wide">
-                        <label class="form-label font-bold" data-i18n-zh="客户端标识" data-i18n-en="Client identity">客户端标识</label>
-                        <div class="form-group-wrapper">
-                            <div class="readonly-client"><strong>{{if .c.Remark}}{{.c.Remark}}{{else}}未命名客户端{{end}}</strong><small>ID {{.c.Id}}</small></div>
-                            <span class="help-block" data-i18n-zh="客户端 ID 由系统分配，编辑时不可更换。" data-i18n-en="The client ID is assigned by the system and cannot be changed while editing.">客户端 ID 由系统分配，编辑时不可更换。</span>
-                        </div>
-                    </div>
-                    <div class="form-group" id="remark">
-                        <label class="form-label font-bold" for="client-remark" langtag="word-remark"></label>
+                    <div class="form-group form-group--wide" id="remark">
+                        <label class="form-label font-bold" for="client-remark" data-i18n-zh="客户端标识（备注）" data-i18n-en="Client name (remark)">客户端标识（备注）</label>
                         <div class="form-group-wrapper">
                             <input id="client-remark" class="form-control" value="{{.c.Remark}}" type="text" name="remark" placeholder=""
-                                langtag="word-remark" required>
-                            <span class="help-block m-b-none" data-i18n-zh="用于识别客户端的备注，不影响 NPC 连接或验证。" data-i18n-en="A label for identifying this client; it does not affect NPC connections or authentication.">用于识别客户端的备注，不影响 NPC 连接或验证。</span>
+                                langtag="word-remark" aria-describedby="client-remark-hint" required>
+                            <span id="client-remark-hint" class="help-block m-b-none"><strong>ID {{.c.Id}}</strong> · <span data-i18n-zh="名称可直接修改，不影响 VKey 或 NPC 连接；数字 ID 由系统分配，不可修改。" data-i18n-en="You can rename this client without changing its VKey or NPC connection. The numeric ID is assigned by the system and cannot be changed.">名称可直接修改，不影响 VKey 或 NPC 连接；数字 ID 由系统分配，不可修改。</span></span>
                         </div>
                     </div>
                     {{if eq true .isAdmin}}

@@ -67,11 +67,10 @@
                         </div>
                     </div>
 
-                    <div class="form-group tunnel-mode-field" id="client_id" data-tunnel-field="client_id">
+                    <div class="form-group form-group--client-select tunnel-mode-field" id="client_id" data-tunnel-field="client_id">
                         <label class="form-label font-bold" for="nps_client_id" langtag="word-clientid"></label>
                         <div class="form-group-wrapper">
-                            <select class="form-control" name="client_id" placeholder="" id="nps_client_id"
-                                    langtag="word-belongclient"></select>
+                            <select class="form-control" name="client_id" id="nps_client_id" data-nps-client-select required></select>
                             <span class="help-block" data-i18n-zh="选择承载这条隧道的 NPC 客户端；目标地址由该客户端所在内网访问。" data-i18n-en="Select the NPC client that will carry this tunnel; the target is reached from that client's private network.">选择承载这条隧道的 NPC 客户端；目标地址由该客户端所在内网访问。</span>
                         </div>
                     </div>
@@ -388,29 +387,8 @@
     function getClientList() {
         var select = document.querySelector("select[name='client_id']");
         if (!select) return;
-        select.textContent = '';
-        var selectedClientId = Number('{{.client_id}}');
-        if (!isFinite(selectedClientId) || Math.floor(selectedClientId) !== selectedClientId || selectedClientId < 0) {
-            selectedClientId = 0;
-        }
-        $.ajax({
-            type: "POST",
-            url: "{{.web_base_url}}/client/list",
-            data: {order: "asc", offset: 0, limit: 999},
-            dataType: "json",
-            success: function (data) {
-                if (data && Array.isArray(data.rows)) {
-                    for (var i = 0; i < data.rows.length; i++) {
-                        var clientId = Number(data.rows[i].Id);
-                        if (!isFinite(clientId) || Math.floor(clientId) !== clientId || clientId <= 0) continue;
-                        var option = document.createElement('option');
-                        option.value = String(clientId);
-                        option.textContent = clientId + ' · ' + (data.rows[i].Remark || (typeof npsIsEnglish === 'function' && npsIsEnglish() ? 'Unnamed client' : '未命名客户端'));
-                        option.selected = clientId === selectedClientId;
-                        select.appendChild(option);
-                    }
-                }
-            }
+        NpsClientFilter.load(select, {
+            url: '{{.web_base_url}}/client/list', selectedId: '{{.client_id}}'
         });
     }
 </script>

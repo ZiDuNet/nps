@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <script>
         function readRegisterThemePreference() {
             try {
@@ -29,7 +29,7 @@
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261106-3" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261026-3" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/nps-login-v2.css?v={{.version}}&ui=20261106-6" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-login-v2.css?v={{.version}}&ui=20261110-1" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/bootstrap-5.3.3.bundle.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
@@ -108,7 +108,7 @@
                     <div class="auth-login-form-grid">
                         <div class="form-group auth-login-field">
                             <label class="auth-login-field__label" for="auth-username" langtag="word-username"></label>
-                            <div class="auth-login-control"><i class="fa fa-user auth-login-control__icon" aria-hidden="true"></i><input id="auth-username" name="username" class="form-control" placeholder="username" required autocomplete="username" langtag="word-username"></div>
+                            <div class="auth-login-control"><i class="fa fa-user auth-login-control__icon" aria-hidden="true"></i><input id="auth-username" name="username" class="form-control" placeholder="username" required autocomplete="username" autocapitalize="none" spellcheck="false" langtag="word-username"></div>
                             <span class="auth-login-field__hint" data-i18n-zh="用于登录面板的唯一用户名。" data-i18n-en="The unique username used to sign in.">用于登录面板的唯一用户名。</span>
                         </div>
                         <div class="form-group auth-login-field">
@@ -120,7 +120,7 @@
                     {{if .email_verify}}
                     <div class="form-group auth-login-field auth-login-field--wide">
                         <label class="auth-login-field__label" for="auth-email" data-i18n-zh="邮箱" data-i18n-en="Email">邮箱</label>
-                        <div class="auth-login-control"><i class="fa fa-envelope auth-login-control__icon" aria-hidden="true"></i><input id="auth-email" name="email" type="email" class="form-control" placeholder="name@example.com" required autocomplete="email"></div>
+                        <div class="auth-login-control"><i class="fa fa-envelope auth-login-control__icon" aria-hidden="true"></i><input id="auth-email" name="email" type="email" inputmode="email" class="form-control" placeholder="name@example.com" required autocomplete="email" autocapitalize="none" spellcheck="false"></div>
                         <span class="auth-login-field__hint" data-i18n-zh="用于接收一次性注册验证码；同一邮箱只能绑定一个账号。" data-i18n-en="Used for a one-time registration code; each email can belong to only one account.">用于接收一次性注册验证码；同一邮箱只能绑定一个账号。</span>
                     </div>
                     <div class="form-group auth-login-field auth-login-field--wide">

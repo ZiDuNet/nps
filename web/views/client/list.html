@@ -103,7 +103,37 @@
             + (npsIsEnglish() ? 'Locating…' : '定位中…') + '</span>';
         return '<span class="client-address-cell" data-ip-region-ip="' + safeAddress + '" title="' + safeAddress + '">'
             + '<span class="client-address-cell__ip">' + safeAddress + '</span>'
-            + output
+            + '<span class="client-address-cell__location"><img class="client-address-cell__flag" data-ip-region-flag width="16" height="12" alt="" aria-hidden="true" hidden>' + output + '</span>'
+            + '</span>';
+    }
+
+    function clientMetricHeading(live) {
+        var zh = live ? '实时带宽' : '累计流量';
+        var en = live ? 'Live rate' : 'Traffic';
+        var zhHint = zh + (live ? '（B/s，每秒字节数）' : '（累计字节数，非实时速度）')
+            + '；↑ 入口：公网→内网；↓ 出口：内网→公网。点击按↑入口' + (live ? '带宽' : '流量') + '排序。';
+        var enHint = (live ? 'Live bandwidth in bytes per second (B/s)' : 'Cumulative traffic in bytes, not speed')
+            + '; ↑ Inlet: public → private; ↓ Outlet: private → public. Click to sort by ↑ inlet.';
+        return '<span class="client-metric-heading" tabindex="0" title="' + npsEscapeHtml(npsIsEnglish() ? enHint : zhHint) + '"'
+            + ' data-title-zh="' + npsEscapeHtml(zhHint) + '" data-title-en="' + npsEscapeHtml(enHint) + '"'
+            + ' aria-label="' + npsEscapeHtml(npsIsEnglish() ? enHint : zhHint) + '"'
+            + ' data-aria-label-zh="' + npsEscapeHtml(zhHint) + '" data-aria-label-en="' + npsEscapeHtml(enHint) + '">'
+            + '<span data-i18n-zh="' + zh + '" data-i18n-en="' + en + '">' + (npsIsEnglish() ? en : zh) + '</span>'
+            + '<i class="fa fa-info-circle" aria-hidden="true"></i></span>';
+    }
+
+    function clientMetricMarkup(row, live) {
+        var data = (live ? row.Rate : row.Flow) || {};
+        var inlet = changeunit(Number(live ? data.UploadRate : data.InletFlow) || 0) + (live ? '/s' : '');
+        var outlet = changeunit(Number(live ? data.DownloadRate : data.ExportFlow) || 0) + (live ? '/s' : '');
+        var inletLabel = npsIsEnglish() ? 'Inlet: public → private' : '入口：公网→内网';
+        var outletLabel = npsIsEnglish() ? 'Outlet: private → public' : '出口：内网→公网';
+        return '<span class="client-metric-pair ' + (live ? 'client-live-rate' : 'client-traffic') + '"'
+            + (live ? ' data-live-client-id="' + Number(row.Id) + '"' : '') + '>'
+            + '<span class="client-metric-pair__direction" aria-hidden="true" title="' + inletLabel + '">↑</span>'
+            + '<span class="client-metric-pair__value"><span class="sr-only">' + inletLabel + ' </span><span' + (live ? ' data-live-client-up' : '') + '>' + npsEscapeHtml(inlet) + '</span></span>'
+            + '<span class="client-metric-pair__direction" aria-hidden="true" title="' + outletLabel + '">↓</span>'
+            + '<span class="client-metric-pair__value"><span class="sr-only">' + outletLabel + ' </span><span' + (live ? ' data-live-client-down' : '') + '>' + npsEscapeHtml(outlet) + '</span></span>'
             + '</span>';
     }
 
@@ -121,14 +151,9 @@
         sidePagination: 'server',//服务器端分页
         pageNumber: 1,
         pageList: [20, 50, 100, 200],//分页步进值
-        // v3 keeps the action column visible even when an older browser
-        // preference hid the version column (where the update action used to
-        // live).  Existing preferences are intentionally not reused so the
-        // remote-update action cannot disappear after an upgrade.
-        // Reset the compact-column preference once so deployments that saved
-        // the previous hidden-flow defaults now receive the new visible flow
-        // columns. Administrators can still hide them from the column menu.
-        storageKey: 'client-v4',
+        // v5 merges inlet/outlet totals and restores the address column on
+        // compact desktops. Do not reuse the old two-column flow preferences.
+        storageKey: 'client-v5',
         detailView: true,
         cardView: clientListCardView,
         smartDisplay: true, // 智能显示 pagination 和 cardview 等
@@ -142,6 +167,15 @@
         onCollapseRow: function () { window.setTimeout(function () { npsDecorateDetailControls('#table'); }, 0); },
         onPostBody: function (data) {
             $('body').setLang('#table');
+            // The whole header, including its padding and sort indicator,
+            // should explain the metric, not just the text/icon itself.
+            $('#table .client-metric-heading').each(function () {
+                $(this).closest('th').add($(this).parent()).attr({
+                    title: this.title,
+                    'data-title-zh': this.getAttribute('data-title-zh'),
+                    'data-title-en': this.getAttribute('data-title-en')
+                });
+            });
             npsApplyTableState(this, 'client');
             if (window.npsIpRegion) window.npsIpRegion.decorate('#table');
         },
@@ -320,7 +354,7 @@
                 + '<div class="client-detail__grid">'
                 + kv('<span langtag="word-maxconnections"></span>', text(row.MaxConn))
                 + kv('<span langtag="word-curconnections"></span>', '<span class="live-connections" data-live-client-id="' + Number(row.Id) + '"><span data-live-client-connections>' + text(row.NowConn, 0) + ' / ' + text(Number(row.MaxConn) > 0 ? row.MaxConn : '∞') + '</span></span>')
-                + kv(english ? 'Live bandwidth' : '实时带宽', '<span class="client-live-rate" data-live-client-id="' + Number(row.Id) + '"><span class="client-live-rate__direction">↑</span><span class="client-live-rate__value" data-live-client-up>' + changeunit(Number((row.Rate || {}).UploadRate) || 0) + '/s</span><span class="client-live-rate__direction">↓</span><span class="client-live-rate__value" data-live-client-down>' + changeunit(Number((row.Rate || {}).DownloadRate) || 0) + '/s</span></span>')
+                + kv(english ? 'Live bandwidth' : '实时带宽', clientMetricMarkup(row, true))
                 + kv('<span langtag="word-flowlimit"></span>', text(flow.FlowLimit, 0) + ' M')
                 + kv('<span langtag="word-ratelimit"></span>', text(row.RateLimit, 0) + ' KB/s')
                 + kv('<span langtag="word-maxtunnels"></span>', text(row.MaxTunnelNum, 0))
@@ -456,50 +490,34 @@
                 title: '<span langtag="word-address"></span>',//标题
                 halign: 'center',
                 class: 'client-list__address',
-                // Compact desktop keeps both flow columns visible; the
-                // address remains available in the column picker and detail.
-                visible: !clientListCompact,
+                visible: true,
                 formatter: function(value) {
                     return clientAddressMarkup(value);
                 }
             },
             {
                 field: 'InletFlow',//域值
-                title: '<span class="client-flow-heading"><span langtag="word-inletflow-short"></span><small langtag="word-inletflow-direction"></small></span>',//标题
+                title: clientMetricHeading(false),
                 halign: 'center',
-                class: 'client-list__inlet-flow',
+                align: 'center',
+                class: 'client-list__traffic',
                 visible: true,
-                sortable: true,//启用排序
-                formatter: function (value, row, index) {
-                    return '<span class="client-table-number">' + npsEscapeHtml(changeunit((row.Flow || {}).InletFlow)) + '</span>';
-                }
-            },
-            {
-                field: 'ExportFlow',//域值
-                title: '<span class="client-flow-heading"><span langtag="word-exportflow-short"></span><small langtag="word-exportflow-direction"></small></span>',//标题
-                halign: 'center',
-                class: 'client-list__export-flow',
-                visible: true,
-                sortable: true,//启用排序
-                formatter: function (value, row, index) {
-                    return '<span class="client-table-number">' + npsEscapeHtml(changeunit((row.Flow || {}).ExportFlow)) + '</span>';
+                // Preserve the existing inlet-flow server-side sort contract.
+                sortable: true,
+                formatter: function (value, row) {
+                    return clientMetricMarkup(row, false);
                 }
             },
             {
                 field: 'Rate.UploadRate',//域值
-                title: '<span data-i18n-zh="实时带宽 ↑ / ↓" data-i18n-en="Live bandwidth ↑ / ↓">实时带宽 ↑ / ↓</span>',
+                title: clientMetricHeading(true),
                 halign: 'center',
+                align: 'center',
                 class: 'client-list__rate',
                 visible: true,//false表示不显示
                 sortable: true,
                 formatter: function (value, row, index) {
-                    var rate = row.Rate || {};
-                    var upload = Number(rate.UploadRate) || 0;
-                    var download = Number(rate.DownloadRate) || 0;
-                    return '<span class="client-live-rate" data-live-client-id="' + Number(row.Id) + '">'
-                        + '<span class="client-live-rate__direction">↑</span><span class="client-live-rate__value" data-live-client-up>' + changeunit(upload) + '/s</span>'
-                        + '<span class="client-live-rate__direction">↓</span><span class="client-live-rate__value" data-live-client-down>' + changeunit(download) + '/s</span>'
-                        + '</span>';
+                    return clientMetricMarkup(row, true);
                 }
             },
             {

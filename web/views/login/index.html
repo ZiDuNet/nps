@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <script>
         function readLoginThemePreference() {
             try {
@@ -30,7 +30,7 @@
     <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261106-3" rel="stylesheet">
     <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261026-3" rel="stylesheet">
-    <link href="{{.web_base_url}}/static/css/nps-login-v2.css?v={{.version}}&ui=20261106-7" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-login-v2.css?v={{.version}}&ui=20261110-1" rel="stylesheet">
 
     <script src="{{.web_base_url}}/static/js/bootstrap-5.3.3.bundle.min.js?v={{.version}}"></script>
     <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
@@ -136,7 +136,7 @@
                         <label class="auth-login-field__label" for="auth-username" langtag="word-username"></label>
                         <div class="auth-login-control">
                             <i class="fa fa-user auth-login-control__icon" aria-hidden="true"></i>
-                            <input id="auth-username" name="username" class="form-control" placeholder="username" required autocomplete="username" langtag="word-username">
+                            <input id="auth-username" name="username" class="form-control" placeholder="username" required autocomplete="username" autocapitalize="none" spellcheck="false" langtag="word-username">
                         </div>
                     </div>
                     <div class="form-group auth-login-field">

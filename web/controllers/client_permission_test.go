@@ -306,6 +306,53 @@ func TestDashboardUserCannotEditAnotherUsersClient(t *testing.T) {
 	}
 }
 
+func TestClientIdentityRenamePreservesClientIdentity(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		isAdmin bool
+	}{
+		{name: "administrator", isAdmin: true},
+		{name: "owner"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			utils := useClientPermissionTestDb(t)
+			utils.JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Status: true})
+			client := &file.Client{
+				Id: 42, UserId: 7, VerifyKey: "unchanged-vkey", Status: true,
+				Remark: "before", Cnf: &file.Config{}, Flow: &file.Flow{},
+			}
+			utils.JsonDb.Clients.Store(client.Id, client)
+			t.Cleanup(func() {
+				client.RLock()
+				rate := client.Rate
+				client.RUnlock()
+				if rate != nil {
+					rate.Stop()
+				}
+			})
+			sessionValues := testUserSession(7)
+			sessionValues["isAdmin"] = tt.isAdmin
+			form := url.Values{
+				"id": {"42"}, "remark": {"办公电脑"}, "vkey": {"unchanged-vkey"}, "user_id": {"7"},
+			}
+			controller, recorder := newClientPermissionController(t, "Edit", form, sessionValues)
+			runClientPermissionAction(t, controller.Edit)
+			if response := readClientPermissionResponse(t, recorder); response["status"] != float64(1) {
+				t.Fatalf("rename response = %#v", response)
+			}
+			saved, err := utils.GetClient(42)
+			if err != nil {
+				t.Fatalf("find renamed client by its original ID: %v", err)
+			}
+			saved.RLock()
+			defer saved.RUnlock()
+			if saved.Remark != "办公电脑" || saved.Id != 42 || saved.UserId != 7 || saved.VerifyKey != "unchanged-vkey" {
+				t.Fatalf("rename must change only the label, got id=%d owner=%d remark=%q", saved.Id, saved.UserId, saved.Remark)
+			}
+		})
+	}
+}
+
 func TestDashboardUserCanDeleteOwnClient(t *testing.T) {
 	utils := useClientPermissionTestDb(t)
 	utils.JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Status: true})

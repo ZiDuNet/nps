@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.42</sub>
+﻿# NPS <sub>v1.1.43</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -213,6 +213,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.43** (2026-11-10) - 优化手机登录、注册和 IP 登记，保留桌面磨砂双栏；统一客户端选择框的所属用户与在线气泡，压缩双向流量展示，并增加浏览器端中文 IP 归属地、IPv4/IPv6 降级查询和本地国家旗帜。一并发布跨平台 NPC 更新/重启恢复修复及账户管理页优化，详见[升级说明](docs/upgrade-1.1.43.md)。
 
 - **v1.1.42** (2026-11-06) - 新增 3 天免登设备登记与单独撤销、管理员页面化 TOTP、全局安全 Tab 和浏览器 PoW 兼容提示；原「API 接入」统一为「账户管理」，并将所有页面标题、状态与说明统一到固定顶栏，修复顶部重叠、全局参数页签换行和 TCP 当前连接数不计入不限速隧道的问题。
 

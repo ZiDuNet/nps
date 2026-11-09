@@ -63,6 +63,10 @@ jobs:
       - name: Enable Yarn
         run: corepack enable
 
+      - name: Test Web browser regressions
+        working-directory: .
+        run: node --test web/tests/*.test.cjs
+
       - name: Verify release version metadata
         run: |
           source_version=$(sed -nE 's/^const VERSION = "([^"]+)"$/\1/p' ../../../../lib/version/version.go)

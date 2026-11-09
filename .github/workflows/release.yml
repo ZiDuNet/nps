@@ -44,6 +44,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Test Web browser regressions
+        run: node --test web/tests/*.test.cjs
       - name: Verify release version metadata
         working-directory: cmd/npc/npc-gui/frontend
         run: |

@@ -570,7 +570,9 @@ func TestResourceListsExposeCascadingIdentityFilters(t *testing.T) {
 		t.Fatalf("read console stylesheet: %v", err)
 	}
 	for _, marker := range []string{
-		".client-flow-heading",
+		".client-metric-heading",
+		".client-metric-pair",
+		".client-address-cell__flag",
 		".host-domain-badge--custom",
 		".host-endpoint",
 		".host-client__line",
@@ -591,15 +593,23 @@ func TestResourceListsExposeCascadingIdentityFilters(t *testing.T) {
 		t.Fatalf("read client list template: %v", err)
 	}
 	for _, marker := range []string{
-		"storageKey: 'client-v4'",
-		"class: 'client-list__address',\n                // Compact desktop keeps both flow columns visible",
-		"class: 'client-list__inlet-flow',\n                visible: true",
-		"class: 'client-list__export-flow',\n                visible: true",
+		"storageKey: 'client-v5'",
+		"class: 'client-list__address',\n                visible: true",
+		"class: 'client-list__traffic',\n                visible: true",
+		"title: clientMetricHeading(false)",
+		"title: clientMetricHeading(true)",
+		"clientMetricMarkup(row, false)",
+		"data-ip-region-flag",
 		"align: 'center',\n                class: 'client-list__remark'",
 		"align: 'center',\n                class: 'client-list__owner'",
 	} {
 		if !strings.Contains(string(clientListContent), marker) {
 			t.Fatalf("client list template misses visible flow marker %q", marker)
+		}
+	}
+	for _, oldColumn := range []string{"class: 'client-list__inlet-flow'", "class: 'client-list__export-flow'"} {
+		if strings.Contains(string(clientListContent), oldColumn) {
+			t.Fatalf("client list must merge both traffic directions, found %q", oldColumn)
 		}
 	}
 }
@@ -636,6 +646,8 @@ func TestClientFiltersExposeOnlineStatusThroughAccessibleListbox(t *testing.T) {
 		".nps-client-filter__status.is-online",
 		".nps-client-filter__status.is-offline",
 		".nps-client-filter__trigger:focus-visible",
+		"body.nps-bootstrap .form-page .form-workflow-form select.nps-client-filter__native",
+		".nps-client-filter--form",
 		".nps-client-filter__menu",
 		"position: fixed",
 		"100dvh",

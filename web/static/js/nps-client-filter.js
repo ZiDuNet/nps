@@ -27,7 +27,36 @@
     }
 
     function optionLabel(option) {
+        if (option && option.hasAttribute('data-client-name')) {
+            return clientName(option) + ' · ID ' + option.value + ' | ' + clientOwner(option);
+        }
         return String(option && option.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function clientName(option) {
+        return String(option.getAttribute('data-client-name') || '').trim() || (isEnglish() ? 'Unnamed client' : '未命名客户端');
+    }
+
+    function clientOwner(option) {
+        return String(option.getAttribute('data-client-owner') || '').trim() || (isEnglish() ? 'Unassigned' : '未分配');
+    }
+
+    function renderLabel(container, option) {
+        container.textContent = '';
+        container.title = optionLabel(option);
+        if (!option || !option.hasAttribute('data-client-name')) {
+            container.textContent = optionLabel(option);
+            return;
+        }
+        var identity = document.createElement('span');
+        identity.className = 'nps-client-filter__identity';
+        [['name', clientName(option)], ['id', 'ID ' + option.value], ['owner', clientOwner(option)]].forEach(function (part) {
+            var text = document.createElement('span');
+            text.className = 'nps-client-filter__' + part[0];
+            text.textContent = part[1];
+            identity.appendChild(text);
+        });
+        container.appendChild(identity);
     }
 
     function selectedOption(select) {
@@ -46,6 +75,7 @@
         var container = select.closest('.nps-table-filter');
         var label = container && container.querySelector('.nps-table-filter__label');
         if (label && String(label.textContent || '').trim()) return String(label.textContent).trim();
+        if (select.labels && select.labels.length) return String(select.labels[0].textContent || '').trim();
         return String(select.getAttribute('aria-label') || '').trim();
     }
 
@@ -66,10 +96,13 @@
         row.setAttribute('tabindex', '-1');
         row.setAttribute('data-value', value);
         row.setAttribute('aria-selected', value === String(instance.select.value) ? 'true' : 'false');
+        row.setAttribute('aria-disabled', option.disabled ? 'true' : 'false');
+        row.setAttribute('aria-label', optionLabel(option) + (online === null ? '' : ', ' + statusText(online)));
+        row.title = optionLabel(option);
 
         var text = document.createElement('span');
         text.className = 'nps-client-filter__option-label';
-        text.textContent = optionLabel(option);
+        renderLabel(text, option);
         row.appendChild(text);
         if (online !== null) row.appendChild(makeStatus(online));
 
@@ -96,6 +129,7 @@
     ClientFilter.prototype.build = function () {
         var wrapper = document.createElement('div');
         wrapper.className = 'nps-client-filter';
+        if (this.select.hasAttribute('data-nps-client-select')) wrapper.classList.add('nps-client-filter--form');
         wrapper.setAttribute('data-nps-client-filter', 'true');
 
         var trigger = document.createElement('button');
@@ -104,6 +138,7 @@
         trigger.setAttribute('aria-haspopup', 'listbox');
         trigger.setAttribute('aria-expanded', 'false');
         trigger.setAttribute('aria-controls', this.id + '-listbox');
+        trigger.id = this.id + '-trigger';
 
         var label = document.createElement('span');
         label.className = 'nps-client-filter__label';
@@ -163,8 +198,35 @@
             }
         });
         this.select.addEventListener('change', function () {
+            if (self.select.value && typeof window.npsSetFieldValidity === 'function') window.npsSetFieldValidity(self.select, true);
             self.refresh();
         });
+        this.select.addEventListener('invalid', function (event) {
+            // Native validation must focus the visible control, not the hidden
+            // source select (which otherwise raises "not focusable" errors).
+            event.preventDefault();
+            if (typeof window.npsSetFieldValidity === 'function') window.npsSetFieldValidity(self.select, false);
+            else self.select.classList.add('is-invalid');
+            self.syncValidity();
+            self.trigger.focus();
+        });
+        Array.prototype.forEach.call(this.select.labels || [], function (label) {
+            label.addEventListener('click', function (event) {
+                if (self.select.disabled) return;
+                event.preventDefault();
+                self.trigger.focus();
+            });
+        });
+        if (this.select.form) this.select.form.addEventListener('reset', function () {
+            window.setTimeout(function () { self.refresh(); }, 0);
+        });
+        if (window.MutationObserver) {
+            this.observer = new window.MutationObserver(function () { self.refresh(); });
+            this.observer.observe(this.select, {
+                childList: true, characterData: true, subtree: true, attributes: true,
+                attributeFilter: ['disabled', 'required', 'class', 'selected', 'value', 'label', 'data-client-online', 'data-client-name', 'data-client-owner']
+            });
+        }
         document.addEventListener('click', function (event) {
             if (self.open && !self.wrapper.contains(event.target)) self.close(false);
         });
@@ -177,6 +239,8 @@
     };
 
     ClientFilter.prototype.refresh = function () {
+        var focused = this.open && this.listbox.contains(document.activeElement);
+        var focusedValue = focused ? document.activeElement.getAttribute('data-value') : null;
         var selected = selectedOption(this.select);
         var online = optionOnline(selected);
         var label = optionLabel(selected);
@@ -186,8 +250,8 @@
             accessibleLabel += ', ' + statusText(online);
         }
 
-        this.label.textContent = label;
-        this.label.title = label;
+        renderLabel(this.label, selected);
+        this.trigger.title = label;
         this.statusSlot.textContent = '';
         if (online !== null) this.statusSlot.appendChild(makeStatus(online));
 
@@ -195,8 +259,10 @@
         this.trigger.disabled = !!this.select.disabled;
         this.wrapper.classList.toggle('is-disabled', !!this.select.disabled);
         this.listbox.setAttribute('aria-label', fieldLabel || label);
+        this.syncValidity();
 
         var selectedValue = String(this.select.value);
+        this.activeIndex = -1;
         this.options = [];
         this.listbox.textContent = '';
         var fragment = document.createDocumentFragment();
@@ -208,7 +274,18 @@
         }, this);
         this.listbox.appendChild(fragment);
         if (this.select.disabled && this.open) this.close(false);
-        if (this.open) this.positionMenu();
+        if (this.open) {
+            this.positionMenu();
+            if (focused) {
+                var row = this.options.filter(function (item) { return item.getAttribute('data-value') === focusedValue; })[0];
+                this.focusOption(row || this.options[this.activeIndex] || this.options[0]);
+            }
+        }
+    };
+
+    ClientFilter.prototype.syncValidity = function () {
+        this.listbox.setAttribute('aria-required', this.select.required ? 'true' : 'false');
+        this.trigger.setAttribute('aria-invalid', this.select.classList.contains('is-invalid') ? 'true' : 'false');
     };
 
     ClientFilter.prototype.toggle = function () {
@@ -217,7 +294,7 @@
     };
 
     ClientFilter.prototype.openMenu = function (key) {
-        if (!this.options.length) return;
+        if (this.select.disabled || !this.options.length) return;
         this.open = true;
         this.listbox.hidden = false;
         this.trigger.setAttribute('aria-expanded', 'true');
@@ -252,7 +329,8 @@
         var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
         if (!viewportWidth || !viewportHeight) return;
 
-        var maxWidth = Math.max(0, Math.min(360, viewportWidth - margin * 2));
+        var preferredWidth = this.select.hasAttribute('data-nps-client-select') ? Math.max(360, triggerRect.width) : 360;
+        var maxWidth = Math.max(0, Math.min(preferredWidth, viewportWidth - margin * 2));
         this.listbox.style.visibility = 'hidden';
         this.listbox.style.maxHeight = 'none';
         this.listbox.style.minWidth = Math.round(Math.min(triggerRect.width, maxWidth)) + 'px';
@@ -317,11 +395,12 @@
 
     ClientFilter.prototype.choose = function (value) {
         if (this.select.disabled) return;
-        Array.prototype.some.call(this.select.options, function (option) {
-            if (String(option.value) !== String(value)) return false;
+        var chosen = Array.prototype.some.call(this.select.options, function (option) {
+            if (option.disabled || String(option.value) !== String(value)) return false;
             this.select.selectedIndex = option.index;
             return true;
         }, this);
+        if (!chosen) return;
         this.select.dispatchEvent(new Event('change', {bubbles: true}));
         this.close(true);
     };
@@ -333,8 +412,78 @@
         return select.__npsClientFilter;
     }
 
+    function validClientID(value) {
+        var id = Number(value);
+        return isFinite(id) && Math.floor(id) === id && id > 0 ? id : 0;
+    }
+
+    function showPlaceholder(select, zh, en) {
+        var option = document.createElement('option');
+        option.value = '';
+        option.setAttribute('data-i18n-zh', zh);
+        option.setAttribute('data-i18n-en', en);
+        option.textContent = isEnglish() ? en : zh;
+        select.textContent = '';
+        select.appendChild(option);
+    }
+
+    // The existing endpoint enforces the current account's visibility. Never
+    // request a separate user list or turn display metadata into submitted IDs.
+    function load(select, settings) {
+        if (!select || !window.jQuery) return null;
+        settings = settings || {};
+        var selectedID = validClientID(settings.selectedId || select.value);
+        if (!select.options.length) showPlaceholder(select, '正在加载客户端…', 'Loading clients…');
+        var instance = enhance(select);
+        instance.trigger.setAttribute('aria-busy', 'true');
+        return window.jQuery.ajax({
+            type: 'POST', url: settings.url, data: {order: 'asc', offset: 0, limit: 999}, dataType: 'json'
+        }).done(function (data) {
+            if (!data || !Array.isArray(data.rows)) {
+                if (!select.value) showPlaceholder(select, '加载客户端失败，请刷新页面', 'Failed to load clients; refresh the page');
+                return;
+            }
+            var clients = data.rows.filter(function (client) { return client && validClientID(client.Id); });
+            // Editing an existing rule must never silently switch it to another
+            // client if a partial response omits the original selection.
+            if (settings.preserveSelection && selectedID && !clients.some(function (client) { return Number(client.Id) === selectedID; })) return;
+            var fragment = document.createDocumentFragment();
+            clients.forEach(function (client) {
+                var option = document.createElement('option');
+                option.value = String(Number(client.Id));
+                var userName = String(client.UserName || '').trim();
+                var userRemark = String(client.UserRemark || '').trim();
+                var owner = userName && userRemark && userName !== userRemark ? userRemark + ' (' + userName + ')' : userName;
+                option.setAttribute('data-client-name', String(client.Remark || '').trim());
+                option.setAttribute('data-client-owner', owner);
+                option.setAttribute('data-client-online', String(client.IsConnect === true));
+                option.textContent = optionLabel(option);
+                option.selected = Number(client.Id) === selectedID;
+                fragment.appendChild(option);
+            });
+            select.textContent = '';
+            select.appendChild(fragment);
+            if (!clients.length) showPlaceholder(select, '暂无可选客户端，请先创建客户端', 'No clients available; create a client first');
+            else if (selectedID && !clients.some(function (client) { return Number(client.Id) === selectedID; })) {
+                var placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.setAttribute('data-i18n-zh', '请选择可用的客户端');
+                placeholder.setAttribute('data-i18n-en', 'Select an available client');
+                placeholder.textContent = isEnglish() ? 'Select an available client' : '请选择可用的客户端';
+                select.insertBefore(placeholder, select.firstChild);
+                select.value = '';
+            }
+        }).fail(function () {
+            if (!select.value) showPlaceholder(select, '加载客户端失败，请刷新页面', 'Failed to load clients; refresh the page');
+        }).always(function () {
+            instance.trigger.removeAttribute('aria-busy');
+            instance.refresh();
+        });
+    }
+
     window.NpsClientFilter = {
         enhance: enhance,
+        load: load,
         refresh: function (select) {
             return enhance(select);
         }
