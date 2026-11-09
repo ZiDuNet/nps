@@ -18,6 +18,7 @@ import (
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/instancekey"
+	"ehang.io/nps/web/audit"
 	"github.com/astaxie/beego"
 	beecontext "github.com/astaxie/beego/context"
 	"github.com/astaxie/beego/session"
@@ -402,7 +403,7 @@ func issueRememberLoginCookie(controller *beego.Controller, ctx *beecontext.Cont
 	return nil
 }
 
-func restoreRememberLogin(controller *beego.Controller, ctx *beecontext.Context, now time.Time) (bool, error) {
+func restoreRememberLogin(controller *beego.Controller, ctx *beecontext.Context, now time.Time) (restored bool, restoreErr error) {
 	if controller == nil || ctx == nil || ctx.Request == nil {
 		return false, nil
 	}
@@ -410,6 +411,14 @@ func restoreRememberLogin(controller *beego.Controller, ctx *beecontext.Context,
 	if err != nil || cookie == nil || strings.TrimSpace(cookie.Value) == "" {
 		return false, nil
 	}
+	wasAuthenticated := sessionBool(controller.GetSession("auth"))
+	auditCode := "remember_unavailable"
+	auditRequestMetadata(ctx, &audit.Event{})
+	defer func() {
+		if !wasAuthenticated {
+			appendAuthenticationAudit(controller, ctx, "auth.remember.restore", "", restored, auditCode, "remember", nil)
+		}
+	}()
 	key, err := rememberLoginKey()
 	if err != nil {
 		return false, err
@@ -419,6 +428,7 @@ func restoreRememberLogin(controller *beego.Controller, ctx *beecontext.Context,
 		err = validateRememberLoginClaims(key, claims)
 	}
 	if err != nil {
+		auditCode = "remember_invalid"
 		if ctx.ResponseWriter != nil {
 			clearRememberLoginCookie(ctx.Request, ctx.ResponseWriter)
 		}
@@ -434,7 +444,7 @@ func restoreRememberLogin(controller *beego.Controller, ctx *beecontext.Context,
 	if err := store.Flush(); err != nil {
 		return false, err
 	}
-	values := map[interface{}]interface{}{"auth": true}
+	values := map[interface{}]interface{}{"auth": true, "username": claims.Username}
 	values[sessionSecurityEpochKey] = int(claims.Epoch)
 	values["rememberDeviceId"] = claims.DeviceID
 	if rememberLoginPrincipal(claims) == "admin" {

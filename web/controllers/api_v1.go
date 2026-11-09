@@ -437,7 +437,7 @@ func emitLegacyEnvelope(controller *beego.Controller, requestID string, recorder
 			"rows":  payload["rows"],
 			"total": payload["total"],
 		}
-		for _, key := range []string{"meta", "ip", "bridgeType", "bridgePort", "bridgeEndpoints", "addr", "traffic"} {
+		for _, key := range []string{"meta", "ip", "bridgeType", "bridgePort", "bridgeEndpoints", "addr", "traffic", "log_enabled", "log_path", "dropped"} {
 			if value, exists := payload[key]; exists {
 				response[key] = value
 			}

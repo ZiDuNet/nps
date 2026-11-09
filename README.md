@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.43</sub>
+﻿# NPS <sub>v1.1.44</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -198,6 +198,8 @@ docker-compose up -d
 See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
+
+- **v1.1.44** (2026-11-10) - Completed login-stage, remembered-session and logout auditing with request IDs, browser/IP metadata and trusted ownership. Redesigned Audit and Connections to use the full content area, readable action names, diagnostic columns and copyable raw events. Old NPC and JSONL/API action codes remain compatible. See the [upgrade notes](docs/upgrade-1.1.44.md).
 
 - **v1.1.43** (2026-11-10) - Improved mobile login, registration and IP registration without changing desktop glass styling; unified client selectors with owner context and online badges, compact traffic/rate readouts, and browser-only IPv4/IPv6 geolocation with bundled country flags. Includes cross-platform NPC update/restart recovery fixes and the refreshed Account Management page. See the [upgrade notes](docs/upgrade-1.1.43.md).
 

@@ -77,6 +77,17 @@ API 文档固定发布在：
 子通道、认证或握手失败，以及隧道和域名反代的来源、目标、耗时与双向字节数；不会保存
 Basic 密码、API Token、验证密钥、请求头或代理正文。
 
+操作审计同样支持 `action`、`resource_type`、`result` 和 `search`，例如
+`action=auth.login&result=failure` 查询登录失败。动作代码保持不变，新增
+`ActionLabel/ActionLabelEN`、`ResourceLabel/ResourceLabelEN`、`ErrorLabel/ErrorLabelEN`
+供中文/英文展示；`Method`、`Path`、`RequestID`、`UserAgent`、`RemoteAddr`、
+`IPSource`、`AuthMethod`、`Stage`、`ErrorCode` 为追加的安全诊断字段。
+历史记录缺失的字段为空。`auth.remember.issue` 为免登凭证签发，
+`auth.remember.restore` 为会话恢复；已登录请求不重复生成恢复日志。
+成功认证后的用户登录、退出等记录按可信会话设置归属；认证前失败只向管理员开放。
+查询返回 `log_enabled`；管理员还可获得 `log_path`，连接查询另返回进程启动以来
+队列溢出的累计 `dropped` 条数。普通用户不会收到服务端文件路径。
+
 连接日志行还提供 `RemoteAddr`、`ServerAddr`、`ClientPublicIP`、
 `ClientLocalAddr`、`ClientLocalAddrSource`、`BridgeChannel`、
 `HandshakeStage`、`ClientStatus`、`ClientExpireTime`、

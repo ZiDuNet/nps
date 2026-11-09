@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"ehang.io/nps/web/audit"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -82,6 +83,9 @@ func TestRememberLoginCookieAttributesAndPath(t *testing.T) {
 }
 
 func TestRestoreRememberLoginCreatesAuthenticatedSession(t *testing.T) {
+	previousAudit := beego.AppConfig.String("audit_log_path")
+	_ = beego.AppConfig.Set("audit_log_path", filepath.Join(t.TempDir(), "audit.log"))
+	t.Cleanup(func() { _ = beego.AppConfig.Set("audit_log_path", previousAudit); audit.Configure("") })
 	previousKeyPath := beego.AppConfig.String("instance_key_file")
 	previousUsername := beego.AppConfig.String("web_username")
 	previousPassword := beego.AppConfig.String("web_password")
@@ -123,5 +127,16 @@ func TestRestoreRememberLoginCreatesAuthenticatedSession(t *testing.T) {
 	}
 	if !sessionBool(store.Get("auth")) || !sessionBool(store.Get("isAdmin")) || store.Get("stale") != nil {
 		t.Fatalf("restored session values = %#v", store.values)
+	}
+	page, err := audit.List(audit.Filter{})
+	if err != nil || page.Total != 1 || page.Events[0].Action != "auth.remember.restore" || page.Events[0].ActorName != "root" || page.Events[0].ActorType != "admin" {
+		t.Fatalf("remember restore audit: %+v %v", page, err)
+	}
+	if _, err := restoreRememberLogin(controller, ctx, now.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	page, _ = audit.List(audit.Filter{})
+	if page.Total != 1 {
+		t.Fatal("an already authenticated session generated another restore event")
 	}
 }

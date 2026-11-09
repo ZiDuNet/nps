@@ -77,6 +77,42 @@ func TestEmptyPathDisablesJournal(t *testing.T) {
 	}
 }
 
+func TestSearchIncludesLocalizedActionsRequestMetadataAndSafeDetails(t *testing.T) {
+	Configure(filepath.Join(t.TempDir(), "audit.log"))
+	t.Cleanup(func() { Configure("") })
+	if err := Append(Event{Action: "auth.login", ResourceType: "session", ActorID: 7, OwnerUserID: 7, Method: "POST", Path: "/login/verify", RequestID: "correlation-unique", UserAgent: "UniqueBrowser", RemoteAddr: "[2001:db8::7]:123", Details: map[string]string{"remark": "unique-remark"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, search := range []string{"登录", "Sign in", "登录会话", "correlation-unique", "uniquebrowser", "2001:db8::7", "unique-remark", "7"} {
+		page, err := List(Filter{Search: search})
+		if err != nil || page.Total != 1 {
+			t.Errorf("search %q: %+v %v", search, page, err)
+		}
+	}
+	owner := 8
+	page, err := List(Filter{Search: "登录", OwnerUserID: &owner})
+	if err != nil || page.Total != 0 {
+		t.Fatal("search widened ownership filter")
+	}
+}
+
+func TestActionCatalogHasUniqueStableCodesAndHistoricalFallback(t *testing.T) {
+	seen := map[string]bool{}
+	for _, connections := range []bool{false, true} {
+		for _, group := range ActionGroups(connections) {
+			for _, action := range group.Actions {
+				if seen[action.Code] || action.Name == "" || action.NameEN == "" {
+					t.Fatalf("invalid action catalog entry: %+v", action)
+				}
+				seen[action.Code] = true
+			}
+		}
+	}
+	if ActionName("auth.login", false) != "登录" || ActionName("future.action", false) != "future.action" {
+		t.Fatal("action labels changed stable codes")
+	}
+}
+
 func intPtr(value int) *int { return &value }
 
 func readFile(t *testing.T, path string) []byte {

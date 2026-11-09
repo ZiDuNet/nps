@@ -1,410 +1,189 @@
-<style>
-    .audit-hub { max-width: 1680px; margin: 0 auto; }
-    .audit-hub__tabs { display: inline-flex; gap: 4px; margin: 0 0 14px; padding: 4px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 11px; }
-    .audit-hub__tab { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 14px; color: var(--nps-muted); background: transparent; border: 0; border-radius: 8px; font-size: 11.5px; font-weight: 720; cursor: pointer; }
-    .audit-hub__tab:hover { color: var(--nps-primary); }
-    .audit-hub__tab.is-active { color: var(--nps-primary); background: var(--nps-surface); box-shadow: 0 3px 12px rgba(15,23,42,.1); }
-    .audit-hub__view { display: none; }
-    .audit-hub__view.is-active { display: block; }
-    .audit-hub .management-table-card { margin-bottom: 0; }
-    .audit-connection-raw {
-        max-height: 310px;
-        margin: 3px 0;
-        padding: 12px 14px;
-        overflow: auto;
-        color: #d8e6f5;
-        background: #0b1220;
-        border: 1px solid #26364d;
-        border-radius: 8px;
-        box-shadow: inset 0 0 0 1px rgba(148, 198, 255, .04);
-        font: 10.5px/1.5 "Fira Code", "Cascadia Code", Consolas, monospace;
-        tab-size: 2;
-        white-space: pre;
-    }
-    .audit-connection-raw::selection { color: #fff; background: #2563eb; }
-    .audit-connection-summary { display: grid; gap: 2px; min-width: 0; text-align: left; }
-    .audit-connection-summary__main { color: var(--nps-ink); font-weight: 650; white-space: nowrap; }
-    .audit-connection-summary__sub { color: var(--nps-muted); font-size: 9.5px; line-height: 1.35; overflow-wrap: anywhere; }
-    @media (max-width: 760px) {
-        .audit-hub__tabs { display: flex; }
-        .audit-hub__tab { flex: 1 1 50%; justify-content: center; }
-        .audit-connection-raw { max-height: 260px; }
-    }
-</style>
-
+<link href="{{.web_base_url}}/static/css/nps-audit.css?v={{.version}}" rel="stylesheet">
+<script src="{{.web_base_url}}/static/js/nps-audit.js?v={{.version}}"></script>
 <section class="wrapper wrapper-content animated fadeInRight management-page management-page--audit audit-hub" aria-labelledby="audit-list-title">
     <header class="dashboard-page-header management-page-header">
         <div>
             <div class="dashboard-page-kicker" data-i18n-zh="安全与运维" data-i18n-en="Security and operations">安全与运维</div>
             <h1 id="audit-list-title" data-i18n-zh="审计与连接" data-i18n-en="Audit and connections">审计与连接</h1>
-            <p data-i18n-zh="查看管理操作，以及客户端 Bridge、隧道和域名代理连接详情，包括公网来源、服务端入口、客户端上报内网地址、版本与失败阶段。日志不保存密码、密钥、请求头或业务正文。"
-               data-i18n-en="Review management actions and detailed Bridge, tunnel, or host connection records, including public source, server endpoint, client-reported LAN address, version, and failure stage. Passwords, keys, headers, and payloads are never stored.">查看管理操作，以及客户端 Bridge、隧道和域名代理连接详情，包括公网来源、服务端入口、客户端上报内网地址、版本与失败阶段。日志不保存密码、密钥、请求头或业务正文。</p>
+            <p data-i18n-zh="追踪登录与管理操作，排查客户端及代理连接。展开记录查看完整元数据；不记录密码、Token、验证码或业务正文。" data-i18n-en="Trace sign-ins, management actions and client or proxy connections. Expand an event for full metadata; passwords, tokens, verification codes and payloads are never recorded.">追踪登录与管理操作，排查客户端及代理连接。展开记录查看完整元数据；不记录密码、Token、验证码或业务正文。</p>
         </div>
     </header>
-
-    <div class="audit-hub__tabs" role="tablist" aria-label="审计内容">
-        <button type="button" class="audit-hub__tab is-active" id="audit-tab-operations" role="tab" aria-selected="true" aria-controls="audit-view-operations" data-audit-view="operations">
-            <i class="fa fa-list-alt" aria-hidden="true"></i>
-            <span data-i18n-zh="管理操作审计" data-i18n-en="Management audit">管理操作审计</span>
-        </button>
-        <button type="button" class="audit-hub__tab" id="audit-tab-connections" role="tab" aria-selected="false" aria-controls="audit-view-connections" data-audit-view="connections">
-            <i class="fa fa-plug" aria-hidden="true"></i>
-            <span data-i18n-zh="客户端连接日志" data-i18n-en="Client connections">客户端连接日志</span>
-        </button>
+    <div class="audit-hub__top">
+        <div class="audit-hub__tabs" role="tablist" aria-label="审计内容">
+            <button type="button" class="audit-hub__tab is-active" id="audit-tab-operations" role="tab" aria-selected="true" aria-controls="audit-view-operations" data-audit-view="operations"><i class="fa fa-list-alt" aria-hidden="true"></i><span data-i18n-zh="管理操作与登录" data-i18n-en="Actions and sign-ins">管理操作与登录</span></button>
+            <button type="button" class="audit-hub__tab" id="audit-tab-connections" role="tab" aria-selected="false" aria-controls="audit-view-connections" tabindex="-1" data-audit-view="connections"><i class="fa fa-plug" aria-hidden="true"></i><span data-i18n-zh="客户端与代理连接" data-i18n-en="Client and proxy connections">客户端与代理连接</span></button>
+        </div>
+        <p class="audit-hub__hint"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="展开查看原始事件 · 列菜单可显示更多字段" data-i18n-en="Expand for raw events · More fields in Columns">展开查看原始事件 · 列菜单可显示更多字段</span></p>
     </div>
 
     <div class="audit-hub__view is-active" id="audit-view-operations" role="tabpanel" aria-labelledby="audit-tab-operations">
         <section class="panel ibox float-e-margins management-table-card nps-panel">
             <div class="ibox-content management-table-content">
+                <div class="audit-log-state" role="status" aria-live="polite" id="audit-log-state"><span class="audit-log-state__count">—</span><span class="audit-log-state__message" data-i18n-zh="正在读取操作审计…" data-i18n-en="Loading audit journal…">正在读取操作审计…</span></div>
                 <div id="audit-toolbar" class="management-table-toolbar">
-                    <label class="nps-table-filter" for="audit-action">
-                        <span class="nps-table-filter__label" data-i18n-zh="动作" data-i18n-en="Action">动作</span>
+                    <label class="nps-table-filter" for="audit-action"><span class="nps-table-filter__label" data-i18n-zh="动作" data-i18n-en="Action">动作</span>
                         <select id="audit-action" name="action" class="form-control nps-table-filter__control" data-nps-table-filter="action" aria-label="动作">
                             <option value="" data-i18n-zh="全部动作" data-i18n-en="All actions">全部动作</option>
-                            <optgroup label="客户端">
-                                <option value="client.create">创建客户端</option>
-                                <option value="client.update">修改客户端</option>
-                                <option value="client.delete">删除客户端</option>
-                                <option value="client.status_change">启停客户端</option>
-                                <option value="client.remote_update">下发升级</option>
-                            </optgroup>
-                            <optgroup label="隧道与域名">
-                                <option value="tunnel.create">创建隧道</option>
-                                <option value="tunnel.update">修改隧道</option>
-                                <option value="tunnel.copy">复制隧道</option>
-                                <option value="tunnel.start">启动隧道</option>
-                                <option value="tunnel.stop">停止隧道</option>
-                                <option value="tunnel.delete">删除隧道</option>
-                                <option value="host.create">新增域名反代</option>
-                                <option value="host.update">修改域名反代</option>
-                                <option value="host.start">启用域名反代</option>
-                                <option value="host.stop">停用域名反代</option>
-                                <option value="host.delete">删除域名反代</option>
-                            </optgroup>
-                            <optgroup label="用户与密钥">
-                                <option value="user.create">创建用户</option>
-                                <option value="user.update">修改用户</option>
-                                <option value="user.delete">删除用户</option>
-                                <option value="user.status_change">启停用户</option>
-                                <option value="user.password_change">修改密码</option>
-                                <option value="user.api_key_rotate">生成用户 Token</option>
-                                <option value="user.api_key_revoke">撤销用户 Token</option>
-                                <option value="admin.api_key_rotate">生成管理员密钥</option>
-                                <option value="admin.api_key_revoke">撤销管理员密钥</option>
-                            </optgroup>
-                            <optgroup label="系统">
-                                <option value="server_config.update">修改服务配置</option>
-                                <option value="server.restart">重启服务</option>
-                                <option value="global.update">修改全局参数</option>
-                                <option value="global.geodata.update">更新 Geo 数据</option>
-                                <option value="ip_registration.revoke">撤销 IP 登记</option>
-                                <option value="ip_registration.clean">清理 IP 登记</option>
-                                <option value="login_ban.remove">解除登录封禁</option>
-                            </optgroup>
+                            {{range .audit_action_groups}}<optgroup label="{{.Name}}" data-label-zh="{{.Name}}" data-label-en="{{.NameEN}}">{{range .Actions}}<option value="{{.Code}}" data-i18n-zh="{{.Name}}" data-i18n-en="{{.NameEN}}">{{.Name}}</option>{{end}}</optgroup>{{end}}
                         </select>
                     </label>
-                    <label class="nps-table-filter" for="audit-resource">
-                        <span class="nps-table-filter__label" data-i18n-zh="资源" data-i18n-en="Resource">资源</span>
+                    <label class="nps-table-filter" for="audit-resource"><span class="nps-table-filter__label" data-i18n-zh="资源" data-i18n-en="Resource">资源</span>
                         <select id="audit-resource" name="resource_type" class="form-control nps-table-filter__control" data-nps-table-filter="resource_type" aria-label="资源类型">
                             <option value="" data-i18n-zh="全部资源" data-i18n-en="All resources">全部资源</option>
-                            <option value="client" data-i18n-zh="客户端" data-i18n-en="Client">客户端</option>
-                            <option value="tunnel" data-i18n-zh="隧道" data-i18n-en="Tunnel">隧道</option>
-                            <option value="host" data-i18n-zh="域名反代" data-i18n-en="Host">域名反代</option>
-                            <option value="user" data-i18n-zh="用户" data-i18n-en="User">用户</option>
-                            <option value="global" data-i18n-zh="全局参数" data-i18n-en="Global">全局参数</option>
-                            <option value="dashboard" data-i18n-zh="大屏密钥" data-i18n-en="Dashboard key">大屏密钥</option>
-                            <option value="ip_registration" data-i18n-zh="IP 登记" data-i18n-en="IP registration">IP 登记</option>
-                            <option value="login_ban" data-i18n-zh="登录封禁" data-i18n-en="Login ban">登录封禁</option>
+                            <option value="session" data-i18n-zh="登录会话" data-i18n-en="Sign-in session">登录会话</option>
+                            <option value="client" data-i18n-zh="客户端" data-i18n-en="Client">客户端</option><option value="tunnel" data-i18n-zh="隧道" data-i18n-en="Tunnel">隧道</option>
+                            <option value="host" data-i18n-zh="域名反代" data-i18n-en="Host">域名反代</option><option value="user" data-i18n-zh="用户" data-i18n-en="User">用户</option>
+                            <option value="global" data-i18n-zh="全局参数" data-i18n-en="Global settings">全局参数</option><option value="nps.conf" data-i18n-zh="服务配置" data-i18n-en="Server configuration">服务配置</option>
+                            <option value="nps" data-i18n-zh="服务端" data-i18n-en="Server">服务端</option><option value="dashboard" data-i18n-zh="大屏密钥" data-i18n-en="Dashboard key">大屏密钥</option>
+                            <option value="ip_registration" data-i18n-zh="IP 登记" data-i18n-en="IP registration">IP 登记</option><option value="login_ban" data-i18n-zh="登录封禁" data-i18n-en="Login ban">登录封禁</option>
                         </select>
                     </label>
-                    <label class="nps-table-filter" for="audit-result">
-                        <span class="nps-table-filter__label" data-i18n-zh="结果" data-i18n-en="Result">结果</span>
-                        <select id="audit-result" name="result" class="form-control nps-table-filter__control" data-nps-table-filter="result" aria-label="结果">
-                            <option value="" data-i18n-zh="全部结果" data-i18n-en="All results">全部结果</option>
-                            <option value="success" data-i18n-zh="成功" data-i18n-en="Success">成功</option>
-                            <option value="failure" data-i18n-zh="失败" data-i18n-en="Failure">失败</option>
-                        </select>
+                    <label class="nps-table-filter" for="audit-result"><span class="nps-table-filter__label" data-i18n-zh="结果" data-i18n-en="Result">结果</span>
+                        <select id="audit-result" name="result" class="form-control nps-table-filter__control" data-nps-table-filter="result" aria-label="结果"><option value="" data-i18n-zh="全部结果" data-i18n-en="All results">全部结果</option><option value="success" data-i18n-zh="成功" data-i18n-en="Success">成功</option><option value="failure" data-i18n-zh="失败" data-i18n-en="Failure">失败</option></select>
                     </label>
                 </div>
                 <table id="audit-table"></table>
             </div>
         </section>
     </div>
-
     <div class="audit-hub__view" id="audit-view-connections" role="tabpanel" aria-labelledby="audit-tab-connections">
         <section class="panel ibox float-e-margins management-table-card nps-panel">
             <div class="ibox-content management-table-content">
+                <div class="audit-log-state" role="status" aria-live="polite" id="connection-log-state"><span class="audit-log-state__count">—</span><span class="audit-log-state__message" data-i18n-zh="正在读取连接日志…" data-i18n-en="Loading connection journal…">正在读取连接日志…</span></div>
                 <div id="connection-toolbar" class="management-table-toolbar">
-                    <label class="nps-table-filter" for="connection-kind">
-                        <span class="nps-table-filter__label" data-i18n-zh="类型" data-i18n-en="Type">类型</span>
-                        <select id="connection-kind" name="kind" class="form-control nps-table-filter__control" data-nps-table-filter="kind">
-                            <option value="" data-i18n-zh="全部类型" data-i18n-en="All types">全部类型</option>
-                            <option value="bridge" data-i18n-zh="Bridge" data-i18n-en="Bridge">Bridge</option>
-                            <option value="tunnel" data-i18n-zh="隧道" data-i18n-en="Tunnel">隧道</option>
-                            <option value="host" data-i18n-zh="域名反代" data-i18n-en="Host">域名反代</option>
-                        </select>
-                    </label>
-                    <label class="nps-table-filter" for="connection-transport">
-                        <span class="nps-table-filter__label" data-i18n-zh="传输协议" data-i18n-en="Transport">传输协议</span>
-                        <select id="connection-transport" name="bridge_transport" class="form-control nps-table-filter__control" data-nps-table-filter="bridge_transport">
-                            <option value="" data-i18n-zh="全部协议" data-i18n-en="All transports">全部协议</option>
-                            <option value="tcp">TCP</option>
-                            <option value="tls">TCP + TLS</option>
-                            <option value="kcp">KCP</option>
-                            <option value="ws">WS</option>
-                            <option value="wss">WSS</option>
-                            <option value="quic">QUIC</option>
-                            <option value="http3">HTTP/3</option>
-                        </select>
-                    </label>
-                    <label class="nps-table-filter" for="connection-result">
-                        <span class="nps-table-filter__label" data-i18n-zh="结果" data-i18n-en="Result">结果</span>
-                        <select id="connection-result" name="result" class="form-control nps-table-filter__control" data-nps-table-filter="result">
-                            <option value="" data-i18n-zh="全部结果" data-i18n-en="All results">全部结果</option>
-                            <option value="success" data-i18n-zh="成功" data-i18n-en="Success">成功</option>
-                            <option value="failure" data-i18n-zh="失败" data-i18n-en="Failure">失败</option>
-                        </select>
-                    </label>
-                    <label class="nps-table-filter" for="connection-action">
-                        <span class="nps-table-filter__label" data-i18n-zh="动作" data-i18n-en="Action">动作</span>
-                        <select id="connection-action" name="action" class="form-control nps-table-filter__control" data-nps-table-filter="action">
-                            <option value="" data-i18n-zh="全部动作" data-i18n-en="All actions">全部动作</option>
-                            <option value="bridge.connected" data-i18n-zh="主连接成功" data-i18n-en="Main connected">主连接成功</option>
-                            <option value="bridge.disconnected" data-i18n-zh="主连接断开" data-i18n-en="Main disconnected">主连接断开</option>
-                            <option value="bridge.auth_failed" data-i18n-zh="认证失败" data-i18n-en="Authentication failed">认证失败</option>
-                            <option value="bridge.failed" data-i18n-zh="Bridge 阶段失败" data-i18n-en="Bridge stage failed">Bridge 阶段失败</option>
-                            <option value="bridge.channel" data-i18n-zh="子通道" data-i18n-en="Bridge channel">子通道</option>
-                            <option value="bridge.update" data-i18n-zh="客户端升级结果" data-i18n-en="Client update result">客户端升级结果</option>
-                            <option value="proxy.connection" data-i18n-zh="代理会话" data-i18n-en="Proxy session">代理会话</option>
-                        </select>
-                    </label>
+                    <label class="nps-table-filter" for="connection-kind"><span class="nps-table-filter__label" data-i18n-zh="类型" data-i18n-en="Type">类型</span><select id="connection-kind" name="kind" class="form-control nps-table-filter__control" data-nps-table-filter="kind" aria-label="连接类型"><option value="" data-i18n-zh="全部类型" data-i18n-en="All types">全部类型</option><option value="bridge">Bridge</option><option value="tunnel" data-i18n-zh="隧道" data-i18n-en="Tunnel">隧道</option><option value="host" data-i18n-zh="域名反代" data-i18n-en="Host">域名反代</option></select></label>
+                    <label class="nps-table-filter" for="connection-transport"><span class="nps-table-filter__label" data-i18n-zh="传输" data-i18n-en="Transport">传输</span><select id="connection-transport" name="bridge_transport" class="form-control nps-table-filter__control" data-nps-table-filter="bridge_transport" aria-label="传输协议"><option value="" data-i18n-zh="全部协议" data-i18n-en="All transports">全部协议</option><option value="tcp">TCP</option><option value="tls">TCP + TLS</option><option value="kcp">KCP</option><option value="ws">WS</option><option value="wss">WSS</option><option value="quic">QUIC</option><option value="http3">HTTP/3</option></select></label>
+                    <label class="nps-table-filter" for="connection-result"><span class="nps-table-filter__label" data-i18n-zh="结果" data-i18n-en="Result">结果</span><select id="connection-result" name="result" class="form-control nps-table-filter__control" data-nps-table-filter="result" aria-label="连接结果"><option value="" data-i18n-zh="全部结果" data-i18n-en="All results">全部结果</option><option value="success" data-i18n-zh="成功" data-i18n-en="Success">成功</option><option value="failure" data-i18n-zh="失败" data-i18n-en="Failure">失败</option></select></label>
+                    <label class="nps-table-filter" for="connection-action"><span class="nps-table-filter__label" data-i18n-zh="动作" data-i18n-en="Action">动作</span><select id="connection-action" name="action" class="form-control nps-table-filter__control" data-nps-table-filter="action" aria-label="连接动作"><option value="" data-i18n-zh="全部动作" data-i18n-en="All actions">全部动作</option>{{range .connection_action_groups}}{{range .Actions}}<option value="{{.Code}}" data-i18n-zh="{{.Name}}" data-i18n-en="{{.NameEN}}">{{.Name}}</option>{{end}}{{end}}</select></label>
                 </div>
                 <table id="connection-table"></table>
             </div>
         </section>
     </div>
 </section>
-
 <script>
 $(function () {
     var english = typeof window.npsIsEnglish === 'function' && window.npsIsEnglish();
-    var text = function (value) {
-        return typeof window.npsEscapeHtml === 'function'
-            ? window.npsEscapeHtml(value == null ? '' : String(value))
-            : $('<div>').text(value == null ? '' : String(value)).html();
+    var ui = window.NpsAudit;
+    var local = function (zh, en) { return english ? en : zh; };
+    var heading = function (zh, en) { return '<span data-i18n-zh="' + ui.escape(zh) + '" data-i18n-en="' + ui.escape(en) + '">' + local(zh, en) + '</span>'; };
+    var column = function (field, zh, en, formatter, extra) { return $.extend({field: field, title: heading(zh, en), halign: 'center', formatter: formatter}, extra || {}); };
+    var result = function (value) {
+        var state = value === 'success' ? 'success' : (value === 'failure' ? 'failure' : 'unknown');
+        var text = state === 'success' ? local('成功', 'Success') : (state === 'failure' ? local('失败', 'Failed') : value || '-');
+        return '<span class="audit-result audit-result--' + state + '">' + ui.escape(text) + '</span>';
     };
-    var resultBadge = function (value) {
-        return value === 'success'
-            ? '<span class="label label-success">' + (english ? 'Success' : '成功') + '</span>'
-            : '<span class="label label-danger">' + (english ? 'Failed' : '失败') + '</span>';
+    var action = function (value, row) { return '<span class="audit-action" title="' + ui.escape(row.Action) + '">' + ui.escape(ui.label(row, 'Action', english)) + '</span>'; };
+    var time = function (value) { var parts = String(value || '').split(' '); return ui.pair(parts[1] || parts[0], parts[1] ? parts[0] : ''); };
+    var resource = function (value, row) { return ui.pair(ui.label(row, 'Resource', english), ''); };
+    var source = function (value, row) {
+        var remote = row.RemoteAddr || '', sub = remote !== value ? remote : '';
+        if (remote.indexOf(value + ':') === 0 || remote.indexOf('[' + value + ']:') === 0) sub = local('源端口 ', 'Source port ') + remote.slice(remote.lastIndexOf(':') + 1);
+        return ui.pair(value, sub, true);
     };
-    var kindLabel = function (value) {
-        var labels = {bridge: 'Bridge', tunnel: english ? 'Tunnel' : '隧道', host: english ? 'Host' : '域名反代'};
-        return labels[value] || value || '-';
-    };
-    var actionLabel = function (value) {
-        var labels = english ? {
-            'bridge.connected': 'Main connected',
-            'bridge.disconnected': 'Main disconnected',
-            'bridge.auth_failed': 'Authentication failed',
-            'bridge.failed': 'Bridge stage failed',
-            'bridge.channel': 'Bridge channel',
-            'bridge.update': 'Client update result',
-            'proxy.connection': 'Proxy session'
-        } : {
-            'bridge.connected': '主连接成功',
-            'bridge.disconnected': '主连接断开',
-            'bridge.auth_failed': '认证失败',
-            'bridge.failed': 'Bridge 阶段失败',
-            'bridge.channel': '子通道',
-            'bridge.update': '客户端升级结果',
-            'proxy.connection': '代理会话'
-        };
-        return labels[value] || value || '-';
-    };
-    var channelLabel = function (value) {
-        var labels = english ? {
-            main: 'Main control', data: 'Data mux', config: 'Configuration', register: 'IP registration',
-            secret: 'Secret proxy', file: 'File transfer', p2p: 'P2P', p2p_session: 'P2P session'
-        } : {
-            main: '主控制', data: '数据复用', config: '配置交换', register: 'IP 登记',
-            secret: '私密代理', file: '文件传输', p2p: 'P2P', p2p_session: 'P2P 会话'
-        };
-        return labels[value] || value || '-';
-    };
-    var identitySummary = function (value, row) {
-        var user = row.User || (english ? 'No user' : '未关联用户');
-        var client = row.Client || (english ? 'Unknown client' : '未知客户端');
-        return '<div class="audit-connection-summary">'
-            + '<span class="audit-connection-summary__main">' + text(user) + '</span>'
-            + '<span class="audit-connection-summary__sub">' + text(client) + '</span></div>';
-    };
-    var connectionSummary = function (value, row) {
-        var action = actionLabel(row.Action);
-        var channel = row.BridgeChannel ? channelLabel(row.BridgeChannel) : '';
-        return '<div class="audit-connection-summary">'
-            + '<span class="audit-connection-summary__main">' + text(kindLabel(row.Kind)) + '</span>'
-            + '<span class="audit-connection-summary__sub">' + text(action + (channel ? ' · ' + channel : '')) + '</span></div>';
-    };
-    var protocolSummary = function (value, row) {
-        var protocol = row.Transport || '-';
-        var channel = row.BridgeChannel ? channelLabel(row.BridgeChannel) : '';
-        return '<div class="audit-connection-summary">'
-            + '<span class="audit-connection-summary__main">' + text(protocol) + '</span>'
-            + (channel ? '<span class="audit-connection-summary__sub">' + text(channel) + '</span>' : '')
-            + '</div>';
-    };
-    var parseDetails = function (value) {
-        if (!value) return {};
-        try {
-            var parsed = JSON.parse(value);
-            return parsed && typeof parsed === 'object' ? parsed : value;
-        } catch (error) {
-            return value;
-        }
-    };
-
-    $('#audit-table').npsTable({
-        toolbar: '#audit-toolbar',
-        method: 'post',
-        url: '{{.web_base_url}}/audit/list',
-        contentType: 'application/x-www-form-urlencoded',
-        striped: true,
-        search: true,
-        showHeader: true,
-        showColumns: true,
-        showRefresh: true,
-        pagination: true,
-        sidePagination: 'server',
-        pageNumber: 1,
-        pageList: [20, 50, 100, 200],
-        storageKey: 'audit.operations',
-        smartDisplay: true,
-        detailView: true,
-        formatLoadingMessage: function () { return npsTableState('audit.operations', true); },
-        formatNoMatches: function () { return npsTableState('audit.operations', false); },
-        onPostBody: function () { $('body').setLang('#audit-table'); npsApplyTableState(this, 'audit.operations'); },
-        onExpandRow: function () { $('body').setLang('.detail-view'); },
-        detailFormatter: function (index, row) {
-            var raw = {
-                id: row.ID,
-                time: row.Time,
-                actor: row.Actor,
-                actor_type: row.ActorType,
-                actor_id: row.ActorID,
-                owner_user_id: row.OwnerUserID,
-                source_ip: row.SourceIP,
-                action: row.Action,
-                resource: row.Resource,
-                resource_type: row.ResourceType,
-                resource_id: row.ResourceID,
-                result: row.Result,
-                error: row.Error,
-                details: parseDetails(row.Details)
-            };
-            return '<pre class="audit-connection-raw">' + text(JSON.stringify(raw, null, 2)) + '</pre>';
-        },
-        columns: [
-            {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', class: 'audit-list__time', width: '154px'},
-            {field: 'Actor', title: '<span data-i18n-zh="操作者" data-i18n-en="Actor">操作者</span>', halign: 'center', class: 'audit-list__actor', escape: true},
-            {field: 'SourceIP', title: '<span data-i18n-zh="来源地址" data-i18n-en="Source">来源地址</span>', halign: 'center', class: 'audit-list__source', escape: true},
-            {field: 'Action', title: '<span data-i18n-zh="动作" data-i18n-en="Action">动作</span>', halign: 'center', class: 'audit-list__action', escape: true},
-            {field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', class: 'audit-list__resource', escape: true},
-            {field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', class: 'audit-list__result', formatter: resultBadge},
-            {field: 'Error', title: '<span data-i18n-zh="错误" data-i18n-en="Error">错误</span>', halign: 'center', class: 'audit-list__error', escape: true},
-            {field: 'Details', title: '<span data-i18n-zh="变更摘要" data-i18n-en="Summary">变更摘要</span>', halign: 'center', class: 'audit-list__details', escape: true}
-        ]
-    });
-
-    $('#connection-table').npsTable({
-        toolbar: '#connection-toolbar',
-        method: 'post',
-        url: '{{.web_base_url}}/audit/connections',
-        contentType: 'application/x-www-form-urlencoded',
-        striped: true,
-        search: true,
-        showHeader: true,
-        showColumns: true,
-        showRefresh: true,
-        pagination: true,
-        sidePagination: 'server',
-        pageNumber: 1,
-        pageList: [20, 50, 100, 200],
-        storageKey: 'audit.connections',
-        smartDisplay: true,
-        detailView: true,
-        formatLoadingMessage: function () { return npsTableState('audit.connections', true); },
-        formatNoMatches: function () { return npsTableState('audit.connections', false); },
-        onPostBody: function () { $('body').setLang('#connection-table'); npsApplyTableState(this, 'audit.connections'); },
-        onExpandRow: function () { $('body').setLang('.detail-view'); },
-        detailFormatter: function (index, row) {
-            var raw = {
-                id: row.ID,
-                time: row.Time,
-                result: row.Result,
-                kind: row.Kind,
-                action: row.Action,
-                started_at: row.StartedAt,
-                ended_at: row.EndedAt,
-                duration: row.Duration,
-                duration_ms: row.RawDuration,
-                user_id: row.UserID,
-                user_name: row.User,
-                user_status: row.UserStatus,
-                user_expire_time: row.UserExpireTime,
-                client_id: row.ClientID,
-                client_name: row.Client,
-                client_status: row.ClientStatus,
-                client_version: row.ClientVer,
-                client_expire_time: row.ClientExpireTime,
-                client_effective_expire_time: row.ClientEffectiveExpireTime,
-                client_last_online_time: row.ClientLastOnlineTime,
-                resource_type: row.ResourceType,
-                resource_id: row.ResourceID,
-                resource: row.Resource,
-                transport: row.Transport,
-                bridge_channel: row.BridgeChannel,
-                handshake_stage: row.HandshakeStage,
-                source_ip: row.SourceIP,
-                remote_addr: row.RemoteAddr,
-                server_addr: row.ServerAddr,
-                client_public_ip: row.ClientPublicIP,
-                client_local_addr: row.ClientLocalAddr,
-                client_local_addr_source: row.ClientLocalAddrSource,
-                bytes_in: row.BytesIn,
-                bytes_out: row.BytesOut,
-                target: row.Target,
-                error: row.Error
-            };
-            return '<pre class="audit-connection-raw">' + text(JSON.stringify(raw, null, 2)) + '</pre>';
-        },
-        columns: [
-            {field: 'Time', title: '<span data-i18n-zh="时间" data-i18n-en="Time">时间</span>', halign: 'center', class: 'audit-list__time', width: '148px'},
-            {field: 'Result', title: '<span data-i18n-zh="结果" data-i18n-en="Result">结果</span>', align: 'center', halign: 'center', class: 'audit-list__result', width: '68px', formatter: resultBadge},
-            {field: 'Kind', title: '<span data-i18n-zh="连接" data-i18n-en="Connection">连接</span>', halign: 'center', class: 'audit-list__kind', width: '155px', formatter: connectionSummary},
-            {field: 'User', title: '<span data-i18n-zh="用户 / 客户端" data-i18n-en="User / client">用户 / 客户端</span>', halign: 'center', class: 'audit-list__identity', width: '150px', formatter: identitySummary},
-            {field: 'Resource', title: '<span data-i18n-zh="资源" data-i18n-en="Resource">资源</span>', halign: 'center', class: 'audit-list__resource', escape: true},
-            {field: 'Transport', title: '<span data-i18n-zh="协议" data-i18n-en="Protocol">协议</span>', halign: 'center', class: 'audit-list__protocol', width: '88px', formatter: protocolSummary},
-            {field: 'SourceIP', title: '<span data-i18n-zh="来源 IP" data-i18n-en="Source IP">来源 IP</span>', halign: 'center', class: 'audit-list__source', width: '120px', escape: true},
-            {field: 'ClientLocalAddr', title: '<span data-i18n-zh="客户端内网地址" data-i18n-en="Client LAN">客户端内网地址</span>', halign: 'center', class: 'audit-list__client-lan', width: '135px', escape: true},
-            {field: 'Error', title: '<span data-i18n-zh="结果说明" data-i18n-en="Result details">结果说明</span>', halign: 'center', class: 'audit-list__error', escape: true}
-        ]
-    });
-
-    function activateAuditView(view) {
-        if (view !== 'connections') view = 'operations';
-        $('.audit-hub__tab').removeClass('is-active').attr('aria-selected', 'false');
-        $('.audit-hub__tab[data-audit-view="' + view + '"]').addClass('is-active').attr('aria-selected', 'true');
-        $('.audit-hub__view').removeClass('is-active');
-        $('#audit-view-' + view).addClass('is-active');
-        if (view === 'connections') $('#connection-table').npsTable('refresh');
-        else $('#audit-table').npsTable('refresh');
+    var request = function (value, row) { return ui.pair((row.Method || '') + ' ' + (row.Path || ''), row.RequestID, true); };
+    function updateState(id, data, failed) {
+        var state = $(id), message = state.find('.audit-log-state__message');
+        state.find('.audit-log-state__count').text(failed ? '—' : local('共 ', '') + (data.total || 0) + local(' 条', ' events'));
+        var disabled = data.log_enabled === false;
+        var text = failed ? local('日志读取失败，请检查路径与读取权限后刷新。', 'Could not read journal. Check its path and permissions, then refresh.')
+            : disabled ? local('未开启文件记录：请在全局参数配置对应日志路径。', 'File logging is disabled. Configure its journal path in Global settings.')
+            : local('文件记录已开启', 'File logging enabled');
+        if (!failed && data.log_path) text += ' · ' + data.log_path;
+        if (!failed && data.dropped > 0) text += local(' · 队列满时累计丢弃 ', ' · Queue overflow dropped ') + data.dropped + local(' 条', ' events');
+        message.removeAttr('data-i18n-zh data-i18n-en').text(text).toggleClass('is-warning', disabled || data.dropped > 0).toggleClass('is-error', !!failed);
     }
-
-    $('.audit-hub__tab').on('click', function () {
-        activateAuditView($(this).attr('data-audit-view'));
+    function options(connections) {
+        var key = connections ? 'audit.connections' : 'audit.operations';
+        var status = connections ? '#connection-log-state' : '#audit-log-state';
+        return {toolbar: connections ? '#connection-toolbar' : '#audit-toolbar', method: 'post',
+            url: '{{.web_base_url}}/audit/' + (connections ? 'connections' : 'list'), contentType: 'application/x-www-form-urlencoded',
+            uniqueId: 'ID', striped: true, search: true, showHeader: true, showColumns: true, showRefresh: true,
+            pagination: true, sidePagination: 'server', pageNumber: 1, pageSize: 50, pageList: [20, 50, 100, 200],
+            storageKey: key + '.v2', smartDisplay: true, detailView: true,
+            formatLoadingMessage: function () { return npsTableState(key, true); }, formatNoMatches: function () { return npsTableState(key, false); },
+            onPostBody: function () { $('body').setLang(connections ? '#connection-table' : '#audit-table'); npsApplyTableState(this, key); },
+            onLoadSuccess: function (data) { updateState(status, data, data.status === 0); },
+            onLoadError: function () { updateState(status, {}, true); },
+            detailFormatter: function (index, row) { return ui.detail(row, connections, english); }};
+    }
+    function initOperations() {
+        $('#audit-table').npsTable($.extend(options(false), {columns: [
+            column('Time', '时间', 'Time', time, {class: 'audit-list__time', width: '128px'}),
+            column('Action', '动作', 'Action', action, {class: 'audit-list__action', width: '138px'}),
+            column('Actor', '操作者 / 账号', 'Actor / account', function (value, row) { return ui.pair(value || '-', ui.actor(row.ActorType, english) + (row.ActorID ? ' #' + row.ActorID : '')); }, {width: '150px'}),
+            column('SourceIP', '来源地址', 'Source', source, {class: 'audit-list__source', width: '178px'}),
+            column('Resource', '资源', 'Resource', resource, {width: '135px'}),
+            column('Result', '结果', 'Result', result, {width: '76px'}),
+            column('Error', '结果说明 / 变更摘要', 'Result / changes', function (value, row) { return ui.summary(row, english); }, {class: 'audit-list__error'}),
+            column('Path', '请求 / 关联 ID', 'Request / ID', request, {visible: false}),
+            column('UserAgent', '浏览器 / 设备', 'Browser / device', null, {visible: false}),
+            column('AuthMethod', '认证方式', 'Authentication', function (value) { return ui.escape(ui.method(value, english)); }, {visible: false}),
+            column('Stage', '校验阶段', 'Stage', function (value) { return ui.escape(ui.stage(value, english)); }, {visible: false}),
+            column('ErrorCode', '错误代码', 'Error code', null, {visible: false}),
+            column('RequestID', '请求 ID', 'Request ID', null, {visible: false}),
+            column('IPSource', 'IP 识别来源', 'IP detection', null, {visible: false})
+        ]}));
+    }
+    function initConnections() {
+        $('#connection-table').npsTable($.extend(options(true), {columns: [
+            column('Time', '时间', 'Time', time, {class: 'audit-list__time', width: '128px'}),
+            column('Action', '连接事件', 'Connection event', function (value, row) { return ui.pair(ui.label(row, 'Action', english), row.Kind + (row.HandshakeStage ? ' · ' + ui.stage(row.HandshakeStage, english) : '')); }, {width: '150px'}),
+            column('User', '用户 / 客户端', 'User / client', function (value, row) { return ui.pair(row.Client || local('未知客户端', 'Unknown client'), (value || local('未关联用户', 'No linked user')) + (row.UserID ? ' #' + row.UserID : '')); }, {width: '160px'}),
+            column('Transport', '协议', 'Protocol', function (value, row) { return ui.pair((value || '-').toUpperCase(), row.BridgeChannel || ''); }, {width: '95px'}),
+            column('SourceIP', '来源地址', 'Source', source, {class: 'audit-list__source', width: '168px'}),
+            column('ClientLocalAddr', '客户端内网地址', 'Client LAN', function (value, row) { return ui.pair(value || local('未上报', 'Not reported'), row.ClientVer ? 'NPC ' + row.ClientVer : '', true); }, {width: '145px'}),
+            column('Result', '结果', 'Result', result, {width: '76px'}),
+            column('Error', '结果说明 / 资源', 'Result / resource', function (value, row) { return ui.pair(value || ui.label(row, 'Resource', english), row.Target || ''); }, {class: 'audit-list__error'}),
+            column('Duration', '时长 / 流量', 'Duration / traffic', function (value, row) { return ui.pair(value, row.Traffic); }, {visible: false}),
+            column('ServerAddr', '服务端入口', 'Server endpoint', null, {visible: false}),
+            column('Resource', '关联资源', 'Resource', resource, {visible: false}),
+            column('Target', '转发目标', 'Target', null, {visible: false}),
+            column('ClientVer', 'NPC 版本', 'NPC version', null, {visible: false}),
+            column('HandshakeStage', '连接阶段', 'Connection stage', null, {visible: false})
+        ]}));
+    }
+    var initialized = {};
+    function syncLanguage() {
+        var next = typeof window.npsIsEnglish === 'function' && window.npsIsEnglish();
+        $('.audit-hub optgroup[data-label-zh]').each(function () { $(this).attr('label', $(this).attr(next ? 'data-label-en' : 'data-label-zh')); });
+        if (next === english) return;
+        english = next;
+        ['operations', 'connections'].forEach(function (view) {
+            if (!initialized[view]) return;
+            var table = $(view === 'connections' ? '#connection-table' : '#audit-table');
+            var instance = table.data('nps.table');
+            if (instance) instance.refreshFilterTitles();
+            table.npsTable('refreshOptions', {locale: next ? 'en-US' : 'zh-CN'});
+        });
+    }
+    function activate(view) {
+        if (view !== 'connections') view = 'operations';
+        $('.audit-hub__tab').removeClass('is-active').attr({'aria-selected': 'false', tabindex: '-1'});
+        $('.audit-hub__tab[data-audit-view="' + view + '"]').addClass('is-active').attr({'aria-selected': 'true', tabindex: '0'});
+        $('.audit-hub__view').removeClass('is-active'); $('#audit-view-' + view).addClass('is-active');
+        if (!initialized[view]) { initialized[view] = true; if (view === 'connections') initConnections(); else initOperations(); }
+        else $(view === 'connections' ? '#connection-table' : '#audit-table').npsTable('refresh');
+    }
+    $('.audit-hub__tab').on('click', function () { activate($(this).attr('data-audit-view')); }).on('keydown', function (event) {
+        if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].indexOf(event.key) < 0) return;
+        event.preventDefault();
+        var next = event.key === 'Home' ? 'operations' : event.key === 'End' ? 'connections' : ($(this).attr('data-audit-view') === 'operations' ? 'connections' : 'operations');
+        activate(next); $('#audit-tab-' + next).trigger('focus');
     });
-    activateAuditView('{{.audit_initial_tab}}' || 'operations');
+    $('.audit-hub').on('click', '[data-audit-copy]', function () {
+        var content = $(this).closest('.audit-detail').find('pre').text();
+        var fallback = function () {
+            var area = document.createElement('textarea'); area.value = content; area.style.position = 'fixed'; area.style.opacity = '0'; document.body.appendChild(area);
+            area.select(); var copied = document.execCommand('copy'); document.body.removeChild(area);
+            if (!copied) throw new Error('copy unavailable');
+        };
+        var done = function () { npsNotify('success', local('完整事件已复制', 'Full event copied')); };
+        Promise.resolve().then(function () { if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(content).catch(fallback); fallback(); }).then(done).catch(function () { npsNotify('warning', local('复制失败，请选中日志手动复制。', 'Copy failed. Select and copy the event manually.')); });
+    });
+    $(document).off('npsLanguageChanged.audit').on('npsLanguageChanged.audit', syncLanguage);
+    activate('{{.audit_initial_tab}}' || 'operations');
+    syncLanguage();
     $('body').setLang('.audit-hub');
 });
 </script>

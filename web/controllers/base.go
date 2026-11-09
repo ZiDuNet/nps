@@ -234,18 +234,16 @@ func (s *BaseController) auditMutation(action, resourceType string, resourceID, 
 	if result == "" {
 		result = audit.ResultSuccess
 	}
-	method, path, sourceIP := "", "", ""
-	if s.Ctx != nil && s.Ctx.Request != nil {
-		method = s.Ctx.Request.Method
-		path = s.Ctx.Request.URL.Path
-		sourceIP = s.Ctx.Input.IP()
-	}
-	if writeErr := audit.Append(audit.Event{
+	event := audit.Event{
 		ActorType: actorType, ActorID: actorID, ActorName: actorName,
-		SourceIP: sourceIP, Method: method, Path: path,
 		Action: action, ResourceType: resourceType, ResourceID: resourceID,
 		OwnerUserID: ownerUserID, Result: result, Error: errorText, Details: details,
-	}); writeErr != nil {
+	}
+	if !s.IsAdmin() && ownerUserID == 0 && resourceType == "session" && actorType == "user" {
+		event.OwnerUserID = actorID
+	}
+	auditRequestMetadata(s.Ctx, &event)
+	if writeErr := audit.Append(event); writeErr != nil {
 		logs.Error("写入操作审计日志失败: %v", writeErr)
 	}
 }

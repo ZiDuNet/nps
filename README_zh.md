@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.43</sub>
+﻿# NPS <sub>v1.1.44</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -213,6 +213,8 @@ docker-compose up -d
 详见 [CHANGELOG.md](CHANGELOG.md)
 
 ### 近期更新
+
+- **v1.1.44** (2026-11-10) - 补齐登录各阶段失败、免登录签发/恢复和退出审计，新增请求 ID、浏览器、来源识别和可信用户归属；审计与连接页铺满内容区，动作显示中文名称，提供更多诊断列和完整 JSON 复制。旧 NPC、JSONL 和 API 动作代码继续兼容，详见[升级说明](docs/upgrade-1.1.44.md)。
 
 - **v1.1.43** (2026-11-10) - 优化手机登录、注册和 IP 登记，保留桌面磨砂双栏；统一客户端选择框的所属用户与在线气泡，压缩双向流量展示，并增加浏览器端中文 IP 归属地、IPv4/IPv6 降级查询和本地国家旗帜。一并发布跨平台 NPC 更新/重启恢复修复及账户管理页优化，详见[升级说明](docs/upgrade-1.1.43.md)。
 

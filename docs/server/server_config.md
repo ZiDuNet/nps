@@ -176,7 +176,7 @@ HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCK
 | open_captcha | 登录是否开启验证码校验 | `false` |
 | force_pow | 是否强制登录前完成工作量证明 | `false` |
 | pow_bits | PoW 难度（SHA-256 前导零位数） | `20` |
-| audit_log_path | 操作审计日志 JSONL 文件路径；相对路径以程序运行目录为准 | `audit.log` |
+| audit_log_path | 操作/登录审计 JSONL 路径；相对路径以程序运行目录为准，留空关闭。Docker 推荐指向持久化挂载内的 `/logs/audit.log` | `audit.log` |
 | connection_log_path | 客户端 Bridge、隧道与域名代理连接日志的 JSONL 路径；留空关闭 | `connection.log` |
 | allow_user_login | 是否允许普通用户登录。优先使用「用户管理」中创建的账号；`user` + 客户端 VerifyKey 仅为历史兼容方式 | `true` |
 | allow_user_vkey_login | 是否允许普通用户继续使用客户端 VKey 登录；关闭后只接受独立用户账号 | `true` |

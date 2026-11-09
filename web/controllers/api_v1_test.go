@@ -18,6 +18,7 @@ import (
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/ipreg"
 	"ehang.io/nps/server"
+	"ehang.io/nps/web/audit"
 	"github.com/astaxie/beego"
 	beecontext "github.com/astaxie/beego/context"
 )
@@ -254,6 +255,68 @@ func TestAPIV1AuditConnectionsScopesUserTokenToOwnedClients(t *testing.T) {
 	row, _ := rows[0].(map[string]interface{})
 	if row["Client"] != "visible #101" {
 		t.Fatalf("visible connection row = %#v", row)
+	}
+	if payload["log_enabled"] != true {
+		t.Fatal("API omitted connection journal status")
+	}
+	if _, exists := payload["log_path"]; exists {
+		t.Fatal("ordinary user API received server filesystem path")
+	}
+	if _, exists := payload["dropped"]; exists {
+		t.Fatal("ordinary user API received global queue diagnostics")
+	}
+}
+
+func TestAPIV1AuditMetadataPreservesRawCodesAndScopesDiagnostics(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	withAPIV1TestAuthKey(t)
+	token, hash, err := generateUserAPIToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Status: true, APIKeyHash: hash})
+	logPath := filepath.Join(t.TempDir(), "audit.log")
+	previous := beego.AppConfig.String("audit_log_path")
+	_ = beego.AppConfig.Set("audit_log_path", logPath)
+	audit.Configure(logPath)
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("audit_log_path", previous)
+		audit.Configure("")
+	})
+	for _, owner := range []int{0, 7, 9} {
+		if err := audit.Append(audit.Event{Action: "auth.login", OwnerUserID: owner, RequestID: "request-safe", AuthMethod: "password"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, admin := range []bool{false, true} {
+		t.Run(strconv.FormatBool(admin), func(t *testing.T) {
+			target := "/api/v1/audit"
+			if admin {
+				target += "?" + apiV1SignedQuery().Encode()
+			}
+			controller, recorder := newAPIV1TestController(t, http.MethodGet, target, nil, "")
+			if !admin {
+				controller.Ctx.Request.Header.Set("Authorization", "Bearer "+token)
+			}
+			controller.Prepare()
+			runClientPermissionAction(t, controller.Audit)
+			payload := readAPIV1JSON(t, recorder)
+			rows, ok := payload["rows"].([]interface{})
+			want := 1
+			if admin {
+				want = 3
+			}
+			if !ok || len(rows) != want || payload["log_enabled"] != true {
+				t.Fatalf("audit API response: %#v", payload)
+			}
+			row := rows[0].(map[string]interface{})
+			if row["Action"] != "auth.login" || row["ActionLabel"] != "登录" || row["RequestID"] != "request-safe" {
+				t.Fatalf("audit API fields: %#v", row)
+			}
+			if path, exists := payload["log_path"]; exists != admin || (admin && path != logPath) {
+				t.Fatalf("audit API path visibility: %#v", payload)
+			}
+		})
 	}
 }
 

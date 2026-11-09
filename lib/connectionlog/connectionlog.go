@@ -305,6 +305,7 @@ func List(filter Filter) (Page, error) {
 		}
 		if search != "" {
 			haystack := strings.Join([]string{
+				event.ID, fmt.Sprint(event.ClientID), fmt.Sprint(event.UserID), fmt.Sprint(event.ResourceID),
 				event.Action, event.Result, event.UserName, event.ClientRemark,
 				event.ResourceType, event.ResourceRemark, event.BridgeTransport,
 				event.BridgeChannel, event.ProxyProtocol, event.SourceIP,

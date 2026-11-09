@@ -38,6 +38,13 @@ type Event struct {
 	ActorID      int               `json:"actor_id,omitempty"`
 	ActorName    string            `json:"actor_name,omitempty"`
 	SourceIP     string            `json:"source_ip,omitempty"`
+	RemoteAddr   string            `json:"remote_addr,omitempty"`
+	IPSource     string            `json:"ip_source,omitempty"`
+	RequestID    string            `json:"request_id,omitempty"`
+	UserAgent    string            `json:"user_agent,omitempty"`
+	AuthMethod   string            `json:"auth_method,omitempty"`
+	Stage        string            `json:"stage,omitempty"`
+	ErrorCode    string            `json:"error_code,omitempty"`
 	Method       string            `json:"method,omitempty"`
 	Path         string            `json:"path,omitempty"`
 	Action       string            `json:"action"`
@@ -207,8 +214,16 @@ func List(filter Filter) (Page, error) {
 		if result != "" && event.Result != result {
 			continue
 		}
-		if search != "" && !strings.Contains(strings.ToLower(event.Action+" "+event.ResourceType+" "+event.ActorName+" "+event.SourceIP+" "+event.Error), search) {
-			continue
+		if search != "" {
+			details, _ := json.Marshal(event.Details)
+			haystack := fmt.Sprintf("%s %s %s %d %d %d %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s %s", event.ID,
+				event.Action, ActionName(event.Action, false), event.ActorID, event.OwnerUserID, event.ResourceID,
+				event.ResourceType, ResourceName(event.ResourceType, false), event.ActorName, event.ActorType,
+				event.SourceIP, event.RemoteAddr, event.RequestID, event.UserAgent, event.Method, event.Path,
+				event.AuthMethod, event.Stage, event.ErrorCode, event.Error, string(details), ActionName(event.Action, true))
+			if !strings.Contains(strings.ToLower(haystack), search) {
+				continue
+			}
 		}
 		matched = append(matched, &event)
 	}

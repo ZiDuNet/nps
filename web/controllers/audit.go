@@ -18,20 +18,35 @@ type AuditController struct {
 }
 
 type auditListRow struct {
-	ID           string
-	Time         string
-	Actor        string
-	ActorType    string
-	ActorID      int
-	OwnerUserID  int
-	SourceIP     string
-	Action       string
-	Resource     string
-	ResourceType string
-	ResourceID   int
-	Result       string
-	Error        string
-	Details      string
+	ID              string
+	Time            string
+	Actor           string
+	ActorType       string
+	ActorID         int
+	OwnerUserID     int
+	SourceIP        string
+	Action          string
+	Resource        string
+	ResourceType    string
+	ResourceID      int
+	Result          string
+	Error           string
+	Details         string
+	Method          string
+	Path            string
+	RemoteAddr      string
+	IPSource        string
+	RequestID       string
+	UserAgent       string
+	AuthMethod      string
+	Stage           string
+	ErrorCode       string
+	ActionLabel     string
+	ActionLabelEN   string
+	ResourceLabel   string
+	ResourceLabelEN string
+	ErrorLabel      string
+	ErrorLabelEN    string
 }
 
 type connectionListRow struct {
@@ -72,12 +87,17 @@ type connectionListRow struct {
 	RawDuration               int64
 	BytesIn                   int64
 	BytesOut                  int64
+	ActionLabel               string
+	ActionLabelEN             string
+	ResourceLabel             string
+	ResourceLabelEN           string
 }
 
 func (s *AuditController) List() {
 	if s.Ctx.Request.Method == "GET" {
 		s.Data["menu"] = "audit"
 		s.Data["audit_initial_tab"] = "operations"
+		s.auditPageOptions()
 		s.SetInfo("audit")
 		s.display("audit/list")
 		return
@@ -136,15 +156,23 @@ func (s *AuditController) List() {
 			Result:       event.Result,
 			Error:        event.Error,
 			Details:      details,
+			Method:       event.Method, Path: event.Path, RemoteAddr: event.RemoteAddr, IPSource: event.IPSource,
+			RequestID: event.RequestID, UserAgent: event.UserAgent, AuthMethod: event.AuthMethod,
+			Stage: event.Stage, ErrorCode: event.ErrorCode,
+			ActionLabel: audit.ActionName(event.Action, false), ActionLabelEN: audit.ActionName(event.Action, true),
+			ResourceLabel:   strings.Replace(resource, event.ResourceType, audit.ResourceName(event.ResourceType, false), 1),
+			ResourceLabelEN: strings.Replace(resource, event.ResourceType, audit.ResourceName(event.ResourceType, true), 1),
+			ErrorLabel:      auditErrorLabel(event, false), ErrorLabelEN: auditErrorLabel(event, true),
 		})
 	}
-	s.AjaxTable(rows, len(rows), page.Total, nil)
+	s.AjaxTable(rows, len(rows), page.Total, s.auditLogStatus(audit.Path()))
 }
 
 func (s *AuditController) Connections() {
 	if s.Ctx.Request.Method == "GET" {
 		s.Data["menu"] = "audit"
 		s.Data["audit_initial_tab"] = "connections"
+		s.auditPageOptions()
 		s.SetInfo("connection log")
 		s.display("audit/list")
 		return
@@ -153,7 +181,7 @@ func (s *AuditController) Connections() {
 	filter := connectionlog.Filter{
 		Offset:          start,
 		Limit:           length,
-		Search:          s.getEscapeString("search"),
+		Search:          connectionAuditSearch(s.getEscapeString("search")),
 		Kind:            s.getEscapeString("kind"),
 		Action:          s.getEscapeString("action"),
 		Result:          s.getEscapeString("result"),
@@ -228,9 +256,53 @@ func (s *AuditController) Connections() {
 			RawDuration:               event.DurationMS,
 			BytesIn:                   event.BytesIn,
 			BytesOut:                  event.BytesOut,
+			ActionLabel:               audit.ActionName(event.Action, false), ActionLabelEN: audit.ActionName(event.Action, true),
+			ResourceLabel:   strings.Replace(resource, event.ResourceType, audit.ResourceName(event.ResourceType, false), 1),
+			ResourceLabelEN: strings.Replace(resource, event.ResourceType, audit.ResourceName(event.ResourceType, true), 1),
 		})
 	}
-	s.AjaxTable(rows, len(rows), page.Total, nil)
+	status := s.auditLogStatus(connectionlog.Path())
+	if s.IsAdmin() {
+		status["dropped"] = connectionlog.Dropped()
+	}
+	s.AjaxTable(rows, len(rows), page.Total, status)
+}
+
+func (s *AuditController) auditPageOptions() {
+	s.Data["audit_action_groups"] = audit.ActionGroups(false)
+	s.Data["connection_action_groups"] = audit.ActionGroups(true)
+}
+
+func (s *AuditController) auditLogStatus(path string) map[string]interface{} {
+	status := map[string]interface{}{"log_enabled": path != ""}
+	// Filesystem layout is diagnostic information for administrators only.
+	if s.IsAdmin() {
+		status["log_path"] = path
+	}
+	return status
+}
+
+func auditErrorLabel(event *audit.Event, english bool) string {
+	if event.Error == "username or password incorrect" {
+		return audit.FailureName("invalid_credentials", english)
+	}
+	if event.ErrorCode != "" {
+		if label := audit.FailureName(event.ErrorCode, english); label != event.ErrorCode {
+			return label
+		}
+	}
+	return event.Error
+}
+
+func connectionAuditSearch(search string) string {
+	for _, group := range audit.ActionGroups(true) {
+		for _, action := range group.Actions {
+			if search == action.Name || strings.EqualFold(search, action.NameEN) {
+				return action.Code
+			}
+		}
+	}
+	return search
 }
 
 func nonEmpty(values ...string) []string {

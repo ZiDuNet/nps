@@ -649,6 +649,9 @@ func (self *LoginController) Verify() {
 	if !self.requirePost() {
 		return
 	}
+	username, failureCode := "", ""
+	auditRequestMetadata(self.Ctx, &audit.Event{})
+	defer func() { self.auditAuthResponse("auth.login", username, failureCode) }()
 	maxBody := int64(beego.AppConfig.DefaultInt("login_max_body", 1024))
 	if maxBody <= 0 {
 		maxBody = 1024
@@ -674,7 +677,7 @@ func (self *LoginController) Verify() {
 			return
 		}
 	}
-	username := self.GetString("username")
+	username = self.GetString("username")
 	rawPassword := self.GetString("password")
 	password := rawPassword
 	totpCode := strings.TrimSpace(self.GetString("totp"))
@@ -689,7 +692,7 @@ func (self *LoginController) Verify() {
 	}
 	captchaOpen, _ := beego.AppConfig.Bool("open_captcha")
 	if captchaOpen {
-		if !cpt.VerifyReq(self.Ctx.Request) {
+		if cpt == nil || !cpt.VerifyReq(self.Ctx.Request) {
 			self.Data["json"] = map[string]interface{}{
 				"status": 0, "code": "captcha_invalid",
 				"msg": "验证码错误，请刷新后重试。", "msg_en": "The verification code is incorrect. Refresh it and try again.",
@@ -707,20 +710,23 @@ func (self *LoginController) Verify() {
 		}
 		password = payload.Password
 	}
-	if self.doLoginWithTOTP(username, password, totpCode, true) {
+	var authenticated bool
+	authenticated, failureCode = self.doLoginWithReason(username, password, totpCode, true)
+	if authenticated {
 		if rememberLogin {
 			if err := issueRememberLoginCookie(&self.Controller, self.Ctx, time.Now()); err != nil {
 				beego.Error("issue remember login cookie:", err)
+				appendAuthenticationAudit(&self.Controller, self.Ctx, "auth.remember.issue", username, false, "remember_issue_failed", "remember", nil)
+			} else {
+				appendAuthenticationAudit(&self.Controller, self.Ctx, "auth.remember.issue", username, true, "", "remember", nil)
 			}
 		} else {
 			clearRememberLoginCookie(self.Ctx.Request, self.Ctx.ResponseWriter)
 		}
-		appendLoginAudit(self, username, true, "")
 		self.Data["json"] = map[string]interface{}{
 			"status": 1, "msg": "登录成功", "msg_en": "Signed in successfully",
 		}
 	} else {
-		appendLoginAudit(self, username, false, "username or password incorrect")
 		self.Data["json"] = map[string]interface{}{
 			"status": 0, "code": "invalid_credentials",
 			"msg": "用户名或密码错误。", "msg_en": "The username or password is incorrect.",
@@ -941,16 +947,21 @@ func (self *LoginController) doLogin(username, password string, explicit bool) b
 }
 
 func (self *LoginController) doLoginWithTOTP(username, password, totpCode string, explicit bool) bool {
+	authenticated, _ := self.doLoginWithReason(username, password, totpCode, explicit)
+	return authenticated
+}
+
+func (self *LoginController) doLoginWithReason(username, password, totpCode string, explicit bool) (bool, string) {
 	ip := loginAttemptIP(self.Ctx.Request.RemoteAddr)
 	if !allowLoginAttempt(ip, username, explicit, time.Now()) {
-		return false
+		return false, "login_rate_limited"
 	}
 	var auth bool
 	if password == beego.AppConfig.String("web_password") && username == beego.AppConfig.String("web_username") {
 		if secret := strings.TrimSpace(beego.AppConfig.String("totp_secret")); secret != "" {
 			valid, err := crypt.ValidateTOTPCode(secret, totpCode)
 			if err != nil || !valid {
-				return false
+				return false, "totp_invalid"
 			}
 		}
 		self.regenerateSession()
@@ -1026,10 +1037,10 @@ func (self *LoginController) doLoginWithTOTP(username, password, totpCode string
 		if explicit {
 			loginAttempts.clear(ip, username)
 		}
-		return true
+		return true, ""
 
 	}
-	return false
+	return false, "invalid_credentials"
 }
 
 func loginAttemptIP(remoteAddr string) string {
@@ -1076,6 +1087,9 @@ func (self *LoginController) RegisterEmailCode() {
 	if !self.requirePost() {
 		return
 	}
+	emailAuditName := ""
+	auditRequestMetadata(self.Ctx, &audit.Event{})
+	defer func() { self.auditAuthResponse("auth.register.email_code", emailAuditName, "") }()
 	if allowed, err := beego.AppConfig.Bool("allow_user_register"); err != nil || !allowed {
 		self.Ctx.Output.SetStatus(http.StatusForbidden)
 		self.Data["json"] = authJSONError(
@@ -1093,6 +1107,7 @@ func (self *LoginController) RegisterEmailCode() {
 		return
 	}
 	emailAddress, err := file.NormalizeUserEmail(self.GetString("email"))
+	emailAuditName = emailAddress
 	if err != nil {
 		self.Ctx.Output.SetStatus(http.StatusBadRequest)
 		self.Data["json"] = authJSONError(
@@ -1121,7 +1136,6 @@ func (self *LoginController) RegisterEmailCode() {
 	now := time.Now()
 	code, retryAfter, err := registrationEmailCodes.issue(emailAddress, ip, now, registrationEmailCodeTTL(), registrationEmailCodeCooldown())
 	if err != nil {
-		appendAuthAudit(self, "auth.register.email_code", emailAddress, false, err.Error())
 		status := http.StatusTooManyRequests
 		if retryAfter <= 0 {
 			status = http.StatusServiceUnavailable
@@ -1142,7 +1156,6 @@ func (self *LoginController) RegisterEmailCode() {
 	smtpConfig, err := configuredRegistrationSMTP()
 	if err != nil {
 		registrationEmailCodes.discard(emailAddress, ip)
-		appendAuthAudit(self, "auth.register.email_code", emailAddress, false, err.Error())
 		self.Ctx.Output.SetStatus(http.StatusServiceUnavailable)
 		self.Data["json"] = authJSONError(
 			"smtp_incomplete", "邮件服务配置不完整，请联系管理员。", "Email service configuration is incomplete. Contact the administrator.",
@@ -1152,7 +1165,6 @@ func (self *LoginController) RegisterEmailCode() {
 	}
 	if err := sendRegistrationVerificationEmail(emailAddress, code, smtpConfig); err != nil {
 		registrationEmailCodes.discard(emailAddress, ip)
-		appendAuthAudit(self, "auth.register.email_code", emailAddress, false, err.Error())
 		self.Ctx.Output.SetStatus(http.StatusBadGateway)
 		self.Data["json"] = authJSONError(
 			"email_send_failed", "验证码邮件发送失败，请稍后再试。", "The verification email could not be sent. Try again later.",
@@ -1160,7 +1172,6 @@ func (self *LoginController) RegisterEmailCode() {
 		self.ServeJSON()
 		return
 	}
-	appendAuthAudit(self, "auth.register.email_code", emailAddress, true, "")
 	response := authJSONResponse(
 		1, "registration_email_sent",
 		"验证码已发送，请检查收件箱和垃圾邮件。",
@@ -1211,6 +1222,9 @@ func (self *LoginController) Register() {
 	if !self.requirePost() {
 		return
 	}
+	registrationName := ""
+	auditRequestMetadata(self.Ctx, &audit.Event{})
+	defer func() { self.auditAuthResponse("auth.register", registrationName, "") }()
 	if allowErr != nil || !allowed {
 		self.Ctx.Output.SetStatus(http.StatusForbidden)
 		self.Data["json"] = authJSONError(
@@ -1220,6 +1234,7 @@ func (self *LoginController) Register() {
 		return
 	}
 	username := strings.TrimSpace(self.GetString("username"))
+	registrationName = username
 	now := time.Now()
 	ip := requestVisitorIP(self.Ctx)
 	if !registrationAttempts.reserveAttempt(ip, username, now, configuredRegistrationPolicy()) {
@@ -1346,12 +1361,10 @@ func (self *LoginController) Register() {
 	}
 	if err := file.GetDb().NewUser(user); err != nil {
 		registrationAttempts.releaseSuccess(ip)
-		appendAuthAudit(self, "auth.register", username, false, err.Error())
 		self.Data["json"] = authJSONError(
 			"registration_failed", "注册失败，请稍后重试。", "Registration failed. Try again later.",
 		)
 	} else {
-		appendAuthAudit(self, "auth.register", username, true, "")
 		response := authJSONResponse(
 			1, "registration_success",
 			"注册成功，请登录。",
@@ -1366,36 +1379,12 @@ func (self *LoginController) Register() {
 
 func (self *LoginController) Out() {
 	setNoStore(self.Ctx)
-	appendAuthAudit(self, "auth.logout", "", true, "")
+	appendAuthenticationAudit(&self.Controller, self.Ctx, "auth.logout", "", true, "", "session", nil)
 	revokeCurrentRememberLoginDevice(&self.Controller, self.Ctx, time.Now())
 	clearAuthenticationSession(self.DelSession)
 	clearRememberLoginCookie(self.Ctx.Request, self.Ctx.ResponseWriter)
 	self.releaseCookieSession()
 	self.Redirect(beego.AppConfig.String("web_base_url")+"/login/index", 302)
-}
-
-func appendLoginAudit(controller *LoginController, username string, success bool, failure string) {
-	appendAuthAudit(controller, "auth.login", username, success, failure)
-}
-
-func appendAuthAudit(controller *LoginController, action, username string, success bool, failure string) {
-	audit.Configure(beego.AppConfig.String("audit_log_path"))
-	result := audit.ResultSuccess
-	if !success {
-		result = audit.ResultFailure
-	}
-	ip := ""
-	method, path := "", ""
-	if controller != nil && controller.Ctx != nil && controller.Ctx.Request != nil {
-		ip = controller.Ctx.Input.IP()
-		method = controller.Ctx.Request.Method
-		path = controller.Ctx.Request.URL.Path
-	}
-	_ = audit.Append(audit.Event{
-		ActorType: "anonymous", ActorName: username, SourceIP: ip,
-		Method: method, Path: path, Action: action, ResourceType: "session",
-		Result: result, Error: failure,
-	})
 }
 
 // regenerateSession prevents a session identifier supplied before login from

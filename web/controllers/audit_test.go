@@ -80,6 +80,7 @@ func TestAuditListScopesOrdinaryUsersToOwnerAndKeepsAdminGlobal(t *testing.T) {
 			OwnerUserID: 7, SourceIP: "198.51.100.20", Action: "client.create",
 			ResourceType: "client", ResourceID: 101, Result: audit.ResultSuccess,
 			Details: map[string]string{"remark": "visible"},
+			Method:  "POST", Path: "/client/add", RequestID: "owned-request", UserAgent: "Browser/1.0",
 		},
 		{Time: now, OwnerUserID: 9, Action: "client.delete"},
 		{Time: now, OwnerUserID: 0, Action: "auth.login"},
@@ -100,6 +101,19 @@ func TestAuditListScopesOrdinaryUsersToOwnerAndKeepsAdminGlobal(t *testing.T) {
 		rows[0]["ResourceID"] != float64(101) || rows[0]["SourceIP"] != "198.51.100.20" ||
 		rows[0]["Details"] != `{"remark":"visible"}` {
 		t.Fatalf("ordinary audit raw fields = %#v", rows[0])
+	}
+	if rows[0]["Method"] != "POST" || rows[0]["Path"] != "/client/add" || rows[0]["RequestID"] != "owned-request" || rows[0]["ActionLabel"] != "创建客户端" {
+		t.Fatalf("additive audit metadata: %#v", rows[0])
+	}
+	var userResponse map[string]interface{}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &userResponse); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := userResponse["log_path"]; exists {
+		t.Fatal("ordinary user received server filesystem path")
+	}
+	if userResponse["log_enabled"] != true {
+		t.Fatal("missing log configuration status")
 	}
 
 	admin, adminRecorder := newAuditTestController(t, "List", map[interface{}]interface{}{"auth": true, "isAdmin": true})
