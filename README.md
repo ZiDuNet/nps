@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.44</sub>
+﻿# NPS <sub>v1.1.45</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -25,6 +25,8 @@ Administrators can create users and assign multiple clients to one user; ordinar
 - 🖥️ **Cross-platform** — Linux / Windows / macOS / ARM / Synology, with one-click system service installation
 - 🎨 **Web UI** — Operations-focused console with a persistent top bar, light/dark theme, responsive layout, Chinese/English localization, keyboard-friendly controls, and real-time traffic monitoring
 - 👥 **User Management** — One user can manage multiple clients, with user-level tunnel quotas and expiration
+- **Account sign-in** — Username or linked-email login, optional client-scoped VKey login, and email password recovery while registration is open; recovery revokes previous browser sessions
+- **Audit and connection journals** — The console reads the latest 2,000 records from each file with user isolation; administrators can prune older records by retention days without changing the existing history-query APIs
 - 🔒 **Security** — Random password on first start, IP whitelist/blacklist, CAPTCHA, login PoW, administrator TOTP, remembered-device management, and rate limiting
 - 🌐 **Domain Proxy** — Custom headers, URL routing, platform wildcard domain pools, route diagnostics, auto HTTPS and certificate hot reload
 - 🔐 **TLS Encryption** — TLS encrypted communication between client and server
@@ -199,6 +201,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.45** (2026-11-16) - Added linked-email login and password recovery while registration is open; fixed client-scoped VKey sign-in and audit initialization. The console reads the latest 2,000 journal records with admin-only retention cleanup. Restored user usage trends, added automatic expired-history cleanup and expanded the embedded guide. Old NPC remains compatible. See the [upgrade notes](docs/upgrade-1.1.45.md).
 - **v1.1.44** (2026-11-10) - Completed login-stage, remembered-session and logout auditing with request IDs, browser/IP metadata and trusted ownership. Redesigned Audit and Connections to use the full content area, readable action names, diagnostic columns and copyable raw events. Old NPC and JSONL/API action codes remain compatible. See the [upgrade notes](docs/upgrade-1.1.44.md).
 
 - **v1.1.43** (2026-11-10) - Improved mobile login, registration and IP registration without changing desktop glass styling; unified client selectors with owner context and online badges, compact traffic/rate readouts, and browser-only IPv4/IPv6 geolocation with bundled country flags. Includes cross-platform NPC update/restart recovery fixes and the refreshed Account Management page. See the [upgrade notes](docs/upgrade-1.1.43.md).

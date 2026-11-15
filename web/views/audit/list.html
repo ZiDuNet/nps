@@ -13,7 +13,10 @@
             <button type="button" class="audit-hub__tab is-active" id="audit-tab-operations" role="tab" aria-selected="true" aria-controls="audit-view-operations" data-audit-view="operations"><i class="fa fa-list-alt" aria-hidden="true"></i><span data-i18n-zh="管理操作与登录" data-i18n-en="Actions and sign-ins">管理操作与登录</span></button>
             <button type="button" class="audit-hub__tab" id="audit-tab-connections" role="tab" aria-selected="false" aria-controls="audit-view-connections" tabindex="-1" data-audit-view="connections"><i class="fa fa-plug" aria-hidden="true"></i><span data-i18n-zh="客户端与代理连接" data-i18n-en="Client and proxy connections">客户端与代理连接</span></button>
         </div>
-        <p class="audit-hub__hint"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="展开查看原始事件 · 列菜单可显示更多字段" data-i18n-en="Expand for raw events · More fields in Columns">展开查看原始事件 · 列菜单可显示更多字段</span></p>
+        <div class="audit-hub__actions">
+            <p class="audit-hub__hint"><i class="fa fa-info-circle" aria-hidden="true"></i><span data-i18n-zh="仅查询最近 2000 条 · 展开查看完整事件" data-i18n-en="Latest 2,000 records only · Expand for full events">仅查询最近 2000 条 · 展开查看完整事件</span></p>
+            {{if .isAdmin}}<button type="button" id="audit-cleanup-open" class="btn btn-outline btn-danger audit-cleanup-open" aria-haspopup="dialog" aria-controls="audit-cleanup-modal"><i class="fa fa-trash" aria-hidden="true"></i><span data-i18n-zh="清理旧日志" data-i18n-en="Clean old logs">清理旧日志</span></button>{{end}}
+        </div>
     </div>
 
     <div class="audit-hub__view is-active" id="audit-view-operations" role="tabpanel" aria-labelledby="audit-tab-operations">
@@ -36,6 +39,7 @@
                             <option value="global" data-i18n-zh="全局参数" data-i18n-en="Global settings">全局参数</option><option value="nps.conf" data-i18n-zh="服务配置" data-i18n-en="Server configuration">服务配置</option>
                             <option value="nps" data-i18n-zh="服务端" data-i18n-en="Server">服务端</option><option value="dashboard" data-i18n-zh="大屏密钥" data-i18n-en="Dashboard key">大屏密钥</option>
                             <option value="ip_registration" data-i18n-zh="IP 登记" data-i18n-en="IP registration">IP 登记</option><option value="login_ban" data-i18n-zh="登录封禁" data-i18n-en="Login ban">登录封禁</option>
+                            <option value="journal" data-i18n-zh="审计与连接日志" data-i18n-en="Audit and connection journals">审计与连接日志</option>
                         </select>
                     </label>
                     <label class="nps-table-filter" for="audit-result"><span class="nps-table-filter__label" data-i18n-zh="结果" data-i18n-en="Result">结果</span>
@@ -61,6 +65,33 @@
         </section>
     </div>
 </section>
+{{if .isAdmin}}
+<div id="audit-cleanup-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="audit-cleanup-title" aria-describedby="audit-cleanup-warning" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content nps-password-modal audit-cleanup-modal">
+            <div class="modal-header">
+                <h2 id="audit-cleanup-title" class="modal-title" data-i18n-zh="清理旧日志" data-i18n-en="Clean old logs">清理旧日志</h2>
+                <button type="button" class="nps-modal-close" data-bs-dismiss="modal" aria-label="关闭" data-aria-label-zh="关闭" data-aria-label-en="Close"><i class="fa fa-times" aria-hidden="true"></i></button>
+            </div>
+            <form id="audit-cleanup-form">
+                <div class="modal-body">
+                    <p class="audit-cleanup-scope"><span data-i18n-zh="当前日志" data-i18n-en="Journal">当前日志</span><strong id="audit-cleanup-kind"></strong></p>
+                    <label class="form-label" for="audit-cleanup-days" data-i18n-zh="保留最近多少天的日志" data-i18n-en="Days of logs to retain">保留最近多少天的日志</label>
+                    <div class="input-group"><input type="number" id="audit-cleanup-days" class="form-control" min="1" max="36500" step="1" inputmode="numeric" value="30" required aria-describedby="audit-cleanup-cutoff audit-cleanup-warning"><span class="input-group-text" data-i18n-zh="天" data-i18n-en="days">天</span></div>
+                    <p id="audit-cleanup-cutoff" class="audit-cleanup-cutoff" aria-live="polite"></p>
+                    <p id="audit-cleanup-warning" class="audit-cleanup-warning"><i class="fa fa-exclamation-triangle" aria-hidden="true"></i><span data-i18n-zh="将永久删除此时间以前的记录，无法撤销。请先备份。不会清理 nps.log、用量历史或客户端数据；无法识别时间的记录会保留。" data-i18n-en="Older records will be permanently deleted. Back up first; this cannot be undone. Runtime nps.log, usage history, client data and records with unknown timestamps are kept.">将永久删除此时间以前的记录，无法撤销。请先备份。不会清理 nps.log、用量历史或客户端数据；无法识别时间的记录会保留。</span></p>
+                    <label class="audit-cleanup-confirm"><input id="audit-cleanup-confirm" type="checkbox"><span data-i18n-zh="我已确认日志类型、保留天数和删除范围" data-i18n-en="I have checked the journal, retention period and deletion scope">我已确认日志类型、保留天数和删除范围</span></label>
+                    <p id="audit-cleanup-feedback" class="audit-cleanup-feedback" role="status" aria-live="polite"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" data-bs-dismiss="modal" data-i18n-zh="取消" data-i18n-en="Cancel">取消</button>
+                    <button type="submit" id="audit-cleanup-submit" class="btn btn-danger" disabled><i class="fa fa-trash" aria-hidden="true"></i> <span data-cleanup-label>确认清理</span></button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{{end}}
 <script>
 $(function () {
     var english = typeof window.npsIsEnglish === 'function' && window.npsIsEnglish();
@@ -84,11 +115,12 @@ $(function () {
     var request = function (value, row) { return ui.pair((row.Method || '') + ' ' + (row.Path || ''), row.RequestID, true); };
     function updateState(id, data, failed) {
         var state = $(id), message = state.find('.audit-log-state__message');
-        state.find('.audit-log-state__count').text(failed ? '—' : local('共 ', '') + (data.total || 0) + local(' 条', ' events'));
+        state.find('.audit-log-state__count').text(failed ? '—' : local('当前范围 ', '') + (data.total || 0) + local(' 条', ' matching events'));
         var disabled = data.log_enabled === false;
         var text = failed ? local('日志读取失败，请检查路径与读取权限后刷新。', 'Could not read journal. Check its path and permissions, then refresh.')
             : disabled ? local('未开启文件记录：请在全局参数配置对应日志路径。', 'File logging is disabled. Configure its journal path in Global settings.')
             : local('文件记录已开启', 'File logging enabled');
+        if (!failed && !disabled && data.recent_limit) text += local(' · 搜索和筛选仅限日志文件最近 ', ' · Search and filters cover only the journal’s latest ') + data.recent_limit + local(' 条记录', ' records');
         if (!failed && data.log_path) text += ' · ' + data.log_path;
         if (!failed && data.dropped > 0) text += local(' · 队列满时累计丢弃 ', ' · Queue overflow dropped ') + data.dropped + local(' 条', ' events');
         message.removeAttr('data-i18n-zh data-i18n-en').text(text).toggleClass('is-warning', disabled || data.dropped > 0).toggleClass('is-error', !!failed);
@@ -143,12 +175,59 @@ $(function () {
             column('HandshakeStage', '连接阶段', 'Connection stage', null, {visible: false})
         ]}));
     }
-    var initialized = {};
+    var initialized = {}, activeView = 'operations';
+    var cleanupModal = $('#audit-cleanup-modal'), cleanupKind = 'operations', cleanupBusy = false;
+    function updateCleanup() {
+        if (!cleanupModal.length) return;
+        var plan = ui.cleanupPlan($('#audit-cleanup-days').val(), cleanupKind);
+        $('#audit-cleanup-kind').text(cleanupKind === 'connections' ? local('客户端与代理连接', 'Client and proxy connections') : local('管理操作与登录', 'Actions and sign-ins'));
+        $('#audit-cleanup-cutoff').text(plan ? local('将删除早于 ', 'Delete records before ') + new Date(plan.before).toLocaleString(english ? 'en-US' : 'zh-CN') + local(' 的记录（以服务端执行时间为准）。', ' (based on server execution time).') : local('请输入 1 到 36500 之间的整数天数。', 'Enter a whole number of days from 1 to 36500.'));
+        $('#audit-cleanup-days').attr('aria-invalid', plan ? 'false' : 'true');
+        $('#audit-cleanup-submit').prop('disabled', cleanupBusy || !plan || !$('#audit-cleanup-confirm').prop('checked')).find('[data-cleanup-label]').text(cleanupBusy ? local('正在清理…', 'Cleaning…') : local('确认清理', 'Confirm cleanup'));
+    }
+    $('#audit-cleanup-open').on('click', function () {
+        cleanupKind = activeView;
+        $('#audit-cleanup-confirm').prop('checked', false);
+        $('#audit-cleanup-feedback').text('').removeClass('is-error');
+        updateCleanup();
+        cleanupModal.modal('show');
+    });
+    cleanupModal.on('shown.bs.modal', function () { $('#audit-cleanup-days').trigger('focus'); }).on('hide.bs.modal', function (event) { if (cleanupBusy) event.preventDefault(); });
+    $('#audit-cleanup-days').on('input change', function () { $('#audit-cleanup-confirm').prop('checked', false); updateCleanup(); });
+    $('#audit-cleanup-confirm').on('change', updateCleanup);
+    $('#audit-cleanup-form').on('submit', function (event) {
+        event.preventDefault();
+        var plan = ui.cleanupPlan($('#audit-cleanup-days').val(), cleanupKind);
+        if (cleanupBusy || !plan || !$('#audit-cleanup-confirm').prop('checked')) { updateCleanup(); return; }
+        cleanupBusy = true;
+        cleanupModal.find('input, button').prop('disabled', true);
+        $('#audit-cleanup-feedback').removeClass('is-error').text(local('正在扫描并清理日志，大文件可能需要一些时间…', 'Scanning and cleaning. Large journals may take a while…'));
+        updateCleanup();
+        $.ajax({url: '{{.web_base_url}}/audit/cleanup', method: 'POST', dataType: 'json', global: false, timeout: 120000,
+            headers: {'X-NPS-Log-Cleanup': '1'}, data: {kind: plan.kind, days: plan.days, confirm: '1'}
+        }).done(function (data) {
+            if (!data || data.status !== 1) { $('#audit-cleanup-feedback').addClass('is-error').text((data && data.msg) || local('清理失败，请检查日志目录权限后重试。', 'Cleanup failed. Check journal directory permissions.')); return; }
+            cleanupBusy = false;
+            cleanupModal.modal('hide');
+            npsNotify('success', local('已清理 ', 'Removed ') + data.removed + local(' 条旧日志，释放 ', ' old records, freed ') + (typeof changeunit === 'function' ? changeunit(data.removed_bytes || 0) : (data.removed_bytes || 0) + ' B'));
+            ['operations', 'connections'].forEach(function (view) {
+                if (!initialized[view]) return;
+                var table = $(view === 'connections' ? '#connection-table' : '#audit-table');
+                var instance = table.data('nps.table');
+                if (instance) instance.pageNumber = 1;
+                table.npsTable('refresh');
+            });
+        }).fail(function (xhr, status) {
+            var message = xhr.responseJSON && xhr.responseJSON.msg;
+            $('#audit-cleanup-feedback').addClass('is-error').text(status === 'timeout' ? local('等待响应超时，清理可能仍在进行；请稍后刷新确认结果，不要重复提交。', 'Response timed out; cleanup may still be running. Refresh later before retrying.') : (message || local('清理失败，请检查网络或服务日志后重试。', 'Cleanup failed. Check the network or server log.')));
+        }).always(function () { cleanupBusy = false; cleanupModal.find('input, button').prop('disabled', false); updateCleanup(); });
+    });
     function syncLanguage() {
         var next = typeof window.npsIsEnglish === 'function' && window.npsIsEnglish();
         $('.audit-hub optgroup[data-label-zh]').each(function () { $(this).attr('label', $(this).attr(next ? 'data-label-en' : 'data-label-zh')); });
         if (next === english) return;
         english = next;
+        updateCleanup();
         ['operations', 'connections'].forEach(function (view) {
             if (!initialized[view]) return;
             var table = $(view === 'connections' ? '#connection-table' : '#audit-table');
@@ -159,6 +238,7 @@ $(function () {
     }
     function activate(view) {
         if (view !== 'connections') view = 'operations';
+        activeView = view;
         $('.audit-hub__tab').removeClass('is-active').attr({'aria-selected': 'false', tabindex: '-1'});
         $('.audit-hub__tab[data-audit-view="' + view + '"]').addClass('is-active').attr({'aria-selected': 'true', tabindex: '0'});
         $('.audit-hub__view').removeClass('is-active'); $('#audit-view-' + view).addClass('is-active');
@@ -185,5 +265,6 @@ $(function () {
     activate('{{.audit_initial_tab}}' || 'operations');
     syncLanguage();
     $('body').setLang('.audit-hub');
+    $('body').setLang('#audit-cleanup-modal');
 });
 </script>

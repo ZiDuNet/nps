@@ -1,6 +1,8 @@
 package audit
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,6 +112,67 @@ func TestActionCatalogHasUniqueStableCodesAndHistoricalFallback(t *testing.T) {
 	}
 	if ActionName("auth.login", false) != "登录" || ActionName("future.action", false) != "future.action" {
 		t.Fatal("action labels changed stable codes")
+	}
+}
+
+func TestRecentWindowPrecedesSearchOwnershipAndPagination(t *testing.T) {
+	Configure(filepath.Join(t.TempDir(), "audit.log"))
+	t.Cleanup(func() { Configure("") })
+	var data strings.Builder
+	now := time.Now()
+	for i := 0; i < 2005; i++ {
+		event := Event{ID: fmt.Sprintf("%04d", i), Time: now.Add(time.Duration(i) * time.Second), Action: "client.update", OwnerUserID: 7}
+		if i < 5 {
+			event.ActorName, event.OwnerUserID = "outside-tail", 9
+		}
+		encoded, _ := json.Marshal(event)
+		data.Write(encoded)
+		data.WriteByte('\n')
+	}
+	if err := os.WriteFile(Path(), []byte(data.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	page, err := List(Filter{RecentLimit: 2000, Limit: 10})
+	if err != nil || page.Total != 2000 || len(page.Events) != 10 || page.Events[0].ID != "2004" {
+		t.Fatalf("recent page = %+v %v", page, err)
+	}
+	page, err = List(Filter{RecentLimit: 2000, Offset: 1995, Limit: 500})
+	if err != nil || len(page.Events) != 5 || page.Events[4].ID != "0005" {
+		t.Fatalf("last page = %+v %v", page, err)
+	}
+	for _, filter := range []Filter{{RecentLimit: 2000, Search: "outside-tail"}, {RecentLimit: 2000, OwnerUserID: intPtr(9)}} {
+		if page, err := List(filter); err != nil || page.Total != 0 {
+			t.Fatalf("filter widened recent window: %+v %v", page, err)
+		}
+	}
+	page, err = List(Filter{Search: "outside-tail"})
+	if err != nil || page.Total != 5 {
+		t.Fatalf("full-history API query regressed: %+v %v", page, err)
+	}
+}
+
+func TestCleanupBeforeKeepsRecentAndCanAppendAfterReplacement(t *testing.T) {
+	Configure(filepath.Join(t.TempDir(), "audit.log"))
+	t.Cleanup(func() { Configure("") })
+	cutoff := time.Now()
+	for _, event := range []Event{
+		{Time: cutoff.Add(-time.Hour), ID: "old", Action: "client.update"},
+		{Time: cutoff, ID: "boundary", Action: "client.update"},
+	} {
+		if err := Append(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := CleanupBefore(cutoff)
+	if err != nil || result.Removed != 1 {
+		t.Fatalf("cleanup = %+v %v", result, err)
+	}
+	if err := Append(Event{Action: "audit.cleanup"}); err != nil {
+		t.Fatal(err)
+	}
+	page, err := List(Filter{})
+	if err != nil || page.Total != 2 {
+		t.Fatalf("journal after cleanup and append = %+v %v", page, err)
 	}
 }
 

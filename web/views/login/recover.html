@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>找回密码 · NPS</title>
+    <script>
+        (function () {
+            var theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            try { theme = localStorage.getItem('nps-theme') || theme; } catch (error) {}
+            document.documentElement.setAttribute('data-theme', theme);
+        }());
+    </script>
+    <link rel="icon" type="image/png" href="{{.web_base_url}}/static/img/nps-logo.png">
+    <link href="{{.web_base_url}}/static/css/bootstrap-5.3.3.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/fontawesome.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/solid.min.css?v={{.version}}" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/modern.css?v={{.version}}&ui=20261026-2" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-console.css?v={{.version}}&ui=20261106-3" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/bootstrap-nps.css?v={{.version}}&ui=20261026-3" rel="stylesheet">
+    <link href="{{.web_base_url}}/static/css/nps-login-v2.css?v={{.version}}&ui=20261110-1" rel="stylesheet">
+    <script src="{{.web_base_url}}/static/js/bootstrap-5.3.3.bundle.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/jquery-3.4.1.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/jsencrypt.min.js?v={{.version}}"></script>
+    <script src="{{.web_base_url}}/static/js/language.js?v={{.version}}&ui=20261106-1"></script>
+    <script src="{{.web_base_url}}/static/js/nps-auth-shell.js?v={{.version}}&ui=20261106-4" defer></script>
+</head>
+<body class="gray-bg auth-body auth-login-page auth-login-page--register nps-bootstrap">
+<iframe id="auth-network-background" class="auth-network-background" src="{{.web_base_url}}/static/background/nps-network-background.html?v={{.version}}&ui=20261106-5&motion=on" title="" aria-hidden="true" tabindex="-1" loading="eager"></iframe>
+<div class="auth-login-v2">
+    <header class="auth-login-toolbar">
+        <a class="auth-login-toolbar__brand" href="{{.web_base_url}}/login/index" aria-label="NPS">
+            <span class="auth-login-toolbar__mark" aria-hidden="true"><img src="{{.web_base_url}}/static/img/nps-logo.png" alt=""></span>
+            <span class="auth-login-toolbar__brand-copy"><strong langtag="application"></strong><small>Network Proxy Server</small></span><span class="nps-pro-badge" aria-label="Pro edition">Pro</span>
+        </a>
+        <div class="auth-login-toolbar__tools">
+            <button type="button" id="theme-toggle" class="auth-login-tool auth-login-theme" aria-label="切换主题" data-aria-label-zh="切换主题" data-aria-label-en="Toggle theme" aria-pressed="false"><i class="fa fa-moon" id="theme-icon" aria-hidden="true"></i><span data-i18n-zh="主题" data-i18n-en="Theme">主题</span></button>
+            <div class="auth-language auth-login-language btn-group dropdown">
+                <button id="languagemenu" class="auth-login-tool dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" aria-label="语言" data-aria-label-zh="语言" data-aria-label-en="Language"><i class="fa fa-globe-asia" aria-hidden="true"></i><span></span></button>
+                <ul class="dropdown-menu"><li lang="zh-CN"><a href="#">简体中文</a></li><li lang="en-US"><a href="#">English</a></li></ul>
+            </div>
+        </div>
+    </header>
+    <main class="auth-login-stage">
+        <section class="auth-login-shell auth-login-shell--register" aria-labelledby="auth-recover-title">
+            <aside class="auth-login-brand" aria-labelledby="auth-recover-brand-title">
+                <div class="auth-login-brand__identity"><span class="auth-login-brand__accent-line" aria-hidden="true"></span><div class="auth-login-brand__identity-copy"><p class="auth-login-brand__wordmark" aria-hidden="true">NPS</p><p class="auth-login-brand__product">NETWORK PROXY SERVER</p><p class="auth-login-brand__tagline" data-i18n-zh="内网穿透 · 反向代理" data-i18n-en="Tunnels · Reverse proxy">内网穿透 · 反向代理</p></div></div>
+                <h1 class="auth-login-brand__headline" id="auth-recover-brand-title"><span data-i18n-zh="验证你的邮箱，安全找回账号访问权限。" data-i18n-en="Verify your email and securely recover your account.">验证你的邮箱，安全找回账号访问权限。</span></h1>
+                <ul class="auth-login-capabilities" aria-label="Password recovery">
+                    <li><span class="auth-login-capabilities__dot" aria-hidden="true"></span><strong data-i18n-zh="使用绑定邮箱" data-i18n-en="Use your linked email">使用绑定邮箱</strong><small data-i18n-zh="仅向有效用户账号的绑定邮箱发送验证码" data-i18n-en="Codes go only to the linked email of an active user">仅向有效用户账号的绑定邮箱发送验证码</small></li>
+                    <li><span class="auth-login-capabilities__dot" aria-hidden="true"></span><strong data-i18n-zh="一次性安全校验" data-i18n-en="One-time verification">一次性安全校验</strong><small data-i18n-zh="验证码 10 分钟有效，请勿转发给他人" data-i18n-en="Codes expire in 10 minutes; never share them">验证码 10 分钟有效，请勿转发给他人</small></li>
+                    <li><span class="auth-login-capabilities__dot" aria-hidden="true"></span><strong data-i18n-zh="重置后重新登录" data-i18n-en="Sign in again after reset">重置后重新登录</strong><small data-i18n-zh="旧登录及免登凭证失效，客户端 VKey 不变" data-i18n-en="Previous sign-ins expire; client VKeys stay unchanged">旧登录及免登凭证失效，客户端 VKey 不变</small></li>
+                </ul>
+                <div class="auth-login-protocols" aria-label="Security"><span>EMAIL</span><span>RSA</span><span>ONE-TIME</span></div>
+            </aside>
+            <section class="auth-login-panel login-form-wrap" aria-labelledby="auth-recover-title">
+                <header class="auth-login-panel__header"><div class="auth-login-panel__meta"><span class="auth-login-panel__eyebrow" data-i18n-zh="账号恢复" data-i18n-en="Account recovery">账号恢复</span><a class="auth-login-panel__ip-link" href="{{.web_base_url}}/login/index" data-i18n-zh="返回登录" data-i18n-en="Back to login">返回登录</a></div><h2 class="auth-login-panel__title" id="auth-recover-title" data-i18n-zh="找回密码" data-i18n-en="Reset password">找回密码</h2></header>
+                {{if not .email_ready}}<div class="auth-login-alert" role="alert" data-i18n-zh="邮件服务未配置完成，请联系管理员重置密码。" data-i18n-en="Email service is not configured. Contact the administrator to reset your password.">邮件服务未配置完成，请联系管理员重置密码。</div>{{end}}
+                <form id="recover-form" class="auth-login-form form nps-form">
+                    <div class="form-group auth-login-field"><label class="auth-login-field__label" for="auth-email" data-i18n-zh="绑定邮箱" data-i18n-en="Linked email">绑定邮箱</label><div class="auth-login-control"><i class="fa fa-envelope auth-login-control__icon" aria-hidden="true"></i><input id="auth-email" name="email" type="email" inputmode="email" class="form-control" placeholder="name@example.com" required autocomplete="email" autocapitalize="none" spellcheck="false"></div></div>
+                    <div class="form-group auth-login-field"><label class="auth-login-field__label" for="auth-email-code" data-i18n-zh="邮箱验证码" data-i18n-en="Email code">邮箱验证码</label><div class="auth-login-email-row"><div class="auth-login-control"><i class="fa fa-key auth-login-control__icon" aria-hidden="true"></i><input id="auth-email-code" name="email_code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" class="form-control" placeholder="000000" required autocomplete="one-time-code"></div><button id="auth-send-email-code" type="button" class="auth-login-email-code-button"{{if not .email_ready}} disabled{{end}} data-i18n-zh="获取验证码" data-i18n-en="Get code">获取验证码</button></div></div>
+                    <div class="form-group auth-login-field"><label class="auth-login-field__label" for="auth-password" data-i18n-zh="新密码" data-i18n-en="New password">新密码</label><div class="auth-login-control"><i class="fa fa-lock auth-login-control__icon" aria-hidden="true"></i><input id="auth-password" name="password" type="password" class="form-control" minlength="6" maxlength="128" required autocomplete="new-password"></div></div>
+                    <div class="form-group auth-login-field"><label class="auth-login-field__label" for="auth-confirm" data-i18n-zh="确认新密码" data-i18n-en="Confirm new password">确认新密码</label><div class="auth-login-control"><i class="fa fa-lock auth-login-control__icon" aria-hidden="true"></i><input id="auth-confirm" type="password" class="form-control" minlength="6" maxlength="128" required autocomplete="new-password"></div></div>
+                    {{if .captcha_open}}<div class="form-group auth-login-field auth-login-field--captcha"><label class="auth-login-field__label" for="auth-captcha" langtag="word-captcha"></label><div class="auth-login-captcha"><div class="auth-login-captcha__challenge">{{create_captcha}}</div><div class="auth-login-control"><i class="fa fa-shield-alt auth-login-control__icon" aria-hidden="true"></i><input id="auth-captcha" name="captcha" class="form-control" required autocomplete="off" langtag="word-captcha"></div></div></div>{{end}}
+                    <p class="auth-login-field__hint" id="recover-status" role="status" aria-live="polite" data-i18n-zh="未绑定邮箱的账号、管理员账号请联系管理员处理。" data-i18n-en="For accounts without a linked email or administrator accounts, contact the administrator.">未绑定邮箱的账号、管理员账号请联系管理员处理。</p>
+                    <button id="recover-submit" type="submit" class="auth-login-submit"{{if not .email_ready}} disabled{{end}}><span data-i18n-zh="重置密码" data-i18n-en="Reset password">重置密码</span><i class="fa fa-arrow-right" aria-hidden="true"></i></button>
+                </form>
+                <div class="auth-login-switch"><a href="{{.web_base_url}}/login/index" data-i18n-zh="返回登录" data-i18n-en="Back to login">返回登录</a><span aria-hidden="true">·</span><a href="{{.web_base_url}}/login/register" langtag="word-register"></a></div>
+            </section>
+        </section>
+    </main>
+    <footer class="auth-login-footer"><span>版权所有 <strong>NPS-Pro</strong> &copy; 2018-2026 By:WuShuo</span><span>Network Proxy Server</span></footer>
+</div>
+<script>window.nps = {web_base_url: "{{.web_base_url}}", version: "{{.version}}", publicKey: {{.public_key}}, loginNonce: "{{.login_nonce}}", timeOffset: 0};</script>
+<script src="{{.web_base_url}}/static/js/nps-password-reset.js?v={{.version}}" defer></script>
+</body>
+</html>

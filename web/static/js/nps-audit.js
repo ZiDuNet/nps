@@ -82,8 +82,17 @@
             + (english ? 'Copy JSON' : '复制 JSON') + '</button></div><pre class="audit-connection-raw" tabindex="0" aria-label="'
             + caption + '">' + escape(JSON.stringify(rawEvent(row, connections), null, 2)) + '</pre></div>';
     }
+
+    function cleanupPlan(days, kind, now) {
+        var value = String(days == null ? '' : days).trim();
+        if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 36500) return null;
+        if (kind !== 'operations' && kind !== 'connections') return null;
+        var cutoff = new Date((now == null ? Date.now() : Number(now)) - Number(value) * 86400000);
+        if (!Number.isFinite(cutoff.getTime())) return null;
+        return {days: Number(value), kind: kind, before: cutoff.toISOString()};
+    }
     return {escape: escape, label: label, pair: pair, parseDetails: parseDetails, summary: summary,
-        rawEvent: rawEvent, detail: detail, stage: function (value, english) { return translated(stages, value, english); },
+        rawEvent: rawEvent, detail: detail, cleanupPlan: cleanupPlan, stage: function (value, english) { return translated(stages, value, english); },
         method: function (value, english) { return translated(methods, value, english); },
         actor: function (value, english) { return translated(actors, value, english); }};
 }));

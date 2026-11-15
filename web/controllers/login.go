@@ -41,6 +41,7 @@ type LoginController struct {
 // by the tests and the login flow while enforcing a hard capacity and doing
 // expiry cleanup at most once per interval.
 var loginAttempts = newLoginAttemptLimiter(maxLoginRecords)
+var accountLoginMu sync.RWMutex
 var powChallenges = newPoWChallengeStore(maxPoWChallenges)
 var cpt *captcha.Captcha
 
@@ -952,6 +953,8 @@ func (self *LoginController) doLoginWithTOTP(username, password, totpCode string
 }
 
 func (self *LoginController) doLoginWithReason(username, password, totpCode string, explicit bool) (bool, string) {
+	accountLoginMu.RLock()
+	defer accountLoginMu.RUnlock()
 	ip := loginAttemptIP(self.Ctx.Request.RemoteAddr)
 	if !allowLoginAttempt(ip, username, explicit, time.Now()) {
 		return false, "login_rate_limited"
@@ -971,8 +974,8 @@ func (self *LoginController) doLoginWithReason(username, password, totpCode stri
 		server.Bridge.Register.Store(common.GetIpByAddr(self.Ctx.Input.IP()), time.Now().Add(time.Hour*time.Duration(2)))
 	}
 	b, err := beego.AppConfig.Bool("allow_user_login")
-	if err == nil && b && beego.AppConfig.DefaultBool("allow_user_vkey_login", true) && !auth {
-		if user, err := file.GetDb().GetUserByName(username); err == nil {
+	if err == nil && b && !auth {
+		if user, err := file.GetDb().GetUserByLoginName(username); err == nil {
 			user.RLock()
 			userID, userName, userPassword := user.Id, user.UserName, user.Password
 			user.RUnlock()
@@ -987,7 +990,7 @@ func (self *LoginController) doLoginWithReason(username, password, totpCode stri
 			}
 		}
 	}
-	if err == nil && b && !auth {
+	if err == nil && b && beego.AppConfig.DefaultBool("allow_user_vkey_login", true) && !auth {
 		file.GetDb().JsonDb.Clients.Range(func(key, value interface{}) bool {
 			v, ok := value.(*file.Client)
 			if !ok || v == nil {
@@ -1000,14 +1003,21 @@ func (self *LoginController) doLoginWithReason(username, password, totpCode stri
 			if !status || noDisplay || (userID != 0 && !file.GetDb().IsUserActive(userID)) {
 				return true
 			}
-			if webUserName == "" && webPassword == "" {
-				if username != "user" || verifyKey != password {
-					return true
-				} else {
-					auth = true
+			// VKEY is a client credential, even when the client also has old
+			// panel credentials. Accept the historical "user" identity, the
+			// client's panel name, or its owner's login name; never widen the
+			// resulting session to the owner's other clients.
+			if verifyKey != "" && subtle.ConstantTimeCompare([]byte(verifyKey), []byte(password)) == 1 {
+				auth = username == "user" || (webUserName != "" && username == webUserName)
+				if !auth && userID > 0 {
+					if owner, ownerErr := file.GetDb().GetUserByLoginName(username); ownerErr == nil {
+						owner.RLock()
+						auth = owner.Id == userID
+						owner.RUnlock()
+					}
 				}
 			}
-			if !auth && webPassword == password && webUserName == username {
+			if !auth && webUserName != "" && webPassword != "" && webPassword == password && webUserName == username {
 				auth = true
 			}
 			if auth {

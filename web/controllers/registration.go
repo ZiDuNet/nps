@@ -199,6 +199,7 @@ type registrationEmailCodeRecord struct {
 	digest    [sha256.Size]byte
 	expiresAt time.Time
 	attempts  int
+	binding   string
 }
 
 type registrationEmailCodeStore struct {
@@ -240,6 +241,10 @@ func (s *registrationEmailCodeStore) cleanupLocked(now time.Time, cooldown time.
 }
 
 func (s *registrationEmailCodeStore) issue(emailAddress, ip string, now time.Time, ttl, cooldown time.Duration) (string, time.Duration, error) {
+	return s.issueBound(emailAddress, ip, now, ttl, cooldown, "")
+}
+
+func (s *registrationEmailCodeStore) issueBound(emailAddress, ip string, now time.Time, ttl, cooldown time.Duration, binding string) (string, time.Duration, error) {
 	emailAddress = strings.ToLower(strings.TrimSpace(emailAddress))
 	ip = strings.TrimSpace(ip)
 	if ip == "" {
@@ -277,6 +282,7 @@ func (s *registrationEmailCodeStore) issue(emailAddress, ip string, now time.Tim
 	s.codes[emailAddress] = &registrationEmailCodeRecord{
 		digest:    sha256.Sum256([]byte(code)),
 		expiresAt: now.Add(ttl),
+		binding:   binding,
 	}
 	s.lastSentByEmail[emailAddress] = now
 	s.lastSentByIP[ip] = now
@@ -297,6 +303,10 @@ func (s *registrationEmailCodeStore) discard(emailAddress, ip string) {
 }
 
 func (s *registrationEmailCodeStore) verify(emailAddress, code string, now time.Time) bool {
+	return s.verifyBound(emailAddress, code, now, "")
+}
+
+func (s *registrationEmailCodeStore) verifyBound(emailAddress, code string, now time.Time, binding string) bool {
 	emailAddress = strings.ToLower(strings.TrimSpace(emailAddress))
 	code = strings.TrimSpace(code)
 	s.mu.Lock()
@@ -308,7 +318,7 @@ func (s *registrationEmailCodeStore) verify(emailAddress, code string, now time.
 	}
 	record.attempts++
 	digest := sha256.Sum256([]byte(code))
-	if code != "" && subtle.ConstantTimeCompare(record.digest[:], digest[:]) == 1 {
+	if code != "" && subtle.ConstantTimeCompare(record.digest[:], digest[:]) == 1 && subtle.ConstantTimeCompare([]byte(record.binding), []byte(binding)) == 1 {
 		delete(s.codes, emailAddress)
 		return true
 	}
@@ -446,6 +456,12 @@ func (a *plainSMTPAuth) Next(_ []byte, more bool) ([]byte, error) {
 }
 
 func sendRegistrationVerificationEmail(recipient, code string, config registrationSMTPConfig) error {
+	body := fmt.Sprintf("您的 NPS 注册验证码是：%s\r\n\r\n验证码 %d 分钟内有效。若非本人操作，请忽略本邮件。\r\n",
+		code, int(registrationEmailCodeTTL()/time.Minute))
+	return sendAccountEmail(recipient, "NPS 注册验证码", body, config)
+}
+
+func sendAccountEmail(recipient, subject, body string, config registrationSMTPConfig) error {
 	recipientAddress, err := mail.ParseAddress(strings.TrimSpace(recipient))
 	if err != nil || recipientAddress == nil || recipientAddress.Address == "" {
 		return errors.New("收件人邮箱无效")
@@ -477,9 +493,7 @@ func sendRegistrationVerificationEmail(recipient, code string, config registrati
 	if err != nil {
 		return fmt.Errorf("SMTP 无法开始发送邮件: %w", err)
 	}
-	subject := mime.QEncoding.Encode("UTF-8", "NPS 注册验证码")
-	body := fmt.Sprintf("您的 NPS 注册验证码是：%s\r\n\r\n验证码 %d 分钟内有效。若非本人操作，请忽略本邮件。\r\n",
-		code, int(registrationEmailCodeTTL()/time.Minute))
+	subject = mime.QEncoding.Encode("UTF-8", subject)
 	message := strings.Join([]string{
 		"From: " + config.From,
 		"To: " + recipientAddress.Address,
@@ -511,6 +525,7 @@ func openRegistrationSMTPClient(config registrationSMTPConfig) (*smtp.Client, er
 		if err != nil {
 			return nil, fmt.Errorf("连接 SMTP TLS 服务器失败: %w", err)
 		}
+		_ = connection.SetDeadline(time.Now().Add(30 * time.Second))
 		client, err := smtp.NewClient(connection, config.Host)
 		if err != nil {
 			_ = connection.Close()
@@ -523,6 +538,7 @@ func openRegistrationSMTPClient(config registrationSMTPConfig) (*smtp.Client, er
 	if err != nil {
 		return nil, fmt.Errorf("连接 SMTP 服务器失败: %w", err)
 	}
+	_ = connection.SetDeadline(time.Now().Add(30 * time.Second))
 	client, err := smtp.NewClient(connection, config.Host)
 	if err != nil {
 		_ = connection.Close()

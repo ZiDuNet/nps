@@ -97,6 +97,9 @@ func currentRememberLoginCredential(controller *beego.Controller) (rememberLogin
 			Version: rememberLoginVersion, Principal: principal, UserID: userID, Username: username,
 		}, rememberLoginCredential{Username: username, Secret: password}, nil
 	case sessionPrincipalClient:
+		if !beego.AppConfig.DefaultBool("allow_user_login", true) || !beego.AppConfig.DefaultBool("allow_user_vkey_login", true) {
+			return rememberLoginClaims{}, rememberLoginCredential{}, errRememberLoginInvalid
+		}
 		clientID, _ := sessionInt(controller.GetSession("clientId"))
 		client, err := file.GetDb().GetClient(clientID)
 		if err != nil || client == nil {
@@ -302,6 +305,9 @@ func rememberedLoginCredential(claims *rememberLoginClaims) (rememberLoginCreden
 		}
 		return rememberLoginCredential{Username: username, Secret: password}, nil
 	case sessionPrincipalClient:
+		if !beego.AppConfig.DefaultBool("allow_user_login", true) || !beego.AppConfig.DefaultBool("allow_user_vkey_login", true) {
+			return rememberLoginCredential{}, errRememberLoginInvalid
+		}
 		client, err := file.GetDb().GetClient(claims.ClientID)
 		if err != nil || client == nil {
 			return rememberLoginCredential{}, errRememberLoginInvalid
@@ -367,6 +373,13 @@ func issueRememberLoginCookie(controller *beego.Controller, ctx *beecontext.Cont
 	if principalKey == "" {
 		return errRememberLoginInvalid
 	}
+	// Keep the epoch of the authenticated session rather than adopting the
+	// registry's newest epoch. A password reset between credential validation
+	// and cookie issuance must not resurrect the session it just revoked.
+	authenticatedEpoch := sessionSecurityEpoch(controller)
+	if !rememberLoginDevices.SessionEpochValid(principalKey, authenticatedEpoch) {
+		return errRememberLoginInvalid
+	}
 	if existing, existingErr := rememberLoginCookieClaims(ctx, now); existingErr == nil &&
 		existing.DeviceID != "" && rememberLoginPrincipalKey(existing) == principalKey {
 		_, _ = rememberLoginDevices.Revoke(principalKey, existing.DeviceID)
@@ -376,7 +389,7 @@ func issueRememberLoginCookie(controller *beego.Controller, ctx *beecontext.Cont
 		return err
 	}
 	claims.DeviceID = deviceID
-	claims.Epoch = rememberLoginDevices.Epoch(principalKey)
+	claims.Epoch = authenticatedEpoch
 	claims.IssuedAt = now.Unix()
 	claims.Fingerprint = rememberLoginFingerprint(key, claims, credential.Secret)
 	token, err := encodeRememberLoginToken(key, claims, now)
@@ -491,6 +504,14 @@ func revokeCurrentRememberLoginDevice(controller *beego.Controller, ctx *beecont
 func browserSessionSecurityValid(controller *beego.Controller, ctx *beecontext.Context, now time.Time) bool {
 	if controller == nil || !sessionBool(controller.GetSession("auth")) {
 		return false
+	}
+	if !sessionBool(controller.GetSession("isAdmin")) {
+		if !beego.AppConfig.DefaultBool("allow_user_login", true) {
+			return false
+		}
+		if controller.GetSession(sessionPrincipalKey) == sessionPrincipalClient && !beego.AppConfig.DefaultBool("allow_user_vkey_login", true) {
+			return false
+		}
 	}
 	principalKey := currentSessionPrincipalKey(controller)
 	if principalKey == "" || !rememberLoginDevices.SessionEpochValid(principalKey, sessionSecurityEpoch(controller)) {

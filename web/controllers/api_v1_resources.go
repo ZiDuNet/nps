@@ -414,13 +414,13 @@ func (s *ApiV1Controller) IPRegisterClear() {
 
 // Audit lists control-plane audit events visible to the current credential.
 func (s *ApiV1Controller) Audit() {
-	s.emitLegacy(s.invokeSafe("audit", "List", &AuditController{}, true))
+	s.emitLegacy(s.invokeSafe("audit", "List", &AuditController{fullHistory: true}, true))
 }
 
 // AuditConnections lists Bridge and proxy connection records visible to the
 // current credential.
 func (s *ApiV1Controller) AuditConnections() {
-	s.emitLegacy(s.invokeSafe("audit", "Connections", &AuditController{}, true))
+	s.emitLegacy(s.invokeSafe("audit", "Connections", &AuditController{fullHistory: true}, true))
 }
 
 // invokeSafe converts invokeLegacy errors into the /api/v1 error envelope.

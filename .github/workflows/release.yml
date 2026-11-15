@@ -64,8 +64,8 @@ jobs:
         run: >-
           go test -race
           ./bridge ./client ./cmd/npc ./cmd/nps
-          ./lib/config ./lib/conn ./lib/file ./lib/install
-          ./server ./server/connection ./server/proxy ./server/tool ./web/...
+          ./lib/config ./lib/conn ./lib/file ./lib/install ./lib/connectionlog ./lib/jsonlog
+          ./server ./server/connection ./server/proxy ./server/tool ./server/usage ./web/...
       - name: Validate formal release source
         if: ${{ github.ref_type == 'tag' || inputs.release_tag != '' }}
         env:

@@ -25,6 +25,8 @@ func Init() {
 			beego.NSAutoRouter(&controllers.IndexController{}),
 			beego.NSAutoRouter(&controllers.LoginController{}),
 			beego.NSRouter("/login/register/code", &controllers.LoginController{}, "POST:RegisterEmailCode"),
+			beego.NSRouter("/login/recover", &controllers.LoginController{}, "GET:Recover;POST:ResetPassword"),
+			beego.NSRouter("/login/recover/code", &controllers.LoginController{}, "POST:ResetEmailCode"),
 			beego.NSAutoRouter(&controllers.ClientController{}),
 			beego.NSAutoRouter(&controllers.UserController{}),
 			beego.NSAutoRouter(&controllers.AuthController{}),
@@ -78,6 +80,8 @@ func Init() {
 		beego.AutoRouter(&controllers.IndexController{})
 		beego.AutoRouter(&controllers.LoginController{})
 		beego.Router("/login/register/code", &controllers.LoginController{}, "POST:RegisterEmailCode")
+		beego.Router("/login/recover", &controllers.LoginController{}, "GET:Recover;POST:ResetPassword")
+		beego.Router("/login/recover/code", &controllers.LoginController{}, "POST:ResetEmailCode")
 		beego.AutoRouter(&controllers.ClientController{})
 		beego.AutoRouter(&controllers.UserController{})
 		beego.AutoRouter(&controllers.AuthController{})

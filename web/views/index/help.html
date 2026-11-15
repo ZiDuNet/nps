@@ -6,24 +6,14 @@
             <p data-i18n-zh="说明内容由管理员独立维护，更新文件后刷新即可生效，无需重新构建或重启 NPS。"
                data-i18n-en="The guide is maintained independently by an administrator. Refresh after replacing the file; rebuilding or restarting NPS is not required.">说明内容由管理员独立维护，更新文件后刷新即可生效，无需重新构建或重启 NPS。</p>
         </div>
+        {{if and .isAdmin (ne .help_state "ready")}}
         <div class="dashboard-page-actions help-document-actions">
-            {{if eq .help_state "ready"}}
-            <a class="btn btn-outline btn-primary" href="{{.help_external_url}}" target="_blank" rel="noopener noreferrer">
-                <i class="fa fa-external-link" aria-hidden="true"></i>
-                <span data-i18n-zh="新窗口打开" data-i18n-en="Open in new window">新窗口打开</span>
-            </a>
-            <button type="button" class="btn btn-outline" id="help-document-refresh">
-                <i class="fa fa-sync-alt" aria-hidden="true"></i>
-                <span data-i18n-zh="刷新内容" data-i18n-en="Refresh">刷新内容</span>
-            </button>
-            {{end}}
-            {{if .isAdmin}}
             <a class="btn btn-primary" href="{{.web_base_url}}/global/index#usage-guide-settings">
                 <i class="fa fa-edit" aria-hidden="true"></i>
                 <span data-i18n-zh="配置内容" data-i18n-en="Configure">配置内容</span>
             </a>
-            {{end}}
         </div>
+        {{end}}
     </header>
 
     {{if eq .help_state "ready"}}
@@ -36,17 +26,35 @@
         {{end}}
         <div class="help-document-shell">
             <div class="help-document-toolbar">
-                <span class="help-document-source">
-                    <i class="fa {{if eq .help_mode "url"}}fa-link{{else}}fa-file-code{{end}}" aria-hidden="true"></i>
-                    <strong>{{if eq .help_mode "url"}}远程页面{{else}}本地 HTML{{end}}</strong>
-                    <code title="{{.help_source}}">{{.help_source}}</code>
-                </span>
-                {{if eq .help_mode "url"}}
-                <small data-i18n-zh="目标站点可能通过 X-Frame-Options 或 CSP 禁止嵌入，此时请使用“新窗口打开”。"
-                       data-i18n-en="The target site may block embedding with X-Frame-Options or CSP. Use Open in new window in that case.">目标站点可能通过 X-Frame-Options 或 CSP 禁止嵌入，此时请使用“新窗口打开”。</small>
-                {{else}}
-                <small data-i18n-zh="本地说明在隔离沙箱中运行，不能读取管理面板登录态。" data-i18n-en="Local guides run in an isolated sandbox and cannot access the console session.">本地说明在隔离沙箱中运行，不能读取管理面板登录态。</small>
-                {{end}}
+                <div class="help-document-meta">
+                    <span class="help-document-source">
+                        <i class="fa {{if eq .help_mode "url"}}fa-link{{else}}fa-file-code{{end}}" aria-hidden="true"></i>
+                        <strong>{{if eq .help_mode "url"}}<span data-i18n-zh="远程页面" data-i18n-en="Remote page">远程页面</span>{{else}}<span data-i18n-zh="本地 HTML" data-i18n-en="Local HTML">本地 HTML</span>{{end}}</strong>
+                        <code title="{{.help_source}}">{{.help_source}}</code>
+                    </span>
+                    {{if eq .help_mode "url"}}
+                    <small data-i18n-zh="目标站点禁止嵌入时，请使用“新窗口打开”。"
+                           data-i18n-en="If the site blocks embedding, open it in a new window.">目标站点禁止嵌入时，请使用“新窗口打开”。</small>
+                    {{else}}
+                    <small data-i18n-zh="隔离沙箱运行，不读取面板登录态。" data-i18n-en="Sandboxed; cannot access your console session.">隔离沙箱运行，不读取面板登录态。</small>
+                    {{end}}
+                </div>
+                <div class="dashboard-page-actions help-document-actions" role="group" aria-label="说明操作" data-aria-label-zh="说明操作" data-aria-label-en="Guide actions">
+                    <a class="btn btn-outline btn-primary" href="{{.help_external_url}}" target="_blank" rel="noopener noreferrer">
+                        <i class="fa fa-external-link" aria-hidden="true"></i>
+                        <span data-i18n-zh="新窗口打开" data-i18n-en="Open in new window">新窗口打开</span>
+                    </a>
+                    <button type="button" class="btn btn-outline" id="help-document-refresh">
+                        <i class="fa fa-sync-alt" aria-hidden="true"></i>
+                        <span data-i18n-zh="刷新内容" data-i18n-en="Refresh">刷新内容</span>
+                    </button>
+                    {{if .isAdmin}}
+                    <a class="btn btn-primary" href="{{.web_base_url}}/global/index#usage-guide-settings">
+                        <i class="fa fa-edit" aria-hidden="true"></i>
+                        <span data-i18n-zh="配置内容" data-i18n-en="Configure">配置内容</span>
+                    </a>
+                    {{end}}
+                </div>
             </div>
             <iframe id="help-document-frame"
                     class="help-document-frame"
@@ -87,28 +95,38 @@
 </section>
 
 <style>
-    .help-document-page { width: 100%; max-width: 1440px; margin: 0 auto; }
-    .help-document-header { align-items: flex-start; }
-    .help-document-actions { align-items: center; }
-    .help-document-shell { overflow: hidden; background: var(--nps-surface, #fff); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 12px; box-shadow: var(--nps-shadow-sm, 0 8px 24px rgba(26, 43, 68, .06)); }
-    .help-document-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; padding: 10px 16px; border-bottom: 1px solid var(--nps-line, #dfe5ee); background: var(--nps-surface-subtle, #f7f9fc); }
+    /* Flex sizing uses the actual remaining space, including wrapped controls
+       and warnings, instead of estimating their height with a fixed offset. */
+    body.nps-bootstrap.nps-help-viewport { height: 100vh; height: 100dvh; overflow: hidden; }
+    body.nps-bootstrap.nps-help-viewport #page-wrapper { display: flex; flex-direction: column; height: 100vh; height: 100dvh; min-height: 0; padding-right: 12px !important; padding-bottom: 8px !important; padding-left: 12px !important; overflow: hidden; box-sizing: border-box; }
+    body.nps-bootstrap.nps-help-viewport #nps-content { display: flex; flex: 1 1 auto; width: 100%; max-width: none; min-height: 0; padding-top: 0; overflow: hidden; }
+    body.nps-bootstrap.nps-help-viewport .footer.fixed { flex: 0 0 auto; margin: 8px 0 0 !important; padding: 6px 0 0 !important; font-size: 11px; }
+    .help-document-page { display: flex; flex: 1 1 auto; flex-direction: column; gap: 10px; width: 100%; max-width: none; min-width: 0; min-height: 0; margin: 0; overflow: auto; }
+    body.nps-bootstrap .help-document-header { flex: 0 0 auto; align-items: flex-start; margin: 0; }
+    body.nps-bootstrap .help-document-header[hidden] { display: none; }
+    body.nps-bootstrap .help-document-actions { flex-wrap: wrap; align-items: center; gap: 6px; }
+    body.nps-bootstrap .help-document-actions .btn { min-height: 32px; padding: 6px 10px; white-space: nowrap; }
+    .help-document-shell { display: flex; flex: 1 1 0; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--nps-surface, #fff); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 10px; box-shadow: var(--nps-shadow-sm, 0 8px 24px rgba(26, 43, 68, .06)); }
+    .help-document-toolbar { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 12px; border-bottom: 1px solid var(--nps-line, #dfe5ee); background: var(--nps-surface-subtle, #f7f9fc); }
+    .help-document-meta { flex: 1 1 240px; min-width: 0; }
     .help-document-source { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--nps-muted, #64748b); }
     .help-document-source i { color: var(--nps-primary, #1769e0); }
     .help-document-source strong { flex: 0 0 auto; color: var(--nps-ink, #1f2937); font-size: 12px; }
     .help-document-source code { min-width: 0; overflow: hidden; color: var(--nps-muted, #64748b); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-    .help-document-toolbar small { max-width: 48%; color: var(--nps-muted, #64748b); font-size: 11px; line-height: 1.5; text-align: right; }
-    .help-document-frame { display: block; width: 100%; height: calc(100vh - 248px); min-height: 560px; background: #fff; border: 0; }
-    .help-document-warning { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; padding: 12px 14px; color: #8a5a00; background: #fff8e1; border: 1px solid #f0d48a; border-radius: 9px; font-size: 12px; }
-    .help-document-empty { display: flex; align-items: flex-start; gap: 18px; max-width: 760px; margin: 5vh auto 0; padding: 28px; background: var(--nps-surface, #fff); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 14px; box-shadow: var(--nps-shadow-sm, 0 8px 24px rgba(26, 43, 68, .06)); }
+    .help-document-toolbar small { display: block; color: var(--nps-muted, #64748b); font-size: 11px; line-height: 1.5; }
+    .help-document-frame { display: block; flex: 1 1 0; width: 100%; height: 100%; min-width: 0; min-height: 0; background: #fff; border: 0; }
+    .help-document-warning { display: flex; flex: 0 0 auto; align-items: flex-start; gap: 10px; padding: 10px 12px; color: #8a5a00; background: #fff8e1; border: 1px solid #f0d48a; border-radius: 9px; font-size: 12px; }
+    .help-document-empty { display: flex; flex: 0 0 auto; align-items: flex-start; gap: 18px; max-width: 760px; min-width: 0; margin: 5vh auto 0; padding: 28px; background: var(--nps-surface, #fff); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 14px; box-shadow: var(--nps-shadow-sm, 0 8px 24px rgba(26, 43, 68, .06)); }
+    .help-document-empty > div { min-width: 0; overflow-wrap: anywhere; }
     .help-document-empty__icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 44px; height: 44px; color: var(--nps-primary, #1769e0); background: var(--nps-primary-soft, #eaf2ff); border-radius: 11px; font-size: 18px; }
     .help-document-empty h2 { margin: 0 0 7px; color: var(--nps-ink, #1f2937); font-size: 17px; }
     .help-document-empty p { margin: 0; color: var(--nps-muted, #64748b); font-size: 13px; line-height: 1.7; }
     .help-document-empty code { display: inline-block; margin-top: 10px; padding: 5px 8px; color: var(--nps-muted, #64748b); background: var(--nps-surface-subtle, #f5f7fa); border-radius: 5px; }
     .help-document-empty--error .help-document-empty__icon { color: #b42318; background: #feeceb; }
     @media (max-width: 767px) {
-        .help-document-toolbar { align-items: flex-start; flex-direction: column; gap: 5px; }
-        .help-document-toolbar small { max-width: none; text-align: left; }
-        .help-document-frame { height: calc(100vh - 300px); min-height: 440px; }
+        .help-document-toolbar { gap: 6px; padding: 8px; }
+        .help-document-meta { flex-basis: 100%; }
+        .help-document-toolbar .help-document-actions { flex: 1 1 100%; justify-content: flex-start; }
         .help-document-empty { margin-top: 18px; padding: 20px; }
     }
 </style>

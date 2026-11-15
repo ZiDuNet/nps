@@ -244,6 +244,12 @@ GET /api/v1/status/history
 数据按 `usage_history_interval` 采样；分钟精度默认保留 48 小时，五分钟精度
 默认保留 90 天。P2P 直连不计入历史用量。
 
+旧版历史文件缺失的用户/客户端范围标识会在服务端加载时自动补齐，不改变
+资源归属或查询权限。启用采集时，过期点在启动及每次采样时自动清理，下一次
+写盘时同步到文件；已删除资源的两种精度历史均过期后回收空记录。保留期和
+写盘频率分别由 `usage_history_1m_hours`、`usage_history_5m_days` 与
+`usage_history_save_every` 控制。
+
 | 参数 | 说明 |
 | --- | --- |
 | `scope` | `global`、`user`、`client`、`tunnel` 或 `host`；默认 `global` |
@@ -282,6 +288,7 @@ curl -s "http://127.0.0.1:8081/api/v1/status/history?scope=user&id=12&bucket=1m&
         "key": "user:12",
         "scope": "user",
         "id": 12,
+        "user_id": 12,
         "name": "alice",
         "total_bytes": 10485760,
         "points_1m": [

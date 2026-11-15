@@ -472,6 +472,7 @@ func (s *UserController) ChangePassword() {
 
 	user.RLock()
 	username, currentPassword, status, remark := user.UserName, user.Password, user.Status, user.Remark
+	email, maxConn, uploadLimit, downloadLimit := user.Email, user.MaxConn, user.UploadLimit, user.DownloadLimit
 	maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash, apiKeyCiphertext, dashboardKeyHash, dashboardKeyCiphertext := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash, user.APIKeyCiphertext, user.DashboardKeyHash, user.DashboardKeyCiphertext
 	user.RUnlock()
 	if !s.IsAdmin() {
@@ -489,6 +490,10 @@ func (s *UserController) ChangePassword() {
 		Id:                     targetID,
 		UserName:               username,
 		Password:               newPassword,
+		Email:                  email,
+		MaxConn:                maxConn,
+		UploadLimit:            uploadLimit,
+		DownloadLimit:          downloadLimit,
 		APIKeyHash:             apiKeyHash,
 		APIKeyCiphertext:       apiKeyCiphertext,
 		DashboardKeyHash:       dashboardKeyHash,

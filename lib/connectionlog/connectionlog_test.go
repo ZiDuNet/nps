@@ -1,8 +1,12 @@
 package connectionlog
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -91,5 +95,69 @@ func TestListIgnoresMalformedLines(t *testing.T) {
 	page, err := List(Filter{})
 	if err != nil || page.Total != 1 {
 		t.Fatalf("expected valid record after malformed line, page=%+v err=%v", page, err)
+	}
+}
+
+func TestRecentWindowKeepsUserBoundariesAndFullHistoryQueries(t *testing.T) {
+	Configure(filepath.Join(t.TempDir(), "connection.log"))
+	t.Cleanup(func() { Configure("") })
+	Flush()
+	var data strings.Builder
+	now := time.Now()
+	for i := 0; i < 2005; i++ {
+		event := Event{ID: fmt.Sprintf("%04d", i), Time: now.Add(time.Duration(i) * time.Second), Action: ActionBridgeConnected, ClientID: 7, UserID: 1}
+		if i < 5 {
+			event.ClientID, event.UserID = 9, 2
+		}
+		encoded, _ := json.Marshal(event)
+		data.Write(encoded)
+		data.WriteByte('\n')
+	}
+	if err := os.WriteFile(Path(), []byte(data.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	page, err := List(Filter{RecentLimit: 2000, Offset: 1995, Limit: 500, AllowedClientIDs: map[int]struct{}{7: {}}})
+	if err != nil || page.Total != 2000 || len(page.Events) != 5 || page.Events[4].ID != "0005" {
+		t.Fatalf("recent last page = %+v %v", page, err)
+	}
+	for _, filter := range []Filter{
+		{RecentLimit: 2000, AllowedClientIDs: map[int]struct{}{9: {}}},
+		{RecentLimit: 2000, AllowedClientIDs: map[int]struct{}{}},
+	} {
+		if page, err := List(filter); err != nil || page.Total != 0 {
+			t.Fatalf("user query widened recent window: %+v %v", page, err)
+		}
+	}
+	page, err = List(Filter{AllowedClientIDs: map[int]struct{}{9: {}}})
+	if err != nil || page.Total != 5 {
+		t.Fatalf("full-history API query regressed: %+v %v", page, err)
+	}
+}
+
+func TestCleanupBeforeDoesNotLoseAsynchronousAppends(t *testing.T) {
+	Configure(filepath.Join(t.TempDir(), "connection.log"))
+	t.Cleanup(func() { Configure("") })
+	cutoff := time.Now().Add(-time.Hour)
+	if err := Append(Event{ID: "old", Time: cutoff.Add(-time.Hour), Action: ActionBridgeConnected}); err != nil {
+		t.Fatal(err)
+	}
+	Flush()
+	var queued sync.WaitGroup
+	queued.Add(1)
+	go func() {
+		defer queued.Done()
+		for i := 0; i < 100; i++ {
+			_ = Append(Event{ID: fmt.Sprintf("new-%d", i), Action: ActionBridgeConnected})
+		}
+	}()
+	result, err := CleanupBefore(cutoff)
+	queued.Wait()
+	Flush()
+	if err != nil || result.Removed != 1 {
+		t.Fatalf("cleanup = %+v %v", result, err)
+	}
+	page, err := List(Filter{Limit: 500})
+	if err != nil || page.Total != 100 || len(page.Events) != 100 {
+		t.Fatalf("cleanup lost asynchronous events: total=%d len=%d err=%v", page.Total, len(page.Events), err)
 	}
 }

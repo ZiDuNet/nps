@@ -139,6 +139,48 @@ func TestHelpTemplateRendersReadyAndMissingStates(t *testing.T) {
 	}
 }
 
+func TestHelpActionsShareToolbarAndRespectAdminPermissions(t *testing.T) {
+	tpl := template.Must(template.ParseFiles("../views/index/help.html"))
+	for _, ready := range []bool{true, false} {
+		for _, admin := range []bool{true, false} {
+			state := "missing"
+			if ready {
+				state = "ready"
+			}
+			var rendered bytes.Buffer
+			if err := tpl.Execute(&rendered, map[string]interface{}{
+				"isAdmin": admin, "help_state": state, "help_mode": usageGuideModeURL,
+				"help_source": "https://docs.example.test/guide", "web_base_url": "/panel",
+				"help_embed_url":      template.URL("https://docs.example.test/guide"),
+				"help_external_url":   template.URL("https://docs.example.test/guide"),
+				"help_iframe_sandbox": "allow-scripts allow-same-origin",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			html := rendered.String()
+			configureCount := strings.Count(html, `href="/panel/global/index#usage-guide-settings"`)
+			if (admin && configureCount != 1) || (!admin && configureCount != 0) {
+				t.Fatalf("ready=%v admin=%v configure buttons=%d", ready, admin, configureCount)
+			}
+			if !ready {
+				if strings.Contains(html, `<iframe id="help-document-frame"`) {
+					t.Fatal("missing guide rendered an iframe")
+				}
+				continue
+			}
+			header := html[:strings.Index(html, "</header>")]
+			if strings.Contains(header, "help-document-actions") {
+				t.Fatal("ready guide kept a second row for toolbar actions")
+			}
+			if strings.Count(html, `id="help-document-refresh"`) != 1 ||
+				!strings.Contains(html, `sandbox="allow-scripts allow-same-origin"`) ||
+				!strings.Contains(html, `role="group" aria-label="说明操作"`) {
+				t.Fatal("guide toolbar or iframe isolation settings changed")
+			}
+		}
+	}
+}
+
 func TestUsageGuideContentHeadersUseSandbox(t *testing.T) {
 	header := make(http.Header)
 	usageGuideContentHeaders(header)

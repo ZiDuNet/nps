@@ -69,7 +69,7 @@ func appendAuthenticationAudit(controller *beego.Controller, ctx *beecontext.Con
 	if success {
 		event.Result, event.Stage, event.ErrorCode = audit.ResultSuccess, "complete", ""
 		// Registration and mail delivery do not authenticate the supplied name.
-		if action != "auth.register" && action != "auth.register.email_code" {
+		if action != "auth.register" && action != "auth.register.email_code" && !strings.HasPrefix(action, "auth.password_reset") {
 			authenticatedAuditIdentity(controller, &event)
 		} else if action == "auth.register" {
 			if user, err := file.GetDb().GetUserByName(username); err == nil && user != nil {
@@ -116,7 +116,7 @@ func (self *LoginController) auditAuthResponse(action, username, overrideCode st
 	if action == "auth.register" {
 		method = "registration"
 	}
-	if action == "auth.register.email_code" {
+	if action == "auth.register.email_code" || strings.HasPrefix(action, "auth.password_reset") {
 		method = "email_code"
 	}
 	if code == "totp_invalid" || (success && sessionBool(self.GetSession("isAdmin")) && strings.TrimSpace(beego.AppConfig.String("totp_secret")) != "") {

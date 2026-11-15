@@ -53,3 +53,35 @@ test('audit page script parses and desktop fills content without widening the do
     assert.match(css,/white-space: pre-wrap/);
     assert.match(css,/@media \(max-width: 600px\)/);
 });
+
+test('log cleanup validates whole retention days and freezes the selected journal scope', () => {
+    const now = Date.parse('2026-11-15T12:00:00Z');
+    assert.deepEqual(ui.cleanupPlan('30', 'operations', now), {days: 30, kind: 'operations', before: '2026-10-16T12:00:00.000Z'});
+    assert.equal(ui.cleanupPlan(1, 'connections', now).before, '2026-11-14T12:00:00.000Z');
+    assert.ok(ui.cleanupPlan(36500, 'operations', now));
+    for (const value of ['', ' ', null, 0, -1, 1.5, '1e3', '36501', Infinity, '<script>']) {
+        assert.equal(ui.cleanupPlan(value, 'operations', now), null, 'accepted invalid retention: ' + value);
+    }
+    assert.equal(ui.cleanupPlan(30, '../../nps.log', now), null);
+    assert.equal(ui.cleanupPlan(30, 'operations', NaN), null);
+});
+
+test('audit cleanup is administrator-only UI with explicit confirmation and safe request feedback', () => {
+    const template = fs.readFileSync(path.join(__dirname, '../views/audit/list.html'), 'utf8');
+    assert.match(template, /\{\{if \.isAdmin\}\}<button[^>]+id="audit-cleanup-open"/);
+    assert.match(template, /\{\{if \.isAdmin\}\}\s*<div id="audit-cleanup-modal"/);
+    assert.match(template, /id="audit-cleanup-confirm" type="checkbox"/);
+    assert.match(template, /id="audit-cleanup-submit"[^>]+disabled/);
+    assert.match(template, /aria-describedby="audit-cleanup-cutoff audit-cleanup-warning"/);
+    assert.match(template, /无法撤销/);
+    assert.match(template, /最近 2000 条/);
+    assert.match(template, /data\.recent_limit/);
+    assert.match(template, /headers: \{'X-NPS-Log-Cleanup': '1'\}/);
+    assert.match(template, /confirm: '1'/);
+    assert.match(template, /cleanupKind = activeView/);
+    assert.match(template, /cleanupBusy \|\| !plan \|\| !\$\('#audit-cleanup-confirm'\)\.prop\('checked'\)/);
+    assert.match(template, /before retrying/);
+    assert.match(template, /setLang\('\.audit-hub'\)/);
+    assert.match(template, /setLang\('#audit-cleanup-modal'\)/);
+    assert.doesNotMatch(template, /setLang\('\.audit-hub, /);
+});

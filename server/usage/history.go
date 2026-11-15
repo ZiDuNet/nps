@@ -60,7 +60,8 @@ type cumulative struct {
 }
 
 type History struct {
-	mu sync.RWMutex
+	mu     sync.RWMutex
+	saveMu sync.Mutex
 
 	resources map[string]*Resource
 	previous  map[string]cumulative
@@ -201,12 +202,29 @@ func (h *History) Load() error {
 	if h.resources == nil {
 		h.resources = make(map[string]*Resource)
 	}
+	// A reloaded snapshot must establish fresh cumulative baselines rather
+	// than attribute traffic from before the restart to the next interval.
+	h.previous = make(map[string]cumulative)
 	h.updatedAt = time.Unix(snapshot.UpdatedAt, 0)
 	for _, resource := range h.resources {
-		resource.Points1m = trimBefore(resource.Points1m, time.Now().Add(-h.options.Retention1m).Unix())
-		resource.Points5m = trimBefore(resource.Points5m, time.Now().Add(-h.options.Retention5m).Unix())
+		if resource == nil {
+			continue
+		}
+		// Older collectors omitted these self-identifying fields. Derive
+		// only the missing field from the same resource's ID; do not infer
+		// historical ownership from today's client assignments.
+		switch resource.Scope {
+		case ScopeUser:
+			if resource.UserID == 0 && resource.ID > 0 {
+				resource.UserID = resource.ID
+			}
+		case ScopeClient:
+			if resource.ClientID == 0 && resource.ID != 0 {
+				resource.ClientID = resource.ID
+			}
+		}
 	}
-	h.trimResourcesLocked()
+	h.pruneLocked(time.Now(), nil)
 	return nil
 }
 
@@ -214,6 +232,11 @@ func (h *History) Save() error {
 	if h == nil || strings.TrimSpace(h.path) == "" {
 		return nil
 	}
+	// The periodic flush and shutdown flush can overlap. Serialize snapshot
+	// creation and replacement so they cannot race on the temporary file or
+	// replace a newer snapshot with an older one.
+	h.saveMu.Lock()
+	defer h.saveMu.Unlock()
 	h.mu.RLock()
 	snapshot := SnapshotFile{
 		Version:   1,
@@ -284,11 +307,32 @@ func (h *History) Sample(now time.Time) {
 	}
 	h.updatedAt = now
 	h.dirty = true
+	h.pruneLocked(now, current.resources)
+}
+
+// pruneLocked applies retention both at startup and after every sample. A
+// configured (including offline) resource keeps its current totals. Deleted
+// resources retain their historical points until both resolutions expire,
+// then the empty metadata is reclaimed along with its cumulative baseline.
+// During Load, no resources are active yet; the first Sample recreates any
+// configured resource whose expired/empty snapshot has been removed.
+func (h *History) pruneLocked(now time.Time, current map[string]*totalResource) {
 	cutoff1m := now.Add(-h.options.Retention1m).Unix()
 	cutoff5m := now.Add(-h.options.Retention5m).Unix()
-	for _, resource := range h.resources {
+	for key, resource := range h.resources {
+		if resource == nil {
+			delete(h.resources, key)
+			delete(h.previous, key)
+			continue
+		}
 		resource.Points1m = trimBefore(resource.Points1m, cutoff1m)
 		resource.Points5m = trimBefore(resource.Points5m, cutoff5m)
+		if _, active := current[key]; !active {
+			delete(h.previous, key)
+			if key != "global:0" && len(resource.Points1m) == 0 && len(resource.Points5m) == 0 {
+				delete(h.resources, key)
+			}
+		}
 	}
 	h.trimResourcesLocked()
 }
@@ -368,9 +412,13 @@ type totalsSnapshot struct {
 }
 
 func collectTotals() totalsSnapshot {
+	return collectTotalsFromDB(file.GetDb())
+}
+
+func collectTotalsFromDB(db *file.DbUtils) totalsSnapshot {
 	snapshot := totalsSnapshot{resources: make(map[string]*totalResource)}
 	var globalIn, globalOut int64
-	file.GetDb().JsonDb.Clients.Range(func(_, value interface{}) bool {
+	db.JsonDb.Clients.Range(func(_, value interface{}) bool {
 		client, ok := value.(*file.Client)
 		if !ok || client == nil {
 			return true
@@ -388,20 +436,20 @@ func collectTotals() totalsSnapshot {
 			limit = flowLimit << 20
 		}
 		snapshot.resources[fmt.Sprintf("client:%d", id)] = &totalResource{
-			Resource: Resource{Key: fmt.Sprintf("client:%d", id), Scope: ScopeClient, ID: id, UserID: userID, Name: name, LimitBytes: limit},
+			Resource: Resource{Key: fmt.Sprintf("client:%d", id), Scope: ScopeClient, ID: id, UserID: userID, ClientID: id, Name: name, LimitBytes: limit},
 			In:       in, Out: out,
 		}
 		if userID > 0 {
 			key := fmt.Sprintf("user:%d", userID)
 			resource := snapshot.resources[key]
 			if resource == nil {
-				resource = &totalResource{Resource: Resource{Key: key, Scope: ScopeUser, ID: userID}}
+				resource = &totalResource{Resource: Resource{Key: key, Scope: ScopeUser, ID: userID, UserID: userID}}
 				snapshot.resources[key] = resource
 			}
 			resource.In += in
 			resource.Out += out
 			if resource.Name == "" {
-				if user, err := file.GetDb().GetUser(userID); err == nil && user != nil {
+				if user, err := db.GetUser(userID); err == nil && user != nil {
 					user.RLock()
 					resource.Name = user.UserName
 					user.RUnlock()
@@ -414,7 +462,7 @@ func collectTotals() totalsSnapshot {
 		Resource: Resource{Key: "global:0", Scope: ScopeGlobal, Name: "全部流量"},
 		In:       globalIn, Out: globalOut,
 	}
-	file.GetDb().JsonDb.Tasks.Range(func(_, value interface{}) bool {
+	db.JsonDb.Tasks.Range(func(_, value interface{}) bool {
 		tunnel, ok := value.(*file.Tunnel)
 		if !ok || tunnel == nil {
 			return true
@@ -439,7 +487,7 @@ func collectTotals() totalsSnapshot {
 		}
 		return true
 	})
-	file.GetDb().JsonDb.Hosts.Range(func(_, value interface{}) bool {
+	db.JsonDb.Hosts.Range(func(_, value interface{}) bool {
 		host, ok := value.(*file.Host)
 		if !ok || host == nil {
 			return true

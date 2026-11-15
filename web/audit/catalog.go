@@ -21,6 +21,10 @@ var actionGroups = []ActionGroup{
 		{"auth.remember.issue", "签发免登录凭证", "Issue remembered sign-in"},
 		{"auth.register", "注册账号", "Register account"},
 		{"auth.register.email_code", "发送注册验证码", "Send registration code"},
+		{"auth.password_reset.email_code", "请求找回验证码", "Request recovery code"},
+		{"auth.password_reset.delivery_failed", "找回邮件发送失败", "Recovery email delivery failed"},
+		{"auth.password_reset", "找回密码请求", "Password recovery request"},
+		{"user.password_reset", "找回密码成功", "Password recovered"},
 		{"security.remember_device.revoke", "撤销登录设备", "Revoke sign-in device"},
 		{"security.remember_device.revoke_all", "退出所有设备", "Sign out all devices"},
 		{"security.totp.bind", "绑定动态验证码", "Bind TOTP"},
@@ -50,6 +54,7 @@ var actionGroups = []ActionGroup{
 		{"dashboard.key_rotate", "生成大屏密钥", "Rotate dashboard key"}, {"dashboard.key_revoke", "撤销大屏密钥", "Revoke dashboard key"},
 	}},
 	{"系统与证书", "System and certificates", []ActionDefinition{
+		{"audit.cleanup", "清理历史日志", "Clean old journal records"},
 		{"server_config.update", "修改服务配置", "Update server configuration"},
 		{"server_config.source_update", "修改配置源码", "Update configuration source"}, {"server.restart", "重启服务", "Restart server"},
 		{"global.update", "修改全局参数", "Update global settings"}, {"global.geodata.update", "更新 Geo 数据", "Update Geo data"},
@@ -106,6 +111,7 @@ func ResourceName(code string, english bool) string {
 		"tunnel": {"隧道", "Tunnel"}, "host": {"域名反代", "Host"}, "user": {"用户", "User"},
 		"global": {"全局参数", "Global settings"}, "nps.conf": {"服务配置", "Server configuration"},
 		"nps": {"服务端", "Server"}, "dashboard": {"大屏密钥", "Dashboard key"},
+		"journal":         {"审计与连接日志", "Audit and connection journals"},
 		"ip_registration": {"IP 登记", "IP registration"}, "login_ban": {"登录封禁", "Login ban"},
 	}
 	if pair, ok := labels[code]; ok {
@@ -130,6 +136,11 @@ func FailureName(code string, english bool) string {
 		"remember_unavailable":         {"免登录会话恢复失败", "Remembered session unavailable"},
 		"remember_issue_failed":        {"免登录凭证签发失败", "Could not issue remembered sign-in"},
 		"registration_disabled":        {"用户注册未开放", "Registration disabled"},
+		"password_reset_disabled":      {"注册未开放，密码找回已关闭", "Recovery disabled with registration"},
+		"password_reset_rate_limited":  {"密码找回请求过于频繁", "Password recovery rate limited"},
+		"password_reset_expired":       {"密码找回请求无效或已过期", "Password recovery request invalid or expired"},
+		"password_reset_failed":        {"密码重置失败", "Password reset failed"},
+		"invalid_password":             {"新密码不符合要求", "Invalid new password"},
 		"registration_rate_limited":    {"注册请求过于频繁", "Registration rate limited"},
 		"registration_captcha_invalid": {"注册图片验证码错误", "Registration image verification failed"},
 		"registration_ip_limit":        {"来源 IP 注册数量已达上限", "Registration IP limit reached"},
@@ -145,8 +156,8 @@ func FailureName(code string, english bool) string {
 		"email_verification_disabled":  {"注册邮箱验证未开启", "Registration email verification disabled"},
 		"email_code_rate_limited":      {"邮件验证码请求过于频繁", "Email verification rate limited"},
 		"email_code_unavailable":       {"暂时无法签发邮件验证码", "Email verification unavailable"},
-		"smtp_incomplete":              {"注册邮件服务配置不完整", "Registration email configuration incomplete"},
-		"email_send_failed":            {"注册验证码邮件发送失败", "Registration email delivery failed"},
+		"smtp_incomplete":              {"邮件服务配置不完整", "Email configuration incomplete"},
+		"email_send_failed":            {"验证码邮件发送失败", "Verification email delivery failed"},
 	}
 	if pair, ok := labels[code]; ok {
 		if english {
@@ -165,7 +176,7 @@ func AuthStage(code string) string {
 		return "pow"
 	case "captcha_invalid", "registration_captcha_invalid":
 		return "captcha"
-	case "login_expired", "register_expired":
+	case "login_expired", "register_expired", "password_reset_expired":
 		return "login_payload"
 	case "login_rate_limited":
 		return "rate_limit"
@@ -173,7 +184,7 @@ func AuthStage(code string) string {
 		return "totp"
 	case "invalid_credentials":
 		return "password"
-	case "registration_rate_limited", "registration_ip_limit", "email_code_rate_limited":
+	case "registration_rate_limited", "registration_ip_limit", "email_code_rate_limited", "password_reset_rate_limited":
 		return "rate_limit"
 	case "email_code_invalid", "email_send_failed", "smtp_incomplete", "email_code_unavailable":
 		return "email"

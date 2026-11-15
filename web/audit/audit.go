@@ -6,6 +6,7 @@ package audit
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/jsonlog"
 )
 
 const (
@@ -67,6 +69,9 @@ type Filter struct {
 	ResourceType string
 	Result       string
 	OwnerUserID  *int
+	// RecentLimit bounds the physical read window before any filters. Zero
+	// preserves full-history API queries; the Web panel supplies 2000.
+	RecentLimit int
 }
 
 // Page contains a newest-first page and the total number of matching records.
@@ -194,6 +199,13 @@ func List(filter Filter) (Page, error) {
 
 	matched := make([]*Event, 0)
 	scanner := bufio.NewScanner(file)
+	if filter.RecentLimit > 0 {
+		recent, err := jsonlog.ReadRecent(file, filter.RecentLimit)
+		if err != nil {
+			return Page{}, fmt.Errorf("read audit journal tail: %w", err)
+		}
+		scanner = bufio.NewScanner(bytes.NewReader(recent))
+	}
 	// Details are intentionally small, but permit a generous line size so a
 	// future safe metadata field cannot make the entire journal unreadable.
 	scanner.Buffer(make([]byte, 4096), 1024*1024)
@@ -245,6 +257,12 @@ func List(filter Filter) (Page, error) {
 		end = total
 	}
 	return Page{Events: matched[filter.Offset:end], Total: total}, nil
+}
+
+// CleanupBefore atomically removes old records without blocking audit appends
+// for the duration of the full-file scan. Authorization belongs to the caller.
+func CleanupBefore(cutoff time.Time) (jsonlog.CleanupResult, error) {
+	return jsonlog.PruneBefore(Path(), cutoff, &journal)
 }
 
 func newID(t time.Time) string {

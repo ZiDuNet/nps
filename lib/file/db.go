@@ -333,6 +333,81 @@ func (s *DbUtils) GetUserByName(username string) (*User, error) {
 	return user, nil
 }
 
+// GetUserByEmail refuses ambiguous legacy records rather than choosing a
+// random account from sync.Map. Usernames retain their existing exact match.
+func (s *DbUtils) GetUserByEmail(email string) (*User, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if normalized, err := NormalizeUserEmail(email); err != nil || email == "" || normalized != email {
+		return nil, errors.New("邮箱地址格式无效")
+	}
+	var found *User
+	ambiguous := false
+	s.JsonDb.Users.Range(func(_, value interface{}) bool {
+		user, ok := value.(*User)
+		if !ok || user == nil {
+			return true
+		}
+		user.RLock()
+		match := strings.EqualFold(strings.TrimSpace(user.Email), email)
+		user.RUnlock()
+		if match {
+			if found != nil {
+				ambiguous = true
+				return false
+			}
+			found = user
+		}
+		return true
+	})
+	if found == nil || ambiguous {
+		return nil, errors.New("未找到唯一的邮箱账号")
+	}
+	return found, nil
+}
+
+func (s *DbUtils) GetUserByLoginName(name string) (*User, error) {
+	name = strings.TrimSpace(name)
+	if user, err := s.GetUserByName(name); err == nil {
+		return user, nil
+	}
+	return s.GetUserByEmail(name)
+}
+
+// ResetUserPassword is a compare-and-swap: a code issued before an email or
+// password change cannot reset the account afterward. Other fields and the
+// existing User pointer are intentionally preserved.
+func (s *DbUtils) ResetUserPassword(id int, email, previous, password string) error {
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	user, err := s.GetUser(id)
+	if err != nil || password == "" || email == "" {
+		return errors.New("账号状态已变化，请重新找回密码")
+	}
+	user.Lock()
+	expired := false
+	if expiry := strings.TrimSpace(user.ExpireTime); expiry != "" {
+		until, valid := ParseExpiryTime(expiry)
+		expired = !valid || !time.Now().Before(until)
+	}
+	if !user.Status || expired || !strings.EqualFold(user.Email, email) ||
+		subtle.ConstantTimeCompare([]byte(user.Password), []byte(previous)) != 1 {
+		user.Unlock()
+		return errors.New("账号状态已变化，请重新找回密码")
+	}
+	user.Password = password
+	user.Unlock()
+	userLock.Lock()
+	err = storeSyncMapToFile(&s.JsonDb.Users, s.JsonDb.UserFilePath)
+	userLock.Unlock()
+	if err != nil {
+		user.Lock()
+		user.Password = previous
+		user.Unlock()
+		return fmt.Errorf("保存密码失败: %w", err)
+	}
+	return nil
+}
+
 // ValidateClientOwner keeps the client-to-user relationship referentially
 // valid. UserId zero intentionally means that a client is not assigned to a
 // dashboard user; every other value must point at a persisted user record.

@@ -2,8 +2,11 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -148,4 +151,153 @@ func auditRows(t *testing.T, recorder *httptest.ResponseRecorder) []map[string]i
 		t.Fatalf("decode audit response %q: %v", recorder.Body.String(), err)
 	}
 	return response.Rows
+}
+
+func TestAuditCleanupRejectsUsersGetAndUnconfirmedRequests(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.log")
+	audit.Configure(path)
+	t.Cleanup(func() { audit.Configure("") })
+	if err := audit.Append(audit.Event{Time: time.Now().AddDate(0, 0, -90), Action: "client.create"}); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := map[interface{}]interface{}{"auth": true, "isAdmin": true}
+	for _, tc := range []struct {
+		name, method, days, kind, confirm string
+		session                           map[interface{}]interface{}
+		intent                            bool
+		status                            int
+	}{
+		{"ordinary user", "POST", "30", "operations", "1", testUserSession(7), true, 403},
+		{"VKey client", "POST", "30", "operations", "1", map[interface{}]interface{}{"auth": true, "isAdmin": false, sessionPrincipalKey: sessionPrincipalClient, "clientId": 42}, true, 403},
+		{"anonymous", "POST", "30", "operations", "1", nil, true, 403},
+		{"get", "GET", "30", "operations", "1", admin, true, 405},
+		{"missing header", "POST", "30", "operations", "1", admin, false, 400},
+		{"missing confirmation", "POST", "30", "operations", "", admin, true, 400},
+		{"zero days", "POST", "0", "operations", "1", admin, true, 400},
+		{"negative days", "POST", "-1", "operations", "1", admin, true, 400},
+		{"fractional days", "POST", "1.5", "operations", "1", admin, true, 400},
+		{"excessive days", "POST", "36501", "operations", "1", admin, true, 400},
+		{"unknown log", "POST", "30", "../../nps.log", "1", admin, true, 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			form := url.Values{"days": {tc.days}, "kind": {tc.kind}, "confirm": {tc.confirm}}
+			controller, recorder := cleanupTestController(t, tc.method, tc.session, form, tc.intent)
+			runClientPermissionAction(t, controller.Cleanup)
+			if recorder.Code != tc.status {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, tc.status, recorder.Body.String())
+			}
+			if data, err := os.ReadFile(path); err != nil || string(data) != string(original) {
+				t.Fatal("rejected request changed the journal", err)
+			}
+		})
+	}
+}
+
+func TestAuditCleanupOnlyDeletesSelectedJournalAndAuditsResult(t *testing.T) {
+	for _, kind := range []string{"operations", "connections"} {
+		t.Run(kind, func(t *testing.T) {
+			dir := t.TempDir()
+			audit.Configure(filepath.Join(dir, "audit.log"))
+			connectionlog.Configure(filepath.Join(dir, "connection.log"))
+			t.Cleanup(func() { audit.Configure(""); connectionlog.Configure("") })
+			for _, at := range []time.Time{time.Now().AddDate(0, 0, -90), time.Now()} {
+				if err := audit.Append(audit.Event{Time: at, Action: "client.create"}); err != nil {
+					t.Fatal(err)
+				}
+				if err := connectionlog.Append(connectionlog.Event{Time: at, Action: connectionlog.ActionBridgeConnected}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			connectionlog.Flush()
+			controller, recorder := cleanupTestController(t, http.MethodPost, map[interface{}]interface{}{"auth": true, "isAdmin": true, "username": "admin"}, url.Values{"kind": {kind}, "days": {"30"}, "confirm": {"1"}}, true)
+			runClientPermissionAction(t, controller.Cleanup)
+			var result struct {
+				Status  int
+				Removed int
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil || result.Status != 1 || result.Removed != 1 {
+				t.Fatalf("cleanup response = %s %v", recorder.Body.String(), err)
+			}
+			auditPage, err := audit.List(audit.Filter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			connectionPage, err := connectionlog.List(connectionlog.Filter{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantAudit, wantConnections := 2, 2
+			if kind == "connections" {
+				wantAudit, wantConnections = 3, 1
+			}
+			if auditPage.Total != wantAudit || connectionPage.Total != wantConnections {
+				t.Fatalf("unexpected journal totals: operations=%d connections=%d", auditPage.Total, connectionPage.Total)
+			}
+			cleanupPage, err := audit.List(audit.Filter{Action: "audit.cleanup"})
+			if err != nil || cleanupPage.Total != 1 || cleanupPage.Events[0].Details["removed"] != "1" || cleanupPage.Events[0].Details["kind"] != kind || cleanupPage.Events[0].ActorType != "admin" {
+				t.Fatalf("cleanup audit missing: %+v %v", cleanupPage, err)
+			}
+		})
+	}
+}
+
+func TestAuditCleanupRejectsDuplicateWhileAnotherCleanupIsRunning(t *testing.T) {
+	auditCleanupMu.Lock()
+	defer auditCleanupMu.Unlock()
+	controller, recorder := cleanupTestController(t, http.MethodPost, map[interface{}]interface{}{"auth": true, "isAdmin": true}, url.Values{"kind": {"operations"}, "days": {"30"}, "confirm": {"1"}}, true)
+	runClientPermissionAction(t, controller.Cleanup)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("concurrent cleanup status=%d: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestAuditPanelLimitsLatestWindowWithoutChangingAPISemantics(t *testing.T) {
+	useClientPermissionTestDb(t)
+	audit.Configure(filepath.Join(t.TempDir(), "audit.log"))
+	t.Cleanup(func() { audit.Configure("") })
+	var data strings.Builder
+	for i := 0; i < 2005; i++ {
+		event := audit.Event{ID: fmt.Sprintf("%04d", i), Time: time.Now(), Action: "auth.login", OwnerUserID: 7}
+		encoded, _ := json.Marshal(event)
+		data.Write(encoded)
+		data.WriteByte('\n')
+	}
+	if err := os.WriteFile(audit.Path(), []byte(data.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, full := range []bool{false, true} {
+		controller, recorder := newAuditTestController(t, "List", testUserSession(7))
+		controller.fullHistory = full
+		runClientPermissionAction(t, controller.List)
+		var response struct {
+			Total       int `json:"total"`
+			RecentLimit int `json:"recent_limit"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if full {
+			if response.Total != 2005 || response.RecentLimit != 0 {
+				t.Fatalf("API history changed: %+v", response)
+			}
+		} else if response.Total != 2000 || response.RecentLimit != 2000 {
+			t.Fatalf("panel not limited to tail window: %+v", response)
+		}
+	}
+}
+
+func cleanupTestController(t *testing.T, method string, session map[interface{}]interface{}, form url.Values, intent bool) (*AuditController, *httptest.ResponseRecorder) {
+	t.Helper()
+	controller, recorder := newAuditTestController(t, "Cleanup", session)
+	controller.Ctx.Request.Method = method
+	controller.Ctx.Request.Form = form
+	controller.Ctx.Request.PostForm = form
+	if intent {
+		controller.Ctx.Request.Header.Set("X-NPS-Log-Cleanup", "1")
+	}
+	return controller, recorder
 }

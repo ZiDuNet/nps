@@ -650,6 +650,9 @@
     // persistent top bar. Content-only navigation therefore updates the shell
     // heading explicitly instead of leaving an empty slot between refreshes.
     function npsSyncPageContext(root) {
+        // Help owns the available viewport; remove its shell sizing again
+        // when content-only navigation opens a normal console page.
+        document.body.classList.toggle('nps-help-viewport', Boolean(root && root.querySelector && root.querySelector('.help-document-page')));
         var slot = document.getElementById('nps-page-context');
         var header = root && root.querySelector ? root.querySelector('.dashboard-page-header') : null;
         if (!slot) return;
@@ -807,15 +810,36 @@
 
         function executeContentScripts(root) {
             var scripts = Array.prototype.slice.call(root.querySelectorAll('script'));
-            scripts.forEach(function (oldScript) {
-                var script = document.createElement('script');
-                for (var i = 0; i < oldScript.attributes.length; i++) {
-                    var attribute = oldScript.attributes[i];
-                    script.setAttribute(attribute.name, attribute.value);
-                }
-                if (!oldScript.src) script.text = oldScript.textContent || '';
-                oldScript.parentNode.replaceChild(script, oldScript);
-            });
+            var serial = navigationSerial;
+            // Dynamically inserted external scripts are asynchronous, unlike
+            // parser-inserted scripts on a full page load. Wait for each
+            // dependency before running the next page initializer.
+            return scripts.reduce(function (pending, oldScript) {
+                return pending.then(function () {
+                    if (serial !== navigationSerial || !root.contains(oldScript)) return;
+                    return new Promise(function (resolve, reject) {
+                        var script = document.createElement('script');
+                        for (var i = 0; i < oldScript.attributes.length; i++) {
+                            var attribute = oldScript.attributes[i];
+                            script.setAttribute(attribute.name, attribute.value);
+                        }
+                        if (oldScript.src) {
+                            script.async = false;
+                            var timer = window.setTimeout(function () { finish(false); }, 20000);
+                            function finish(loaded) {
+                                window.clearTimeout(timer);
+                                script.onload = script.onerror = null;
+                                if (loaded) resolve();
+                                else reject(new Error('page script load failed'));
+                            }
+                            script.onload = function () { finish(true); };
+                            script.onerror = function () { finish(false); };
+                        } else script.text = oldScript.textContent || '';
+                        oldScript.parentNode.replaceChild(script, oldScript);
+                        if (!oldScript.src) resolve();
+                    });
+                });
+            }, Promise.resolve());
         }
 
         function focusNewPage() {
@@ -870,14 +894,16 @@
                 }
                 disposePageRuntime();
                 content.innerHTML = extracted.content.innerHTML;
-                executeContentScripts(content);
                 var active = extracted.document.querySelector('#side-menu > li.active > a[href]');
                 setActiveMenu(active ? active.href : url.href);
                 if (pushHistory) history.pushState({ npsConsole: true }, '', url.href);
-                refreshLanguage();
-                npsSyncPageContext(content);
-                focusNewPage();
-                document.dispatchEvent(new CustomEvent('nps:content-loaded', { detail: { url: url.href } }));
+                return executeContentScripts(content).then(function () {
+                    if (serial !== navigationSerial) return;
+                    refreshLanguage();
+                    npsSyncPageContext(content);
+                    focusNewPage();
+                    document.dispatchEvent(new CustomEvent('nps:content-loaded', { detail: { url: url.href } }));
+                });
 	            }).catch(function (error) {
                 if (serial !== navigationSerial || (error && error.name === 'AbortError')) return;
                 // Keep the current page usable when the asynchronous request
@@ -885,7 +911,7 @@
                 if (!pushHistory) window.location.reload();
                 else {
                     setActiveMenu(current);
-                    if (typeof npsNotify === 'function') npsNotify('error', npsIsEnglish() ? 'Page load failed' : '页面加载失败');
+                    if (typeof npsNotify === 'function') npsNotify('error', npsIsEnglish() ? 'Page load failed. Refresh to retry.' : '页面加载失败，请刷新后重试。');
                 }
             }).finally(function () {
                 if (serial !== navigationSerial) return;

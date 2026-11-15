@@ -6,6 +6,20 @@
 .audit-hub__tab.is-active { color: var(--nps-primary); background: var(--nps-surface); box-shadow: 0 1px 4px rgb(15 23 42 / 8%); }
 .audit-hub__tab:focus-visible, .audit-detail__copy:focus-visible, .audit-connection-raw:focus-visible { outline: 2px solid var(--nps-primary); outline-offset: 2px; }
 .audit-hub__hint { display: flex; align-items: center; gap: 7px; min-width: 0; margin: 0; color: var(--nps-muted); font-size: 12px; }
+.audit-hub__actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
+.audit-cleanup-open { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 6px; min-height: 38px; white-space: nowrap; }
+.audit-cleanup-modal { color-scheme: light; }
+[data-theme="dark"] .audit-cleanup-modal { color-scheme: dark; }
+.audit-cleanup-scope { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin: 0 0 18px; color: var(--nps-muted); }
+.audit-cleanup-scope strong { color: var(--nps-ink); }
+.audit-cleanup-cutoff { margin: 10px 0; color: var(--nps-muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.audit-cleanup-warning { display: flex; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid var(--nps-line); border-radius: 8px; background: var(--nps-danger-soft); color: var(--nps-ink); font-size: 13px; line-height: 1.6; }
+.audit-cleanup-warning > i { margin-top: 4px; color: var(--nps-danger); }
+.audit-cleanup-confirm { display: flex; align-items: flex-start; gap: 9px; min-height: 44px; padding: 8px 0; margin: 0; color: var(--nps-ink); font-size: 13px; cursor: pointer; }
+.audit-cleanup-confirm > input { flex: 0 0 auto; width: 16px; height: 16px; margin-top: 2px; accent-color: var(--nps-danger); }
+.audit-cleanup-feedback { min-height: 20px; margin: 6px 0 0; color: var(--nps-muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.audit-cleanup-feedback.is-error { color: var(--nps-danger); }
+.audit-cleanup-open:focus-visible, .audit-cleanup-modal button:focus-visible, .audit-cleanup-modal input:focus-visible { outline: 2px solid var(--nps-primary); outline-offset: 2px; }
 .audit-hub__view { display: none; width: 100%; min-width: 0; min-height: 0; }
 .audit-hub__view.is-active { display: block; }
 .audit-hub .management-table-card { width: 100%; min-width: 0; margin: 0; }
@@ -58,6 +72,9 @@
     .audit-hub__tabs { display: flex; width: 100%; }
     .audit-hub__tab { flex: 1 1 50%; min-height: 44px; padding: 0 8px; }
     .audit-hub__hint { display: none; }
+    .audit-hub__actions { width: 100%; justify-content: flex-end; }
+    .audit-cleanup-open { min-height: 44px; }
+    .audit-cleanup-modal .form-control, .audit-cleanup-modal .btn { min-height: 44px; }
     .audit-log-state { align-items: flex-start; gap: 7px; padding: 9px 10px; }
     .audit-hub .nps-table__toolbar { padding: 10px; }
     body.nps-bootstrap .audit-hub .nps-table__toolbar > .nps-table__search { order: 1 !important; }

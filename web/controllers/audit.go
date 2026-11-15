@@ -2,12 +2,16 @@ package controllers
 
 import (
 	"encoding/json"
+	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"ehang.io/nps/lib/connectionlog"
+	"ehang.io/nps/lib/jsonlog"
 	"ehang.io/nps/web/audit"
+	"github.com/astaxie/beego/logs"
 )
 
 // AuditController exposes the control-plane journal and persistent connection
@@ -15,7 +19,10 @@ import (
 // owned by their account.
 type AuditController struct {
 	BaseController
+	fullHistory bool // Internal API adapter flag, never accepted from request parameters.
 }
+
+var auditCleanupMu sync.Mutex
 
 type auditListRow struct {
 	ID              string
@@ -105,6 +112,7 @@ func (s *AuditController) List() {
 	start, length := s.GetAjaxParams()
 	filter := audit.Filter{
 		Offset: start, Limit: length,
+		RecentLimit:  s.recentLimit(),
 		Search:       s.getEscapeString("search"),
 		Action:       s.getEscapeString("action"),
 		ResourceType: s.getEscapeString("resource_type"),
@@ -181,6 +189,7 @@ func (s *AuditController) Connections() {
 	filter := connectionlog.Filter{
 		Offset:          start,
 		Limit:           length,
+		RecentLimit:     s.recentLimit(),
 		Search:          connectionAuditSearch(s.getEscapeString("search")),
 		Kind:            s.getEscapeString("kind"),
 		Action:          s.getEscapeString("action"),
@@ -273,13 +282,75 @@ func (s *AuditController) auditPageOptions() {
 	s.Data["connection_action_groups"] = audit.ActionGroups(true)
 }
 
+// Cleanup is deliberately a panel-only, administrator-only POST. The intent
+// header cannot be supplied by a cross-site HTML form, and ordinary user/API
+// token requests must never be able to delete a shared journal.
+func (s *AuditController) Cleanup() {
+	if !s.RequirePost() || !s.RequireAdmin() {
+		return
+	}
+	if s.Ctx.Request.Header.Get("X-NPS-Log-Cleanup") != "1" || s.GetString("confirm") != "1" {
+		s.rejectRequest(http.StatusBadRequest, "请在审计页面确认清理操作")
+		return
+	}
+	days, err := strconv.Atoi(strings.TrimSpace(s.GetString("days")))
+	if err != nil || days < 1 || days > 36500 {
+		s.rejectRequest(http.StatusBadRequest, "保留天数必须是 1 到 36500 的整数")
+		return
+	}
+	kind := s.GetString("kind")
+	if kind != "operations" && kind != "connections" {
+		s.rejectRequest(http.StatusBadRequest, "请选择管理操作日志或连接日志")
+		return
+	}
+	if !auditCleanupMu.TryLock() {
+		s.rejectRequest(http.StatusConflict, "已有日志清理任务正在执行，请稍后刷新")
+		return
+	}
+	defer auditCleanupMu.Unlock()
+	cutoff := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
+	var result jsonlog.CleanupResult
+	if kind == "operations" {
+		result, err = audit.CleanupBefore(cutoff)
+	} else {
+		result, err = connectionlog.CleanupBefore(cutoff)
+	}
+	details := map[string]string{"kind": kind, "days": strconv.Itoa(days), "before": cutoff.Format(time.RFC3339)}
+	if err != nil {
+		logs.Error("清理 %s 日志失败: %v", kind, err)
+		s.auditMutation("audit.cleanup", "journal", 0, 0, audit.ResultFailure, err, details)
+		s.rejectRequest(http.StatusInternalServerError, "清理失败，原日志未替换；请检查日志目录权限、磁盘空间或文件是否被其他程序轮转")
+		return
+	}
+	details["removed"] = strconv.FormatInt(result.Removed, 10)
+	details["removed_bytes"] = strconv.FormatInt(result.RemovedBytes, 10)
+	s.auditMutation("audit.cleanup", "journal", 0, 0, audit.ResultSuccess, nil, details)
+	s.Data["json"] = s.withRequestMeta(map[string]interface{}{
+		"status": 1, "msg": "日志清理完成", "kind": kind, "days": days,
+		"before":  cutoff.Local().Format("2006-01-02 15:04:05"),
+		"removed": result.Removed, "removed_bytes": result.RemovedBytes,
+	})
+	s.ServeJSON()
+	s.StopRun()
+}
+
 func (s *AuditController) auditLogStatus(path string) map[string]interface{} {
 	status := map[string]interface{}{"log_enabled": path != ""}
+	if limit := s.recentLimit(); limit > 0 {
+		status["recent_limit"] = limit
+	}
 	// Filesystem layout is diagnostic information for administrators only.
 	if s.IsAdmin() {
 		status["log_path"] = path
 	}
 	return status
+}
+
+func (s *AuditController) recentLimit() int {
+	if s.fullHistory {
+		return 0
+	}
+	return jsonlog.RecentLimit
 }
 
 func auditErrorLabel(event *audit.Event, english bool) string {

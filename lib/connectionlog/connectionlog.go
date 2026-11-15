@@ -5,6 +5,7 @@ package connectionlog
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/jsonlog"
 )
 
 const (
@@ -104,6 +106,9 @@ type Filter struct {
 	OwnerUserID      *int
 	ClientID         *int
 	AllowedClientIDs map[int]struct{}
+	// Zero keeps the existing full-history API behavior. The Web panel reads
+	// only the tail window, before applying ownership, search, and filters.
+	RecentLimit int
 }
 
 // Page is one bounded page of connection events.
@@ -127,6 +132,7 @@ var (
 	startOnce sync.Once
 	jobs      = make(chan job, queueCapacity)
 	dropped   atomic.Uint64
+	writeMu   sync.Mutex
 )
 
 func startWriter() {
@@ -271,6 +277,13 @@ func List(filter Filter) (Page, error) {
 	proxyProtocol := strings.TrimSpace(filter.ProxyProtocol)
 	matched := make([]*Event, 0)
 	scanner := bufio.NewScanner(file)
+	if filter.RecentLimit > 0 {
+		recent, err := jsonlog.ReadRecent(file, filter.RecentLimit)
+		if err != nil {
+			return Page{}, fmt.Errorf("read connection log tail: %w", err)
+		}
+		scanner = bufio.NewScanner(bytes.NewReader(recent))
+	}
 	scanner.Buffer(make([]byte, 4096), 1024*1024)
 	for scanner.Scan() {
 		var event Event
@@ -342,7 +355,15 @@ func List(filter Filter) (Page, error) {
 	return Page{Events: matched[filter.Offset:end], Total: total}, nil
 }
 
+// CleanupBefore keeps the forwarding path's asynchronous, non-blocking Append
+// behavior. The background writer is paused only for the final file swap.
+func CleanupBefore(cutoff time.Time) (jsonlog.CleanupResult, error) {
+	return jsonlog.PruneBefore(Path(), cutoff, &writeMu)
+}
+
 func write(path string, payload []byte) error {
+	writeMu.Lock()
+	defer writeMu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return fmt.Errorf("create connection log directory: %w", err)
 	}

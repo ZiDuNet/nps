@@ -133,17 +133,17 @@
 
                 <form id="login-form" class="auth-login-form form nps-form" onsubmit="return login()">
                     <div class="form-group auth-login-field">
-                        <label class="auth-login-field__label" for="auth-username" langtag="word-username"></label>
+                        <label class="auth-login-field__label" for="auth-username" data-i18n-zh="用户名 / 邮箱" data-i18n-en="Username / email">用户名 / 邮箱</label>
                         <div class="auth-login-control">
                             <i class="fa fa-user auth-login-control__icon" aria-hidden="true"></i>
-                            <input id="auth-username" name="username" class="form-control" placeholder="username" required autocomplete="username" autocapitalize="none" spellcheck="false" langtag="word-username">
+                            <input id="auth-username" name="username" class="form-control" placeholder="用户名或绑定邮箱" data-placeholder-zh="用户名或绑定邮箱" data-placeholder-en="Username or linked email" required autocomplete="username" autocapitalize="none" spellcheck="false">
                         </div>
                     </div>
                     <div class="form-group auth-login-field">
                         <label class="auth-login-field__label" for="auth-password" langtag="word-password"></label>
                         <div class="auth-login-control">
                             <i class="fa fa-lock auth-login-control__icon" aria-hidden="true"></i>
-                            <input id="auth-password" name="password" type="password" class="form-control" placeholder="password" required autocomplete="current-password" langtag="word-password">
+                            <input id="auth-password" name="password" type="password" class="form-control" placeholder="密码或客户端 VKey" data-placeholder-zh="密码或客户端 VKey" data-placeholder-en="Password or client VKey" required autocomplete="current-password">
                         </div>
                     </div>
                     {{if .pow_enabled}}
@@ -207,6 +207,8 @@
                 <div class="auth-login-switch register-link">
                     <span langtag="info-noaccount"></span>
                     <a href="{{.web_base_url}}/login/register" langtag="word-register"></a>
+                    <span aria-hidden="true">·</span>
+                    <a href="{{.web_base_url}}/login/recover" data-i18n-zh="找回密码" data-i18n-en="Forgot password?">找回密码</a>
                 </div>
                 {{end}}
             </section>
