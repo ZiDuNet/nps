@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.46</sub>
+﻿# NPS <sub>v1.1.47</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -216,6 +216,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.47** (2026-11-17) - 修复飞牛纯连接模式断线后不自动重连（子进程按 `auto_reconnection` 退出交由管理进程每 5 秒重建），并将内嵌日志视图改为最新在前显示。
 - **v1.1.46** (2026-11-17) - 新增飞牛 fnOS 原生 NPC 客户端 FPK 包（NPC-Pro），内置设置页支持快捷指令/手动配置、直接编辑 `npc.conf`、多 VKey 独立运行与轮转日志；FPK 与 Docker 客户端禁用服务端远程自更新。服务端配置保存支持部分运行时参数即时生效，版本检查改为服务端缓存，删除最后一个客户端/隧道/Host 后回收持久化 ID。详见[升级说明](docs/upgrade-1.1.46.md)。
 - **v1.1.45** (2026-11-16) - 增加绑定邮箱登录和开放注册时的邮件找回密码，修复客户端级 VKey 登录及审计首次加载；页面仅查最近 2000 条日志，管理员可按天清理。修复用户用量趋势并自动清理过期历史，使用说明铺满可用区域，旧 NPC 继续兼容。详见[升级说明](docs/upgrade-1.1.45.md)。
 - **v1.1.44** (2026-11-10) - 补齐登录各阶段失败、免登录签发/恢复和退出审计，新增请求 ID、浏览器、来源识别和可信用户归属；审计与连接页铺满内容区，动作显示中文名称，提供更多诊断列和完整 JSON 复制。旧 NPC、JSONL 和 API 动作代码继续兼容，详见[升级说明](docs/upgrade-1.1.44.md)。
