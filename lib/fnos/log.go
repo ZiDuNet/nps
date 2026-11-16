@@ -251,6 +251,12 @@ func LogTail(path string) string {
 	if len(lines) > LogTailLines {
 		lines = lines[len(lines)-LogTailLines:]
 	}
+	// The embedded Web UI is a live log viewer: render newest first so the
+	// latest event is at the top instead of forcing the user to scroll to the
+	// bottom after every refresh.
+	for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
+		lines[i], lines[j] = lines[j], lines[i]
+	}
 	return ansiSequence.ReplaceAllString(strings.Join(lines, "\n"), "")
 }
 
