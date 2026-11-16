@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NPC-Pro</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --line: #e4e8ef;
+    --text: #1b2430;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-weak: #eef4ff;
+    --danger: #dc2626;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --radius: 12px;
+    --shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 6px 20px rgba(15, 23, 42, .04);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 20px 56px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; font-weight: 700; }
+  header .sub { color: var(--muted); font-size: 13px; flex: 1; }
+
+  .layout { display: flex; gap: 16px; align-items: flex-start; }
+  .sidebar {
+    width: 230px; flex: 0 0 230px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); position: sticky; top: 16px;
+  }
+  .side-title { font-size: 12px; color: var(--muted); margin: 2px 4px 8px; font-weight: 600; }
+  .side-nav { display: flex; flex-direction: column; gap: 4px; }
+  .side-item {
+    display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 8px;
+    border: 1px solid transparent; background: transparent; color: var(--text); cursor: pointer;
+    font: inherit; text-align: left; width: 100%; transition: background .15s, color .15s, border-color .15s;
+  }
+  .side-item:hover { background: #f8fafc; }
+  .side-item.active { background: var(--accent-weak); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .side-item .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; background: #cbd5e1; }
+  .side-item .dot.on { background: var(--ok); }
+  .side-item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side-add {
+    width: 100%; margin-top: 10px; border: 1px dashed var(--accent); background: transparent;
+    color: var(--accent); border-radius: 8px; padding: 8px 10px; cursor: pointer; font: inherit;
+  }
+  .side-add:hover { background: var(--accent-weak); }
+  .content { flex: 1; min-width: 0; }
+  .footer { margin-top: 18px; text-align: center; font-size: 12px; color: var(--muted); }
+  .footer a { color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+  .footer a:hover { color: var(--accent); }
+
+  @media (max-width: 760px) {
+    .layout { flex-direction: column; }
+    .sidebar { width: 100%; flex: none; position: static; }
+  }
+
+  .sub-tabs { display: flex; gap: 6px; align-items: flex-end; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+  .sub-tab {
+    border: 1px solid var(--line); border-bottom: none; background: #fff; color: var(--muted);
+    border-radius: 10px 10px 0 0; padding: 7px 15px; cursor: pointer; font: inherit;
+    position: relative; top: 1px; transition: color .15s, border-color .15s, background .15s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .sub-tab:hover { color: var(--accent); border-color: var(--accent); }
+  .sub-tab.active { color: var(--accent); border-color: var(--accent); background: var(--accent-weak); font-weight: 600; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px 20px; margin-bottom: 14px; box-shadow: var(--shadow);
+  }
+  .card h2 { margin: 0 0 14px; font-size: 14px; font-weight: 650; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .muted { color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-start; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 170px; flex: 1 1 170px; }
+  .field label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+  input, select, textarea {
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit;
+    background: #fff; color: var(--text); width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-weak); border-color: var(--accent); }
+  .radio { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .radio label { display: flex; gap: 6px; align-items: center; cursor: pointer; font-size: 13px; color: var(--text); }
+  .radio input { width: auto; }
+  .hint { color: var(--muted); font-size: 12px; }
+
+  .statusline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .status .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status.on { background: #ecfdf3; color: var(--ok); }
+  .status.on .dot { background: var(--ok); }
+  .status.off { background: #f1f3f6; color: var(--muted); }
+  .status.off .dot { background: #cbd5e1; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; background: var(--accent-weak); color: var(--accent); }
+  .badge.off { background: #f1f3f6; color: var(--muted); }
+  .overview { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+
+  .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; margin-top: 14px; }
+  .value { padding: 8px 0; word-break: break-all; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .updated { margin-top: 14px; color: var(--muted); font-size: 12px; }
+
+  .btn {
+    border: 1px solid var(--line); background: #fff; color: var(--text); border-radius: 8px;
+    padding: 7px 14px; cursor: pointer; font: inherit; transition: border-color .15s, color .15s, background .15s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.06); color: #fff; }
+  .btn.danger { color: var(--danger); }
+  .btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .btn.sm { padding: 5px 10px; font-size: 12px; }
+  .side-add { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .side-title { display: flex; align-items: center; gap: 6px; }
+  .overview .badge { display: inline-flex; align-items: center; gap: 5px; }
+  .icon { display: inline-flex; align-items: center; }
+
+  pre.log { background: #0f172a; color: #dbeafe; padding: 14px; border-radius: 10px; overflow: auto; max-height: 480px; min-height: 130px; font-size: 12px; white-space: pre-wrap; word-break: break-all; margin: 0; }
+  textarea.raw { min-height: 340px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.6; resize: vertical; }
+  textarea.raw[readonly] { background: #f8fafc; color: #64748b; cursor: default; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+  #msg { min-height: 20px; font-size: 13px; margin-top: 8px; }
+  #msg.err { color: var(--danger); }
+  #msg.ok { color: var(--ok); }
+
+  .empty { text-align: center; padding: 52px 20px; color: var(--muted); }
+  .empty .btn { margin-top: 12px; }
+
+  .modal-mask { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); display: flex; align-items: flex-start; justify-content: center; padding: 30px 16px; overflow: auto; z-index: 20; }
+  .modal { background: #fff; border-radius: 14px; padding: 20px 22px; width: 100%; max-width: 720px; box-shadow: 0 20px 60px rgba(15, 23, 42, .22); }
+  .modal h2 { margin: 0 0 16px; font-size: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="side-title"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>连接</div>
+      <div class="side-nav" id="side-nav"></div>
+      <button class="side-add" id="side-add"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>新增连接</button>
+    </aside>
+    <main class="content" id="panel"></main>
+  </div>
+  <div id="msg"></div>
+  <footer class="footer">
+    <a href="https://github.com/ZiDuNet/nps" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.72.5.1.68-.22.68-.48v-1.7c-2.78.62-3.37-1.37-3.37-1.37-.46-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.9 1.57 2.36 1.12 2.94.86.09-.66.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.7 0 0 .84-.28 2.75 1.05a9.4 9.4 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.4.2 2.44.1 2.7.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9v2.82c0 .27.18.59.69.48A10.03 10.03 0 0 0 22 12.25C22 6.58 17.52 2 12 2z"></path></svg>
+      ZiDuNet/NPS Pro
+    </a>
+  </footer>
+</div>
+
+<script>
+const BASE = location.pathname.replace(/\/+$/, '') || '/';
+let cfg = { version: 1, revision: '', connections: [] };
+let activeId = null;
+let subTabs = {};
+let editingConfig = {};
+let editingRaw = {};
+let logAutoScroll = true;
+let pollTimer = null;
+
+async function api(path, opts) {
+  const res = await fetch(BASE + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function truncate(s, n) {
+  s = String(s == null ? '' : s);
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+function protocolName(p) {
+  if (p === 'tls') return 'TCP + TLS';
+  return (p || 'tcp').toUpperCase();
+}
+
+function tabLabel(c) {
+  return c.name || c.vkey || c.id.slice(0, 6);
+}
+
+function msg(text, ok) {
+  const m = document.getElementById('msg');
+  m.textContent = text || '';
+  m.className = ok ? 'ok' : (text ? 'err' : '');
+}
+
+function icon(name, size) {
+  size = size || 16;
+  const paths = {
+    status: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>',
+    config: '<line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>',
+    log: '<polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line>',
+    plug: '<path d="M12 2a2 2 0 0 1 2 2v5h-4V4a2 2 0 0 1 2-2z"></path><path d="M6 9h12v3a6 6 0 0 1-12 0z"></path><path d="M12 18v4"></path>',
+    plus: '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>',
+    edit: '<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>',
+    trash: '<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>',
+    check: '<polyline points="20 6 9 17 4 12"></polyline>',
+    close: '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>',
+    refresh: '<polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>',
+    down: '<polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline>',
+    server: '<rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line>',
+    tag: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line>',
+    cpu: '<rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line>',
+    users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
+    memory: '<rect x="2" y="3" width="20" height="18" rx="2" ry="2"></rect><line x1="7" y1="3" x2="7" y2="21"></line><line x1="17" y1="3" x2="17" y2="21"></line>'
+  };
+  return `<span class="icon"><svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || ''}</svg></span>`;
+}
+
+function statusBadge(c) {
+  const on = c.running;
+  return `<span class="status ${on ? 'on' : 'off'}"><span class="dot"></span>${on ? '运行中' : '已停止'}</span>
+          <span class="badge">${icon('server', 13)}${protocolName(c.protocol)}</span>
+          <span class="badge ${c.enabled ? '' : 'off'}">${icon(c.enabled ? 'check' : 'close', 13)}${c.enabled ? '已启用' : '已停用'}</span>`;
+}
+
+function renderSidebar() {
+  const nav = document.getElementById('side-nav');
+  nav.innerHTML = '';
+  cfg.connections.forEach(c => {
+    const b = document.createElement('button');
+    b.className = 'side-item' + (c.id === activeId ? ' active' : '');
+    b.dataset.id = c.id;
+    b.title = (c.name ? c.name + ' · ' : '') + c.vkey;
+    b.innerHTML = `<span class="dot ${c.running ? 'on' : ''}"></span>${icon('plug', 15)}<span class="label">${esc(truncate(tabLabel(c), 22))}</span>`;
+    b.onclick = () => { activeId = c.id; render(); };
+    nav.appendChild(b);
+  });
+  document.getElementById('side-add').onclick = openAdd;
+}
+
+function protocolAdvanced(protocol) {
+  return {
+    path: protocol === 'ws' || protocol === 'wss',
+    alpn: protocol === 'quic',
+    tls: protocol === 'tls' || protocol === 'wss' || protocol === 'quic'
+  };
+}
+
+function settingsForm(prefix, c, allowMode) {
+  const mode = c.mode || 'quick';
+  const enabled = c.enabled !== false;
+  const modeField = allowMode ? `
+      <div class="field"><label>配置方式</label>
+        <div class="radio">
+          <label><input type="radio" name="${prefix}.mode" value="quick" ${mode === 'quick' ? 'checked' : ''}> 快捷指令</label>
+          <label><input type="radio" name="${prefix}.mode" value="manual" ${mode === 'manual' ? 'checked' : ''}> 手动填写</label>
+        </div>
+      </div>` : '';
+  return `
+    <div class="row">
+      <div class="field"><label>连接备注</label><input data-f="${prefix}.name" value="${esc(c.name)}" placeholder="可选"></div>
+      <div class="field"><label>是否启用</label>
+        <div class="radio">
+          <label><input type="radio" name="${prefix}.enabled" value="true" ${enabled ? 'checked' : ''}> 启用</label>
+          <label><input type="radio" name="${prefix}.enabled" value="false" ${!enabled ? 'checked' : ''}> 停用</label>
+        </div>
+      </div>
+      ${modeField}
+    </div>
+    <div class="row mode-quick" style="${mode === 'quick' ? '' : 'display:none'}">
+      <div class="field"><label>快捷启动码</label><input data-f="${prefix}.quick" placeholder="粘贴 NPS 面板生成的完整快捷码" autocomplete="off"></div>
+    </div>
+    <div class="row mode-manual" style="${mode === 'manual' ? '' : 'display:none'}">
+      <div class="field"><label>服务端域名 / IP</label><input data-f="${prefix}.host" value="${esc(c.host)}"></div>
+      <div class="field"><label>端口</label><input data-f="${prefix}.port" value="${esc(c.port || '8024')}"></div>
+      <div class="field"><label>VKey（留空保留原值）</label><input type="password" data-f="${prefix}.vkey" autocomplete="new-password"></div>
+      <div class="field"><label>连接协议</label>
+        <select data-f="${prefix}.protocol">
+          ${['tcp','tls','kcp','ws','wss','quic'].map(p => `<option value="${p}" ${(c.protocol || 'tcp') === p ? 'selected' : ''}>${protocolName(p)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="row mode-advanced" style="${mode === 'manual' ? '' : 'display:none'}">
+      <div class="field"><label>WS / WSS 路径</label><input data-f="${prefix}.path" value="${esc(c.path || '/ws')}"></div>
+      <div class="field"><label>QUIC ALPN</label><input data-f="${prefix}.alpn" value="${esc(c.alpn || 'nps')}"></div>
+      <div class="field"><label>TLS ServerName</label><input data-f="${prefix}.sni" value="${esc(c.sni)}"></div>
+      <div class="field"><label>TLS 证书指纹</label><input data-f="${prefix}.fingerprint" value="${esc(c.fingerprint)}"></div>
+      <div class="field"><label>自有 CA 文件路径</label><input data-f="${prefix}.ca" value="${esc(c.ca)}"></div>
+    </div>
+  `;
+}
+
+function formatBytes(n) {
+  n = Number(n) || 0;
+  if (n <= 0) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + ' ' + units[i];
+}
+
+function configSummary(c, withMemory) {
+  const tls = c.protocol === 'tls' || c.protocol === 'wss' || c.protocol === 'quic';
+  const pathRow = (c.protocol === 'ws' || c.protocol === 'wss')
+    ? `<div class="field"><label>WS / WSS 路径</label><div class="value mono">${esc(c.path || '/ws')}</div></div>` : '';
+  const alpnRow = c.protocol === 'quic'
+    ? `<div class="field"><label>QUIC ALPN</label><div class="value mono">${esc(c.alpn || 'nps')}</div></div>` : '';
+  const sniRow = tls
+    ? `<div class="field"><label>TLS ServerName</label><div class="value mono">${esc(c.sni) || '—'}</div></div>` : '';
+  const memoryRow = withMemory
+    ? `<div class="field"><label>${icon('memory', 12)}内存占用</label><div class="value mono" id="status-memory">${formatBytes(c.memory)}</div></div>` : '';
+  return `
+    <div class="status-grid">
+      <div class="field"><label>连接备注</label><div class="value">${esc(c.name) || '—'}</div></div>
+      <div class="field"><label>是否启用</label><div class="value">${c.enabled ? '已启用' : '已停用'}</div></div>
+      <div class="field"><label>连接协议</label><div class="value">${protocolName(c.protocol)}</div></div>
+      <div class="field"><label>${icon('server', 12)}服务端地址</label><div class="value mono">${esc(c.host)}:${esc(c.port)}</div></div>
+      <div class="field"><label>${icon('tag', 12)}VKey</label><div class="value mono">${esc(c.vkey)}</div></div>
+      ${pathRow}
+      ${alpnRow}
+      ${sniRow}
+      ${memoryRow}
+    </div>
+  `;
+}
+
+function statusTab(c) {
+  const running = cfg.connections.filter(x => x.running).length;
+  const total = cfg.connections.length;
+  return `
+    <div class="card">
+      <div class="overview">
+        <span class="badge">${icon('tag', 14)}NPC-Pro v${esc(cfg.app_version || '—')}</span>
+        <span class="badge">${icon('cpu', 14)}核心 ${esc(cfg.core_version || '—')}</span>
+        <span class="badge">${icon('users', 14)}连接 <span id="status-count">${running}</span> / ${total} 运行中</span>
+      </div>
+      <div class="statusline" id="status-line">${statusBadge(c)}</div>
+      ${configSummary(c, true)}
+      <div class="updated" id="status-updated">最后更新 ${new Date().toLocaleTimeString()}</div>
+    </div>
+  `;
+}
+
+function configTab(c) {
+  if (!editingConfig[c.id]) {
+    return `
+      <div class="card">
+        <h2>连接配置 <span class="muted">运行中的连接需点击「编辑」才能修改</span></h2>
+        ${configSummary(c)}
+        <div class="actions">
+          <button class="btn" id="edit-conn">${icon('edit', 15)}编辑</button>
+          <button class="btn danger" id="delete-conn">${icon('trash', 15)}删除连接</button>
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="card">
+      <h2>连接配置 <span class="muted">保存后自动生效</span></h2>
+      ${settingsForm('conn', c, true)}
+      <div class="actions">
+        <button class="btn primary" id="save-conn">${icon('check', 15)}保存配置</button>
+        <button class="btn" id="cancel-edit">${icon('close', 15)}取消</button>
+        <button class="btn danger" id="delete-conn">${icon('trash', 15)}删除连接</button>
+      </div>
+    </div>
+  `;
+}
+
+function rawTab(c) {
+  const editing = editingRaw[c.id];
+  return `
+    <div class="card">
+      <h2>配置文件（npc.conf）<span class="muted">${editing ? '保存后热重载，无需重启' : '只读，点击「编辑」修改'}</span></h2>
+      <textarea class="raw" id="raw-text" ${editing ? '' : 'readonly'} placeholder="加载中…"></textarea>
+      <div class="actions">
+        ${editing ? `
+          <button class="btn primary" id="save-raw">${icon('check', 15)}保存配置文件</button>
+          <button class="btn" id="reload-raw">${icon('refresh', 15)}重新读取</button>
+          <button class="btn" id="cancel-raw">${icon('close', 15)}取消</button>
+        ` : `<button class="btn" id="edit-raw">${icon('edit', 15)}编辑</button>`}
+      </div>
+    </div>
+  `;
+}
+
+function logTab(c) {
+  return `
+    <div class="card">
+      <h2>运行日志 <span class="muted">自动刷新</span></h2>
+      <div class="toolbar">
+        <button class="btn sm" id="refresh-log">${icon('refresh', 14)}刷新</button>
+        <button class="btn sm" id="auto-scroll">${icon('down', 14)}自动滚动：${logAutoScroll ? '开' : '关'}</button>
+        <button class="btn sm danger" id="clear-log">${icon('trash', 14)}清空</button>
+      </div>
+      <pre class="log" id="log-view">加载中…</pre>
+    </div>
+  `;
+}
+
+function renderPanel() {
+  const panel = document.getElementById('panel');
+  const c = cfg.connections.find(x => x.id === activeId);
+  if (!c) {
+    panel.innerHTML = `<div class="card empty">还没有连接。点击右上角「＋ 新增」添加第一条连接。</div>`;
+    return;
+  }
+  const sub = subTabs[activeId] || 'status';
+  panel.innerHTML = `
+    <div class="sub-tabs">
+      <button class="sub-tab ${sub === 'status' ? 'active' : ''}" data-sub="status">${icon('status', 15)}状态</button>
+      <button class="sub-tab ${sub === 'config' ? 'active' : ''}" data-sub="config">${icon('config', 15)}连接配置</button>
+      <button class="sub-tab ${sub === 'raw' ? 'active' : ''}" data-sub="raw">${icon('file', 15)}配置文件</button>
+      <button class="sub-tab ${sub === 'log' ? 'active' : ''}" data-sub="log">${icon('log', 15)}日志</button>
+    </div>
+    <div id="sub-content"></div>
+  `;
+  panel.querySelectorAll('.sub-tab').forEach(btn => {
+    btn.onclick = () => { subTabs[activeId] = btn.dataset.sub; renderPanel(); };
+  });
+  renderSub(c, sub);
+}
+
+function renderSub(c, sub) {
+  const content = document.getElementById('sub-content');
+  if (sub === 'status') {
+    content.innerHTML = statusTab(c);
+  } else if (sub === 'config') {
+    content.innerHTML = configTab(c);
+    bindConfig(c);
+  } else if (sub === 'raw') {
+    content.innerHTML = rawTab(c);
+    bindRaw(c);
+    loadRaw(c.id);
+  } else {
+    content.innerHTML = logTab(c);
+    bindLog(c);
+    loadLog(c.id);
+  }
+}
+
+function syncVisibility(scope, forceMode) {
+  const mode = forceMode || scope.querySelector('input[name$=".mode"]:checked')?.value || 'quick';
+  scope.querySelectorAll('.mode-quick').forEach(el => el.style.display = mode === 'quick' ? '' : 'none');
+  scope.querySelectorAll('.mode-manual').forEach(el => el.style.display = mode === 'manual' ? '' : 'none');
+  scope.querySelectorAll('.mode-advanced').forEach(el => el.style.display = mode === 'manual' ? '' : 'none');
+  const proto = scope.querySelector('select[data-f$=".protocol"]')?.value || 'tcp';
+  const a = protocolAdvanced(proto);
+  const vis = (name, on) => { const el = scope.querySelector(`[data-f$="${name}"]`)?.closest('.field'); if (el) el.style.display = on ? '' : 'none'; };
+  vis('.path', a.path); vis('.alpn', a.alpn); vis('.sni', a.tls); vis('.fingerprint', a.tls); vis('.ca', a.tls);
+}
+
+function val(scope, name) {
+  const el = scope.querySelector(`[data-f$="${name}"]`);
+  return el ? el.value : '';
+}
+
+function bindConfig(c) {
+  const scope = document.getElementById('sub-content');
+
+  const editBtn = document.getElementById('edit-conn');
+  if (editBtn) {
+    editBtn.onclick = () => { editingConfig[c.id] = true; renderPanel(); };
+    const delBtn = document.getElementById('delete-conn');
+    if (delBtn) delBtn.onclick = () => deleteConnection(c);
+    return;
+  }
+
+  scope.querySelectorAll('.radio input').forEach(inp => {
+    inp.onchange = () => syncVisibility(scope);
+  });
+  scope.querySelectorAll('select[data-f$=".protocol"]').forEach(sel => {
+    sel.onchange = () => syncVisibility(scope);
+  });
+  syncVisibility(scope);
+
+  document.getElementById('save-conn').onclick = async () => {
+    try {
+      await api('/api/config', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          revision: cfg.revision,
+          connections: [{
+            id: c.id, action: 'update',
+            name: val(scope, '.name'),
+            enabled: scope.querySelector('input[name="conn.enabled"]:checked')?.value === 'true',
+            mode: scope.querySelector('input[name="conn.mode"]:checked')?.value || c.mode || 'quick',
+            quick: val(scope, '.quick'),
+            host: val(scope, '.host'), port: val(scope, '.port'), vkey: val(scope, '.vkey'),
+            protocol: val(scope, '.protocol'), path: val(scope, '.path'), alpn: val(scope, '.alpn'),
+            sni: val(scope, '.sni'), fingerprint: val(scope, '.fingerprint'), ca: val(scope, '.ca')
+          }],
+          add: null
+        })
+      });
+      msg('已保存，正在应用…', true);
+      editingConfig[c.id] = false;
+      await load();
+      render();
+    } catch (e) { msg(e.message, false); }
+  };
+
+  document.getElementById('cancel-edit').onclick = () => {
+    editingConfig[c.id] = false;
+    renderPanel();
+  };
+
+  document.getElementById('delete-conn').onclick = () => deleteConnection(c);
+}
+
+async function deleteConnection(c) {
+  const ok = await confirmBox('删除连接', `确认删除「${tabLabel(c)}」？其配置文件将被移除。`, '删除');
+  if (!ok) return;
+  try {
+    await api('/api/config', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ revision: cfg.revision, connections: [{ id: c.id, action: 'delete', confirm_delete: 'yes' }], add: null })
+    });
+    msg('已删除', true);
+    activeId = cfg.connections.find(x => x.id !== c.id)?.id || null;
+    await load();
+    render();
+  } catch (e) { msg(e.message, false); }
+}
+
+function confirmBox(title, message, okText) {
+  return new Promise(resolve => {
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML = `
+      <div class="modal" style="max-width:420px">
+        <h2>${esc(title)}</h2>
+        <p style="margin:0 0 18px;color:var(--muted)">${esc(message)}</p>
+        <div class="actions" style="justify-content:flex-end;margin-top:0">
+          <button class="btn" id="cf-cancel">取消</button>
+          <button class="btn danger" id="cf-ok">${esc(okText || '确认')}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(mask);
+    const done = value => { mask.remove(); resolve(value); };
+    mask.onclick = e => { if (e.target === mask) done(false); };
+    document.getElementById('cf-cancel').onclick = () => done(false);
+    document.getElementById('cf-ok').onclick = () => done(true);
+  });
+}
+
+function bindRaw(c) {
+  const editBtn = document.getElementById('edit-raw');
+  if (editBtn) {
+    editBtn.onclick = () => { editingRaw[c.id] = true; renderPanel(); };
+    return;
+  }
+  document.getElementById('save-raw').onclick = async () => {
+    try {
+      await api('/api/raw', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: c.id, content: document.getElementById('raw-text').value })
+      });
+      msg('配置文件已保存，正在热重载', true);
+      editingRaw[c.id] = false;
+      await loadRaw(c.id);
+      renderPanel();
+    } catch (e) { msg(e.message, false); }
+  };
+  document.getElementById('reload-raw').onclick = () => loadRaw(c.id);
+  document.getElementById('cancel-raw').onclick = () => {
+    editingRaw[c.id] = false;
+    renderPanel();
+  };
+}
+
+function bindLog(c) {
+  document.getElementById('refresh-log').onclick = () => loadLog(c.id);
+  document.getElementById('clear-log').onclick = async () => {
+    try {
+      await api('/api/logs?id=' + encodeURIComponent(c.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'clear' }) });
+      await loadLog(c.id);
+    } catch (e) { msg(e.message, false); }
+  };
+  document.getElementById('auto-scroll').onclick = e => {
+    logAutoScroll = !logAutoScroll;
+    e.target.textContent = '自动滚动：' + (logAutoScroll ? '开' : '关');
+  };
+}
+
+async function loadRaw(id) {
+  try {
+    const d = await api('/api/raw?id=' + encodeURIComponent(id));
+    const el = document.getElementById('raw-text');
+    if (el) el.value = d.content;
+  } catch (e) {
+    const el = document.getElementById('raw-text');
+    if (el) el.placeholder = '读取失败：' + e.message;
+  }
+}
+
+async function loadLog(id) {
+  try {
+    const d = await api('/api/logs?id=' + encodeURIComponent(id));
+    const el = document.getElementById('log-view');
+    if (el) {
+      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      el.textContent = d.log || '暂无日志';
+      if (logAutoScroll || nearBottom) el.scrollTop = el.scrollHeight;
+    }
+  } catch (e) {
+    const el = document.getElementById('log-view');
+    if (el) el.textContent = '日志读取失败：' + e.message;
+  }
+}
+
+function openAdd() {
+  let modal = document.getElementById('add-modal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'add-modal';
+  modal.className = 'modal-mask';
+  modal.innerHTML = `
+    <div class="modal">
+      <h2>新增连接</h2>
+      ${settingsForm('add', { enabled: true, mode: 'quick', protocol: 'tcp' }, true)}
+      <div class="actions">
+        <button class="btn primary" id="add-save">保存</button>
+        <button class="btn" id="add-cancel">取消</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  const m = modal.querySelector('.modal');
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  document.getElementById('add-cancel').onclick = () => modal.remove();
+  modal.querySelectorAll('.radio input').forEach(inp => inp.onchange = () => syncVisibility(m));
+  modal.querySelectorAll('select[data-f$=".protocol"]').forEach(sel => sel.onchange = () => syncVisibility(m));
+  syncVisibility(m);
+  document.getElementById('add-save').onclick = async () => {
+    try {
+      const body = {
+        revision: cfg.revision, connections: [],
+        add: {
+          action: 'add',
+          name: val(m, '.name'),
+          enabled: m.querySelector('input[name="add.enabled"]:checked')?.value === 'true',
+          mode: m.querySelector('input[name="add.mode"]:checked')?.value || 'quick',
+          quick: val(m, '.quick'),
+          host: val(m, '.host'), port: val(m, '.port'), vkey: val(m, '.vkey'),
+          protocol: val(m, '.protocol'), path: val(m, '.path'), alpn: val(m, '.alpn'),
+          sni: val(m, '.sni'), fingerprint: val(m, '.fingerprint'), ca: val(m, '.ca')
+        }
+      };
+      await api('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      modal.remove();
+      msg('已新增连接', true);
+      const before = cfg.connections.map(x => x.id);
+      await load();
+      const added = cfg.connections.find(x => !before.includes(x.id));
+      activeId = added ? added.id : (cfg.connections[0]?.id || null);
+      render();
+    } catch (e) { msg(e.message, false); }
+  };
+}
+
+async function load() {
+  cfg = await api('/api/config');
+}
+
+function render() {
+  if (!cfg.connections.length) activeId = null;
+  else if (!cfg.connections.some(x => x.id === activeId)) activeId = cfg.connections[0].id;
+  renderSidebar();
+  renderPanel();
+}
+
+function updateRunningUI() {
+  cfg.connections.forEach(c => {
+    const tab = [...document.querySelectorAll('#side-nav .side-item')].find(el => el.dataset.id === c.id);
+    if (tab) {
+      const dot = tab.querySelector('.dot');
+      if (dot) dot.className = 'dot ' + (c.running ? 'on' : '');
+    }
+  });
+  const c = cfg.connections.find(x => x.id === activeId);
+  if (!c) return;
+  const line = document.getElementById('status-line');
+  if (line) line.innerHTML = statusBadge(c);
+  const count = document.getElementById('status-count');
+  if (count) count.textContent = cfg.connections.filter(x => x.running).length;
+  const memory = document.getElementById('status-memory');
+  if (memory) memory.textContent = formatBytes(c.memory || 0);
+  const updated = document.getElementById('status-updated');
+  if (updated) updated.textContent = '最后更新 ' + new Date().toLocaleTimeString();
+}
+
+function applyConfig(data) {
+  const prev = cfg.connections.map(x => x.id).join(',');
+  const next = data.connections.map(x => x.id).join(',');
+  const structural = data.revision !== cfg.revision || prev !== next;
+  cfg = data;
+  if (structural) {
+    render();
+  } else {
+    updateRunningUI();
+  }
+}
+
+async function poll() {
+  try {
+    const data = await api('/api/config');
+    applyConfig(data);
+    const c = cfg.connections.find(x => x.id === activeId);
+    if (c && subTabs[activeId] === 'log') {
+      await loadLog(c.id);
+    }
+  } catch (e) {
+    // Ignore transient poll failures; the next tick retries silently.
+  }
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(poll, 2000);
+}
+
+load().then(() => {
+  render();
+  startPolling();
+}).catch(e => {
+  document.getElementById('panel').innerHTML = `<div class="card empty">加载失败：${esc(e.message)}</div>`;
+});
+</script>
+</body>
+</html>

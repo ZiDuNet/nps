@@ -30,7 +30,8 @@ import (
 var (
 	Bridge          *bridge.Bridge
 	RunList         sync.Map // task IDs plus the private management service key
-	once            sync.Once
+	flowStoreStop   chan struct{}
+	flowStoreMu     sync.Mutex
 	taskLifecycleMu sync.Mutex
 )
 
@@ -289,9 +290,7 @@ func StartNewServer(bridgePort int, cnf *file.Tunnel, bridgeType string, bridgeD
 	go dealClientFlow()
 	go dealClientExpire()
 	tool.StartIORateCollector()
-	if minute, err := beego.AppConfig.Int("flow_store_interval"); err == nil && minute > 0 {
-		go flowSession(time.Minute * time.Duration(minute))
-	}
+	RestartFlowStoreTimer()
 	// Restore persisted services before constructing the synthetic management
 	// service. NewMode must remain side-effect free so it can also be called by
 	// addTask while taskLifecycleMu is held.
@@ -1625,21 +1624,53 @@ func clientNearExpiry(expire string, now time.Time) bool {
 	return false
 }
 
-// 实例化流量数据到文件
-func flowSession(m time.Duration) {
-	once.Do(func() {
-		ticker := time.NewTicker(m)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				file.GetDb().JsonDb.StoreHostToJsonFile()
-				file.GetDb().JsonDb.StoreTasksToJsonFile()
-				file.GetDb().JsonDb.StoreClientsToJsonFile()
-				file.GetDb().JsonDb.StoreGlobalToJsonFile()
-			}
+// flowStoreLoop flushes JSON stores on the configured interval. The loop is
+// restartable so a hot-reloaded flow_store_interval takes effect without a
+// process restart.
+func flowStoreLoop(interval time.Duration, stop <-chan struct{}) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			file.GetDb().JsonDb.StoreHostToJsonFile()
+			file.GetDb().JsonDb.StoreTasksToJsonFile()
+			file.GetDb().JsonDb.StoreClientsToJsonFile()
+			file.GetDb().JsonDb.StoreGlobalToJsonFile()
+		case <-stop:
+			return
 		}
-	})
+	}
+}
+
+// RestartFlowStoreTimer applies a changed flow_store_interval at runtime.
+// A zero or empty interval stops the periodic flush; the shutdown path already
+// persists the final counters. Invalid text keeps the current flusher alive.
+func RestartFlowStoreTimer() {
+	minute := 0
+	if raw := strings.TrimSpace(beego.AppConfig.String("flow_store_interval")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			// Keep the existing flusher alive when a hand-edited value is
+			// invalid. Stopping it would silently disable persistence for the
+			// whole process.
+			logs.Warn("flow_store_interval is invalid, keeping the current flush interval: %v", err)
+			return
+		}
+		minute = parsed
+	}
+	flowStoreMu.Lock()
+	defer flowStoreMu.Unlock()
+	if flowStoreStop != nil {
+		close(flowStoreStop)
+		flowStoreStop = nil
+	}
+	if minute <= 0 {
+		return
+	}
+	stop := make(chan struct{})
+	flowStoreStop = stop
+	go flowStoreLoop(time.Minute*time.Duration(minute), stop)
 }
 
 func dealClientExpire() {

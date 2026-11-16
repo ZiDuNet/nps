@@ -1,0 +1,14 @@
+{
+  ".url": {
+    "NPC-Pro.main": {
+      "title": "NPC-Pro",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/NPC-Pro",
+      "gatewaySocket": "app.sock",
+      "url": "/app/NPC-Pro",
+      "allUsers": true
+    }
+  }
+}

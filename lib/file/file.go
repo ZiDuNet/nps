@@ -372,6 +372,32 @@ func (s *JsonDb) GetTemporaryHostID() int32 {
 	return atomic.AddInt32(&s.temporaryHostID, -1)
 }
 
+// reclaimPersistentID resets a resource counter when its table emptied out.
+// Deleting the last record otherwise leaves the counter high forever, so
+// recreated deployments keep climbing through ID gaps (yisier/nps #362).
+// The table must be empty rather than merely missing ID 1, otherwise resetting
+// the counter would hand the next allocation an ID that is still in use. CAS
+// keeps this safe against a concurrent allocation that wins the race.
+func (s *JsonDb) reclaimPersistentID(counter *int32, table *sync.Map) {
+	empty := true
+	table.Range(func(_, _ interface{}) bool {
+		empty = false
+		return false
+	})
+	if !empty {
+		return
+	}
+	for {
+		current := atomic.LoadInt32(counter)
+		if current <= 0 {
+			return
+		}
+		if atomic.CompareAndSwapInt32(counter, current, 0) {
+			return
+		}
+	}
+}
+
 func loadSyncMapFromFile(filePath string, f func(value string)) {
 	if !common.FileExists(filePath) {
 		return

@@ -1,0 +1,26 @@
+#!/bin/bash
+# Preserve NPC connection data by default. Only when the uninstall wizard
+# explicitly selects "purge" do we clear this app's own etc/var contents.
+# fnOS owns the directory lifecycle, so we never delete the mount points
+# themselves and never touch any path outside TRIM_PKGETC / TRIM_PKGVAR.
+set -euo pipefail
+
+purge_dir_contents() {
+    local target="${1:-}"
+    [ -n "$target" ] || return 0
+    target="$(realpath -m -- "$target" 2>/dev/null)" || return 0
+    case "$target" in
+        /|/bin|/boot|/dev|/etc|/home|/lib|/lib32|/lib64|/libx32|/media|/mnt|/opt|/proc|/root|/run|/sbin|/srv|/sys|/tmp|/usr|/var)
+            printf '拒绝清除受保护的系统路径：%s\n' "$target" >&2
+            return 0
+            ;;
+    esac
+    [ -d "$target" ] || return 0
+    find "$target" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+}
+
+if [ "${wizard_data_mode:-keep}" = "purge" ]; then
+    purge_dir_contents "${TRIM_PKGETC:-}"
+    purge_dir_contents "${TRIM_PKGVAR:-}"
+fi
+exit 0

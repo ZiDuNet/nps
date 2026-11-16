@@ -7,6 +7,9 @@
 *.png
 !cmd/npc/npc-gui/frontend/public/nps-logo.png
 !web/static/img/nps-logo.png
+!lib/fnos/logo.png
+__pycache__/
+*.pyc
 conf/clients.json
 conf/tasks.json
 conf/hosts.json

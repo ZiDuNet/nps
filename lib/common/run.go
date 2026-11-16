@@ -8,6 +8,11 @@ import (
 
 var ConfPath string
 
+// RuntimeTempPath is an explicit application override. Native multi-profile
+// hosts set it before startup so npc_vkey.txt never crosses profile boundaries.
+// Ordinary CLI, SDK and server behavior is unchanged when it is empty.
+var RuntimeTempPath string
+
 // Get the currently selected configuration file directory
 // For non-Windows systems, select the /etc/nps as config directory if exist, or select ./
 // windows system, select the C:\Program Files\nps as config directory if exist, or select ./
@@ -95,6 +100,9 @@ func GetNpcLogPath() string {
 
 // interface pid file path
 func GetTmpPath() string {
+	if RuntimeTempPath != "" {
+		return RuntimeTempPath
+	}
 	var path string
 	if IsWindows() {
 		path = GetAppPath()

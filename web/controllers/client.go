@@ -1062,6 +1062,11 @@ func (s *ClientController) Edit() {
 			c.VerifyKey = s.getEscapeString("vkey")
 			c.UserId = selectedUserID
 			c.Flow.SetLimit(int64(s.GetIntNoErr("flow_limit")))
+			if s.GetBoolNoErr("reset_flow") {
+				inlet := int64(s.GetIntNoErr("reset_inlet_flow"))
+				export := int64(s.GetIntNoErr("reset_export_flow"))
+				c.Flow.ResetCounters(inlet, export)
+			}
 			c.RateLimit = s.GetIntNoErr("rate_limit")
 			c.MaxConn = s.GetIntNoErr("max_conn")
 			c.MaxTunnelNum = s.GetIntNoErr("max_tunnel")

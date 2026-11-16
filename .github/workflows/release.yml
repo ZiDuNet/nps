@@ -64,7 +64,7 @@ jobs:
         run: >-
           go test -race
           ./bridge ./client ./cmd/npc ./cmd/nps
-          ./lib/config ./lib/conn ./lib/file ./lib/install ./lib/connectionlog ./lib/jsonlog
+          ./lib/config ./lib/conn ./lib/file ./lib/fnos ./lib/install ./lib/connectionlog ./lib/jsonlog
           ./server ./server/connection ./server/proxy ./server/tool ./server/usage ./web/...
       - name: Validate formal release source
         if: ${{ github.ref_type == 'tag' || inputs.release_tag != '' }}
@@ -144,6 +144,48 @@ jobs:
           retention-days: 14
 
   # ==================== Docker 镜像 ====================
+  build_fnos:
+    name: fnOS FPK
+    needs: build_assets
+    if: github.ref_type == 'tag' || inputs.release_tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Download CLI assets
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-assets
+          path: cli-assets
+      - name: Prepare npc binaries
+        run: |
+          mkdir -p npc-bin
+          tar -xzf cli-assets/linux_amd64_client.tar.gz -C npc-bin
+          mv npc-bin/npc npc-bin/npc-amd64
+          tar -xzf cli-assets/linux_arm64_client.tar.gz -C npc-bin
+          mv npc-bin/npc npc-bin/npc-arm64
+      - name: Download fnpack
+        run: |
+          mkdir -p tools-cache
+          curl -fsSL -o tools-cache/fnpack https://static2.fnnas.com/fnpack/fnpack-1.2.3-linux-amd64
+          echo "54b97fa7b70968c4d05c79840f5daeff508957d0bb2062fdb0376d00d9615c93  tools-cache/fnpack" | sha256sum -c -
+          chmod +x tools-cache/fnpack
+      - name: Build fnOS FPK packages
+        run: |
+          python3 tools/build-fnos.py \
+            --arch amd64 --arch arm64 \
+            --npc npc-bin/npc-amd64 --npc npc-bin/npc-arm64 \
+            --fnpack tools-cache/fnpack \
+            --output dist/fnos
+          ls -la dist/fnos
+      - name: Upload fnOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fnos-fpk
+          path: dist/fnos/*.fpk
+          if-no-files-found: error
+          retention-days: 14
+
   build_docker:
     needs: validate_release
     if: github.ref_type == 'tag' || inputs.release_tag != ''
@@ -439,7 +481,7 @@ jobs:
   # ==================== 正式 Release 汇总上传 ====================
   publish_release:
     runs-on: ubuntu-latest
-    needs: [build_assets, build_android, build_windows_gui, build_macos_gui, build_linux_gui]
+    needs: [build_assets, build_android, build_windows_gui, build_macos_gui, build_linux_gui, build_fnos]
     if: github.ref_type == 'tag' || inputs.release_tag != ''
     steps:
       - name: Check out code
@@ -468,6 +510,8 @@ jobs:
           cd release-assets
           find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.apk' -o -name '*.zip' \) -print0 \
             | sort -z | xargs -0 -r sha256sum > checksums.txt
+          find . -maxdepth 1 -type f -name '*.fpk' -print0 \
+            | sort -z | xargs -0 -r sha256sum >> checksums.txt
           test -s checksums.txt
       - name: Prepare release notes from changelog
         env:
@@ -503,6 +547,7 @@ jobs:
             release-assets/*.tar.gz
             release-assets/*.apk
             release-assets/*.zip
+            release-assets/*.fpk
             release-assets/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

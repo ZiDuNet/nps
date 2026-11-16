@@ -178,6 +178,37 @@ func (s *Flow) SetLimit(limit int64) {
 	s.Unlock()
 }
 
+// ResetCounters rewrites the persisted usage counters. Administrative resets
+// reuse the same baseline-repair discipline as the legacy-accounting migration:
+// rate samples and baselines must move with the counters or the next Add would
+// report a bogus byte burst and the quota view would lag one interval.
+func (s *Flow) ResetCounters(inlet, export int64) {
+	if s == nil {
+		return
+	}
+	if inlet < 0 {
+		inlet = 0
+	}
+	if export < 0 {
+		export = 0
+	}
+	s.Lock()
+	// The reset writes directional counters, so a legacy record must not be
+	// folded back into LegacyTotal the next time it is loaded.
+	s.AccountingVersion = directionalFlowAccountingVersion
+	s.InletFlow = inlet
+	s.ExportFlow = export
+	// LegacyTotal participates in quota checks (see Exceeded); leaving it set
+	// would keep an already-exhausted client blocked after an admin reset.
+	s.LegacyTotal = 0
+	s.rateSampleAt = time.Time{}
+	s.rateSampleIn = 0
+	s.rateSampleOut = 0
+	s.rateIn = 0
+	s.rateOut = 0
+	s.Unlock()
+}
+
 func (s *Flow) Exceeded() bool {
 	if s == nil {
 		return false

@@ -1694,6 +1694,11 @@ func (s *IndexController) Edit() {
 				s.AjaxErr(limitErr.Error())
 				return
 			}
+			// Usage counters are an enforcement boundary, so ordinary users
+			// must not be able to clear them through the tunnel editor.
+			resetFlowSubmitted := s.IsAdmin() && s.GetBoolNoErr("reset_flow")
+			resetInlet := int64(s.GetIntNoErr("reset_inlet_flow"))
+			resetExport := int64(s.GetIntNoErr("reset_export_flow"))
 			t.RLock()
 			currentMaxConn := t.MaxConn
 			var currentFlowLimitMB int64
@@ -1767,6 +1772,12 @@ func (s *IndexController) Edit() {
 			}
 			t.SetRateLimits(desiredUploadLimit, desiredDownloadLimit)
 			t.MaxConn = desiredMaxConn
+			if resetFlowSubmitted {
+				if t.Flow == nil {
+					t.Flow = file.NewFlow()
+				}
+				t.Flow.ResetCounters(resetInlet, resetExport)
+			}
 			if t.Flow != nil {
 				t.Flow.SetLimit(desiredFlowLimitMB)
 			} else {

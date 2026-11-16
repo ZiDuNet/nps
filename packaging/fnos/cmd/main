@@ -1,0 +1,59 @@
+#!/bin/bash
+source "$(dirname -- "$0")/common"
+prepare_dirs
+command -v flock >/dev/null || { report_error '缺少系统 flock 工具，无法安全管理 NPC 进程。'; exit 1; }
+exec 9> "${TRIM_PKGTMP}/service.lock"
+flock -x 9
+
+case "${1:-}" in
+    start)
+        if npc_running; then exit 0; fi
+        [ -d "$NPC_CONFIG" ] || { report_error 'NPC 配置目录不存在，请在应用设置中配置连接。'; exit 1; }
+        [ ! -L "$NPC_PIDFILE" ] || { report_error 'NPC PID 文件不能是符号链接。'; exit 1; }
+        startup_log="${TRIM_PKGVAR}/startup.log"
+        [ ! -L "$startup_log" ] || { report_error '启动日志不能是符号链接。'; exit 1; }
+        if [ -f "$startup_log" ] && [ "$(stat -c %s -- "$startup_log")" -gt 1048576 ]; then
+            [ ! -L "${startup_log}.1" ] || { report_error '启动日志备份不能是符号链接。'; exit 1; }
+            mv -f -- "$startup_log" "${startup_log}.1"
+        fi
+        touch -- "$startup_log"
+        chmod 600 -- "$startup_log"
+        # Close the lifecycle lock in the child; otherwise it would lock out stop.
+        nohup "$NPC_BINARY" -fnos=run "-fnos-config=$NPC_CONFIG" \
+            "-fnos-socket=${TRIM_APPDEST}/app.sock" "-fnos-gateway=/app/NPC-Pro" \
+            "-fnos-template=${TRIM_APPDEST}/conf/npc.conf.example" \
+            "-log_path=${TRIM_PKGVAR}/npc.log" </dev/null >>"$startup_log" 2>&1 9>&- &
+        pid=$!
+        ticks="$(process_ticks "$pid")" || { report_error '无法读取 NPC 进程身份。'; exit 1; }
+        printf '%s %s\n' "$pid" "$ticks" > "$NPC_PIDFILE"
+        chmod 600 -- "$NPC_PIDFILE"
+        for attempt in 1 2 3 4 5; do
+            sleep 0.2
+            npc_running || { report_error 'NPC 启动失败，请检查应用数据目录中的 startup.log。'; exit 1; }
+        done
+        ;;
+    stop)
+        if npc_running; then
+            kill -TERM "$NPC_PID"
+            for ((attempt=0; attempt<30; attempt++)); do
+                npc_running || break
+                sleep 1
+            done
+            if npc_running; then
+                # Revalidate PID, executable and start ticks immediately before KILL.
+                kill -KILL "$NPC_PID"
+            fi
+        fi
+        if [ -f "$NPC_PIDFILE" ] && [ ! -L "$NPC_PIDFILE" ]; then
+            rm -- "$NPC_PIDFILE"
+        fi
+        ;;
+    status)
+        if npc_running; then exit 0; fi
+        exit 3
+        ;;
+    *)
+        report_error '未知 NPC 应用操作。'
+        exit 1
+        ;;
+esac

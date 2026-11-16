@@ -1,0 +1,6 @@
+#!/bin/bash
+source "$(dirname -- "$0")/common"
+# The install wizard is introduction-only and never collects connection
+# details. Just prepare the writable directories and the npc.conf reference;
+# connections are created afterwards in the embedded desktop Web UI.
+prepare_dirs

@@ -1,0 +1,5 @@
+#!/bin/bash
+source "$(dirname -- "$0")/common"
+# Upgrades never collect wizard input and never overwrite existing VKeys or
+# hand-written npc.conf files; refresh the bundled reference template only.
+prepare_dirs

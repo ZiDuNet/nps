@@ -14,6 +14,13 @@ import (
 
 	npsconf "ehang.io/nps/conf"
 	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/connectionlog"
+	filelib "ehang.io/nps/lib/file"
+	"ehang.io/nps/server"
+	"ehang.io/nps/server/tool"
+	"ehang.io/nps/web/audit"
+	"github.com/astaxie/beego"
+	"github.com/astaxie/beego/logs"
 )
 
 // serverConfigMeta describes the small amount of presentation and validation
@@ -29,6 +36,118 @@ type serverConfigMeta struct {
 	Editable    bool
 	Optional    bool
 	Sensitive   bool
+}
+
+// hotReloadServerConfigKeys lists runtime switches that take effect without a
+// process restart. Handlers read them per request, or applyHotReloadKey pushes
+// the new value into the relevant runtime component. Listener endpoints, TLS
+// material, log adapters, P2P transports and the session store stay restart-
+// only because their values are captured once during startup.
+var hotReloadServerConfigKeys = map[string]struct{}{
+	"allow_ports":                {},
+	"allow_flow_limit":           {},
+	"allow_rate_limit":           {},
+	"allow_connection_num_limit": {},
+	"allow_tunnel_num_limit":     {},
+	"allow_multi_ip":             {},
+	"allow_local_proxy":          {},
+	"allow_user_login":           {},
+	"allow_user_register":        {},
+	"allow_user_change_username": {},
+	"allow_user_vkey_login":      {},
+	"open_captcha":               {},
+	"register_captcha":           {},
+	"register_email_verify":      {},
+	"show_http_proxy_port":       {},
+	"http_proxy_access_port":     {},
+	"https_proxy_access_port":    {},
+	"client_history_limit":       {},
+	"flow_store_interval":        {},
+	"audit_log_path":             {},
+	"connection_log_path":        {},
+}
+
+// applyServerConfigHotReload pushes the newly persisted values into the
+// running process. The values map must come from the file that was just
+// written; beego.AppConfig still holds the startup snapshot until Set is
+// called. Only keys that changed are applied so a no-op save cannot restart
+// background workers or log noise.
+func applyServerConfigHotReload(values map[string]string, changedKeys []string) map[string]interface{} {
+	hot := make(map[string]interface{}, len(changedKeys))
+	for _, key := range changedKeys {
+		if _, supported := hotReloadServerConfigKeys[key]; !supported {
+			continue
+		}
+		value := strings.TrimSpace(values[key])
+		_ = beego.AppConfig.Set(key, value)
+		applyHotReloadKey(key, value)
+		hot[key] = reloadEcho(key, value)
+	}
+	if len(hot) == 0 {
+		return nil
+	}
+	return hot
+}
+
+func reloadEcho(key, value string) string {
+	switch key {
+	case "client_history_limit":
+		return strconv.Itoa(filelib.GetConnectionHistoryLimit())
+	default:
+		return value
+	}
+}
+
+func applyHotReloadKey(key, value string) {
+	switch key {
+	case "allow_ports":
+		tool.InitAllowPort()
+	case "client_history_limit":
+		if limit, err := strconv.Atoi(value); err == nil && limit >= 0 {
+			filelib.SetConnectionHistoryLimit(limit)
+		}
+	case "flow_store_interval":
+		server.RestartFlowStoreTimer()
+	case "audit_log_path":
+		audit.Configure(value)
+	case "connection_log_path":
+		connectionlog.Configure(value)
+	}
+}
+
+// configChangedKeys returns the sorted union of keys whose effective values
+// differ between two parsed INI snapshots. Omitted optional keys count as an
+// empty value, so removing a key is a change like any other.
+func configChangedKeys(before, after map[string]string) []string {
+	keys := make(map[string]struct{}, len(before)+len(after))
+	for key := range before {
+		keys[key] = struct{}{}
+	}
+	for key := range after {
+		keys[key] = struct{}{}
+	}
+	changed := make([]string, 0, len(keys))
+	for key := range keys {
+		if before[key] != after[key] {
+			changed = append(changed, key)
+		}
+	}
+	sort.Strings(changed)
+	return changed
+}
+
+func isHotReloadServerConfigKey(key string) bool {
+	_, supported := hotReloadServerConfigKeys[key]
+	return supported
+}
+
+func hasRestartOnlyChanges(changedKeys []string) bool {
+	for _, key := range changedKeys {
+		if !isHotReloadServerConfigKey(key) {
+			return true
+		}
+	}
+	return false
 }
 
 type serverConfigFieldView struct {
@@ -1339,13 +1458,41 @@ func (s *GlobalController) SaveConfig() {
 		return
 	}
 	s.auditMutation("server_config.update", "nps.conf", 0, 0, "", nil, map[string]string{"changed": strconv.Itoa(len(changed))})
+	hot, restartRequired := applySavedServerConfig(changed)
+	message := "配置已保存，需要重启 NPS 才会生效"
+	if len(changed) == 0 {
+		message = "配置未发生变化"
+	} else if len(hot) > 0 && !restartRequired {
+		message = "配置已保存并即时生效"
+	} else if len(hot) > 0 {
+		message = "配置已保存，部分参数已即时生效，其余需要重启 NPS"
+	}
 	s.Data["json"] = map[string]interface{}{
 		"status":           1,
-		"msg":              "配置已保存，需要重启 NPS 才会生效",
+		"msg":              message,
 		"changed":          changed,
-		"restart_required": len(changed) > 0,
+		"restart_required": restartRequired,
+		"hot_reloaded":     hot,
 	}
 	s.ServeJSON()
+}
+
+// applySavedServerConfig re-reads the just-written file and applies the
+// runtime subset of the changed keys. Re-reading is intentional: the update
+// list contains submitted values, while the file also reflects duplicate-key
+// removal and omitted optional entries.
+func applySavedServerConfig(changedKeys []string) (map[string]interface{}, bool) {
+	if len(changedKeys) == 0 {
+		return nil, false
+	}
+	content, err := os.ReadFile(serverConfigPath())
+	if err != nil {
+		logs.Warn("读取已保存的 nps.conf 失败，跳过热更新：%v", err)
+		return nil, true
+	}
+	values := serverConfigKeyValues(string(content))
+	hot := applyServerConfigHotReload(values, changedKeys)
+	return hot, hasRestartOnlyChanges(changedKeys)
 }
 
 // SaveCertificateConfig updates only fields owned by the certificate settings

@@ -772,30 +772,65 @@ function npsSafeReturnUrl(referrer) {
 }
 
 function submitform(action, url, postdata) {
+	var submitGuard = submitform._active || (submitform._active = {});
+	var recordID = '';
+	if (Array.isArray(postdata)) {
+		for (var fieldIndex = 0; fieldIndex < postdata.length; fieldIndex++) {
+			if (postdata[fieldIndex] && postdata[fieldIndex].name === 'id') {
+				recordID = postdata[fieldIndex].value;
+				break;
+			}
+		}
+	} else if (postdata && typeof postdata === 'object' && postdata.id !== undefined) {
+		recordID = postdata.id;
+	}
+	// Keep the guard per record: list pages reuse one URL for every row, and a
+	// global key would silently drop a legitimate action on another row.
+	var guardKey = url + '|' + action + (recordID === '' ? '' : '|' + recordID);
 	function postForAction(isMutation) {
+		// Rapid double clicks previously produced duplicate tunnel/host/client
+		// records (yisier/nps #334). The in-flight key and the disabled submit
+		// button together close that window.
+		if (submitGuard[guardKey]) return;
 		var form = document.querySelector('form.form-horz');
 		if (!validateNpsForm(form, true)) return;
+		submitGuard[guardKey] = true;
+		var submitButtons = form ? form.querySelectorAll('button[type="button"], button[type="submit"]') : [];
+		var disabledList = [];
+		Array.prototype.forEach.call(submitButtons, function (button) {
+			if (button.disabled) return;
+			button.disabled = true;
+			disabledList.push(button);
+		});
+		function releaseGuard() {
+			delete submitGuard[guardKey];
+			Array.prototype.forEach.call(disabledList, function (button) { button.disabled = false; });
+		}
 		$.ajax({
 			type: "POST",
 			url: url,
 			data: postdata,
 			success: function (res) {
 				npsNotify(res.status ? 'success' : 'error', langreply(res.msg));
-				if (!res.status) return;
+				if (!res.status) { releaseGuard(); return; }
 				if (isMutation) {
 					// List pages refresh in place instead of reloading the whole
 					// document so current filters and scroll position survive.
 					var table = $('#table').data('npsTable');
 					if (table && typeof table.refresh === 'function') {
+						releaseGuard();
 						table.refresh();
 						return;
 					}
+					releaseGuard();
 					document.location.reload();
 				} else {
+					releaseGuard();
 					window.location.href = npsSafeReturnUrl(document.referrer);
 				}
 			},
 			error: function () {
+				releaseGuard();
 				npsNotify('error', npsRequestErrorMessage());
 			}
 		});

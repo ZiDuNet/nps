@@ -40,8 +40,31 @@ jobs:
         run: >-
           go test -race
           ./bridge ./client ./cmd/npc ./cmd/nps
-          ./lib/config ./lib/conn ./lib/file ./lib/install ./lib/connectionlog ./lib/jsonlog
+          ./lib/config ./lib/conn ./lib/file ./lib/fnos ./lib/install ./lib/connectionlog ./lib/jsonlog
           ./server ./server/connection ./server/proxy ./server/tool ./server/usage ./web/...
+
+  packaging:
+    name: Packaging scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate shell lifecycle scripts
+        run: |
+          for script in packaging/fnos/cmd/*; do
+            head -n1 "$script" | grep -q '^#!' || continue
+            bash -n "$script"
+          done
+          test -x packaging/fnos/cmd/main
+          test -x packaging/fnos/cmd/install_callback
+      - name: Validate fnOS wizard JSON fixtures
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          for name in ("upgrade", "uninstall"):
+              data = json.loads((pathlib.Path("packaging/fnos/wizard") / name).read_text())
+              assert isinstance(data, list) and data, name
+          PY
 
   gui-frontend:
     name: GUI frontend

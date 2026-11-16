@@ -128,6 +128,26 @@ func TestCounterDeltaHandlesCounterReset(t *testing.T) {
 	}
 }
 
+func TestNextRandomServerPortSamplesInsideAllowList(t *testing.T) {
+	portsMu.Lock()
+	previous := ports
+	ports = []int{20001, 20002}
+	portsMu.Unlock()
+	t.Cleanup(func() {
+		portsMu.Lock()
+		ports = previous
+		portsMu.Unlock()
+	})
+
+	for index := 0; index < 50; index++ {
+		switch port := nextRandomServerPort(); port {
+		case 20001, 20002:
+		default:
+			t.Fatalf("generated port %d outside the configured allow list", port)
+		}
+	}
+}
+
 func TestVirtualListenerDialPreservesVisitorAddressAndTransfersBytes(t *testing.T) {
 	listener := NewVirtualListener(nil)
 	defer listener.Close()

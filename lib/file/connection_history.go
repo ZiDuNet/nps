@@ -41,6 +41,10 @@ func SetConnectionHistoryLimit(limit int) {
 
 func getConnectionHistoryLimit() int { return int(connectionHistoryLimit.Load()) }
 
+// GetConnectionHistoryLimit exposes the active retention limit for runtime
+// diagnostics without inviting callers to mutate it directly.
+func GetConnectionHistoryLimit() int { return getConnectionHistoryLimit() }
+
 func (h *ConnectionHistory) trimLocked(limit int) {
 	if limit == 0 {
 		h.events = nil

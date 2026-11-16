@@ -524,6 +524,7 @@ func (p *nps) run() (runErr error) {
 
 func run() error {
 	routers.Init()
+	controllers.StartVersionCheckWorker()
 	task := &file.Tunnel{
 		Mode: "webServer",
 	}

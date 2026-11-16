@@ -1330,6 +1330,9 @@ func (s *DbUtils) SaveGlobal(t *Glob) error {
 }
 
 func (s *DbUtils) DelTask(id int) error {
+	if id > 0 {
+		defer s.JsonDb.reclaimPersistentID(&s.JsonDb.TaskIncreaseId, &s.JsonDb.Tasks)
+	}
 	s.JsonDb.Tasks.Delete(id)
 	s.JsonDb.StoreTasksToJsonFile()
 	return nil
@@ -1368,6 +1371,9 @@ func (s *DbUtils) GetTask(id int) (t *Tunnel, err error) {
 func (s *DbUtils) DelHost(id int) error {
 	hostMutationMu.Lock()
 	defer hostMutationMu.Unlock()
+	if id > 0 {
+		defer s.JsonDb.reclaimPersistentID(&s.JsonDb.HostIncreaseId, &s.JsonDb.Hosts)
+	}
 	s.JsonDb.Hosts.Delete(id)
 	s.JsonDb.StoreHostToJsonFile()
 	return nil
@@ -2313,6 +2319,9 @@ func (s *DbUtils) DelClientForUser(id, userID int) error {
 }
 
 func (s *DbUtils) delClientLocked(id int) error {
+	if id > 0 {
+		defer s.JsonDb.reclaimPersistentID(&s.JsonDb.ClientIncreaseId, &s.JsonDb.Clients)
+	}
 	if old, ok := s.JsonDb.Clients.Load(id); ok {
 		if client, valid := old.(*Client); valid && client != nil {
 			client.RLock()

@@ -481,11 +481,12 @@
         }
 
         function applyLatestRelease(release) {
-            if (!release || !release.tag_name) return;
+            if (!release || !release.latest) return;
+            if (release.update_available === false) return;
             var current = parseStableVersion(config.version);
-            var latest = parseStableVersion(release.tag_name);
+            var latest = parseStableVersion(release.latest);
             if (!current || !latest || compareVersions(current, latest) >= 0) return;
-            var latestLabel = String(release.tag_name).trim();
+            var latestLabel = String(release.latest).trim();
             var english = typeof npsIsEnglish === 'function' && npsIsEnglish();
             update.textContent = english ? 'New ' + latestLabel : '有新版本 ' + latestLabel;
             update.hidden = false;
@@ -493,11 +494,12 @@
             indicator.setAttribute('title', english ? 'A newer release is available' : '有新版本，点击查看发布说明');
         }
 
-        var repositoryPath = String(config.repository).split('/').map(function (part) { return encodeURIComponent(part); }).join('/');
-        window.fetch('https://api.github.com/repos/' + repositoryPath + '/releases/latest', {
+        var basePath = String(config.web_base_url || '').replace(/\/+$/, '');
+        var endpoint = basePath + '/global/version-check';
+        window.fetch(endpoint, {
             method: 'GET',
-            headers: { 'Accept': 'application/vnd.github+json' },
-            credentials: 'omit'
+            headers: { 'Accept': 'application/json' },
+            credentials: 'same-origin'
         }).then(function (response) {
             return response.ok ? response.json() : null;
         }).then(applyLatestRelease).catch(function () {});

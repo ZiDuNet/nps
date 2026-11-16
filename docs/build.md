@@ -1,6 +1,6 @@
 # 构建发布
 
-本项目包含服务端 `nps`、命令行客户端 `npc`、GUI 客户端和 Docker 镜像。
+本项目包含服务端 `nps`、命令行客户端 `npc`、GUI 客户端、Docker 镜像和飞牛 fnOS NPC 客户端包。
 
 ## 环境要求
 
@@ -9,6 +9,7 @@
 - Yarn 1.22.22（GUI 前端）
 - Wails v3.0.0-beta.12（GUI 客户端，需与 `cmd/npc/npc-gui/go.mod` 一致）
 - Docker Buildx（Docker 多架构镜像）
+- Python 3（飞牛 FPK 构建脚本）
 
 ## 本地构建
 
@@ -106,6 +107,7 @@ docker build -f Dockerfile.npc -t npc .
 - `config-examples.tar.gz` 配置示例包（不含运行数据、证书和私钥）
 - Android APK 打包
 - Docker 多架构镜像构建与推送
+- NPC 飞牛 fnOS 原生 FPK（仅客户端；不含 NPS 服务端包）
 - Windows/macOS/Linux GUI 客户端打包
 - Release 附件上传
 
@@ -113,9 +115,20 @@ docker build -f Dockerfile.npc -t npc .
 
 普通代码提交不会触发 Docker 发布。`.github/workflows/docker.yml` 仅保留从已有 `v*` 标签手动重跑的兜底入口，正式镜像由 Release 工作流统一推送版本号和 `latest`，避免一次发版生成两套来源不同的镜像标签。
 
-推送与源码版本严格一致的标签（例如源码为 `1.1.45` 时推送 `v1.1.45`）才会运行 Release 工作流并创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；CLI/GUI 自动更新和服务端下发的 NPC 在线升级仍只读取 GitHub 上经过完整校验的最新正式 Release，并按 `lib/version.VERSION` 与 Release tag 比较，不依赖 Docker 标签。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`；Release 的 Docker 构建同时推送版本号镜像（如 `1.1.45`）和 `latest`。因此正式发版只需：先把准备好的代码推送到 `master`，确认版本号后创建并推送对应的 `vX.Y.Z` 标签。也可以在 Actions 页面手动执行 Release 的 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.45`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
+推送与源码版本严格一致的标签（例如源码为 `1.1.46` 时推送 `v1.1.46`）才会运行 Release 工作流并创建 GitHub Release。正式标签必须指向当前 `master` 提交，工作流会在构建前校验版本元数据和核心 Go 测试；CLI/GUI 自动更新和服务端下发的 NPC 在线升级仍只读取 GitHub 上经过完整校验的最新正式 Release，并按 `lib/version.VERSION` 与 Release tag 比较，不依赖 Docker 标签。所有平台产物完成后一次性上传 CLI、Android、GUI 和 `checksums.txt`；Release 的 Docker 构建同时推送版本号镜像（如 `1.1.46`）和 `latest`。因此正式发版只需：先把准备好的代码推送到 `master`，确认版本号后创建并推送对应的 `vX.Y.Z` 标签。也可以在 Actions 页面手动执行 Release 的 `workflow_dispatch`，但 `release_tag` 必须与 `lib/version.VERSION` 对应（例如 `v1.1.46`），并且该标签已推送且指向当前 `master`。Docker 镜像发布需要配置 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN` secrets。
 
 更新器只按 `lib/version.VERSION` 与 GitHub 最新正式 Release 比较，不会从 Docker Hub 的 `latest` 推断版本；因此只有正式标签完成 Release 后，`latest` 才会指向该版本。
+
+### 飞牛 FPK
+
+FPK 只打包 NPC 客户端，使用官方 `fnpack` 1.2.3 和固定 SHA-256 校验。构建脚本从 `conf/npc.conf` 释放完整模板，再把对应架构的静态 `npc` 放入 FPK；模板不会覆盖设备 `etc` 目录中的现有配置。
+
+```bash
+python3 tools/build-fnos.py --fnpack /path/to/fnpack-1.2.3-linux-amd64 --arch amd64
+python3 tools/build-fnos.py --fnpack /path/to/fnpack-1.2.3-linux-amd64 --arch arm64
+```
+
+产物在 `dist/fnos/`，包含 FPK 和外层 SHA-256。流水线只发布这两个 NPC 包；飞牛和 Docker 均通过应用中心或镜像更新，不接受 NPS 服务端下发远程自更新。没有飞牛真机时，CI 只能验证包结构和脚本，不能替代安装、升级和原生向导验收。
 
 GUI 构建由 Wails 3 调用 `wails.json` 中配置的 Yarn 前端流程：
 

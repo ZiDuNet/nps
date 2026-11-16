@@ -67,6 +67,13 @@ var (
 	tlsServerName       = flag.String("tls_server_name", "", "TLS server name")
 	tlsFingerprint      = flag.String("tls_fingerprint", "", "TLS server SHA-256 certificate fingerprint")
 	tlsInsecure         = flag.Bool("tls_insecure_skip_verify", false, "explicitly disable TLS certificate verification")
+	fnosAction          = flag.String("fnos", "", "fnOS package action (run|install|configure|prepare|wizard-install|wizard-config)")
+	fnosConfig          = flag.String("fnos-config", "", "fnOS native npc.conf directory (absolute path)")
+	fnosWizard          = flag.String("fnos-wizard", "", "fnOS native settings wizard (absolute path)")
+	fnosState           = flag.String("fnos-state", "", "fnOS internal per-connection runtime directory")
+	fnosTemplate        = flag.String("fnos-template", "", "fnOS packaged full npc.conf example (absolute path)")
+	fnosSocket          = flag.String("fnos-socket", "", "fnOS embedded settings Unix socket (absolute path)")
+	fnosGateway         = flag.String("fnos-gateway", "/app/NPC-Pro", "fnOS unified gateway prefix")
 )
 
 func currentTLSOptions() client.TLSOptions {
@@ -122,6 +129,13 @@ func main() {
 	logs.SetLogFuncCallDepth(3)
 	if *ver {
 		common.PrintVersion()
+		return
+	}
+	if *fnosAction != "" {
+		if err := fnosMain(*fnosAction, *fnosConfig, *fnosWizard); err != nil {
+			fmt.Fprintln(os.Stderr, "飞牛 NPC：", err)
+			os.Exit(1)
+		}
 		return
 	}
 	loadNpcUpdateReceipt()

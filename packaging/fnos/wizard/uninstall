@@ -1,0 +1,12 @@
+[
+  {
+    "stepTitle": "卸载 NPC",
+    "items": [
+      {"type": "tips", "helpText": "卸载会停止本应用的全部 NPC 连接，不删除 NPS 服务端的客户端和隧道。需要保留 VKey 和连接时，请先备份应用 etc 配置目录中的 npc.conf 和 connections 目录（含密钥，请勿公开）。"},
+      {"type": "radio", "field": "wizard_data_mode", "label": "数据处理方式", "initValue": "keep", "options": [
+        {"label": "仅卸载应用，保留配置和数据", "value": "keep"},
+        {"label": "卸载并清除所有数据（配置、连接、日志，不可恢复）", "value": "purge"}
+      ]}
+    ]
+  }
+]

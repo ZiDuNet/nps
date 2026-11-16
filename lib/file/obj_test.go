@@ -127,3 +127,40 @@ func TestFlowMigratesLegacyMirroredCountersWithoutDoublingQuota(t *testing.T) {
 		t.Fatal("historical and new directional traffic should share the quota")
 	}
 }
+
+func TestFlowResetCountersClearsLegacyQuotaAndRateBaseline(t *testing.T) {
+	flow := &Flow{
+		InletFlow:   5 << 20,
+		ExportFlow:  4 << 20,
+		LegacyTotal: 3 << 20,
+		FlowLimit:   1,
+	}
+	flow.rateSampleAt = time.Now().Add(-time.Second)
+	flow.rateSampleIn = 5 << 20
+	flow.rateSampleOut = 4 << 20
+	flow.rateIn = 1024
+	flow.rateOut = 2048
+
+	flow.ResetCounters(10, 20)
+	inlet, export, limit := flow.Snapshot()
+	if inlet != 10 || export != 20 || limit != 1 {
+		t.Fatalf("reset counters = (%d, %d, limit %d), want (10, 20, 1)", inlet, export, limit)
+	}
+	if legacy := flow.LegacySnapshot(); legacy != 0 {
+		t.Fatalf("legacy total after reset = %d, want 0", legacy)
+	}
+	if flow.AccountingVersion != directionalFlowAccountingVersion {
+		t.Fatalf("accounting version after reset = %d, want %d", flow.AccountingVersion, directionalFlowAccountingVersion)
+	}
+	if flow.Exceeded() {
+		t.Fatal("reset flow must not remain over quota because of legacy usage")
+	}
+	if inRate, outRate := flow.RateSnapshot(); inRate != 0 || outRate != 0 {
+		t.Fatalf("rate after reset = (%d, %d), want zero baseline", inRate, outRate)
+	}
+
+	flow.ResetCounters(-1, -1)
+	if inlet, export, _ := flow.Snapshot(); inlet != 0 || export != 0 {
+		t.Fatalf("negative reset counters = (%d, %d), want zero", inlet, export)
+	}
+}

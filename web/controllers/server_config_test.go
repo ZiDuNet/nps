@@ -535,6 +535,39 @@ func TestSaveServerConfigSourceUsesRevisionAndPreservesContent(t *testing.T) {
 	}
 }
 
+func TestConfigChangedKeysClassifiesHotAndRestartOnlyUpdates(t *testing.T) {
+	before := map[string]string{
+		"allow_ports":         "1000-2000",
+		"flow_store_interval": "1",
+		"web_port":            "8081",
+	}
+	after := map[string]string{
+		"allow_ports":         "3000-4000",
+		"flow_store_interval": "2",
+		"web_port":            "8082",
+	}
+	changed := configChangedKeys(before, after)
+	if strings.Join(changed, ",") != "allow_ports,flow_store_interval,web_port" {
+		t.Fatalf("changed keys = %v", changed)
+	}
+	if !hasRestartOnlyChanges(changed) {
+		t.Fatal("web_port should require a restart")
+	}
+	if !isHotReloadServerConfigKey("allow_ports") || !isHotReloadServerConfigKey("flow_store_interval") {
+		t.Fatal("allow_ports and flow_store_interval should be hot-reloadable")
+	}
+
+	delete(before, "web_port")
+	delete(after, "web_port")
+	changed = configChangedKeys(before, after)
+	if hasRestartOnlyChanges(changed) {
+		t.Fatalf("hot-only changes reported restart required: %v", changed)
+	}
+	if len(configChangedKeys(after, after)) != 0 {
+		t.Fatal("identical snapshots must not report changes")
+	}
+}
+
 func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
 	defaults := serverConfigKeyValues(npsconf.DefaultNpsConf)
 	form := url.Values{}

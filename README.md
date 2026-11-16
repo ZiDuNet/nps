@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.45</sub>
+﻿# NPS <sub>v1.1.46</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -31,6 +31,7 @@ Administrators can create users and assign multiple clients to one user; ordinar
 - 🌐 **Domain Proxy** — Custom headers, URL routing, platform wildcard domain pools, route diagnostics, auto HTTPS and certificate hot reload
 - 🔐 **TLS Encryption** — TLS encrypted communication between client and server
 - 📦 **Docker** — Multi-arch images (amd64/arm/arm64), one-command deployment
+- 🐮 **飞牛 fnOS NPC** — 原生 FPK 客户端包，自动释放并可编辑完整 `npc.conf`；同机支持多个独立 VKey，不提供额外 Web 管理页
 - 🔌 **Open API** — Versioned `/api/v1` for clients, tunnels, hosts, users, global settings and audit, with administrator signatures and scoped user tokens
 - 💻 **GUI Client** — Wails-based desktop client for Windows/macOS/Linux desktop environments
 - ⬆️ **Client maintenance** — Staged downloads and verification, actual service-path updates, GUI connection recovery, and progress/reconnection confirmation; see [update behavior and migration limits](docs/client-update.md)
@@ -201,6 +202,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.46** (2026-11-17) - Added the fnOS (飞牛) native NPC FPK package (NPC-Pro) with an embedded settings page, quick-command/manual forms, direct `npc.conf` editing, multi-VKey sub-process management and rotated logs; FPK and Docker clients disable server-pushed self-update. Server-side config now hot-reloads the supported runtime subset, version checks are cached server-side, and persistent IDs are reclaimed after the last client/tunnel/host is removed. See the [upgrade notes](docs/upgrade-1.1.46.md).
 - **v1.1.45** (2026-11-16) - Added linked-email login and password recovery while registration is open; fixed client-scoped VKey sign-in and audit initialization. The console reads the latest 2,000 journal records with admin-only retention cleanup. Restored user usage trends, added automatic expired-history cleanup and expanded the embedded guide. Old NPC remains compatible. See the [upgrade notes](docs/upgrade-1.1.45.md).
 - **v1.1.44** (2026-11-10) - Completed login-stage, remembered-session and logout auditing with request IDs, browser/IP metadata and trusted ownership. Redesigned Audit and Connections to use the full content area, readable action names, diagnostic columns and copyable raw events. Old NPC and JSONL/API action codes remain compatible. See the [upgrade notes](docs/upgrade-1.1.44.md).
 

@@ -54,6 +54,7 @@ func GetTunnelConn(id int, remote string) (stdnet.Conn, error) {
 
 var (
 	ports            []int
+	portsMu          sync.RWMutex
 	ServerStatus     []map[string]interface{}
 	ServerStatusLock sync.RWMutex
 	// ServerStatusMu is retained for source compatibility. ServerStatusLock is
@@ -75,7 +76,9 @@ func StartSystemInfo() {
 
 func InitAllowPort() {
 	p := beego.AppConfig.String("allow_ports")
+	portsMu.Lock()
 	ports = common.GetPorts(p)
+	portsMu.Unlock()
 }
 
 func TestServerPort(p int, m string) (b bool) {
@@ -85,8 +88,11 @@ func TestServerPort(p int, m string) (b bool) {
 	if p > 65535 || p < 0 {
 		return false
 	}
-	if len(ports) != 0 {
-		if !common.InIntArr(ports, p) {
+	portsMu.RLock()
+	allowList := ports
+	portsMu.RUnlock()
+	if len(allowList) != 0 {
+		if !common.InIntArr(allowList, p) {
 			return false
 		}
 	}
@@ -99,11 +105,13 @@ func TestServerPort(p int, m string) (b bool) {
 }
 
 func GenerateServerPort(m string) int {
+	// When allow_ports is configured, sample inside the whitelist directly. A
+	// full-range probe burns up to 1000 attempts and can exhaust them on a
+	// narrow whitelist even though free ports exist.
 	for i := 0; i < 1000; i++ {
-		//生成随机数 1024 - 65535
-		serverPort := rand.Intn(65535)
-		if serverPort < 1024 {
-			serverPort = 1024
+		serverPort := nextRandomServerPort()
+		if serverPort <= 0 {
+			return 0
 		}
 
 		if TestServerPort(serverPort, m) {
@@ -111,6 +119,21 @@ func GenerateServerPort(m string) int {
 		}
 	}
 	return 0
+}
+
+func nextRandomServerPort() int {
+	portsMu.RLock()
+	allowList := ports
+	portsMu.RUnlock()
+	if len(allowList) > 0 {
+		return allowList[rand.Intn(len(allowList))]
+	}
+	//生成随机数 1024 - 65535
+	serverPort := rand.Intn(65535)
+	if serverPort < 1024 {
+		serverPort = 1024
+	}
+	return serverPort
 }
 
 func getSeverStatus() {

@@ -1,0 +1,54 @@
+#!/bin/bash
+# Sourced only from this package's trusted lifecycle scripts. Never source
+# wizard input, .env or the connection JSON; none of them is executable code.
+set -euo pipefail
+umask 077
+
+PKG_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+: "${TRIM_APPDEST:?Missing TRIM_APPDEST}"
+: "${TRIM_PKGETC:?Missing TRIM_PKGETC}"
+: "${TRIM_PKGVAR:?Missing TRIM_PKGVAR}"
+: "${TRIM_PKGTMP:?Missing TRIM_PKGTMP}"
+NPC_BINARY="${TRIM_APPDEST}/bin/npc"
+NPC_CONFIG="${TRIM_PKGETC}"
+NPC_PIDFILE="${TRIM_PKGTMP}/npc.pid"
+
+report_error() {
+    if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then
+        printf '%s\n' "$1" > "$TRIM_TEMP_LOGFILE"
+    fi
+    printf '%s\n' "$1" >&2
+}
+
+prepare_dirs() {
+    mkdir -p -- "$TRIM_PKGETC" "$TRIM_PKGVAR" "$TRIM_PKGTMP"
+    chmod 700 -- "$TRIM_PKGETC" "$TRIM_PKGVAR" "$TRIM_PKGTMP"
+    if [ ! -e "${TRIM_PKGETC}/npc.conf.example" ]; then
+        [ ! -L "${TRIM_PKGETC}/npc.conf.example" ] || { report_error '配置参考不能是符号链接。'; return 1; }
+        install -m 600 -- "${TRIM_APPDEST}/conf/npc.conf.example" "${TRIM_PKGETC}/npc.conf.example"
+    fi
+}
+
+process_ticks() {
+    # NPC's executable name has no spaces; field 22 is Linux's start time.
+    awk '{print $22}' "/proc/$1/stat" 2>/dev/null
+}
+
+npc_running() {
+    [ -f "$NPC_PIDFILE" ] && [ ! -L "$NPC_PIDFILE" ] || return 1
+    local pid ticks actual_tick actual_exe expected_exe arg found_mode=0 found_config=0
+    read -r pid ticks < "$NPC_PIDFILE" || return 1
+    [[ "$pid" =~ ^[1-9][0-9]*$ && "$ticks" =~ ^[0-9]+$ ]] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    actual_tick="$(process_ticks "$pid")" || return 1
+    [ "$actual_tick" = "$ticks" ] || return 1
+    actual_exe="$(readlink -f -- "/proc/$pid/exe")" || return 1
+    expected_exe="$(readlink -f -- "$NPC_BINARY")" || return 1
+    [ "$actual_exe" = "$expected_exe" ] || return 1
+    while IFS= read -r -d '' arg; do
+        [ "$arg" != '-fnos=run' ] || found_mode=1
+        [ "$arg" != "-fnos-config=$NPC_CONFIG" ] || found_config=1
+    done < "/proc/$pid/cmdline"
+    [ "$found_mode" -eq 1 ] && [ "$found_config" -eq 1 ] || return 1
+    NPC_PID="$pid"
+}

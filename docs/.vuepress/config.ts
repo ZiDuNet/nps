@@ -39,6 +39,7 @@ const sidebar: SidebarConfig = [
       { text: '客户端配置与启动', link: '/client_config.html' },
       { text: '配置文件参考', link: '/client/config-file.html' },
       { text: 'NPC Docker 部署', link: '/client/docker.html' },
+      { text: '飞牛 fnOS 原生包', link: '/client/fnos.html' },
       { text: 'NPC GUI 客户端', link: '/gui.html' },
       { text: '客户端更新与远程升级', link: '/client-update.html' },
     ],

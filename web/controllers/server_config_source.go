@@ -165,6 +165,11 @@ func (s *GlobalController) SaveConfigSource() {
 	}
 	content := s.GetString("content")
 	revision := strings.TrimSpace(s.GetString("revision"))
+	previousContent, readErr := readServerConfigSource(serverConfigPath())
+	if readErr != nil {
+		s.configSourceError(http.StatusInternalServerError, "读取 nps.conf 失败: "+readErr.Error())
+		return
+	}
 	changed, nextRevision, err := saveServerConfigSource(serverConfigPath(), content, revision)
 	if err != nil {
 		if errors.Is(err, errServerConfigSourceConflict) {
@@ -178,15 +183,39 @@ func (s *GlobalController) SaveConfigSource() {
 		"changed": fmt.Sprintf("%t", changed),
 		"bytes":   fmt.Sprintf("%d", len(content)),
 	})
-	message := "源码未发生变化，无需重启 NPS"
 	if changed {
-		message = "配置源码已保存，需要重启 NPS 才会生效"
+		newValues := serverConfigKeyValues(content)
+		changedKeys := configChangedKeys(serverConfigKeyValues(string(previousContent)), newValues)
+		hot := applyServerConfigHotReload(newValues, changedKeys)
+		restartRequired := hasRestartOnlyChanges(changedKeys)
+		message := "配置源码已保存，无需重启 NPS"
+		if restartRequired {
+			message = "配置源码已保存，需要重启 NPS 才会生效"
+		}
+		if len(hot) > 0 && !restartRequired {
+			message = "配置源码已保存并即时生效"
+		} else if len(hot) > 0 {
+			message = "配置源码已保存，部分参数已即时生效，其余需要重启 NPS"
+		}
+		s.Data["json"] = s.withRequestMeta(map[string]interface{}{
+			"status":           1,
+			"msg":              message,
+			"changed":          changed,
+			"restart_required": restartRequired,
+			"hot_reloaded":     hot,
+			"revision":         nextRevision,
+			"size":             len(content),
+			"lines":            strings.Count(content, "\n") + 1,
+		})
+		s.ServeJSON()
+		return
 	}
+	message := "源码未发生变化，无需重启 NPS"
 	s.Data["json"] = s.withRequestMeta(map[string]interface{}{
 		"status":           1,
 		"msg":              message,
 		"changed":          changed,
-		"restart_required": changed,
+		"restart_required": false,
 		"revision":         nextRevision,
 		"size":             len(content),
 		"lines":            strings.Count(content, "\n") + 1,
