@@ -150,6 +150,11 @@ def main() -> None:
                         default=pathlib.Path.home() / ".cache" / "nps-fnos-research.lRfM3X" / "fnpack-1.2.3-linux-amd64")
     parser.add_argument("--keep", type=pathlib.Path, help="保留构建暂存目录")
     args = parser.parse_args()
+    args.fnpack = args.fnpack.resolve()
+    args.output = args.output.resolve()
+    args.npc = [path.resolve() for path in args.npc]
+    if args.keep is not None:
+        args.keep = args.keep.resolve()
     version = source_version()
     args.output.mkdir(parents=True, exist_ok=True)
     if not args.fnpack.exists():
