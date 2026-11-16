@@ -297,6 +297,7 @@ func runFNOSChild(path string) error {
 	kicked := atomic.Bool{}
 	finished := make(chan struct{})
 	var direct *client.TRPClient
+	reconnect := false
 	if entry.Sync {
 		logs.Info("[配置] 检测到规则或 fnos_config_sync=true，使用原生配置文件模式；服务端需允许配置连接")
 		go func() {
@@ -309,6 +310,7 @@ func runFNOSChild(path string) error {
 			return errors.New("npc.conf 加载失败，请检查配置内容")
 		}
 		c := cnf.CommonConfig
+		reconnect = c.AutoReconnection
 		if err := common.SetCustomDNS(c.DnsServer); err != nil {
 			return errors.New("npc.conf DNS 配置无效")
 		}
@@ -334,7 +336,14 @@ func runFNOSChild(path string) error {
 			logs.GetBeeLogger().Close()
 			os.Exit(42)
 		}
-		logs.Info("[配置] 本条运行已结束（可能关闭了 auto_reconnection），等待设置变更")
+		if reconnect {
+			// Exit so the manager recreates this child process and reconnects.
+			// Blocking here would leave the connection permanently down because
+			// the parent is still waiting on cmd.Wait().
+			logs.Info("[配置] 连接已断开，退出并由管理进程自动重连")
+			return nil
+		}
+		logs.Info("[配置] 本条运行已结束（auto_reconnection 已关闭），等待设置变更")
 		<-ctx.Done()
 		return nil
 	}
