@@ -182,3 +182,19 @@ tar -czvf windows_arm64_server.tar.gz nps.exe
 # Publish deployment examples separately from the binary archives. Runtime
 # JSON data, certificates and private keys intentionally stay out of releases.
 tar -czvf config-examples.tar.gz conf/nps.conf conf/npc.conf conf/multi_account.conf conf/README.md
+
+# npsctl CLI. Asset names must match scripts/install-npsctl.sh, which downloads
+# bare binaries named npsctl_<os>_<arch> (plus .exe on Windows).
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -extldflags -static -extldflags -static" -o npsctl_linux_amd64 ./cmd/npsctl
+CGO_ENABLED=0 GOOS=linux GOARCH=386 go build -ldflags "-s -w -extldflags -static -extldflags -static" -o npsctl_linux_386 ./cmd/npsctl
+CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "-s -w -extldflags -static -extldflags -static" -o npsctl_linux_armv7 ./cmd/npsctl
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -extldflags -static -extldflags -static" -o npsctl_linux_arm64 ./cmd/npsctl
+CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -extldflags -static -extldflags -static" -o npsctl_darwin_amd64 ./cmd/npsctl
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w -extldflags -static -extldflags -static" -o npsctl_darwin_arm64 ./cmd/npsctl
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -extldflags -static -extldflags -static" -o npsctl_windows_amd64.exe ./cmd/npsctl
+CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -ldflags "-s -w -extldflags -static -extldflags -static" -o npsctl_windows_386.exe ./cmd/npsctl
+CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -ldflags "-s -w -extldflags -static -extldflags -static" -o npsctl_windows_arm64.exe ./cmd/npsctl
+
+# Bundled NPS Skill package, rooted at nps/ to mirror /skill/nps.tar.gz so the
+# panel's "download address 2" resolves from GitHub Releases.
+tar -czvf nps-skill.tar.gz -C web/skills nps

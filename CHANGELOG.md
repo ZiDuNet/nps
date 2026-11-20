@@ -2,6 +2,20 @@
 
 所有重要变更记录在此。
 
+## [1.1.48] - 2026-11-20
+
+### Added
+
+- 登录改为无状态挑战（`/auth/challenge`），替代会话 nonce，修复 Nginx 反代缓存或多实例部署下反复出现 `login_expired` 的问题。
+- 新增 MCP 服务端（`/mcp`，`mcp_enabled` 开关），供 AI Agent 通过 Model Context Protocol 接入平台数据。
+- 新增 npsctl 命令行工具与一键安装脚本 `scripts/install-npsctl.sh`。
+- 新增内置 NPS Skill（`/skill/nps.tar.gz` 下载端点），发布时同步产出 `nps-skill.tar.gz` 供 GitHub Releases 直接下载。
+- “账户管理”更名为“接入与安全”，页面 Tab 化并新增 Agent 接入说明（Skill / CLI / MCP 一键复制）。
+
+### Changed
+
+- 发布流水线补齐 npsctl 各平台二进制与 `nps-skill.tar.gz` 的构建、校验和与发布资产。
+
 ## [1.1.47] - 2026-11-17
 
 ### Fixed

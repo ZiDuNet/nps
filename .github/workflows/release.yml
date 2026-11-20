@@ -119,6 +119,8 @@ jobs:
             *_server.tar.gz
             npc_sdk.tar.gz
             config-examples.tar.gz
+            npsctl_*
+            nps-skill.tar.gz
           if-no-files-found: error
           retention-days: 14
 
@@ -508,7 +510,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd release-assets
-          find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.apk' -o -name '*.zip' \) -print0 \
+          find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.apk' -o -name '*.zip' -o -name 'npsctl_*' \) -print0 \
             | sort -z | xargs -0 -r sha256sum > checksums.txt
           find . -maxdepth 1 -type f -name '*.fpk' -print0 \
             | sort -z | xargs -0 -r sha256sum >> checksums.txt
@@ -548,6 +550,7 @@ jobs:
             release-assets/*.apk
             release-assets/*.zip
             release-assets/*.fpk
+            release-assets/npsctl_*
             release-assets/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
