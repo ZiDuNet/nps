@@ -54,8 +54,21 @@ func GetInstallPath() string {
 	return path
 }
 
-// Get the absolute path to the running directory
+// GetAppPath returns the directory containing the running executable.
+//
+// It prefers os.Executable so the result stays correct when the binary is
+// launched from PATH (os.Args[0] may be just the bare command name) or by a
+// system service whose working directory is unrelated to the binary location.
+// The os.Args[0] branch is kept as a fallback for platforms or sandboxes where
+// the real executable path is unavailable (for example /proc not mounted on
+// Linux).
 func GetAppPath() string {
+	if exe, err := os.Executable(); err == nil {
+		if abs, err := filepath.Abs(filepath.Dir(exe)); err == nil {
+			return abs
+		}
+		return filepath.Dir(exe)
+	}
 	if path, err := filepath.Abs(filepath.Dir(os.Args[0])); err == nil {
 		return path
 	}
