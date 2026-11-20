@@ -1,6 +1,9 @@
 package web
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -8,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
@@ -18,6 +22,9 @@ var StaticFS embed.FS
 
 //go:embed views
 var ViewsFS embed.FS
+
+//go:embed skills
+var SkillsFS embed.FS
 
 // obsoleteStaticAssets lists files removed from the embedded bundle. Upgraded
 // installations keep a copy in the runtime web directory, so remove the known
@@ -65,6 +72,57 @@ func ReadStaticFile(name string) ([]byte, error) {
 	name = strings.ReplaceAll(name, "\\", "/")
 	name = path.Clean("/" + strings.TrimPrefix(name, "/"))
 	return StaticFS.ReadFile(path.Join("static", strings.TrimPrefix(name, "/")))
+}
+
+// SkillPackageTarGz returns the bundled nps Skill as a gzipped tarball whose
+// entries are rooted at "nps/". It is served by the /skill/nps.tar.gz endpoint
+// so users can install the Skill without cloning the repository.
+func SkillPackageTarGz() ([]byte, error) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	now := time.Now()
+	if err := fs.WalkDir(SkillsFS, "skills", func(name string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		data, err := SkillsFS.ReadFile(name)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel("skills", name)
+		if err != nil {
+			return err
+		}
+		header := &tar.Header{
+			Name:    filepath.ToSlash(rel),
+			Mode:    0644,
+			Size:    int64(len(data)),
+			ModTime: now,
+		}
+		if strings.HasSuffix(header.Name, ".sh") {
+			header.Mode = 0755
+		}
+		if err := tw.WriteHeader(header); err != nil {
+			return err
+		}
+		if _, err := tw.Write(data); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 type slashFileSystem struct{ fs http.FileSystem }

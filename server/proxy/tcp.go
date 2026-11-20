@@ -21,6 +21,7 @@ import (
 	"ehang.io/nps/bridge"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/conn"
+	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/instancekey"
 	"ehang.io/nps/server/connection"
@@ -190,6 +191,9 @@ func (s *WebServer) Start() error {
 	if err := configureWebSessionSecurity(useTLS); err != nil {
 		return err
 	}
+	if err := configureLoginChallengeKey(); err != nil {
+		return err
+	}
 	web.InitBeegoAssets()
 	beego.InitBeforeHTTPRun()
 	handler := beego.BeeApp.Handlers
@@ -267,13 +271,7 @@ func configureWebSessionSecurity(useTLS bool) error {
 	if strings.TrimSpace(beego.AppConfig.String("sessionConfig")) != "" {
 		return nil
 	}
-	keyPath := strings.TrimSpace(beego.AppConfig.String("instance_key_file"))
-	if keyPath == "" {
-		keyPath = filepath.Join(common.GetRunPath(), "conf", "instance.key")
-	} else if !filepath.IsAbs(keyPath) {
-		keyPath = filepath.Join(common.GetRunPath(), keyPath)
-	}
-	key, err := instancekey.LoadOrCreate(keyPath)
+	key, err := instancekey.LoadOrCreate(resolveInstanceKeyPath())
 	if err != nil {
 		return err
 	}
@@ -308,8 +306,8 @@ func configureWebSessionSecurity(useTLS bool) error {
 		// SessionStart otherwise emits a temporary unsigned-looking session id
 		// before the cookie provider serializes the encrypted state. That creates
 		// duplicate Set-Cookie headers and some reverse proxies keep the first
-		// value, losing the login nonce. The deferred/manual SessionRelease calls
-		// below are responsible for the single encrypted cookie.
+		// value. Explicit SessionRelease calls emit the single encrypted cookie
+		// while the response headers are still writable.
 		"enableSetCookie": false,
 		"gclifetime":      beego.BConfig.WebConfig.Session.SessionGCMaxLifetime,
 		"maxLifetime":     beego.BConfig.WebConfig.Session.SessionGCMaxLifetime,
@@ -325,6 +323,33 @@ func configureWebSessionSecurity(useTLS bool) error {
 	}
 	beego.BConfig.WebConfig.Session.SessionProvider = "cookie"
 	return nil
+}
+
+// configureLoginChallengeKey derives the Web login challenge HMAC key from the
+// same installation-local instance key used for session cookies. Keeping it
+// persistent means a signed login challenge remains valid across panel restarts.
+func configureLoginChallengeKey() error {
+	key, err := instancekey.LoadOrCreate(resolveInstanceKeyPath())
+	if err != nil {
+		return err
+	}
+	challengeKey, err := key.DeriveKey("web-login-challenge", 32)
+	if err != nil {
+		return err
+	}
+	crypt.SetLoginChallengeKey(challengeKey)
+	return nil
+}
+
+func resolveInstanceKeyPath() string {
+	keyPath := strings.TrimSpace(beego.AppConfig.String("instance_key_file"))
+	if keyPath == "" {
+		return filepath.Join(common.GetRunPath(), "conf", "instance.key")
+	}
+	if !filepath.IsAbs(keyPath) {
+		return filepath.Join(common.GetRunPath(), keyPath)
+	}
+	return keyPath
 }
 
 func newManagedHTTPServer(handler http.Handler) *http.Server {

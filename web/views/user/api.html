@@ -1,10 +1,10 @@
 <link href="{{.web_base_url}}/static/css/nps-account.css?v={{.version}}&ui=20261106-1" rel="stylesheet">
 
-<main class="wrapper wrapper-content dashboard-page account-page" aria-label="账户管理" data-aria-label-zh="账户管理" data-aria-label-en="Account management">
+<main class="wrapper wrapper-content dashboard-page account-page" aria-label="接入与安全" data-aria-label-zh="接入与安全" data-aria-label-en="Access and security">
     <header class="dashboard-page-header">
         <div>
             <div class="dashboard-page-kicker" data-i18n-zh="账号安全与系统接入" data-i18n-en="Account security and integration">账号安全与系统接入</div>
-            <h1 data-i18n-zh="账户管理" data-i18n-en="Account management">账户管理</h1>
+            <h1 data-i18n-zh="接入与安全" data-i18n-en="Access and security">接入与安全</h1>
             <p data-i18n-zh="集中管理 API 凭证、登录设备与账号安全。" data-i18n-en="Manage API credentials, signed-in devices and account security.">集中管理 API 凭证、登录设备与账号安全。</p>
         </div>
         <div class="dashboard-page-actions">
@@ -55,6 +55,13 @@
         </div>
     </section>
 
+    <nav class="account-tabs" role="tablist" aria-label="接入与安全">
+        <button type="button" class="account-tab is-active" role="tab" aria-selected="true" data-tab="credentials" data-i18n-zh="访问凭证" data-i18n-en="Credentials">访问凭证</button>
+        <button type="button" class="account-tab" role="tab" aria-selected="false" data-tab="devices" data-i18n-zh="登录设备" data-i18n-en="Devices">登录设备</button>
+        <button type="button" class="account-tab" role="tab" aria-selected="false" data-tab="developers" data-i18n-zh="Agent 接入" data-i18n-en="Agent access">Agent 接入</button>
+    </nav>
+
+    <div class="account-tab-panel is-active" id="tab-credentials" role="tabpanel" aria-labelledby="tab-credentials">
     <div class="account-workbench{{if eq false .isAdmin}} account-workbench--single{{end}}">
         <section class="account-surface account-credentials" aria-labelledby="account-credentials-title">
             <header class="account-section-head">
@@ -235,7 +242,9 @@
         </aside>
         {{end}}
     </div>
+    </div>
 
+    <div class="account-tab-panel" id="tab-devices" role="tabpanel" aria-labelledby="tab-devices" hidden>
     <section class="account-surface account-sessions api-session-security" aria-labelledby="account-sessions-title">
         <header class="account-section-head account-sessions__head">
             <div>
@@ -259,20 +268,129 @@
             </div>
         </div>
     </section>
+    </div>
 
-    <section class="account-surface account-api-guide" aria-labelledby="account-api-guide-title">
-        <div class="account-api-guide__copy">
-            <span class="account-section-head__eyebrow" data-i18n-zh="INTEGRATION" data-i18n-en="INTEGRATION">INTEGRATION</span>
-            <h2 id="account-api-guide-title" data-i18n-zh="接口鉴权方式" data-i18n-en="API authentication">接口鉴权方式</h2>
-            <p data-i18n-zh="管理员密钥使用时间戳签名，时间差需在 20 秒内；用户 Token 通过 Bearer 头或 api_token 参数传递。" data-i18n-en="Administrator keys use a timestamp signature valid for 20 seconds. User tokens are passed through the Bearer header or api_token parameter.">管理员密钥使用时间戳签名，时间差需在 20 秒内；用户 Token 通过 Bearer 头或 api_token 参数传递。</p>
-            <a class="account-api-guide__link" href="https://github.com/{{.github_repository}}" target="_blank" rel="noopener noreferrer"><i class="fa fa-external-link" aria-hidden="true"></i><span data-i18n-zh="查看完整接口说明" data-i18n-en="View the complete API documentation">查看完整接口说明</span></a>
+    <div class="account-tab-panel" id="tab-developers" role="tabpanel" aria-labelledby="tab-developers" hidden>
+    <section class="account-surface account-dev" aria-labelledby="account-dev-title">
+        <header class="account-section-head account-dev__head">
+            <div>
+                <span class="account-section-head__eyebrow" data-i18n-zh="AGENT ACCESS" data-i18n-en="AGENT ACCESS">AGENT ACCESS</span>
+                <h2 id="account-dev-title" data-i18n-zh="Agent 接入" data-i18n-en="Agent access">Agent 接入</h2>
+                <p data-i18n-zh="通过 CLI、Skill 或 MCP 把平台能力接入脚本与 AI Agent。三者统一使用上面的 Token / API Key 作为凭据；管理员密钥走时间戳签名，用户 Token 走 Bearer 头。" data-i18n-en="Connect scripts and AI agents through the CLI, Skill or MCP. All three use the token or API key above; administrator keys use timestamp signatures and user tokens use a Bearer header.">通过 CLI、Skill 或 MCP 把平台能力接入脚本与 AI Agent。三者统一使用上面的 Token / API Key 作为凭据；管理员密钥走时间戳签名，用户 Token 走 Bearer 头。</p>
+            </div>
+        </header>
+        <div class="account-dev-grid">
+            <article class="account-dev-card">
+                <div class="account-dev-card__head">
+                    <span class="account-dev-card__icon" aria-hidden="true"><i class="fa fa-terminal"></i></span>
+                    <div>
+                        <h3 data-i18n-zh="npsctl CLI" data-i18n-en="npsctl CLI">npsctl CLI</h3>
+                        <p data-i18n-zh="命令行管理客户端、隧道、域名反代、用户与审计。" data-i18n-en="Manage clients, tunnels, hosts, users and audit from the terminal.">命令行管理客户端、隧道、域名反代、用户与审计。</p>
+                    </div>
+                </div>
+                <pre class="account-dev-card__code"><code id="npsctl-snippet">curl -fsSL https://raw.githubusercontent.com/{{.github_repository}}/master/scripts/install-npsctl.sh | bash</code></pre>
+                <div class="account-dev-card__actions">
+                    <button type="button" class="btn btn-outline btn-primary" id="npsctl-copy"><i class="fa fa-copy" aria-hidden="true"></i><span data-i18n-zh="复制安装命令" data-i18n-en="Copy install">复制安装命令</span></button>
+                    <button type="button" class="btn btn-outline" data-guide="cli"><i class="fa fa-question-circle" aria-hidden="true"></i><span data-i18n-zh="使用说明" data-i18n-en="How to use">使用说明</span></button>
+                </div>
+            </article>
+
+            <article class="account-dev-card">
+                <div class="account-dev-card__head">
+                    <span class="account-dev-card__icon" aria-hidden="true"><i class="fa fa-puzzle-piece"></i></span>
+                    <div>
+                        <h3 data-i18n-zh="NPS Skill" data-i18n-en="NPS Skill">NPS Skill</h3>
+                        <p data-i18n-zh="面向 Codex / Claude 的本地技能，可引导部署 NPC 与生成接入配置。" data-i18n-en="A local skill for Codex / Claude that guides NPC deployment and access configuration.">面向 Codex / Claude 的本地技能，可引导部署 NPC 与生成接入配置。</p>
+                    </div>
+                </div>
+                <pre class="account-dev-card__code"><code id="skill-snippet">请接入 NPS Pro 管理我的资源：
+下载地址1：<span class="dev-server">http://127.0.0.1:8081</span>/skill/nps.tar.gz
+下载地址2：<span class="skill-release-url">https://github.com/{{.github_repository}}/releases/latest/download/nps-skill.tar.gz</span>
+服务器：<span class="dev-server">http://127.0.0.1:8081</span>
+Token：<span class="dev-token">YOUR_TOKEN</span></code></pre>
+                <div class="account-dev-card__actions">
+                    <button type="button" class="btn btn-outline btn-primary" id="skill-copy"><i class="fa fa-copy" aria-hidden="true"></i><span data-i18n-zh="复制给 Agent" data-i18n-en="Copy for agent">复制给 Agent</span></button>
+                    <button type="button" class="btn btn-outline" data-guide="skill"><i class="fa fa-question-circle" aria-hidden="true"></i><span data-i18n-zh="使用说明" data-i18n-en="How to use">使用说明</span></button>
+                </div>
+            </article>
+
+            <article class="account-dev-card">
+                <div class="account-dev-card__head">
+                    <span class="account-dev-card__icon" aria-hidden="true"><i class="fa fa-robot"></i></span>
+                    <div>
+                        <h3 data-i18n-zh="MCP 接入" data-i18n-en="MCP access">MCP 接入</h3>
+                        <p data-i18n-zh="AI Agent 通过 /mcp 端点直接调用平台能力，工具即接口。" data-i18n-en="AI agents call the /mcp endpoint directly; every tool is an interface.">AI Agent 通过 /mcp 端点直接调用平台能力，工具即接口。</p>
+                    </div>
+                </div>
+                <div id="mcp-token-hint" class="account-mcp-hint" hidden>
+                    <i class="fa fa-info-circle" aria-hidden="true"></i>
+                    <span data-i18n-zh="还没有可用的 Token，请先在上方生成用户 API Token 后再复制配置。" data-i18n-en="No token is available yet. Generate a user API token above before copying the configuration.">还没有可用的 Token，请先在上方生成用户 API Token 后再复制配置。</span>
+                </div>
+                <pre class="account-dev-card__code"><code id="mcp-servers-json">{
+  "mcpServers": {
+    "nps": {
+      "url": "<span class="mcp-url">http://127.0.0.1:8081/mcp</span>",
+      "headers": {
+        "Authorization": "Bearer <span class="mcp-token">YOUR_TOKEN</span>"
+      }
+    }
+  }
+}</code></pre>
+                <div class="account-dev-card__actions">
+                    <button type="button" class="btn btn-outline btn-primary" id="mcp-config-copy"><i class="fa fa-copy" aria-hidden="true"></i><span data-i18n-zh="复制配置" data-i18n-en="Copy configuration">复制配置</span></button>
+                    <button type="button" class="btn btn-outline" data-guide="mcp"><i class="fa fa-question-circle" aria-hidden="true"></i><span data-i18n-zh="使用说明" data-i18n-en="How to use">使用说明</span></button>
+                </div>
+            </article>
         </div>
-        <pre class="account-api-guide__code"><code>auth_key = md5(key + timestamp)
-GET/POST /index/clientlist?auth_key=&lt;签名&gt;&amp;timestamp=&lt;unix 秒&gt;
-
-Authorization: Bearer npsu_xxx</code></pre>
     </section>
+    </div>
 </main>
+
+<div id="dev-guide-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="dev-guide-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+        <div class="modal-content nps-password-modal">
+            <div class="modal-header">
+                <div><div class="nps-modal-kicker" data-i18n-zh="HOW TO USE" data-i18n-en="HOW TO USE">HOW TO USE</div><h2 id="dev-guide-title" class="modal-title" data-i18n-zh="使用说明" data-i18n-en="How to use">使用说明</h2></div>
+                <button type="button" class="nps-modal-close" data-bs-dismiss="modal" aria-label="关闭" data-aria-label-zh="关闭" data-aria-label-en="Close"><i class="fa fa-times" aria-hidden="true"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="guide-cli" class="dev-guide" hidden>
+                    <h3 data-i18n-zh="npsctl CLI 安装与使用" data-i18n-en="npsctl CLI">npsctl CLI 安装与使用</h3>
+                    <p data-i18n-zh="npsctl 是 NPS Pro 的命令行工具，用于管理客户端、隧道、域名反代、用户与审计。" data-i18n-en="npsctl is the NPS Pro command-line tool for managing clients, tunnels, hosts, users and audit.">npsctl 是 NPS Pro 的命令行工具，用于管理客户端、隧道、域名反代、用户与审计。</p>
+                    <h4 data-i18n-zh="安装" data-i18n-en="Install">安装</h4>
+                    <pre class="account-dev-card__code"><code>curl -fsSL https://raw.githubusercontent.com/{{.github_repository}}/master/scripts/install-npsctl.sh | bash</code></pre>
+                    <p data-i18n-zh="脚本会自动识别系统与架构，下载到 ~/.local/bin 并加入 PATH；GitHub 不可达时自动切换国内镜像。也可在 GitHub Release 手动下载对应平台二进制。" data-i18n-en="The script detects your OS and architecture, installs to ~/.local/bin and updates PATH, falling back to a mirror when GitHub is unreachable. Binaries are also on GitHub Releases.">脚本会自动识别系统与架构，下载到 ~/.local/bin 并加入 PATH；GitHub 不可达时自动切换国内镜像。也可在 GitHub Release 手动下载对应平台二进制。</p>
+                    <h4 data-i18n-zh="使用" data-i18n-en="Usage">使用</h4>
+                    <pre class="account-dev-card__code"><code>npsctl --server <span class="dev-server">http://127.0.0.1:8081</span> --token <span class="dev-token">YOUR_TOKEN</span> clients
+npsctl --server <span class="dev-server">http://127.0.0.1:8081</span> --token <span class="dev-token">YOUR_TOKEN</span> client get 3
+npsctl --server <span class="dev-server">http://127.0.0.1:8081</span> --token <span class="dev-token">YOUR_TOKEN</span> mcp</code></pre>
+                    <p data-i18n-zh="普通用户用 --token 传用户 Token；管理员可用 --key 传 auth_key（自动时间戳签名）。完整命令见 npsctl 帮助。" data-i18n-en="Users pass --token; administrators may pass --key for automatic timestamp signing. Run npsctl for the full command list.">普通用户用 --token 传用户 Token；管理员可用 --key 传 auth_key（自动时间戳签名）。完整命令见 npsctl 帮助。</p>
+                </div>
+                <div id="guide-skill" class="dev-guide" hidden>
+                    <h3 data-i18n-zh="NPS Skill 安装与使用" data-i18n-en="NPS Skill">NPS Skill 安装与使用</h3>
+                    <p data-i18n-zh="Skill 是给 Codex / Claude 的本地技能，能让 Agent 理解并操作 NPS Pro，例如部署 NPC、管理隧道与域名反代。" data-i18n-en="A Skill teaches Codex / Claude how to operate NPS Pro, such as deploying NPC and managing tunnels and hosts.">Skill 是给 Codex / Claude 的本地技能，能让 Agent 理解并操作 NPS Pro，例如部署 NPC、管理隧道与域名反代。</p>
+                    <h4 data-i18n-zh="最快方式" data-i18n-en="Quickest">最快方式</h4>
+                    <p data-i18n-zh="点击卡片上的「复制给 Agent」，把提示词直接丢给 Codex / Claude，它会自己下载安装并使用你的 Token 干活。" data-i18n-en="Click Copy for agent and paste the prompt into Codex / Claude; it will install the Skill and use your token.">点击卡片上的「复制给 Agent」，把提示词直接丢给 Codex / Claude，它会自己下载安装并使用你的 Token 干活。</p>
+                    <h4 data-i18n-zh="下载地址" data-i18n-en="Download">下载地址</h4>
+                    <pre class="account-dev-card__code"><code>地址1：<span class="dev-server">http://127.0.0.1:8081</span>/skill/nps.tar.gz
+地址2：https://github.com/{{.github_repository}}/releases/latest/download/nps-skill.tar.gz</code></pre>
+                    <p data-i18n-zh="安装位置由 Agent 自行判断；如需手动安装，Codex 使用 ~/.codex/skills，Claude 使用 ~/.claude/skills，其他 Agent 按其自身规范放置即可。" data-i18n-en="The agent decides where to install the skill. For manual installs, Codex uses ~/.codex/skills, Claude uses ~/.claude/skills, and other agents follow their own conventions.">安装位置由 Agent 自行判断；如需手动安装，Codex 使用 ~/.codex/skills，Claude 使用 ~/.claude/skills，其他 Agent 按其自身规范放置即可。</p>
+                </div>
+                <div id="guide-mcp" class="dev-guide" hidden>
+                    <h3 data-i18n-zh="MCP 接入配置" data-i18n-en="MCP access">MCP 接入配置</h3>
+                    <p data-i18n-zh="MCP 让 AI Agent 通过 /mcp 端点直接调用平台能力，无需理解 HTTP 细节。Agent 使用你的 Token 作为 Bearer 凭证，权限与账号一致。" data-i18n-en="MCP lets AI agents call platform capabilities through /mcp. The agent uses your token as a Bearer credential with the same account scope.">MCP 让 AI Agent 通过 /mcp 端点直接调用平台能力，无需理解 HTTP 细节。Agent 使用你的 Token 作为 Bearer 凭证，权限与账号一致。</p>
+                    <h4 data-i18n-zh="配置" data-i18n-en="Configure">配置</h4>
+                    <p data-i18n-zh="点击「复制配置」，把 mcpServers JSON 粘贴到 Codex / Claude 的 MCP 配置中即可。" data-i18n-en="Copy the mcpServers JSON into your Codex / Claude MCP configuration.">点击「复制配置」，把 mcpServers JSON 粘贴到 Codex / Claude 的 MCP 配置中即可。</p>
+                    <h4 data-i18n-zh="能力" data-i18n-en="Capabilities">能力</h4>
+                    <p data-i18n-zh="只读：仪表盘、客户端、隧道、域名反代；维护：客户端/隧道/域名反代的创建、修改、删除与启停。管理员额外可读用户、审计与全局配置。" data-i18n-en="Read: dashboard, clients, tunnels, hosts. Write: create, update, delete and toggle clients, tunnels and hosts. Administrators additionally read users, audit and global config.">只读：仪表盘、客户端、隧道、域名反代；维护：客户端/隧道/域名反代的创建、修改、删除与启停。管理员额外可读用户、审计与全局配置。</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" data-bs-dismiss="modal" data-i18n-zh="关闭" data-i18n-en="Close">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div id="config-key-password-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="config-key-password-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-sm" role="document">
@@ -530,6 +648,71 @@ $(function () {
             .text(localized(copy[0], copy[1]));
     }
 
+    function refreshMCPConfig() {
+        var token = ($('#admin-api-value').val() || $('#user-api-value').val() || '').trim();
+        var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+        $('#mcp-servers-json .mcp-url').text(origin + '/mcp');
+        $('#mcp-servers-json .mcp-token').text(token || 'YOUR_TOKEN');
+        $('.dev-server').text(origin);
+        $('.dev-token').text(token || 'YOUR_TOKEN');
+        $('#mcp-token-hint').prop('hidden', Boolean(token));
+    }
+    $('#npsctl-copy').on('click', function () {
+        npsCopyText($('#npsctl-snippet').text().trim(), localized('安装命令已复制', 'Install command copied'));
+    });
+    $('#skill-copy').on('click', function () {
+        var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+        var token = ($('#admin-api-value').val() || $('#user-api-value').val() || '').trim();
+        if (!token) {
+            npsNotify('warning', localized('请先生成 Token', 'Generate a token first'));
+            return;
+        }
+        var release = $('.skill-release-url').text().trim();
+        npsCopyText(
+            '请接入 NPS Pro 管理我的资源：\n' +
+            '下载地址1：' + origin + '/skill/nps.tar.gz\n' +
+            '下载地址2：' + release + '\n' +
+            '服务器：' + origin + '\n' +
+            'Token：' + token,
+            localized('提示词已复制，丢给 Agent 即可', 'Prompt copied, paste it to your agent')
+        );
+    });
+    $('#mcp-config-copy').on('click', function () {
+        var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+        var token = ($('#admin-api-value').val() || $('#user-api-value').val() || '').trim();
+        if (!token) {
+            npsNotify('warning', localized('请先生成 Token', 'Generate a token first'));
+            return;
+        }
+        var config = {
+            mcpServers: {
+                nps: {
+                    url: origin + '/mcp',
+                    headers: { Authorization: 'Bearer ' + token }
+                }
+            }
+        };
+        npsCopyText(JSON.stringify(config, null, 2), localized('MCP 配置已复制', 'MCP configuration copied'));
+    });
+
+    $('.account-tab').on('click', function () {
+        var tab = $(this).data('tab');
+        $('.account-tab').removeClass('is-active').attr('aria-selected', 'false');
+        $(this).addClass('is-active').attr('aria-selected', 'true');
+        $('.account-tab-panel').removeClass('is-active').prop('hidden', true);
+        $('#tab-' + tab).addClass('is-active').prop('hidden', false);
+    });
+
+    $('[data-guide]').on('click', function () {
+        var key = $(this).data('guide');
+        $('.dev-guide').prop('hidden', true);
+        $('#guide-' + key).prop('hidden', false);
+        var modalEl = document.getElementById('dev-guide-modal');
+        if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+            window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+    });
+
     function refreshUserAPIKey() {
         $.get(base + '/user/apikeystatus', function (response) {
             var enabled = Boolean(response && response.enabled);
@@ -537,6 +720,7 @@ $(function () {
             var token = enabled && response.token ? response.token : '';
             $('#user-api-value').val(token);
             $('#user-api-result').prop('hidden', !token);
+            refreshMCPConfig();
         }, 'json').fail(function () {
             setCredentialStatus('#user-api-status', 'error');
         });
@@ -548,6 +732,7 @@ $(function () {
             $('#user-api-value').val(response.token || '');
             $('#user-api-result').prop('hidden', false);
             setCredentialStatus('#user-api-status', 'enabled');
+            refreshMCPConfig();
             npsNotify('success', response.msg || localized('Token 已生成', 'Token generated'));
         }).always(function () { button.disabled = false; });
     });
@@ -558,6 +743,7 @@ $(function () {
             $('#user-api-value').val('');
             $('#user-api-result').prop('hidden', true);
             setCredentialStatus('#user-api-status', 'empty');
+            refreshMCPConfig();
             npsNotify('success', response.msg || localized('Token 已撤销', 'Token revoked'));
         }).always(function () { button.disabled = false; });
     });
@@ -570,6 +756,7 @@ $(function () {
             var token = enabled && response.token ? response.token : '';
             $('#admin-api-value').val(token);
             $('#admin-api-result').prop('hidden', !token);
+            refreshMCPConfig();
         }, 'json').fail(function () {
             setCredentialStatus('#admin-api-status', 'error');
         });
@@ -581,6 +768,7 @@ $(function () {
             $('#admin-api-value').val(response.token || '');
             $('#admin-api-result').prop('hidden', false);
             setCredentialStatus('#admin-api-status', 'enabled');
+            refreshMCPConfig();
             npsNotify('success', response.msg || localized('管理员 API 密钥已生成', 'Administrator API key generated'));
         }).always(function () { button.disabled = false; });
     });
@@ -591,6 +779,7 @@ $(function () {
             $('#admin-api-value').val('');
             $('#admin-api-result').prop('hidden', true);
             setCredentialStatus('#admin-api-status', 'empty');
+            refreshMCPConfig();
             npsNotify('success', response.msg || localized('管理员 API 密钥已撤销', 'Administrator API key revoked'));
         }).always(function () { button.disabled = false; });
     });

@@ -53,6 +53,7 @@ func configureAuthAuditTest(t *testing.T) string {
 	})
 	loginAttempts.removeAllBans()
 	useClientPermissionTestDb(t)
+	crypt.SetLoginChallengeKey([]byte("0123456789abcdef0123456789abcdef"))
 	return keys["audit_log_path"]
 }
 

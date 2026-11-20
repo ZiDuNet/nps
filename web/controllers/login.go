@@ -346,14 +346,6 @@ func (self *LoginController) Index() {
 	if self.doLogin("", "", false) {
 		self.Redirect(webBaseUrl+"/index/index", 302)
 	}
-	loginNonce := crypt.GetRandomString(16)
-	self.SetSession("login_nonce", loginNonce)
-	// Cookie-backed sessions must be released while the response headers are
-	// still writable. Beego's deferred release runs after template rendering,
-	// at which point the response may already have started and the nonce cookie
-	// would be dropped. Without this explicit release the next login attempt
-	// cannot validate the page nonce and is reported as expired.
-	self.releaseCookieSession()
 	publicKey, _ := crypt.GetRSAPublicKeyPEM()
 	self.Data["web_base_url"] = webBaseUrl
 	self.Data["register_allow"], _ = beego.AppConfig.Bool("allow_user_register")
@@ -361,7 +353,6 @@ func (self *LoginController) Index() {
 	self.Data["totp_enabled"] = strings.TrimSpace(beego.AppConfig.String("totp_secret")) != ""
 	self.Data["pow_enabled"] = beego.AppConfig.DefaultBool("force_pow", false)
 	self.Data["pow_bits"] = powDifficulty()
-	self.Data["login_nonce"] = loginNonce
 	self.Data["public_key"] = publicKey
 	self.Data["login_max_skew"] = configuredLoginMaxSkew()
 	// Keep the public entry point discoverable even before an administrator has
@@ -681,6 +672,7 @@ func (self *LoginController) Verify() {
 	username = self.GetString("username")
 	rawPassword := self.GetString("password")
 	password := rawPassword
+	challengeExpires, challengeSignature := loginChallengeFromForm(&self.Controller)
 	totpCode := strings.TrimSpace(self.GetString("totp"))
 	rememberLogin := strings.TrimSpace(self.GetString("remember_login")) == "1"
 	if beego.AppConfig.DefaultBool("force_pow", false) && !verifyLoginPoW(username, self.GetString("pow_nonce"), self.GetString("pow_solution")) {
@@ -703,9 +695,8 @@ func (self *LoginController) Verify() {
 		}
 	}
 	if payload, err := crypt.ParseLoginPayload(rawPassword); err == nil {
-		if !self.verifyLoginPayload(payload) {
-			self.Data["json"] = self.loginPayloadError("login_expired", "登录请求已过期，请刷新页面。", "The sign-in request expired. Refresh the page.")
-			self.releaseCookieSession()
+		if !self.verifyLoginPayload(payload, challengeExpires, challengeSignature) {
+			self.Data["json"] = authJSONError("login_expired", "登录请求已过期，请刷新页面。", "The sign-in request expired. Refresh the page.")
 			self.ServeJSON()
 			return
 		}
@@ -747,12 +738,18 @@ func configuredLoginMaxSkew() time.Duration {
 	return time.Duration(value) * time.Millisecond
 }
 
-func (self *LoginController) verifyLoginPayload(payload *crypt.LoginPayload) bool {
+// loginChallengeFromForm reads the stateless challenge fields submitted next to
+// an encrypted login/registration/recovery payload.
+func loginChallengeFromForm(c *beego.Controller) (int64, string) {
+	expires, _ := strconv.ParseInt(strings.TrimSpace(c.GetString("challenge_expires")), 10, 64)
+	return expires, strings.TrimSpace(c.GetString("challenge_signature"))
+}
+
+func (self *LoginController) verifyLoginPayload(payload *crypt.LoginPayload, challengeExpires int64, challengeSignature string) bool {
 	if payload == nil || strings.TrimSpace(payload.Nonce) == "" || payload.Password == "" || payload.Timestamp <= 0 {
 		return false
 	}
-	storedNonce, _ := self.GetSession("login_nonce").(string)
-	if storedNonce == "" || subtle.ConstantTimeCompare([]byte(storedNonce), []byte(payload.Nonce)) != 1 {
+	if !crypt.VerifyLoginChallenge(payload.Nonce, challengeExpires, challengeSignature, time.Now()) {
 		return false
 	}
 	maxSkew := configuredLoginMaxSkew()
@@ -764,20 +761,6 @@ func (self *LoginController) verifyLoginPayload(payload *crypt.LoginPayload) boo
 		}
 	}
 	return true
-}
-
-func (self *LoginController) loginPayloadError(code, message, messageEN string) map[string]interface{} {
-	nonce := crypt.GetRandomString(16)
-	self.SetSession("login_nonce", nonce)
-	publicKey, _ := crypt.GetRSAPublicKeyPEM()
-	return map[string]interface{}{
-		"status": 0,
-		"code":   code,
-		"msg":    message,
-		"msg_en": messageEN,
-		"nonce":  nonce,
-		"cert":   publicKey,
-	}
 }
 
 func authJSONResponse(status int, code, message, messageEN string) map[string]interface{} {
@@ -1205,9 +1188,6 @@ func (self *LoginController) Register() {
 		}
 		self.Data["web_base_url"] = webBaseURL
 		self.Data["version"] = version.VERSION
-		self.Data["login_nonce"] = crypt.GetRandomString(16)
-		self.SetSession("login_nonce", self.Data["login_nonce"])
-		self.releaseCookieSession()
 		self.Data["public_key"], _ = crypt.GetRSAPublicKeyPEM()
 		self.Data["captcha_open"] = registrationCaptchaEnabled()
 		self.Data["email_verify"] = registrationEmailVerifyEnabled()
@@ -1286,12 +1266,12 @@ func (self *LoginController) Register() {
 	}
 	rawPassword := self.GetString("password")
 	password := rawPassword
+	challengeExpires, challengeSignature := loginChallengeFromForm(&self.Controller)
 	if payload, err := crypt.ParseLoginPayload(rawPassword); err == nil {
-		if !self.verifyLoginPayload(payload) {
-			self.Data["json"] = self.loginPayloadError(
+		if !self.verifyLoginPayload(payload, challengeExpires, challengeSignature) {
+			self.Data["json"] = authJSONError(
 				"register_expired", "注册请求已过期，请刷新页面。", "The registration request expired. Refresh the page.",
 			)
-			self.releaseCookieSession()
 			self.ServeJSON()
 			return
 		}

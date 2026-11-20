@@ -256,7 +256,7 @@ func TestAccountManagementCentralizesSessionsAndAdminTOTP(t *testing.T) {
 	}
 	template := string(content)
 	for _, marker := range []string{
-		`data-i18n-zh="账户管理"`,
+		`data-i18n-zh="接入与安全"`,
 		`id="totp-start"`,
 		`id="totp-confirm"`,
 		`id="totp-disable"`,
@@ -275,9 +275,9 @@ func TestAccountManagementCentralizesSessionsAndAdminTOTP(t *testing.T) {
 		t.Fatalf("read console layout: %v", err)
 	}
 	layout := string(layoutContent)
-	if !strings.Contains(layout, `data-i18n-zh="账户管理"`) ||
+	if !strings.Contains(layout, `data-i18n-zh="接入与安全"`) ||
 		strings.Contains(layout, `data-i18n-zh="API 接入"`) {
-		t.Fatal("console navigation must call /user/api Account management")
+		t.Fatal("console navigation must call /user/api Access and security")
 	}
 }
 
@@ -339,7 +339,7 @@ func TestGlobalSecurityTabAndPoWExclusiveForm(t *testing.T) {
 		`id="security-pow-enabled"`,
 		`id="security-pow-bits"`,
 		`/security/pow/save`,
-		`打开账户管理`,
+		`打开接入与安全`,
 	} {
 		if !strings.Contains(securityTemplate, marker) {
 			t.Fatalf("security settings template misses marker %q", marker)

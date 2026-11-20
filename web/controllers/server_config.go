@@ -308,13 +308,14 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"web_ip":                 {Label: "管理面板监听地址", Category: "Web 管理面板", Description: "管理面板监听的本机地址。"},
 	"web_base_url":           {Label: "管理面板 URL 前缀", Category: "Web 管理面板", Description: "反向代理到子路径时填写，例如 /nps。", Optional: true},
 	"instance_key_file":      {Label: "会话实例密钥路径", Category: "Web 管理面板", Description: "留空时使用 conf/instance.key。", Optional: true},
-	"web_open_ssl":           {Label: "管理面板 HTTPS", Category: "Web 管理面板", Description: "是否直接为管理面板启用 HTTPS。"},
+	"web_open_ssl":           {Label: "管理面板 HTTPS", Category: "Web 管理面板", Description: "是否让管理面板自身直接监听 HTTPS。使用 Nginx/CDN 反代收 HTTPS、再 HTTP 回源到本面板时，请保持关闭。"},
 	"web_cert_file":          {Label: "管理面板证书路径", Category: "Web 管理面板", Description: "web_open_ssl=true 时使用；关闭 HTTPS 时可不写入。", Optional: true},
 	"web_key_file":           {Label: "管理面板私钥路径", Category: "Web 管理面板", Description: "web_open_ssl=true 时使用；关闭 HTTPS 时可不写入。", Optional: true},
 	"web_close_on_not_found": {Label: "未知路径直接断开", Category: "Web 管理面板", Description: "访问不存在的管理路径时尽力关闭连接，不返回 404 响应。", Type: "bool", Optional: true},
 
 	"auth_key":       {Label: "Web API 密钥", Category: "Web API 认证", Description: "签名 API 请求使用的密钥。", Sensitive: true},
 	"auth_crypt_key": {Label: "API 密钥加密密钥", Category: "Web API 认证", Description: "必须恰好为 16 个字符。", Sensitive: true},
+	"mcp_enabled":    {Label: "MCP 接入端点", Category: "Web API 认证", Description: "是否开放 /mcp 模型上下文协议接入端点，供 AI Agent 通过 Bearer Token 调用。默认开启。", Type: "bool"},
 
 	"allow_user_login":      {Label: "允许普通用户登录", Category: "用户与资源权限", Description: "是否启用多用户面板登录。"},
 	"allow_user_vkey_login": {Label: "允许 VKEY 登录面板", Category: "用户与资源权限", Description: "是否允许普通用户使用客户端 VKEY 登录管理面板。", Type: "bool"},

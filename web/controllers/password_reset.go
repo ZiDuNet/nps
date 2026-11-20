@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"crypto/sha256"
-	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -100,8 +99,8 @@ func (self *LoginController) recoveryPost() bool {
 	}
 	// The per-browser nonce also prevents cross-site mail requests. Do not
 	// accept a recovery request without first loading the recovery page.
-	nonce, _ := self.GetSession("login_nonce").(string)
-	if nonce == "" || subtle.ConstantTimeCompare([]byte(nonce), []byte(self.GetString("nonce"))) != 1 {
+	challengeExpires, challengeSignature := loginChallengeFromForm(&self.Controller)
+	if !crypt.VerifyLoginChallenge(strings.TrimSpace(self.GetString("nonce")), challengeExpires, challengeSignature, time.Now()) {
 		self.recoveryError(http.StatusBadRequest, "password_reset_expired", "找回请求已过期，请刷新页面。", "Recovery request expired. Refresh the page.")
 		return false
 	}
@@ -138,10 +137,6 @@ func (self *LoginController) Recover() {
 		return
 	}
 	self.Data["web_base_url"], self.Data["version"] = base, version.VERSION
-	nonce := crypt.GetRandomString(16)
-	self.SetSession("login_nonce", nonce)
-	self.releaseCookieSession()
-	self.Data["login_nonce"] = nonce
 	self.Data["public_key"], _ = crypt.GetRSAPublicKeyPEM()
 	self.Data["captcha_open"] = registrationCaptchaEnabled() || beego.AppConfig.DefaultBool("open_captcha", false)
 	_, err := configuredRegistrationSMTP()
@@ -209,8 +204,9 @@ func (self *LoginController) ResetPassword() {
 		return
 	}
 	email = strings.ToLower(strings.TrimSpace(self.GetString("email")))
+	challengeExpires, challengeSignature := loginChallengeFromForm(&self.Controller)
 	payload, err := crypt.ParseLoginPayload(self.GetString("password"))
-	if err != nil || !self.verifyLoginPayload(payload) {
+	if err != nil || !self.verifyLoginPayload(payload, challengeExpires, challengeSignature) {
 		self.recoveryError(http.StatusBadRequest, "password_reset_expired", "安全请求无效或已过期，请刷新页面重试。", "Secure request is invalid or expired. Refresh the page.")
 		return
 	}
@@ -238,8 +234,6 @@ func (self *LoginController) ResetPassword() {
 		return
 	}
 	ownerID, ownerName = id, name
-	self.DelSession("login_nonce")
-	self.releaseCookieSession()
 	self.Data["json"] = authJSONResponse(1, "password_reset_success", "密码已重置，旧登录设备已退出，请重新登录。", "Password reset. Existing devices are signed out. Sign in again.")
 	self.ServeJSON()
 }

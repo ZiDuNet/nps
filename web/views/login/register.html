@@ -156,11 +156,25 @@
         "web_base_url": "{{.web_base_url}}",
         "version": "{{.version}}",
         "publicKey": `{{.public_key}}`,
-        "loginNonce": "{{.login_nonce}}",
+        "loginChallenge": null,
         "timeOffset": 0
     };
     var npsRSAEncryptor = typeof JSEncrypt === 'function' ? new JSEncrypt() : null;
     if (npsRSAEncryptor) npsRSAEncryptor.setPublicKey(window.nps.publicKey || '');
+    function npsLoadLoginChallenge() {
+        $.ajax({
+            url: "{{.web_base_url}}/auth/challenge",
+            dataType: "json",
+            cache: false,
+            timeout: 5000,
+            success: function (res) {
+                if (res && res.status && res.nonce && res.signature) {
+                    window.nps.loginChallenge = {nonce: res.nonce, expires: res.expires, signature: res.signature};
+                }
+            }
+        });
+    }
+    npsLoadLoginChallenge();
     $.ajax({
         url: "{{.web_base_url}}/auth/gettime",
         dataType: "json",
@@ -232,11 +246,12 @@
         if (!validateNpsForm(document.getElementById('register-form'), true)) return false;
         var data = {};
         $("#register-form").serializeArray().forEach(function (field) { data[field.name] = field.value; });
-        if (!npsRSAEncryptor || !window.nps.publicKey || !window.nps.loginNonce) {
+        var challenge = window.nps.loginChallenge;
+        if (!npsRSAEncryptor || !window.nps.publicKey || !challenge || !challenge.nonce || !challenge.signature) {
             npsNotify('error', npsIsEnglish() ? 'Secure password encryption is unavailable. Refresh the page and try again.' : '安全密码加密不可用，请刷新页面后重试。');
             return false;
         }
-        var payload = JSON.stringify({n: window.nps.loginNonce, t: Date.now() + window.nps.timeOffset, p: data.password});
+        var payload = JSON.stringify({n: challenge.nonce, t: Date.now() + window.nps.timeOffset, p: data.password});
         try {
             data.password = npsRSAEncryptor.encrypt(payload);
         } catch (error) {
@@ -246,17 +261,15 @@
             npsNotify('error', npsIsEnglish() ? 'Secure password encryption failed. Refresh the page and try again.' : '安全密码加密失败，请刷新页面后重试。');
             return false;
         }
+        data.challenge_expires = challenge.expires;
+        data.challenge_signature = challenge.signature;
         $.ajax({
             type: "POST",
             url: "{{.web_base_url}}/login/register",
             data: data,
             success: function (res) {
                 npsNotify(res.status ? 'success' : 'error', npsAuthErrorMessage(res));
-                if (res.nonce) window.nps.loginNonce = res.nonce;
-                if (res.cert) {
-                    window.nps.publicKey = res.cert;
-                    npsRSAEncryptor.setPublicKey(res.cert);
-                }
+                npsLoadLoginChallenge();
                 if (res.status) {
                     window.setTimeout(function () {
                         window.location.href = "{{.web_base_url}}/login/index";

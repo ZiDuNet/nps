@@ -487,66 +487,6 @@ func TestRegenerateSessionWithCookieProviderKeepsAuthenticationStore(t *testing.
 	}
 }
 
-func TestLoginIndexReleasesCookieSessionBeforeRendering(t *testing.T) {
-	providerConfig, err := json.Marshal(map[string]string{
-		"securityKey":  "login-index-signing-key",
-		"blockKey":     "0123456789abcdef",
-		"securityName": "login-index-session",
-		"cookieName":   "nps_session",
-	})
-	if err != nil {
-		t.Fatalf("encode cookie provider config: %v", err)
-	}
-	manager, err := session.NewManager("cookie", &session.ManagerConfig{
-		CookieName:      "nps_session",
-		EnableSetCookie: true,
-		Gclifetime:      3600,
-		Maxlifetime:     3600,
-		ProviderConfig:  string(providerConfig),
-	})
-	if err != nil {
-		t.Fatalf("create cookie session manager: %v", err)
-	}
-	store, err := manager.GetProvider().SessionRead("pre-login-cookie")
-	if err != nil {
-		t.Fatalf("read cookie session: %v", err)
-	}
-
-	request := httptest.NewRequest(http.MethodGet, "http://console.test/login/index", nil)
-	recorder := httptest.NewRecorder()
-	ctx := beecontext.NewContext()
-	ctx.Reset(recorder, request)
-	controller := &LoginController{Controller: beego.Controller{
-		Ctx:        ctx,
-		Data:       make(map[interface{}]interface{}),
-		CruSession: store,
-	}}
-
-	oldUser := beego.AppConfig.String("web_username")
-	oldPassword := beego.AppConfig.String("web_password")
-	oldBaseURL := beego.AppConfig.String("web_base_url")
-	t.Cleanup(func() {
-		_ = beego.AppConfig.Set("web_username", oldUser)
-		_ = beego.AppConfig.Set("web_password", oldPassword)
-		_ = beego.AppConfig.Set("web_base_url", oldBaseURL)
-	})
-	_ = beego.AppConfig.Set("web_username", "admin")
-	_ = beego.AppConfig.Set("web_password", "secret")
-	_ = beego.AppConfig.Set("web_base_url", "")
-
-	controller.Index()
-	cookies := recorder.Result().Cookies()
-	if len(cookies) == 0 {
-		t.Fatal("login page did not release its cookie session")
-	}
-	if len(cookies[len(cookies)-1].Value) <= 32 {
-		t.Fatalf("login page released an unencrypted session id: %q", cookies[len(cookies)-1].Value)
-	}
-	if got := store.Get("login_nonce"); got == nil || got == "" {
-		t.Fatalf("login nonce was not stored in cookie session: %#v", got)
-	}
-}
-
 func TestCaptchaFilterPathFollowsWebBaseURL(t *testing.T) {
 	tests := []struct {
 		name string

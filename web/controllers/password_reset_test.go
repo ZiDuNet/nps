@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +111,23 @@ func encryptedRecoveryPassword(t *testing.T, nonce, password string) string {
 	return base64.StdEncoding.EncodeToString(encrypted)
 }
 
+func issueRecoveryChallenge(t *testing.T) *crypt.LoginChallenge {
+	t.Helper()
+	challenge, err := crypt.IssueLoginChallenge(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return challenge
+}
+
+func recoveryChallengeFields(challenge *crypt.LoginChallenge) map[string]string {
+	return map[string]string{
+		"nonce":               challenge.Nonce,
+		"challenge_expires":   strconv.FormatInt(challenge.Expires, 10),
+		"challenge_signature": challenge.Signature,
+	}
+}
+
 func TestRecoveryCodeResponsesDoNotEnumerateAccounts(t *testing.T) {
 	var responses []string
 	for _, exists := range []bool{true, false} {
@@ -126,14 +144,15 @@ func TestRecoveryCodeResponsesDoNotEnumerateAccounts(t *testing.T) {
 				}
 				return true
 			}
-			form := url.Values{"email": {"ALICE@EXAMPLE.COM"}, "nonce": {"browser-nonce"}}
-			controller, recorder := authAuditController(form, map[interface{}]interface{}{"login_nonce": "browser-nonce"})
+			fields := recoveryChallengeFields(issueRecoveryChallenge(t))
+			form := url.Values{"email": {"ALICE@EXAMPLE.COM"}, "nonce": {fields["nonce"]}, "challenge_expires": {fields["challenge_expires"]}, "challenge_signature": {fields["challenge_signature"]}}
+			controller, recorder := authAuditController(form, nil)
 			controller.ResetEmailCode()
 			if recorder.Code != http.StatusOK || queued != 1 {
 				t.Fatalf("code=%d queued=%d body=%s", recorder.Code, queued, recorder.Body)
 			}
 			responses = append(responses, recorder.Body.String())
-			controller, recorder = authAuditController(form, map[interface{}]interface{}{"login_nonce": "browser-nonce"})
+			controller, recorder = authAuditController(form, nil)
 			controller.ResetEmailCode()
 			if recorder.Code != http.StatusTooManyRequests {
 				t.Fatal("repeated code request bypassed cooldown")
@@ -162,8 +181,9 @@ func TestRecoveryResetPreservesUserAndRevokesSessions(t *testing.T) {
 	if err != nil || id != 7 {
 		t.Fatal(err)
 	}
-	form := url.Values{"email": {user.Email}, "nonce": {"browser-nonce"}, "email_code": {code}, "password": {encryptedRecoveryPassword(t, "browser-nonce", "new-password")}}
-	controller, recorder := authAuditController(form, map[interface{}]interface{}{"login_nonce": "browser-nonce"})
+	fields := recoveryChallengeFields(issueRecoveryChallenge(t))
+	form := url.Values{"email": {user.Email}, "nonce": {fields["nonce"]}, "email_code": {code}, "password": {encryptedRecoveryPassword(t, fields["nonce"], "new-password")}, "challenge_expires": {fields["challenge_expires"]}, "challenge_signature": {fields["challenge_signature"]}}
+	controller, recorder := authAuditController(form, nil)
 	controller.ResetPassword()
 	if recorder.Code != http.StatusOK || controller.Data["json"].(map[string]interface{})["status"] != 1 {
 		t.Fatalf("reset failed: %s", recorder.Body)
@@ -185,7 +205,7 @@ func TestRecoveryResetPreservesUserAndRevokesSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, secret := range []string{code, "new-password", "old-pass", form.Get("password"), "browser-nonce"} {
+	for _, secret := range []string{code, "new-password", "old-pass", form.Get("password"), fields["nonce"], fields["challenge_signature"]} {
 		if bytes.Contains(journal, []byte(secret)) {
 			t.Fatalf("audit leaked a recovery credential")
 		}
@@ -204,7 +224,13 @@ func TestRecoveryGuardsAndCodePurpose(t *testing.T) {
 			if tc.config != "" {
 				_ = beego.AppConfig.Set(tc.config, tc.value)
 			}
-			controller, recorder := authAuditController(url.Values{"email": {"alice@example.com"}, "nonce": {tc.nonce}, "password": {tc.password}}, map[interface{}]interface{}{"login_nonce": "browser-nonce"})
+			fields := recoveryChallengeFields(issueRecoveryChallenge(t))
+			nonce := fields["nonce"]
+			if tc.nonce == "" {
+				nonce = ""
+			}
+			form := url.Values{"email": {"alice@example.com"}, "nonce": {nonce}, "password": {tc.password}, "challenge_expires": {fields["challenge_expires"]}, "challenge_signature": {fields["challenge_signature"]}}
+			controller, recorder := authAuditController(form, nil)
 			controller.ResetPassword()
 			if recorder.Code < 400 {
 				t.Fatalf("unguarded reset: %s", recorder.Body)
@@ -230,7 +256,7 @@ func TestRecoveryDisabledBlocksBothPostEndpointsAndPage(t *testing.T) {
 	configureRecoveryTest(t)
 	_ = beego.AppConfig.Set("allow_user_register", "false")
 	for _, sendCode := range []bool{true, false} {
-		controller, recorder := authAuditController(url.Values{"email": {"alice@example.com"}, "nonce": {"browser-nonce"}}, map[interface{}]interface{}{"login_nonce": "browser-nonce"})
+		controller, recorder := authAuditController(url.Values{"email": {"alice@example.com"}}, nil)
 		if sendCode {
 			controller.ResetEmailCode()
 		} else {

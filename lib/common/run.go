@@ -13,28 +13,16 @@ var ConfPath string
 // Ordinary CLI, SDK and server behavior is unchanged when it is empty.
 var RuntimeTempPath string
 
-// Get the currently selected configuration file directory
-// For non-Windows systems, select the /etc/nps as config directory if exist, or select ./
-// windows system, select the C:\Program Files\nps as config directory if exist, or select ./
+// GetRunPath returns the directory holding the running executable and, by
+// default, the configuration files. An explicit -conf_path override wins;
+// otherwise the configuration always lives next to the binary so that the
+// source of conf/nps.conf and conf/instance.key is unambiguous regardless of
+// how the process is launched (bare command, PATH lookup or system service).
 func GetRunPath() string {
 	if ConfPath != "" {
 		return ConfPath
 	}
-
-	var path string
-	if len(os.Args) == 1 {
-		if !IsWindows() {
-			dir, _ := filepath.Abs(filepath.Dir(os.Args[0])) //返回
-			return dir + "/"
-		} else {
-			return "./"
-		}
-	} else {
-		if path = GetInstallPath(); !FileExists(path) {
-			return GetAppPath()
-		}
-	}
-	return path
+	return GetAppPath()
 }
 
 // Different systems get different installation paths

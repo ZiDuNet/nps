@@ -20,8 +20,20 @@
     function data() {
         var fields = {};
         $(form).serializeArray().forEach(function (field) { fields[field.name] = field.value; });
-        fields.nonce = window.nps.loginNonce;
+        var challenge = window.nps.loginChallenge;
+        if (challenge) {
+            fields.nonce = challenge.nonce;
+            fields.challenge_expires = challenge.expires;
+            fields.challenge_signature = challenge.signature;
+        }
         return fields;
+    }
+    function loadChallenge() {
+        $.ajax({url: window.nps.web_base_url + '/auth/challenge', dataType: 'json', cache: false, timeout: 5000}).done(function (res) {
+            if (res && res.status && res.nonce && res.signature) {
+                window.nps.loginChallenge = {nonce: res.nonce, expires: res.expires, signature: res.signature};
+            }
+        });
     }
     function countdown() {
         send.removeAttribute('data-i18n-zh'); send.removeAttribute('data-i18n-en');
@@ -39,6 +51,7 @@
                 message(xhr.responseJSON ? window.npsAuthErrorMessage(xhr.responseJSON) : local('请求失败，请稍后重试。', 'Request failed. Try again later.'), true);
             }).always(function () {
                 busy = false; submit.disabled = false; send.disabled = remaining > 0; form.setAttribute('aria-busy', 'false'); captcha();
+                loadChallenge();
             });
     }
     send.addEventListener('click', function () {
@@ -46,6 +59,7 @@
         var email = document.getElementById('auth-email'), challenge = form.querySelector('[name="captcha"]');
         if (!email.reportValidity() || (challenge && !challenge.reportValidity())) return;
         var fields = data();
+        if (!window.nps.loginChallenge) { message(local('安全校验未就绪，请刷新页面后重试。', 'Security challenge is not ready. Refresh the page.'), true); return; }
         delete fields.password; delete fields.email_code;
         request('/login/recover/code', fields, function (response) {
             remaining = Number(response.retry_after) || 60; countdown();
@@ -59,8 +73,9 @@
         var fields = data(), confirm = document.getElementById('auth-confirm');
         if (fields.password !== confirm.value) { message(local('两次输入的新密码不一致。', 'The new passwords do not match.'), true); confirm.focus(); return; }
         try {
+            if (!window.nps.loginChallenge) throw new Error('challenge missing');
             var encryptor = new window.JSEncrypt(); encryptor.setPublicKey(window.nps.publicKey);
-            fields.password = encryptor.encrypt(JSON.stringify({n: window.nps.loginNonce, t: Date.now() + window.nps.timeOffset, p: fields.password}));
+            fields.password = encryptor.encrypt(JSON.stringify({n: window.nps.loginChallenge.nonce, t: Date.now() + window.nps.timeOffset, p: fields.password}));
             if (!fields.password) throw new Error('encryption failed');
         } catch (error) { message(local('安全加密不可用，请刷新页面后重试。', 'Secure encryption unavailable. Refresh the page.'), true); return; }
         request('/login/recover', fields, function () {
@@ -69,6 +84,7 @@
         });
     });
     $.ajax({url: window.nps.web_base_url + '/auth/gettime', dataType: 'json', timeout: 5000, cache: false}).done(function (res) { if (res && res.time != null) window.nps.timeOffset = res.time * 1000 - Date.now(); });
+    loadChallenge();
     function theme() {
         var dark = document.documentElement.getAttribute('data-theme') === 'dark';
         document.getElementById('theme-icon').className = dark ? 'fa fa-sun' : 'fa fa-moon';

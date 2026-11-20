@@ -1,6 +1,9 @@
 package routers
 
 import (
+	"net/http"
+
+	"ehang.io/nps/web"
 	"ehang.io/nps/web/controllers"
 	"github.com/astaxie/beego"
 )
@@ -120,6 +123,26 @@ func Init() {
 		beego.AutoRouter(&controllers.GlobalController{})
 		beego.AutoRouter(&controllers.AuditController{})
 		beego.AddNamespace(beego.NewNamespace("/api/v1", apiV1Routers()...))
+	}
+	// MCP (Model Context Protocol) streamable HTTP endpoint. It is mounted at
+	// the root regardless of web_base_url so agents always use a stable /mcp.
+	beego.Handler("/mcp", controllers.NewMCPHandler())
+	// Bundled Skill package download. Public: users install the Skill from their
+	// own panel without cloning the repository.
+	beego.Handler("/skill/nps.tar.gz", http.HandlerFunc(skillDownloadHandler))
+}
+
+func skillDownloadHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := web.SkillPackageTarGz()
+	if err != nil {
+		http.Error(w, "skill package unavailable", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", `attachment; filename="nps-skill.tar.gz"`)
+	w.Header().Set("Cache-Control", "no-store")
+	if _, err := w.Write(data); err != nil {
+		http.Error(w, "failed to stream skill package", http.StatusInternalServerError)
 	}
 }
 
