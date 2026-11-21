@@ -109,3 +109,68 @@ func TestMCPConfigIncludesHTTPType(t *testing.T) {
 		t.Fatalf("unexpected url: %s", out)
 	}
 }
+
+func TestSuccessHTTPStatusWithoutEnvelopeStatusFails(t *testing.T) {
+	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"msg":"unexpected shape"}`))
+	})
+	err := c.get("/api/v1/overview")
+	if err == nil || !strings.Contains(err.Error(), "unexpected shape") {
+		t.Fatalf("expected status=0 response to fail, got %v", err)
+	}
+}
+
+func TestAmbiguousCredentialsFail(t *testing.T) {
+	c := &client{server: "https://nps.example.com", token: "npsu_x", key: "secret"}
+	err := c.get("/api/v1/overview")
+	if err == nil || !strings.Contains(err.Error(), "凭据冲突") {
+		t.Fatalf("expected credential conflict, got %v", err)
+	}
+}
+
+func TestServerURLValidation(t *testing.T) {
+	for _, server := range []string{"nps.example.com", "ftp://nps.example.com", "https://", "https://user:pass@nps.example.com"} {
+		c := &client{server: server, token: "npsu_x", out: &bytes.Buffer{}}
+		if err := c.get("/api/v1/overview"); err == nil || !strings.Contains(err.Error(), "--server") {
+			t.Fatalf("server %q should be rejected, got %v", server, err)
+		}
+	}
+}
+
+func TestHelpCanFollowSubcommand(t *testing.T) {
+	t.Setenv("NPS_TOKEN", "")
+	t.Setenv("NPS_KEY", "")
+	if err := run([]string{"clients", "-h"}); err != nil {
+		t.Fatalf("trailing help should succeed: %v", err)
+	}
+}
+
+func TestUnknownTrailingArgumentsFail(t *testing.T) {
+	if err := run([]string{"clients", "junk"}); err == nil || !strings.Contains(err.Error(), "额外参数") {
+		t.Fatalf("expected trailing list argument error, got %v", err)
+	}
+	c := &client{}
+	if err := c.clientCmd([]string{"get", "1", "extra"}, ""); err == nil || !strings.Contains(err.Error(), "参数数量") {
+		t.Fatalf("expected exact argument error, got %v", err)
+	}
+}
+
+func TestMCPConfigUsesManagedAdminKeyOnly(t *testing.T) {
+	c := &client{server: "https://nps.example.com", key: "npsa_managed", out: &bytes.Buffer{}}
+	if err := c.printMCP(); err != nil {
+		t.Fatalf("printMCP: %v", err)
+	}
+	if out := c.out.(*bytes.Buffer).String(); !strings.Contains(out, "Bearer npsa_managed") {
+		t.Fatalf("managed key should be used as MCP bearer: %s", out)
+	}
+
+	c = &client{server: "https://nps.example.com", key: "raw-auth-key", out: &bytes.Buffer{}}
+	if err := c.printMCP(); err != nil {
+		t.Fatalf("printMCP: %v", err)
+	}
+	out := c.out.(*bytes.Buffer).String()
+	if strings.Contains(out, "raw-auth-key") || !strings.Contains(out, "Bearer YOUR_TOKEN") {
+		t.Fatalf("raw auth_key must not be exposed as an MCP bearer: %s", out)
+	}
+}

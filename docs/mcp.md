@@ -18,13 +18,14 @@ NPS Pro 内置一个 [Model Context Protocol](https://modelcontextprotocol.io) �
 
 | 凭据 | 前缀 | `npsctl` 用法 | MCP 直连 | 权限 |
 | --- | --- | --- | --- | --- |
-| 用户 API Token | `npsu_` | `--token` / `NPS_TOKEN` | 是 | 当前账号名下的客户端、隧道、域名反代；REST 审计仅显示本人范围 |
+| 用户 API Token | `npsu_` | `--token` / `NPS_TOKEN` | 是 | 当前账号名下的客户端、隧道、域名反代与本人范围审计 |
 | Web 生成的管理员 API 密钥 | `npsa_` | `--key` / `NPS_KEY`，自动时间戳签名 | 是 | 全局 |
 | `nps.conf` 中的 `auth_key` | 无固定前缀 | `--key` / `NPS_KEY`，自动时间戳签名 | 否 | 全局 |
 
 Token 在「接入与安全」页面生成；生成后仍可再次查看，重新生成会立即使旧值失效。
-管理员 API 密钥与 `auth_key` 一样可作为 `npsctl --key` 的签名密钥，但不能直接
-作为 `/mcp` 的 Bearer Token。
+管理员 API 密钥可直接作为 `/mcp` Bearer Token，也可作为 `npsctl --key`
+的签名密钥。`nps.conf` 中的 `auth_key` 只能用于 `npsctl --key` 时间戳签名，
+不能直接作为 `/mcp` Bearer Token。
 
 ## 客户端配置
 
@@ -49,9 +50,12 @@ Token 在「接入与安全」页面生成；生成后仍可再次查看，重�
 - 使用 `"type": "http"`。当前端点没有 SSE 兼容地址。
 - 管理面板若配置了 `web_base_url` 前缀，`/mcp` 仍固定在根路径 `/mcp`，不受前缀影响。
 - 服务端默认关闭本机保护，允许非 localhost 客户端连接；生产环境请务必置于 HTTPS 之后。
-- 客户端会先执行 MCP `initialize`，后续请求携带 `Mcp-Session-Id`；请求同时需要
-  `Authorization` 和 MCP 协议要求的 `Accept: application/json, text/event-stream`。
-- `GET /mcp` 可能保持长连接用于服务端事件流，不要把它当作普通健康检查接口；
+- 服务端按无状态模式运行，客户端仍会先执行 MCP `initialize`，但不需要保存或
+  发送 `Mcp-Session-Id`。每个请求都单独校验 Bearer Token，可配合多实例和
+  无粘滞会话的反向代理部署。
+- 请求同时需要 `Authorization` 和 MCP 协议要求的
+  `Accept: application/json, text/event-stream`。
+- `GET /mcp` 固定返回 `405 Method Not Allowed`，不会建立长连接事件流；
   健康检查请使用面板或 `/api/v1/info`。
 - 只支持 stdio 的老客户端应使用 `mcp-remote` 一类的桥接器，而不是把 `/mcp`
   改成 SSE URL。
@@ -74,23 +78,27 @@ MCP 配置或生产脚本。
 | `nps_tunnel_create` / `delete` / `set_status` | 隧道维护 | 账号范围 |
 | `nps_host_create` / `delete` / `set_status` | 域名反代维护 | 账号范围 |
 | `nps_users` | 列出用户 | 仅管理员 |
-| `nps_audit` | 最近操作审计事件 | 仅管理员 |
+| `nps_audit` | 最近操作审计事件 | 用户本人范围；管理员全局 |
 | `nps_global_config` | 全局配置脱敏概览 | 仅管理员 |
 
 权限边界说明：
 
 - MCP 没有 `start` / `stop` 工具；客户端启停使用 `nps_client_set_status`，
   隧道和域名反代使用对应的 `nps_*_set_status`。
-- `/api/v1/audit` 对普通用户返回其自身可见范围，但当前 MCP `nps_audit` 仅
-  管理员可用。两种入口的权限语义并不完全一致，Agent 不应假设普通用户能通过
-  MCP 读取审计。
-- 401 认证失败由 HTTP 层直接返回，可能不是 JSON-RPC 错误对象；客户端应先
-  处理 HTTP 状态和 `WWW-Authenticate`。
+- `/api/v1/audit` 与 MCP `nps_audit` 都按当前账号隔离：普通用户只看本人
+  范围，管理员看全局记录。
+- 401 认证失败由 HTTP 层返回 `application/json` 对象，并带
+  `WWW-Authenticate`；客户端应先处理 HTTP 状态，再读取 JSON 错误。
 - MCP 工具结果只返回当前账号范围的资源；普通用户即使猜到他人物 ID，也会被
   服务端拒绝。
 
-列表型工具返回 `total` 和对应资源数组；当前 MCP 工具集不是完整分页 API，
-需要大规模数据时使用 `/api/v1` 的 `offset` / `limit` / `page_size`。
+列表型工具 `nps_clients`、`nps_tunnels`、`nps_hosts` 和 `nps_users`
+接受 `offset` / `limit`，返回匹配总数 `total`、当前页数据与分页参数；
+`limit` 最大为 500。`nps_audit` 同样支持 `offset` / `limit`。
+
+所有工具都声明了 MCP 安全提示：读取工具为只读、幂等；创建工具可能产生新
+资源；更新和状态工具为幂等；删除工具标记为 destructive；工具均不访问
+NPS 之外的开放世界资源。
 
 ## 与 npsctl / Skill 的关系
 

@@ -276,7 +276,7 @@
             <div>
                 <span class="account-section-head__eyebrow" data-i18n-zh="AGENT ACCESS" data-i18n-en="AGENT ACCESS">AGENT ACCESS</span>
                 <h2 id="account-dev-title" data-i18n-zh="Agent 接入" data-i18n-en="Agent access">Agent 接入</h2>
-                <p data-i18n-zh="通过 CLI、Skill 或 MCP 把平台能力接入脚本与 AI Agent。三者统一使用上面的 Token / API Key 作为凭据；管理员密钥走时间戳签名，用户 Token 走 Bearer 头。" data-i18n-en="Connect scripts and AI agents through the CLI, Skill or MCP. All three use the token or API key above; administrator keys use timestamp signatures and user tokens use a Bearer header.">通过 CLI、Skill 或 MCP 把平台能力接入脚本与 AI Agent。三者统一使用上面的 Token / API Key 作为凭据；管理员密钥走时间戳签名，用户 Token 走 Bearer 头。</p>
+                <p data-i18n-zh="通过 CLI、Skill 或 MCP 把平台能力接入脚本与 AI Agent。用户 Token 可同时用于 CLI Bearer 与 MCP；管理员 API 密钥可用于 MCP Bearer，CLI 使用 --key 时走时间戳签名；nps.conf 的 auth_key 仅用于 CLI 签名。" data-i18n-en="Use the CLI, Skill or MCP to connect scripts and AI agents. User tokens work with CLI Bearer auth and MCP. The managed admin key works as an MCP Bearer token; npsctl --key uses timestamp signing. The nps.conf auth_key is only for CLI signatures.">通过 CLI、Skill 或 MCP 把平台能力接入脚本与 AI Agent。用户 Token 可同时用于 CLI Bearer 与 MCP；管理员 API 密钥可用于 MCP Bearer，CLI 使用 --key 时走时间戳签名；nps.conf 的 auth_key 仅用于 CLI 签名。</p>
             </div>
         </header>
         <div class="account-dev-grid">
@@ -329,6 +329,7 @@ Token：<span class="dev-token">YOUR_TOKEN</span></code></pre>
                 <pre class="account-dev-card__code"><code id="mcp-servers-json">{
   "mcpServers": {
     "nps": {
+      "type": "http",
       "url": "<span class="mcp-url">http://127.0.0.1:8081/mcp</span>",
       "headers": {
         "Authorization": "Bearer <span class="mcp-token">YOUR_TOKEN</span>"
@@ -382,7 +383,7 @@ npsctl --server <span class="dev-server">http://127.0.0.1:8081</span> --token <s
                     <h4 data-i18n-zh="配置" data-i18n-en="Configure">配置</h4>
                     <p data-i18n-zh="点击「复制配置」，把 mcpServers JSON 粘贴到 Codex / Claude 的 MCP 配置中即可。" data-i18n-en="Copy the mcpServers JSON into your Codex / Claude MCP configuration.">点击「复制配置」，把 mcpServers JSON 粘贴到 Codex / Claude 的 MCP 配置中即可。</p>
                     <h4 data-i18n-zh="能力" data-i18n-en="Capabilities">能力</h4>
-                    <p data-i18n-zh="只读：仪表盘、客户端、隧道、域名反代；维护：客户端/隧道/域名反代的创建、修改、删除与启停。管理员额外可读用户、审计与全局配置。" data-i18n-en="Read: dashboard, clients, tunnels, hosts. Write: create, update, delete and toggle clients, tunnels and hosts. Administrators additionally read users, audit and global config.">只读：仪表盘、客户端、隧道、域名反代；维护：客户端/隧道/域名反代的创建、修改、删除与启停。管理员额外可读用户、审计与全局配置。</p>
+                    <p data-i18n-zh="普通用户可查看本人范围的仪表盘、客户端、隧道、域名反代和审计，并维护本人资源的创建、修改、删除与启停；客户端总开关仅管理员可操作。管理员额外可读全局用户、全量审计与脱敏全局配置。" data-i18n-en="Users can read their dashboard, clients, tunnels, hosts and scoped audit records, and maintain their own resources. Only administrators can toggle client-wide status. Administrators also read users, global audit and redacted global configuration.">普通用户可查看本人范围的仪表盘、客户端、隧道、域名反代和审计，并维护本人资源的创建、修改、删除与启停；客户端总开关仅管理员可操作。管理员额外可读全局用户、全量审计与脱敏全局配置。</p>
                 </div>
             </div>
             <div class="modal-footer">
@@ -687,6 +688,7 @@ $(function () {
         var config = {
             mcpServers: {
                 nps: {
+                    type: 'http',
                     url: origin + '/mcp',
                     headers: { Authorization: 'Bearer ' + token }
                 }

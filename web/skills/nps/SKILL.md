@@ -27,15 +27,15 @@ commit a real credential.
 
 | Credential | Create / view in | `npsctl` | `/mcp` | Scope |
 | --- | --- | --- | --- | --- |
-| User API Token (`npsu_...`) | 接入与安全 | `--token` or `NPS_TOKEN` | `Authorization: Bearer ...` | That user's clients, tunnels, hosts and scoped REST audit records |
+| User API Token (`npsu_...`) | 接入与安全 | `--token` or `NPS_TOKEN` | `Authorization: Bearer ...` | That user's clients, tunnels, hosts and scoped audit records |
 | Managed admin key (`npsa_...`) | 接入与安全, administrator only | `--key` or `NPS_KEY` with timestamp signing | `Authorization: Bearer ...` | Global |
 | `auth_key` from `nps.conf` | Server configuration | `--key` or `NPS_KEY` with timestamp signing | Not accepted directly | Global |
 
 The managed admin key is accepted by `npsctl --key` through the same signed
-timestamp protocol as `auth_key`. MCP only accepts bearer credentials. Some MCP
-management tools have narrower permissions than their REST equivalents:
-`nps_users`, `nps_audit`, `nps_global_config` and
-`nps_client_set_status` are administrator-only.
+timestamp protocol as `auth_key`, and is also accepted directly as an MCP
+Bearer token. `auth_key` itself cannot be used as a Bearer token. MCP audit is
+scoped for ordinary users and global for administrators. `nps_users`,
+`nps_global_config` and `nps_client_set_status` remain administrator-only.
 
 ## Deploying NPC
 
@@ -71,7 +71,9 @@ npsctl --server https://nps.example.com --token npsu_xxx mcp
 
 List endpoints return `status`, `code`, `msg`, `rows`, `total`, `meta` and
 `request_id`. `rows` is the current page; `--limit` does not fetch every page.
-Create/update commands require `--data <JSON>`.
+Create/update commands require `--data <JSON>`. `--token` and `--key` are
+mutually exclusive, unknown trailing arguments are rejected, and `--server`
+must be an absolute HTTP(S) URL.
 
 If the user has no CLI, they can install it from the panel's 接入与安全 page,
 or use the GitHub Release command. Never ask the user to run an unexplained
@@ -96,10 +98,10 @@ The server exposes a Streamable HTTP MCP endpoint at `/mcp`. Use
 ```
 
 Run `npsctl mcp` to generate the same snippet with the current server URL and
-token. The server implements normal MCP initialization and `Mcp-Session-Id`;
-`GET /mcp` is a long-lived Streamable HTTP stream, so do not use it as a health
-check. If an MCP client only supports stdio, bridge it with `mcp-remote` rather
-than changing the URL to an SSE endpoint.
+credential. The endpoint is stateless, so clients do not need to persist or
+send `Mcp-Session-Id`. `GET /mcp` returns `405 Method Not Allowed`; use panel
+or `/api/v1/info` for health checks. If an MCP client only supports stdio,
+bridge it with `mcp-remote` rather than changing the URL to an SSE endpoint.
 
 Read tools: `nps_dashboard`, `nps_clients`, `nps_client_get`, `nps_tunnels`,
 `nps_hosts`, `nps_users`, `nps_audit`, `nps_global_config`.
@@ -110,8 +112,9 @@ Maintenance tools: `nps_client_create`, `nps_client_update`,
 `nps_host_delete`, `nps_host_set_status`.
 
 There are no MCP `start` / `stop` tools; use `nps_*_set_status` with
-`{"status": true|false}`. MCP audit is administrator-only, while
-`/api/v1/audit` remains scoped for a normal user's own records.
+`{"status": true|false}`. Ordinary users see only audit events in their own
+scope; administrators see the global journal. List tools accept `offset` and
+`limit` and return the matching `total`.
 
 ## HTTPS / custom CA
 

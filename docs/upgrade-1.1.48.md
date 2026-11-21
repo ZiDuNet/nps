@@ -10,8 +10,9 @@ Skill 三类接入能力。不改变 Bridge 握手、NPC 业务协议或业务 J
   反复出现 `login_expired`。
 - 新增 MCP 服务端：`/mcp` 使用 Streamable HTTP，`mcp_enabled` 默认开启。
   用户 API Token（`npsu_...`）和 Web 生成的管理员 API 密钥（`npsa_...`）
-  可作为 Bearer Token；`nps_users`、`nps_audit`、`nps_global_config` 仅管理员
-  可用。`nps.conf` 的 `auth_key` 仍可用于 `npsctl --key` 的时间戳签名。
+  可作为 Bearer Token；`nps_users`、`nps_global_config` 仅管理员可用，
+  `nps_audit` 对普通用户只返回本人范围、管理员可查看全局。`nps.conf` 的
+  `auth_key` 仍可用于 `npsctl --key` 的时间戳签名。
 - 新增 `npsctl` CLI：覆盖客户端、隧道、域名反代、用户、审计和仪表盘查询，
   并可通过 `npsctl mcp` 生成 MCP 配置片段。
 - 新增内置 NPS Skill：面板 `/skill/nps.tar.gz` 可直接下载；GitHub Release
@@ -53,7 +54,8 @@ API Token 或 TOTP 绑定，回滚后仍由原有字段保存。
 - MCP 客户端请使用 `type: "http"`（VS Code / Claude Code）或
   `streamableHttp`（Cline），不要填 `sse`；Claude Desktop 需要
   `mcp-remote` 桥接。
-- 旧协议客户端必须先 `initialize`，后续请求携带 `Mcp-Session-Id`；
-  2026-07-28 及之后的协议版本不再要求会话头。
+- 客户端仍需执行 MCP `initialize`，但当前服务端按无状态模式运行，不需要
+  保存或发送 `Mcp-Session-Id`。`GET /mcp` 返回 405，用于健康检查请使用
+  面板或 `/api/v1/info`。
 - Node.js MCP 客户端遇到证书链错误时设置 `NODE_EXTRA_CA_CERTS`；curl
   调试可临时使用 `-k`，不要在生产脚本中长期关闭校验。

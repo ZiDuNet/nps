@@ -21,6 +21,8 @@ import (
 	"ehang.io/nps/lib/version"
 )
 
+const adminAPITokenPrefixForCLI = "npsa_"
+
 type client struct {
 	server string
 	token  string
@@ -77,14 +79,11 @@ func run(args []string) error {
 		usage(os.Stdout, fs)
 		return nil
 	}
-	if *data != "" && !json.Valid([]byte(*data)) {
-		return errors.New("--data 不是合法 JSON")
-	}
 
 	c := &client{
-		server: strings.TrimRight(*server, "/"),
-		token:  *token,
-		key:    *key,
+		server: strings.TrimRight(strings.TrimSpace(*server), "/"),
+		token:  strings.TrimSpace(*token),
+		key:    strings.TrimSpace(*key),
 		http:   &http.Client{Timeout: 20 * time.Second},
 		out:    os.Stdout,
 	}
@@ -93,33 +92,63 @@ func run(args []string) error {
 	argv := rest[1:]
 	switch cmd {
 	case "version":
+		if err := noPositionalArgs("version", argv); err != nil {
+			return err
+		}
 		fmt.Println(version.VERSION)
 		return nil
 	case "dashboard":
+		if err := noPositionalArgs("dashboard", argv); err != nil {
+			return err
+		}
 		return c.get("/api/v1/overview")
 	case "clients":
+		if err := noPositionalArgs("clients", argv); err != nil {
+			return err
+		}
 		return c.list("/api/v1/clients", *limit)
 	case "client":
 		return c.clientCmd(argv, *data)
 	case "tunnels":
+		if err := noPositionalArgs("tunnels", argv); err != nil {
+			return err
+		}
 		return c.list("/api/v1/tunnels", *limit)
 	case "tunnel":
 		return c.tunnelCmd(argv, *data)
 	case "hosts":
+		if err := noPositionalArgs("hosts", argv); err != nil {
+			return err
+		}
 		return c.list("/api/v1/hosts", *limit)
 	case "host":
 		return c.hostCmd(argv, *data)
 	case "users":
+		if err := noPositionalArgs("users", argv); err != nil {
+			return err
+		}
 		return c.list("/api/v1/users", *limit)
 	case "audit":
+		if err := noPositionalArgs("audit", argv); err != nil {
+			return err
+		}
 		return c.get("/api/v1/audit?limit=" + strconv.Itoa(nonZero(*limit, 50)))
 	case "npc":
+		if err := noPositionalArgs("npc", argv); err != nil {
+			return err
+		}
 		printNPC()
 		return nil
 	case "skill":
+		if err := noPositionalArgs("skill", argv); err != nil {
+			return err
+		}
 		printSkill()
 		return nil
 	case "mcp":
+		if err := noPositionalArgs("mcp", argv); err != nil {
+			return err
+		}
 		return c.printMCP()
 	default:
 		return fmt.Errorf("未知子命令 %q", cmd)
@@ -134,16 +163,25 @@ func (c *client) clientCmd(argv []string, data string) error {
 	id := argAt(argv, 1)
 	switch action {
 	case "get":
+		if err := exactArgs("client get", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("client", action, id); err != nil {
 			return err
 		}
 		return c.get("/api/v1/clients/" + id)
 	case "create":
+		if err := exactArgs("client create", argv, 1); err != nil {
+			return err
+		}
 		if err := requireData("client create", data); err != nil {
 			return err
 		}
 		return c.post("/api/v1/clients", data)
 	case "update":
+		if err := exactArgs("client update", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("client", action, id); err != nil {
 			return err
 		}
@@ -152,11 +190,17 @@ func (c *client) clientCmd(argv []string, data string) error {
 		}
 		return c.send("PUT", "/api/v1/clients/"+id, data)
 	case "delete":
+		if err := exactArgs("client delete", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("client", action, id); err != nil {
 			return err
 		}
 		return c.send("DELETE", "/api/v1/clients/"+id, "")
 	case "enable", "disable":
+		if err := exactArgs("client "+action, argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("client", action, id); err != nil {
 			return err
 		}
@@ -178,16 +222,25 @@ func (c *client) tunnelCmd(argv []string, data string) error {
 	id := argAt(argv, 1)
 	switch action {
 	case "get":
+		if err := exactArgs("tunnel get", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("tunnel", action, id); err != nil {
 			return err
 		}
 		return c.get("/api/v1/tunnels/" + id)
 	case "create":
+		if err := exactArgs("tunnel create", argv, 1); err != nil {
+			return err
+		}
 		if err := requireData("tunnel create", data); err != nil {
 			return err
 		}
 		return c.post("/api/v1/tunnels", data)
 	case "update":
+		if err := exactArgs("tunnel update", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("tunnel", action, id); err != nil {
 			return err
 		}
@@ -196,16 +249,25 @@ func (c *client) tunnelCmd(argv []string, data string) error {
 		}
 		return c.send("PUT", "/api/v1/tunnels/"+id, data)
 	case "delete":
+		if err := exactArgs("tunnel delete", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("tunnel", action, id); err != nil {
 			return err
 		}
 		return c.send("DELETE", "/api/v1/tunnels/"+id, "")
 	case "start":
+		if err := exactArgs("tunnel start", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("tunnel", action, id); err != nil {
 			return err
 		}
 		return c.post("/api/v1/tunnels/"+id+"/start", "")
 	case "stop":
+		if err := exactArgs("tunnel stop", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("tunnel", action, id); err != nil {
 			return err
 		}
@@ -223,16 +285,25 @@ func (c *client) hostCmd(argv []string, data string) error {
 	id := argAt(argv, 1)
 	switch action {
 	case "get":
+		if err := exactArgs("host get", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("host", action, id); err != nil {
 			return err
 		}
 		return c.get("/api/v1/hosts/" + id)
 	case "create":
+		if err := exactArgs("host create", argv, 1); err != nil {
+			return err
+		}
 		if err := requireData("host create", data); err != nil {
 			return err
 		}
 		return c.post("/api/v1/hosts", data)
 	case "update":
+		if err := exactArgs("host update", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("host", action, id); err != nil {
 			return err
 		}
@@ -241,16 +312,25 @@ func (c *client) hostCmd(argv []string, data string) error {
 		}
 		return c.send("PUT", "/api/v1/hosts/"+id, data)
 	case "delete":
+		if err := exactArgs("host delete", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("host", action, id); err != nil {
 			return err
 		}
 		return c.send("DELETE", "/api/v1/hosts/"+id, "")
 	case "start":
+		if err := exactArgs("host start", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("host", action, id); err != nil {
 			return err
 		}
 		return c.post("/api/v1/hosts/"+id+"/start", "")
 	case "stop":
+		if err := exactArgs("host stop", argv, 2); err != nil {
+			return err
+		}
 		if err := requireID("host", action, id); err != nil {
 			return err
 		}
@@ -283,7 +363,13 @@ func (c *client) send(method, path, body string) error {
 	if c.token == "" && c.key == "" {
 		return errors.New("缺少凭据：请设置 --token 或 --key（或环境变量 NPS_TOKEN / NPS_KEY）")
 	}
-	full := c.server + path
+	if c.token != "" && c.key != "" {
+		return errors.New("凭据冲突：--token 与 --key 只能选择一个")
+	}
+	if err := validateServerURL(c.server); err != nil {
+		return err
+	}
+	full := strings.TrimRight(c.server, "/") + path
 	var reader io.Reader
 	if body != "" {
 		reader = strings.NewReader(body)
@@ -326,10 +412,13 @@ func (c *client) send(method, path, body string) error {
 		}
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, msg)
 	}
-	if parsed && env.Code != "" && env.Status != 1 {
+	if parsed && env.Status != 1 {
 		msg := env.Msg
 		if env.ErrorCode != "" {
 			msg = env.ErrorCode + ": " + msg
+		}
+		if msg == "" {
+			msg = "服务端返回失败状态"
 		}
 		return errors.New(msg)
 	}
@@ -350,13 +439,21 @@ func (c *client) send(method, path, body string) error {
 }
 
 func (c *client) printMCP() error {
-	u, err := url.Parse(c.server)
-	if err != nil {
+	server := strings.TrimRight(strings.TrimSpace(c.server), "/")
+	if err := validateServerURL(server); err != nil {
 		return err
 	}
+	if c.token != "" && c.key != "" {
+		return errors.New("凭据冲突：--token 与 --key 只能选择一个")
+	}
+	u, _ := url.Parse(server)
 	cred := c.token
 	if cred == "" {
-		cred = "YOUR_TOKEN"
+		if strings.HasPrefix(c.key, adminAPITokenPrefixForCLI) {
+			cred = c.key
+		} else {
+			cred = "YOUR_TOKEN"
+		}
 	}
 	cfg := map[string]any{
 		"mcpServers": map[string]any{
@@ -458,7 +555,7 @@ func envOr(key, fallback string) string {
 func splitGlobalArgs(args []string) (global, rest []string) {
 	known := map[string]bool{
 		"--server": true, "--token": true, "--key": true, "--limit": true, "--data": true,
-		"-version": true, "--version": true,
+		"-version": true, "--version": true, "-h": true, "--help": true,
 	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -471,7 +568,7 @@ func splitGlobalArgs(args []string) (global, rest []string) {
 			rest = append(rest, arg)
 			continue
 		}
-		if name == "-version" || name == "--version" {
+		if name == "-version" || name == "--version" || name == "-h" || name == "--help" {
 			global = append(global, arg)
 			continue
 		}
@@ -502,6 +599,34 @@ func requireID(kind, action, id string) error {
 	n, err := strconv.Atoi(id)
 	if err != nil || n <= 0 {
 		return fmt.Errorf("%s id 必须是正整数，收到 %q", kind, id)
+	}
+	return nil
+}
+
+func exactArgs(command string, args []string, want int) error {
+	if len(args) == want {
+		return nil
+	}
+	return fmt.Errorf("用法: npsctl %s 参数数量不正确：需要 %d 个，实际 %d 个", command, want, len(args))
+}
+
+func noPositionalArgs(command string, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	return fmt.Errorf("用法: npsctl %s 不接受额外参数，收到 %q", command, strings.Join(args, " "))
+}
+
+func validateServerURL(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return errors.New("--server 必须是带主机名的绝对 http:// 或 https:// URL")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return errors.New("--server 仅支持 http:// 或 https://")
+	}
+	if u.User != nil {
+		return errors.New("--server 不能包含用户名或密码")
 	}
 	return nil
 }

@@ -37,8 +37,8 @@
   部署方式有变化时。
 - 文档中的 Bridge 端口必须写明来自面板/API 的 `bridgeEndpoints`；只有明确
   说明“默认值”时才可提 `8024` / `8025`。
-- MCP 文档必须明确 `type: "http"`、管理员/用户凭据矩阵以及 REST 与 MCP
-  审计权限差异。
+- MCP 文档必须明确 `type: "http"`、无状态会话、管理员/用户凭据矩阵，以及
+  REST 与 MCP 审计都按当前账号范围过滤。
 
 ## 本地验证
 
@@ -64,6 +64,7 @@ CLI 冒烟至少覆盖：
 - `npsctl clients --limit 5` 输出 `rows` / `total`，不再返回 `data:null`。
 - 无 Token 时返回凭据错误；错误 Token 时非零退出。
 - `npsctl client get` 缺 id 时先报参数错误。
+- `npsctl clients -h`、未知尾随参数、凭据冲突和非法 `--server` 均按预期处理。
 - `npsctl mcp` 生成的片段包含 `type`，且不误导为 SSE。
 - `bash -n web/skills/nps/scripts/npc-help.sh`，并检查帮助内容没有把默认
   端口写成所有部署的固定端口。

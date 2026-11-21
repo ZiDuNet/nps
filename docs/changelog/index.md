@@ -1,5 +1,9 @@
 # 更新日志
 
+## 未发布
+
+- MCP 改为无状态 Streamable HTTP，补齐安全标注、分页、JSON 401、普通用户审计隔离和 `GET /mcp` 405；`npsctl`、Skill 与接入文档同步修复。
+
 ## v1.1.48（2026-11-20）
 
 - 登录改为无状态挑战，修复 Nginx 反代缓存或多实例部署下的 `login_expired`；不改变旧 NPC 兼容性。

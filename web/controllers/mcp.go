@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -41,12 +42,16 @@ func NewMCPHandler() http.Handler {
 			}
 			return ctx
 		}),
+		server.WithStateLess(true),
+		server.WithDisableStreaming(true),
 		server.WithDisableLocalhostProtection(true),
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := resolveMCPPrincipal(r); !ok {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="nps"`)
-			http.Error(w, `{"status":0,"code":"unauthorized","msg":"缺少或无效的 Bearer Token"}`, http.StatusUnauthorized)
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"status":0,"code":"unauthorized","msg":"缺少或无效的 Bearer Token","msg_en":"Missing or invalid Bearer token"}` + "\n"))
 			return
 		}
 		handler.ServeHTTP(w, r)
@@ -136,6 +141,53 @@ func mcpError(text string) *mcp.CallToolResult {
 	return mcp.NewToolResultError(text)
 }
 
+func mcpRequestPrincipal(ctx context.Context) (*mcpPrincipal, *mcp.CallToolResult) {
+	principal, ok := mcpPrincipalFrom(ctx)
+	if !ok || principal == nil {
+		return nil, mcpError("认证主体缺失，请重新连接")
+	}
+	return principal, nil
+}
+
+func newMCPTool(name, title string, readOnly, destructive, idempotent bool, options ...mcp.ToolOption) mcp.Tool {
+	all := []mcp.ToolOption{
+		mcp.WithoutDefaultAnnotations(),
+		mcp.WithTitleAnnotation(title),
+		mcp.WithReadOnlyHintAnnotation(readOnly),
+		mcp.WithDestructiveHintAnnotation(destructive),
+		mcp.WithIdempotentHintAnnotation(idempotent),
+		mcp.WithOpenWorldHintAnnotation(false),
+	}
+	all = append(all, options...)
+	return mcp.NewTool(name, all...)
+}
+
+func mcpPageBounds(args map[string]any, defaultLimit int) (offset, limit int) {
+	offset = mcpArgInt(args, "offset")
+	if offset < 0 {
+		offset = 0
+	}
+	limit = mcpArgInt(args, "limit")
+	if limit <= 0 {
+		limit = defaultLimit
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	return offset, limit
+}
+
+func mcpPage[T any](rows []T, offset, limit int) []T {
+	if offset >= len(rows) {
+		return []T{}
+	}
+	end := offset + limit
+	if end > len(rows) {
+		end = len(rows)
+	}
+	return rows[offset:end]
+}
+
 func registerMCPTools(s *server.MCPServer) {
 	registerMCPReadTools(s)
 	registerMCPClientTools(s)
@@ -144,57 +196,89 @@ func registerMCPTools(s *server.MCPServer) {
 }
 
 func registerMCPReadTools(s *server.MCPServer) {
-	s.AddTool(mcp.NewTool("nps_dashboard",
+	s.AddTool(newMCPTool("nps_dashboard", "查看仪表盘", true, false, true,
 		mcp.WithDescription("返回仪表盘概览：客户端、隧道、域名反代数量与在线客户端数。"),
 	), mcpDashboard)
 
-	s.AddTool(mcp.NewTool("nps_clients",
+	s.AddTool(newMCPTool("nps_clients", "列出客户端", true, false, true,
 		mcp.WithDescription("列出客户端，可按备注/ID 搜索，或指定单个客户端 ID。"),
 		mcp.WithString("search", mcp.Description("按备注、VKey 或 ID 模糊搜索")),
 		mcp.WithNumber("client_id", mcp.Description("只返回指定客户端 ID")),
+		mcp.WithNumber("offset", mcp.Description("分页偏移，默认 0")),
+		mcp.WithNumber("limit", mcp.Description("返回条数，默认 100，最大 500")),
 	), mcpClients)
 
-	s.AddTool(mcp.NewTool("nps_client_get",
+	s.AddTool(newMCPTool("nps_client_get", "查看客户端", true, false, true,
 		mcp.WithDescription("返回单个客户端的详细信息。"),
 		mcp.WithNumber("id", mcp.Required(), mcp.Description("客户端 ID")),
 	), mcpClientGet)
 
-	s.AddTool(mcp.NewTool("nps_tunnels",
+	s.AddTool(newMCPTool("nps_tunnels", "列出隧道", true, false, true,
 		mcp.WithDescription("列出隧道，可按客户端 ID 或模式过滤。"),
 		mcp.WithNumber("client_id", mcp.Description("按客户端 ID 过滤")),
 		mcp.WithString("mode", mcp.Description("按模式过滤：tcp、udp、socks5、httpProxy、file、p2p 等")),
+		mcp.WithNumber("offset", mcp.Description("分页偏移，默认 0")),
+		mcp.WithNumber("limit", mcp.Description("返回条数，默认 100，最大 500")),
 	), mcpTunnels)
 
-	s.AddTool(mcp.NewTool("nps_hosts",
+	s.AddTool(newMCPTool("nps_hosts", "列出域名反代", true, false, true,
 		mcp.WithDescription("列出域名反代规则。"),
 		mcp.WithString("search", mcp.Description("按域名或备注模糊搜索")),
+		mcp.WithNumber("offset", mcp.Description("分页偏移，默认 0")),
+		mcp.WithNumber("limit", mcp.Description("返回条数，默认 100，最大 500")),
 	), mcpHosts)
 
-	s.AddTool(mcp.NewTool("nps_users",
+	s.AddTool(newMCPTool("nps_users", "列出用户", true, false, true,
 		mcp.WithDescription("列出用户（仅管理员）。"),
 		mcp.WithString("search", mcp.Description("按用户名或邮箱模糊搜索")),
+		mcp.WithNumber("offset", mcp.Description("分页偏移，默认 0")),
+		mcp.WithNumber("limit", mcp.Description("返回条数，默认 100，最大 500")),
 	), mcpUsers)
 
-	s.AddTool(mcp.NewTool("nps_audit",
-		mcp.WithDescription("列出最近的操作审计事件（仅管理员）。"),
+	s.AddTool(newMCPTool("nps_audit", "查看操作审计", true, false, true,
+		mcp.WithDescription("列出当前账号可见的操作审计事件；管理员查看全局，普通用户仅查看本人范围。"),
 		mcp.WithNumber("limit", mcp.Description("返回条数，默认 50，最大 500")),
+		mcp.WithNumber("offset", mcp.Description("分页偏移，默认 0")),
 	), mcpAudit)
 
-	s.AddTool(mcp.NewTool("nps_global_config",
+	s.AddTool(newMCPTool("nps_global_config", "查看全局配置", true, false, true,
 		mcp.WithDescription("返回全局配置的脱敏概览（仅管理员）。"),
 	), mcpGlobalConfig)
 }
 
 func mcpDashboard(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
-	db := file.GetDb()
-	clients, _ := db.GetClientListForAllowedIds(0, 10000, "", "id", "asc", 0, principal.allowedClientIDs())
-	tunnels, hosts, users := 0, 0, 0
-	if principal.IsAdmin {
-		userRows, _ := db.GetUserList(0, 10000, "")
-		users = len(userRows)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
 	}
+	db := file.GetDb()
 	allowed := principal.allowedClientIDs()
+	clients, onlineClients, tunnels, hosts, users := 0, 0, 0, 0, 0
+	db.JsonDb.Clients.Range(func(_, value interface{}) bool {
+		client, ok := value.(*file.Client)
+		if !ok || client == nil {
+			return true
+		}
+		client.RLock()
+		clientID, connected, noDisplay := client.Id, client.IsConnect, client.NoDisplay
+		client.RUnlock()
+		if noDisplay {
+			return true
+		}
+		if allowed != nil {
+			if _, ok := allowed[clientID]; !ok {
+				return true
+			}
+		}
+		clients++
+		if connected {
+			onlineClients++
+		}
+		return true
+	})
+	if principal.IsAdmin {
+		_, users = db.GetUserList(0, 0, "")
+	}
 	db.JsonDb.Tasks.Range(func(_, value interface{}) bool {
 		tunnel, ok := value.(*file.Tunnel)
 		if !ok || tunnel == nil {
@@ -238,25 +322,32 @@ func mcpDashboard(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResu
 		return true
 	})
 	return mcpJSON(map[string]any{
-		"clients": len(clients), "tunnels": tunnels, "hosts": hosts, "users": users,
+		"clients": clients, "online_clients": onlineClients, "tunnels": tunnels, "hosts": hosts, "users": users,
 	})
 }
 
 func mcpClients(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	args := request.GetArguments()
 	search := mcpArgString(args, "search")
 	clientID := mcpArgInt(args, "client_id")
-	rows, _ := file.GetDb().GetClientListForAllowedIds(0, 200, search, "id", "asc", clientID, principal.allowedClientIDs())
+	offset, limit := mcpPageBounds(args, 100)
+	rows, total := file.GetDb().GetClientListForAllowedIds(offset, limit, search, "id", "asc", clientID, principal.allowedClientIDs())
 	dtos := make([]mcpClientDTO, 0, len(rows))
 	for _, client := range rows {
 		dtos = append(dtos, buildMCPClientDTO(client))
 	}
-	return mcpJSON(map[string]any{"total": len(dtos), "clients": dtos})
+	return mcpJSON(map[string]any{"total": total, "clients": dtos, "offset": offset, "limit": limit})
 }
 
 func mcpClientGet(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	id := mcpArgInt(request.GetArguments(), "id")
 	if id <= 0 {
 		return mcpError("id 不能为空"), nil
@@ -272,10 +363,14 @@ func mcpClientGet(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTo
 }
 
 func mcpTunnels(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	args := request.GetArguments()
 	clientID := mcpArgInt(args, "client_id")
 	mode := strings.ToLower(mcpArgString(args, "mode"))
+	offset, limit := mcpPageBounds(args, 100)
 	allowed := principal.allowedClientIDs()
 	dtos := make([]mcpTunnelDTO, 0)
 	file.GetDb().JsonDb.Tasks.Range(func(_, value interface{}) bool {
@@ -309,12 +404,19 @@ func mcpTunnels(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallTool
 		dtos = append(dtos, mcpTunnelDTO{Id: tunnelID, ClientId: ownerID, Mode: tunnelMode, Port: port, Status: status, RunStatus: runStatus, Target: target, Remark: remark})
 		return true
 	})
-	return mcpJSON(map[string]any{"total": len(dtos), "tunnels": dtos})
+	sort.Slice(dtos, func(i, j int) bool { return dtos[i].Id < dtos[j].Id })
+	total := len(dtos)
+	return mcpJSON(map[string]any{"total": total, "tunnels": mcpPage(dtos, offset, limit), "offset": offset, "limit": limit})
 }
 
 func mcpHosts(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
-	search := mcpArgString(request.GetArguments(), "search")
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
+	args := request.GetArguments()
+	search := mcpArgString(args, "search")
+	offset, limit := mcpPageBounds(args, 100)
 	allowed := principal.allowedClientIDs()
 	dtos := make([]mcpHostDTO, 0)
 	file.GetDb().JsonDb.Hosts.Range(func(_, value interface{}) bool {
@@ -341,30 +443,42 @@ func mcpHosts(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolRe
 		dtos = append(dtos, mcpHostDTO{Id: hostID, ClientId: ownerID, Host: hostName, Scheme: scheme, Location: location, Remark: remark, IsClose: closed})
 		return true
 	})
-	return mcpJSON(map[string]any{"total": len(dtos), "hosts": dtos})
+	sort.Slice(dtos, func(i, j int) bool { return dtos[i].Id < dtos[j].Id })
+	total := len(dtos)
+	return mcpJSON(map[string]any{"total": total, "hosts": mcpPage(dtos, offset, limit), "offset": offset, "limit": limit})
 }
 
 func mcpUsers(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
-	if principal == nil || !principal.IsAdmin {
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
+	if !principal.IsAdmin {
 		return mcpError("仅管理员可用"), nil
 	}
-	rows, _ := file.GetDb().GetUserList(0, 200, mcpArgString(request.GetArguments(), "search"))
+	args := request.GetArguments()
+	offset, limit := mcpPageBounds(args, 100)
+	rows, total := file.GetDb().GetUserList(offset, limit, mcpArgString(args, "search"))
 	dtos := make([]mcpUserDTO, 0, len(rows))
 	for _, user := range rows {
 		user.RLock()
 		dtos = append(dtos, mcpUserDTO{Id: user.Id, UserName: user.UserName, Email: user.Email, Status: user.Status, Remark: user.Remark})
 		user.RUnlock()
 	}
-	return mcpJSON(map[string]any{"total": len(dtos), "users": dtos})
+	return mcpJSON(map[string]any{"total": total, "users": dtos, "offset": offset, "limit": limit})
 }
 
 func mcpAudit(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
-	if principal == nil || !principal.IsAdmin {
-		return mcpError("仅管理员可用"), nil
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
 	}
-	limit := mcpArgInt(request.GetArguments(), "limit")
+	args := request.GetArguments()
+	offset := mcpArgInt(args, "offset")
+	if offset < 0 {
+		offset = 0
+	}
+	limit := mcpArgInt(args, "limit")
 	if limit <= 0 {
 		limit = 50
 	}
@@ -372,16 +486,24 @@ func mcpAudit(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolRe
 		limit = 500
 	}
 	audit.Configure(beego.AppConfig.String("audit_log_path"))
-	page, err := audit.List(audit.Filter{Limit: limit})
+	filter := audit.Filter{Offset: offset, Limit: limit}
+	if !principal.IsAdmin {
+		ownerID := principal.UserID
+		filter.OwnerUserID = &ownerID
+	}
+	page, err := audit.List(filter)
 	if err != nil {
 		return mcpError("读取审计失败: " + err.Error()), nil
 	}
-	return mcpJSON(map[string]any{"total": page.Total, "events": page.Events})
+	return mcpJSON(map[string]any{"total": page.Total, "events": page.Events, "offset": offset, "limit": limit})
 }
 
 func mcpGlobalConfig(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
-	if principal == nil || !principal.IsAdmin {
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
+	if !principal.IsAdmin {
 		return mcpError("仅管理员可用"), nil
 	}
 	keys := []string{
@@ -470,7 +592,7 @@ type mcpUserDTO struct {
 }
 
 func registerMCPClientTools(s *server.MCPServer) {
-	s.AddTool(mcp.NewTool("nps_client_create",
+	s.AddTool(newMCPTool("nps_client_create", "创建客户端", false, false, false,
 		mcp.WithDescription("创建客户端。管理员可指定 user_id，普通用户固定归属自己。"),
 		mcp.WithString("remark", mcp.Description("备注")),
 		mcp.WithNumber("user_id", mcp.Description("归属用户 ID（仅管理员）")),
@@ -479,7 +601,7 @@ func registerMCPClientTools(s *server.MCPServer) {
 		mcp.WithNumber("rate_limit", mcp.Description("限速 KB/s，0 表示不限")),
 	), mcpClientCreate)
 
-	s.AddTool(mcp.NewTool("nps_client_update",
+	s.AddTool(newMCPTool("nps_client_update", "更新客户端", false, false, true,
 		mcp.WithDescription("更新客户端备注或限额字段。"),
 		mcp.WithNumber("id", mcp.Required(), mcp.Description("客户端 ID")),
 		mcp.WithString("remark", mcp.Description("备注")),
@@ -488,12 +610,12 @@ func registerMCPClientTools(s *server.MCPServer) {
 		mcp.WithNumber("rate_limit", mcp.Description("限速 KB/s")),
 	), mcpClientUpdate)
 
-	s.AddTool(mcp.NewTool("nps_client_delete",
+	s.AddTool(newMCPTool("nps_client_delete", "删除客户端", false, true, true,
 		mcp.WithDescription("删除客户端及其隧道与域名反代。"),
 		mcp.WithNumber("id", mcp.Required(), mcp.Description("客户端 ID")),
 	), mcpClientDelete)
 
-	s.AddTool(mcp.NewTool("nps_client_set_status",
+	s.AddTool(newMCPTool("nps_client_set_status", "启停客户端", false, false, true,
 		mcp.WithDescription("启用或停用客户端（仅管理员）。"),
 		mcp.WithNumber("id", mcp.Required(), mcp.Description("客户端 ID")),
 		mcp.WithBoolean("status", mcp.Required(), mcp.Description("true 启用，false 停用")),
@@ -501,7 +623,10 @@ func registerMCPClientTools(s *server.MCPServer) {
 }
 
 func mcpClientCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	args := request.GetArguments()
 	client := &file.Client{
 		Remark:       mcpArgString(args, "remark"),
@@ -524,7 +649,10 @@ func mcpClientCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 }
 
 func mcpClientUpdate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	args := request.GetArguments()
 	id := mcpArgInt(args, "id")
 	if !principal.canTouchClient(id) {
@@ -556,7 +684,10 @@ func mcpClientUpdate(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 }
 
 func mcpClientDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	id := mcpArgInt(request.GetArguments(), "id")
 	if !principal.canTouchClient(id) {
 		return mcpError("无权操作该客户端"), nil
@@ -574,8 +705,11 @@ func mcpClientDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 }
 
 func mcpClientSetStatus(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
-	if principal == nil || !principal.IsAdmin {
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
+	if !principal.IsAdmin {
 		return mcpError("仅管理员可用"), nil
 	}
 	args := request.GetArguments()
@@ -594,7 +728,7 @@ func mcpClientSetStatus(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 }
 
 func registerMCPTunnelTools(s *server.MCPServer) {
-	s.AddTool(mcp.NewTool("nps_tunnel_create",
+	s.AddTool(newMCPTool("nps_tunnel_create", "创建隧道", false, false, false,
 		mcp.WithDescription("创建隧道。"),
 		mcp.WithString("mode", mcp.Required(), mcp.Description("模式：tcp、udp、socks5、httpProxy、file、p2p 等")),
 		mcp.WithNumber("port", mcp.Required(), mcp.Description("监听端口")),
@@ -603,12 +737,12 @@ func registerMCPTunnelTools(s *server.MCPServer) {
 		mcp.WithString("remark", mcp.Description("备注")),
 	), mcpTunnelCreate)
 
-	s.AddTool(mcp.NewTool("nps_tunnel_delete",
+	s.AddTool(newMCPTool("nps_tunnel_delete", "删除隧道", false, true, true,
 		mcp.WithDescription("删除隧道。"),
 		mcp.WithNumber("id", mcp.Required(), mcp.Description("隧道 ID")),
 	), mcpTunnelDelete)
 
-	s.AddTool(mcp.NewTool("nps_tunnel_set_status",
+	s.AddTool(newMCPTool("nps_tunnel_set_status", "启停隧道", false, false, true,
 		mcp.WithDescription("启用或停用隧道。"),
 		mcp.WithNumber("id", mcp.Required(), mcp.Description("隧道 ID")),
 		mcp.WithBoolean("status", mcp.Required(), mcp.Description("true 启用，false 停用")),
@@ -616,7 +750,10 @@ func registerMCPTunnelTools(s *server.MCPServer) {
 }
 
 func mcpTunnelCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	args := request.GetArguments()
 	clientID := mcpArgInt(args, "client_id")
 	if !principal.canTouchClient(clientID) {
@@ -642,7 +779,10 @@ func mcpTunnelCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 }
 
 func mcpTunnelDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	id := mcpArgInt(request.GetArguments(), "id")
 	tunnel, err := file.GetDb().GetTask(id)
 	if err != nil || tunnel == nil {
@@ -664,7 +804,10 @@ func mcpTunnelDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 }
 
 func mcpTunnelSetStatus(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	args := request.GetArguments()
 	id := mcpArgInt(args, "id")
 	tunnel, err := file.GetDb().GetTask(id)
@@ -690,7 +833,7 @@ func mcpTunnelSetStatus(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 }
 
 func registerMCPHostTools(s *server.MCPServer) {
-	s.AddTool(mcp.NewTool("nps_host_create",
+	s.AddTool(newMCPTool("nps_host_create", "创建域名反代", false, false, false,
 		mcp.WithDescription("创建域名反代规则。"),
 		mcp.WithString("host", mcp.Required(), mcp.Description("域名")),
 		mcp.WithNumber("client_id", mcp.Required(), mcp.Description("客户端 ID")),
@@ -700,12 +843,12 @@ func registerMCPHostTools(s *server.MCPServer) {
 		mcp.WithString("remark", mcp.Description("备注")),
 	), mcpHostCreate)
 
-	s.AddTool(mcp.NewTool("nps_host_delete",
+	s.AddTool(newMCPTool("nps_host_delete", "删除域名反代", false, true, true,
 		mcp.WithDescription("删除域名反代规则。"),
 		mcp.WithNumber("id", mcp.Required(), mcp.Description("规则 ID")),
 	), mcpHostDelete)
 
-	s.AddTool(mcp.NewTool("nps_host_set_status",
+	s.AddTool(newMCPTool("nps_host_set_status", "启停域名反代", false, false, true,
 		mcp.WithDescription("启用或停用域名反代规则。"),
 		mcp.WithNumber("id", mcp.Required(), mcp.Description("规则 ID")),
 		mcp.WithBoolean("status", mcp.Required(), mcp.Description("true 启用，false 停用")),
@@ -713,7 +856,10 @@ func registerMCPHostTools(s *server.MCPServer) {
 }
 
 func mcpHostCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	args := request.GetArguments()
 	clientID := mcpArgInt(args, "client_id")
 	if !principal.canTouchClient(clientID) {
@@ -746,7 +892,10 @@ func mcpHostCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 }
 
 func mcpHostDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	id := mcpArgInt(request.GetArguments(), "id")
 	host, err := file.GetDb().GetHostById(id)
 	if err != nil || host == nil {
@@ -768,7 +917,10 @@ func mcpHostDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 }
 
 func mcpHostSetStatus(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	principal, _ := mcpPrincipalFrom(ctx)
+	principal, failure := mcpRequestPrincipal(ctx)
+	if failure != nil {
+		return failure, nil
+	}
 	args := request.GetArguments()
 	id := mcpArgInt(args, "id")
 	host, err := file.GetDb().GetHostById(id)
