@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.47</sub>
+﻿# NPS <sub>v1.1.48</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -202,6 +202,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.48** (2026-11-20) - Replaced session-bound login challenges with stateless `/auth/challenge` verification, fixing `login_expired` behind Nginx caching or multi-instance deployments. Added the `/mcp` Model Context Protocol server, the `npsctl` CLI, and a bundled NPS Skill distributed as a GitHub release asset. Renamed Account Management to Access & Security and added Agent integration guidance. Release assets now include per-platform `npsctl` binaries and `nps-skill.tar.gz`. See the [upgrade notes](docs/upgrade-1.1.48.md).
 - **v1.1.47** (2026-11-17) - Fixed the fnOS pure-connection mode so it auto-reconnects after a bridge drop: the child process now exits per `auto_reconnection` and the manager recreates it every 5 seconds, and the embedded log view now shows newest entries first.
 - **v1.1.46** (2026-11-17) - Added the fnOS (飞牛) native NPC FPK package (NPC-Pro) with an embedded settings page, quick-command/manual forms, direct `npc.conf` editing, multi-VKey sub-process management and rotated logs; FPK and Docker clients disable server-pushed self-update. Server-side config now hot-reloads the supported runtime subset, version checks are cached server-side, and persistent IDs are reclaimed after the last client/tunnel/host is removed. See the [upgrade notes](docs/upgrade-1.1.46.md).
 - **v1.1.45** (2026-11-16) - Added linked-email login and password recovery while registration is open; fixed client-scoped VKey sign-in and audit initialization. The console reads the latest 2,000 journal records with admin-only retention cleanup. Restored user usage trends, added automatic expired-history cleanup and expanded the embedded guide. Old NPC remains compatible. See the [upgrade notes](docs/upgrade-1.1.45.md).

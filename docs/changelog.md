@@ -1,5 +1,13 @@
 # 更新日志
 
+## v1.1.48 (2026-11-20)
+
+- 登录改为无状态挑战（`/auth/challenge`），不再依赖会话中的 nonce，修复 Nginx 反代缓存或多实例部署下反复出现 `login_expired` 的问题。
+- 新增 MCP 服务端（`/mcp`，`mcp_enabled` 开关），使用 Streamable HTTP；用户 Token 或 Web 生成的管理员 API 密钥可认证，`nps_users` / `nps_audit` / `nps_global_config` 仅管理员可用。命令行签名仍兼容 `nps.conf` 中的 `auth_key`。
+- 新增 `npsctl` 命令行工具与内置 NPS Skill；Release 现在发布各平台 `npsctl` 二进制和 `nps-skill.tar.gz`，面板 `/skill/nps.tar.gz` 下载保持可用。
+- 「账户管理」更名为「接入与安全」，页面按 Tab 组织，并新增 Skill / CLI / MCP 的 Agent 接入说明与一键复制。
+- 兼容性：不改变 Bridge 握手、NPC 业务协议、历史快捷命令或业务 JSON；旧 NPC、旧配置无需迁移。详见 [1.1.48 升级说明](upgrade-1.1.48.md)。
+
 ## v1.1.47 (2026-11-17)
 
 - 修复飞牛纯连接模式（仅 `[common]`、无本地隧道规则）断线后不自动重连：子进程改为按 `auto_reconnection` 退出交由管理进程按 5 秒重建，或保持等待配置变更。
