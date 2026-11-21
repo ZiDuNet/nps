@@ -134,27 +134,6 @@ tar -czvf freebsd_amd64_server.tar.gz nps
 
 
 
-CGO_ENABLED=0 GOOS=linux GOARCH=mips GOMIPS=softfloat go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/nps
-
-tar -czvf linux_mips_server.tar.gz nps
-
-
-CGO_ENABLED=0 GOOS=linux GOARCH=mips64 GOMIPS64=softfloat go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/nps
-
-tar -czvf linux_mips64_server.tar.gz nps
-
-
-CGO_ENABLED=0 GOOS=linux GOARCH=mips64le GOMIPS64=softfloat go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/nps
-
-tar -czvf linux_mips64le_server.tar.gz nps
-
-
-CGO_ENABLED=0 GOOS=linux GOARCH=mipsle GOMIPS=softfloat go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/nps
-
-tar -czvf linux_mipsle_server.tar.gz nps
-
-
-
 CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w -extldflags -static -extldflags -static" ./cmd/nps
 
 tar -czvf darwin_amd64_server.tar.gz nps

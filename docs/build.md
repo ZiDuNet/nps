@@ -50,6 +50,17 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 \
   go build -ldflags "-s -w" ./cmd/npc
 ```
 
+从 v1.1.50 起，SQLite 驱动只在 NPS 服务端入口注册，NPC 不再编译
+`modernc.org/sqlite`。正式服务端架构为 Linux `amd64/386/armv5/armv6/armv7/arm64`、
+FreeBSD `386/amd64/arm`、macOS `amd64/arm64` 和 Windows
+`386/amd64/arm64`。Linux MIPS server 因 SQLite 驱动不支持而退出正式发布
+矩阵；Linux MIPS `mips/mipsle/mips64/mips64le` NPC 继续发布，已部署的旧
+MIPS 客户端仍可通过原 Bridge 协议连接新服务端。
+
+提交前可执行 `bash scripts/check-release-targets.sh`，它会检查 NPC 没有重新
+引入 SQLite 依赖，并使用与 Release 相同的主要架构组合交叉编译 `nps` 和
+`npc`。
+
 ## GUI 客户端
 
 前端依赖：

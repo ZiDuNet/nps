@@ -2,8 +2,8 @@
 <manifest
         xmlns:android="http://schemas.android.com/apk/res/android"
         package="org.nps.client"
-        android:versionCode="49"
-        android:versionName="1.1.49">
+        android:versionCode="50"
+        android:versionName="1.1.50">
 
     <application android:label="Npc" android:debuggable="true">
         <activity android:name="org.golang.app.GoNativeActivity"

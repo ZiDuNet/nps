@@ -6,8 +6,8 @@
 ## 版本号规则
 
 - 版本号唯一来源：`lib/version/version.go` 的 `VERSION`。
-- 正式 tag 必须等于 `v{VERSION}`，例如源码为 `1.1.49` 时 tag 只能是
-  `v1.1.49`。
+- 正式 tag 必须等于 `v{VERSION}`，例如源码为 `1.1.50` 时 tag 只能是
+  `v1.1.50`。
 - tag 必须指向当前 `origin/master` 的提交；`release.yml` 的
   `validate_release` 会强制校验这两点。
 - 补丁版本只递增最后一位；不要复用或移动已发布 tag，回滚请发新补丁版本。
@@ -20,6 +20,9 @@
 | `cmd/npc/npc-gui/wails.json` | `info.productVersion` 同步 |
 | `cmd/npc/npc-gui/frontend/package.json` | `version` 同步 |
 | `cmd/npc/npc-gui/build/darwin/Info.plist` | `CFBundleVersion` 与 `CFBundleShortVersionString` 同步 |
+| `cmd/npc/npc-gui/build/windows/info.json` | `file_version` 与 `ProductVersion` 同步 |
+| `cmd/npc/npc-gui/build/windows/wails.exe.manifest` | 程序集版本同步 |
+| `cmd/npc/npc-gui/build/config.yml` | 源版本同步，避免下次生成资产时回退 |
 | `gui/npc/AndroidManifest.xml` | `versionName` 同步，`versionCode` 单调递增 |
 | `packaging/fnos/manifest` | `version` 同步；打包脚本仍会在构建时覆盖 |
 | `cmd/npsctl/main.go` | 从 `lib/version` 读取，禁止另写常量 |
@@ -50,6 +53,7 @@
 ```bash
 export GOPROXY=https://goproxy.cn,direct
 go build ./...
+bash scripts/check-release-targets.sh
 go test ./...
 go test -race ./bridge ./client ./cmd/npc ./cmd/nps \
   ./lib/config ./lib/conn ./lib/file ./lib/fnos ./lib/install \
@@ -119,6 +123,9 @@ Docker 用户还要确认 `nps` / `npc` 的版本标签和 `latest` 指向新版
   非 master 提交上。
 - 资产 404：检查 `build.assets.sh` 是否生成、`upload-artifact` 是否包含、
   `publish_release.files` 是否匹配；裸二进制需单列 `npsctl_*`。
+- 跨架构构建失败：先运行 `bash scripts/check-release-targets.sh`。SQLite
+  驱动不支持 Linux MIPS server；MIPS NPC 必须保持不依赖 SQLite，不要通过
+  复制旧资产或伪造版本号绕过。
 - Node.js 20 deprecation 警告目前不阻塞发布，但升级 action 版本时应一并处理。
 
 ## 红线

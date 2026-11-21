@@ -2,6 +2,19 @@
 
 所有重要变更记录在此。
 
+## [1.1.50] - 2026-11-21
+
+### Fixed
+
+- 修复 `v1.1.49` 的多架构发布失败：SQLite 驱动被公共存储包匿名注册，导致并不使用数据库的 NPC 也被迫编译平台受限的 `modernc.org/libc`，最终在 Linux MIPS 构建阶段中断整个 Release。
+- SQLite 驱动注册拆到服务端专用入口；NPC 重新不依赖 SQLite，继续发布 Linux MIPS client。无法提供 SQLite 存储的 Linux MIPS server 不再进入正式发布矩阵。
+- CI 新增正式服务端发布架构和全部历史 NPC 架构的交叉编译检查，并校验 NPC 不得重新引入 SQLite 依赖，避免直到正式标签才暴露打包问题。
+
+### Compatibility
+
+- 已部署的旧版 MIPS NPC 仍可通过 Bridge 协议连接受支持架构上的 NPS 服务端；本次只停止提供无法由 SQLite 版本构建的 MIPS server。
+- 不改变 Bridge 握手、NPC 控制消息、快捷命令、现有 `/api/v1` 字段或 SQLite 数据格式；从 `v1.1.49` 升级无需再次执行 JSON 网关。
+
 ## [1.1.49] - 2026-11-21
 
 ### Added
