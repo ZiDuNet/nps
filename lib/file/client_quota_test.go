@@ -2,6 +2,7 @@ package file
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -11,20 +12,104 @@ import (
 	"ehang.io/nps/lib/common"
 )
 
+func TestConcurrentTunnelCreationCannotExceedUserQuota(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	user := &User{Id: 1, UserName: "alice", Password: "secret", Status: true, MaxTunnelNum: LimitInt(3)}
+	client := &Client{Id: 1, UserId: user.Id, VerifyKey: "client-1", Status: true}
+	db.Users.Store(user.Id, user)
+	db.Clients.Store(client.Id, client)
+
+	const attempts = 12
+	var created int32
+	var wg sync.WaitGroup
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			tunnel := &Tunnel{
+				Mode:   "tcp",
+				Port:   10000 + index,
+				Status: true,
+				Client: client,
+				Target: &Target{TargetStr: "127.0.0.1:80"},
+			}
+			if err := utils.NewTask(tunnel); err == nil {
+				atomic.AddInt32(&created, 1)
+			}
+		}(i)
+	}
+	wg.Wait()
+	if created != 3 {
+		t.Fatalf("concurrent tunnel creations = %d, want exactly 3", created)
+	}
+	if got := utils.GetUserTunnelNum(user.Id); got != 3 {
+		t.Fatalf("persisted tunnel count = %d, want 3", got)
+	}
+}
+
+func TestConcurrentHostCreationCannotExceedUserQuota(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	user := &User{Id: 1, UserName: "alice", Password: "secret", Status: true, MaxHostNum: LimitInt(2)}
+	client := &Client{Id: 1, UserId: user.Id, VerifyKey: "client-1", Status: true}
+	db.Users.Store(user.Id, user)
+	db.Clients.Store(client.Id, client)
+
+	const attempts = 10
+	var created int32
+	var wg sync.WaitGroup
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			host := &Host{
+				Host:     "tenant-" + strconv.Itoa(index) + ".example.com",
+				Location: "/",
+				Scheme:   "http",
+				Client:   client,
+				Target:   &Target{TargetStr: "127.0.0.1:80"},
+			}
+			if err := utils.NewHost(host); err == nil {
+				atomic.AddInt32(&created, 1)
+			}
+		}(i)
+	}
+	wg.Wait()
+	if created != 2 {
+		t.Fatalf("concurrent host creations = %d, want exactly 2", created)
+	}
+}
+
+func TestNewTaskEnforcesClientMaxTunnelNum(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	client := &Client{Id: 1, VerifyKey: "client-1", Status: true, MaxTunnelNum: 1}
+	db.Clients.Store(client.Id, client)
+	first := &Tunnel{Mode: "tcp", Port: 10001, Status: true, Client: client, Target: &Target{TargetStr: "127.0.0.1:80"}}
+	if err := utils.NewTask(first); err != nil {
+		t.Fatal(err)
+	}
+	second := &Tunnel{Mode: "tcp", Port: 10002, Status: true, Client: client, Target: &Target{TargetStr: "127.0.0.1:80"}}
+	if err := utils.NewTask(second); err == nil {
+		t.Fatal("client-level tunnel quota must be enforced in the data layer")
+	}
+}
+
 func TestUserMaxClientNumDefaultsToUnlimitedForExistingJSON(t *testing.T) {
 	var user User
 	if err := json.Unmarshal([]byte(`{"Id":7,"UserName":"legacy","Password":"secret","Status":true}`), &user); err != nil {
 		t.Fatal(err)
 	}
-	if user.MaxClientNum != 0 {
-		t.Fatalf("legacy user max client num = %d, want zero/unlimited", user.MaxClientNum)
+	if user.MaxClientNum != nil {
+		t.Fatalf("legacy user max client num = %v, want nil/unlimited", user.MaxClientNum)
 	}
 }
 
 func TestNewClientEnforcesUserMaxClientNum(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}
-	user := &User{Id: 1, UserName: "alice", Password: "secret", Status: true, MaxClientNum: 2}
+	user := &User{Id: 1, UserName: "alice", Password: "secret", Status: true, MaxClientNum: LimitInt(2)}
 	db.Users.Store(user.Id, user)
 
 	for i := 0; i < 2; i++ {
@@ -44,10 +129,46 @@ func TestNewClientEnforcesUserMaxClientNum(t *testing.T) {
 	}
 }
 
+func TestAdminClientMutationsBypassOnlyPlanQuota(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	user := &User{
+		Id:           1,
+		UserName:     "alice",
+		Password:     "secret",
+		Status:       true,
+		MaxClientNum: NotIncludedInt(),
+		ExpireTime:   "2030-08-01 12:00:00",
+	}
+	db.Users.Store(user.Id, user)
+
+	client := &Client{UserId: user.Id, VerifyKey: "admin-created", Status: true}
+	if err := utils.NewClientAsAdmin(client); err != nil {
+		t.Fatalf("administrator-created client should ignore the plan's client quota: %v", err)
+	}
+	defer stopStoredClientRates(db)
+	if got := utils.GetUserClientNum(user.Id); got != 1 {
+		t.Fatalf("assigned client count = %d, want 1", got)
+	}
+
+	replacement := &Client{Id: client.Id, UserId: user.Id, VerifyKey: "admin-created", Status: true}
+	if err := utils.UpdateClientAsAdmin(replacement); err != nil {
+		t.Fatalf("administrator update should ignore the plan's client quota: %v", err)
+	}
+
+	if err := utils.NewClientAsAdmin(&Client{UserId: 404, VerifyKey: "missing-owner"}); err == nil {
+		t.Fatal("administrator client creation still requires an existing owner")
+	}
+	late := &Client{UserId: user.Id, VerifyKey: "late-expiry", ExpireTime: "2030-09-01 12:00:00"}
+	if err := utils.NewClientAsAdmin(late); err == nil || !strings.Contains(err.Error(), "不能晚于") {
+		t.Fatalf("administrator client creation must preserve owner expiry bounds: %v", err)
+	}
+}
+
 func TestConcurrentNewClientRespectsUserMaxClientNum(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}
-	user := &User{Id: 2, UserName: "concurrent", Password: "secret", Status: true, MaxClientNum: 3}
+	user := &User{Id: 2, UserName: "concurrent", Password: "secret", Status: true, MaxClientNum: LimitInt(3)}
 	db.Users.Store(user.Id, user)
 	defer stopStoredClientRates(db)
 
@@ -74,11 +195,11 @@ func TestConcurrentNewClientRespectsUserMaxClientNum(t *testing.T) {
 	group.Wait()
 	close(errs)
 
-	if got := atomic.LoadInt32(&successes); got != int32(user.MaxClientNum) {
-		t.Fatalf("concurrent creates succeeded = %d, want %d", got, user.MaxClientNum)
+	if got, want := atomic.LoadInt32(&successes), int32(*user.MaxClientNum); got != want {
+		t.Fatalf("concurrent creates succeeded = %d, want %d", got, want)
 	}
-	if got := utils.GetUserClientNum(user.Id); got != user.MaxClientNum {
-		t.Fatalf("persisted client count = %d, want %d", got, user.MaxClientNum)
+	if got, want := utils.GetUserClientNum(user.Id), *user.MaxClientNum; got != want {
+		t.Fatalf("persisted client count = %d, want %d", got, want)
 	}
 	for err := range errs {
 		if !strings.Contains(err.Error(), "配额") {
@@ -90,8 +211,8 @@ func TestConcurrentNewClientRespectsUserMaxClientNum(t *testing.T) {
 func TestUpdateClientOwnerQuotaExcludesCurrentClient(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}
-	ownerA := &User{Id: 1, UserName: "a", Password: "secret", Status: true, MaxClientNum: 1}
-	ownerB := &User{Id: 2, UserName: "b", Password: "secret", Status: true, MaxClientNum: 1}
+	ownerA := &User{Id: 1, UserName: "a", Password: "secret", Status: true, MaxClientNum: LimitInt(1)}
+	ownerB := &User{Id: 2, UserName: "b", Password: "secret", Status: true, MaxClientNum: LimitInt(1)}
 	db.Users.Store(ownerA.Id, ownerA)
 	db.Users.Store(ownerB.Id, ownerB)
 	db.Clients.Store(10, &Client{Id: 10, UserId: ownerA.Id, VerifyKey: "owner-a"})

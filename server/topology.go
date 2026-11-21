@@ -47,7 +47,7 @@ type TopologyClient struct {
 	Connections     int32  `json:"connections"`
 	ConnectionLimit int    `json:"connectionLimit"`
 	TunnelLimit     int    `json:"tunnelLimit"`
-	RateLimit       int    `json:"rateLimit"`
+	RateLimit       int64  `json:"rateLimit"`
 	FlowIn          int64  `json:"flowIn"`
 	FlowOut         int64  `json:"flowOut"`
 	FlowTotal       int64  `json:"flowTotal"`
@@ -215,7 +215,7 @@ func topologyOwners() []TopologyOwner {
 		owner.RLock()
 		owners = append(owners, TopologyOwner{
 			ID: owner.Id, Name: owner.UserName, Remark: owner.Remark, Enabled: owner.Status,
-			ClientLimit: owner.MaxClientNum, TunnelLimit: owner.MaxTunnelNum,
+			ClientLimit: quotaIntValue(owner.MaxClientNum), TunnelLimit: quotaIntValue(owner.MaxTunnelNum),
 			CreatedAt: owner.CreateTime, ExpiresAt: owner.ExpireTime,
 		})
 		owner.RUnlock()
@@ -223,6 +223,13 @@ func topologyOwners() []TopologyOwner {
 	})
 	sort.Slice(owners, func(i, j int) bool { return owners[i].ID < owners[j].ID })
 	return owners
+}
+
+func quotaIntValue(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func topologyTunnel(task *file.Tunnel, clients map[int]*file.Client) (TopologyResource, int, bool) {

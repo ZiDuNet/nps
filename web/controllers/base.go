@@ -59,11 +59,20 @@ const (
 // intentionally excludes legacy client-login principals because their single
 // client credential is not a user-owned account with self-service quotas.
 type accountQuotaSummary struct {
-	Visible     bool
-	ClientUsed  int
-	ClientLimit int
-	TunnelUsed  int
-	TunnelLimit int
+	Visible       bool
+	ClientUsed    int
+	ClientLimit   *int
+	ClientState   string
+	TunnelUsed    int
+	TunnelLimit   *int
+	TunnelState   string
+	HostUsed      int
+	HostLimit     *int
+	HostState     string
+	ClientDisplay string
+	TunnelDisplay string
+	HostDisplay   string
+	HostIncluded  bool
 }
 
 // 初始化参数
@@ -188,12 +197,8 @@ func (s *BaseController) Prepare() {
 		s.Data["accountQuota"] = accountQuotaSummary{}
 	}
 	s.Data["allow_user_login"], _ = beego.AppConfig.Bool("allow_user_login")
-	s.Data["allow_flow_limit"], _ = beego.AppConfig.Bool("allow_flow_limit")
-	s.Data["allow_rate_limit"], _ = beego.AppConfig.Bool("allow_rate_limit")
-	s.Data["allow_connection_num_limit"], _ = beego.AppConfig.Bool("allow_connection_num_limit")
 	s.Data["allow_multi_ip"], _ = beego.AppConfig.Bool("allow_multi_ip")
 	s.Data["system_info_display"], _ = beego.AppConfig.Bool("system_info_display")
-	s.Data["allow_tunnel_num_limit"], _ = beego.AppConfig.Bool("allow_tunnel_num_limit")
 	s.Data["allow_local_proxy"], _ = beego.AppConfig.Bool("allow_local_proxy")
 	s.Data["allow_user_local"], _ = beego.AppConfig.Bool("allow_user_local")
 	s.Data["allow_user_change_username"], _ = beego.AppConfig.Bool("allow_user_change_username")
@@ -415,14 +420,39 @@ func (s *BaseController) accountQuota() accountQuotaSummary {
 		return accountQuotaSummary{}
 	}
 	user.RLock()
-	clientLimit, tunnelLimit := user.MaxClientNum, user.MaxTunnelNum
+	clientLimit := file.IntQuotaSnapshot(user.MaxClientNum)
+	tunnelLimit := file.IntQuotaSnapshot(user.MaxTunnelNum)
+	hostLimit := file.IntQuotaSnapshot(user.MaxHostNum)
 	user.RUnlock()
 	return accountQuotaSummary{
-		Visible:     true,
-		ClientUsed:  file.GetDb().GetUserClientNum(userID),
-		ClientLimit: clientLimit,
-		TunnelUsed:  file.GetDb().GetUserTunnelNum(userID),
-		TunnelLimit: tunnelLimit,
+		Visible:       true,
+		ClientUsed:    file.GetDb().GetUserClientNum(userID),
+		ClientLimit:   clientLimit,
+		ClientState:   quotaState(clientLimit),
+		ClientDisplay: quotaDisplay(clientLimit),
+		TunnelUsed:    file.GetDb().GetUserTunnelNum(userID),
+		TunnelLimit:   tunnelLimit,
+		TunnelState:   quotaState(tunnelLimit),
+		TunnelDisplay: quotaDisplay(tunnelLimit),
+		HostUsed:      file.GetDb().GetUserHostNum(userID),
+		HostLimit:     hostLimit,
+		HostState:     quotaState(hostLimit),
+		HostDisplay:   quotaDisplay(hostLimit),
+		HostIncluded:  true,
+	}
+}
+
+// quotaState and quotaDisplay keep the sidebar's bootstrap template free of
+// pointer truthiness. In Go templates a non-nil pointer to zero is true, which
+// previously rendered a "not included" quota as the literal limit 0.
+func quotaDisplay(limit *int) string {
+	switch {
+	case file.IntQuotaUnlimited(limit):
+		return "不限"
+	case file.IntQuotaNotIncluded(limit):
+		return "不包含"
+	default:
+		return strconv.Itoa(*limit)
 	}
 }
 

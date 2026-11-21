@@ -27,7 +27,7 @@ func TestTopologyDataScopesOperationalResourcesToAllowedClients(t *testing.T) {
 	db.Clients.Store(other.Id, other)
 	db.Users.Store(owned.UserId, &file.User{
 		Id: 71, UserName: "owner-a", Remark: "研发组", Status: true,
-		MaxClientNum: 5, MaxTunnelNum: 12,
+		MaxClientNum: file.LimitInt(5), MaxTunnelNum: file.LimitInt(12),
 	})
 
 	ownedTask := &file.Tunnel{

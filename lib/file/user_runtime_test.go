@@ -4,6 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"ehang.io/nps/lib/rate"
 )
 
 var userRuntimeTestID int64 = 10_000
@@ -20,7 +22,7 @@ func nextUserRuntimeTestID(t *testing.T) int {
 
 func TestUserConnectionLimitIsSharedAcrossClients(t *testing.T) {
 	userID := nextUserRuntimeTestID(t)
-	SetUserRuntimeLimits(userID, 2, 0, 0)
+	SetUserRuntimeLimits(userID, LimitInt(2), nil)
 	first := NewClient("first", false, false)
 	second := NewClient("second", false, false)
 	third := NewClient("third", false, false)
@@ -55,15 +57,47 @@ func TestUserRuntimeSnapshotDoesNotCreateState(t *testing.T) {
 	if state := userRuntimeFor(userID, false); state != nil {
 		t.Fatal("read-only snapshot created runtime state")
 	}
-	SetUserRuntimeLimits(userID, 3, 128, 256)
+	SetUserRuntimeLimits(userID, LimitInt(3), LimitInt64(rate.BpsFromKBPerSecond(128+256)))
 	if connections, limit, _, _ := UserRuntimeSnapshot(userID); connections != 0 || limit != 3 {
 		t.Fatalf("configured snapshot = %d/%d, want 0/3", connections, limit)
 	}
 }
 
+func TestUserRuntimeLimitsPreserveThreeStateSemantics(t *testing.T) {
+	userID := nextUserRuntimeTestID(t)
+
+	SetUserRuntimeLimits(userID, nil, nil)
+	if UserQuotaExcluded(userID, QuotaConnection) || UserQuotaExcluded(userID, QuotaBandwidth) {
+		t.Fatal("nil limits must represent unlimited resources")
+	}
+	if owner, accounted, allowed := acquireUserConnection(userID); !allowed {
+		t.Fatal("an unlimited user connection was rejected")
+	} else if accounted {
+		releaseUserConnection(owner)
+	}
+
+	SetUserRuntimeLimits(userID, LimitInt(0), LimitInt64(0))
+	if !UserQuotaExcluded(userID, QuotaConnection) || !UserQuotaExcluded(userID, QuotaBandwidth) {
+		t.Fatal("zero limits must represent excluded resources")
+	}
+	if _, _, allowed := acquireUserConnection(userID); allowed {
+		t.Fatal("a user connection excluded by plan was admitted")
+	}
+
+	SetUserRuntimeLimits(userID, LimitInt(2), LimitInt64(rate.BpsFromKBPerSecond(64)))
+	if UserQuotaExcluded(userID, QuotaConnection) || UserQuotaExcluded(userID, QuotaBandwidth) {
+		t.Fatal("positive limits must represent limited resources")
+	}
+	if owner, accounted, allowed := acquireUserConnection(userID); !allowed {
+		t.Fatal("a connection below the configured limit was rejected")
+	} else if accounted {
+		releaseUserConnection(owner)
+	}
+}
+
 func TestUserConnectionAdmissionIsAtomicUnderConcurrency(t *testing.T) {
 	userID := nextUserRuntimeTestID(t)
-	SetUserRuntimeLimits(userID, 5, 0, 0)
+	SetUserRuntimeLimits(userID, LimitInt(5), nil)
 
 	const workers = 64
 	clients := make([]*Client, workers)
@@ -107,9 +141,73 @@ func TestUserConnectionAdmissionIsAtomicUnderConcurrency(t *testing.T) {
 	}
 }
 
+func TestUserRuntimeLimitsConcurrentSetQueryAndAdmission(t *testing.T) {
+	userID := nextUserRuntimeTestID(t)
+	SetUserRuntimeLimits(userID, nil, nil)
+
+	connectionLimits := []*int{nil, LimitInt(0), LimitInt(1)}
+	bandwidthLimits := []*int64{nil, LimitInt64(0), LimitInt64(rate.BpsFromKBPerSecond(64))}
+
+	const (
+		writers    = 4
+		readers    = 8
+		iterations = 1000
+	)
+
+	start := make(chan struct{})
+	stop := make(chan struct{})
+	var writerWait sync.WaitGroup
+	var readerWait sync.WaitGroup
+
+	writerWait.Add(writers)
+	for writer := 0; writer < writers; writer++ {
+		go func(offset int) {
+			defer writerWait.Done()
+			<-start
+			for index := 0; index < iterations; index++ {
+				SetUserRuntimeLimits(
+					userID,
+					connectionLimits[(offset+index)%len(connectionLimits)],
+					bandwidthLimits[(offset+index)%len(bandwidthLimits)],
+				)
+			}
+		}(writer)
+	}
+
+	readerWait.Add(readers)
+	for reader := 0; reader < readers; reader++ {
+		go func() {
+			defer readerWait.Done()
+			<-start
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				UserQuotaExcluded(userID, QuotaConnection)
+				UserQuotaExcluded(userID, QuotaBandwidth)
+				if owner, accounted, allowed := acquireUserConnection(userID); accounted && allowed {
+					releaseUserConnection(owner)
+				}
+			}
+		}()
+	}
+
+	close(start)
+	writerWait.Wait()
+	close(stop)
+	readerWait.Wait()
+
+	SetUserRuntimeLimits(userID, nil, nil)
+	if current, _ := userConnections(userID); current != 0 {
+		t.Fatalf("shared user connection count = %d after concurrent access, want 0", current)
+	}
+}
+
 func TestUserBandwidthLimiterIsSharedAndUpdatesInPlace(t *testing.T) {
 	userID := nextUserRuntimeTestID(t)
-	SetUserRuntimeLimits(userID, 0, 128, 256)
+	SetUserRuntimeLimits(userID, nil, LimitInt64(rate.BpsFromKBPerSecond(128+256)))
 	first := &Client{UserId: userID}
 	second := &Client{UserId: userID}
 	firstLimiter := UserRateLimiterForClient(first)
@@ -117,15 +215,13 @@ func TestUserBandwidthLimiterIsSharedAndUpdatesInPlace(t *testing.T) {
 	if firstLimiter == nil || firstLimiter != secondLimiter {
 		t.Fatal("clients owned by the same user must share one bandwidth limiter")
 	}
-	upload, download := firstLimiter.Limits()
-	if upload != 128*1024 || download != 256*1024 {
-		t.Fatalf("initial user limits = %d/%d bytes/s, want %d/%d", upload, download, 128*1024, 256*1024)
+	if got, want := firstLimiter.Limit(), int64((128+256)*1024); got != want {
+		t.Fatalf("initial user shared limit = %d bytes/s, want %d", got, want)
 	}
 
-	SetUserRuntimeLimits(userID, 0, 64, 0)
-	upload, download = firstLimiter.Limits()
-	if upload != 64*1024 || download != 0 {
-		t.Fatalf("updated user limits = %d/%d bytes/s, want %d/0", upload, download, 64*1024)
+	SetUserRuntimeLimits(userID, nil, LimitInt64(rate.BpsFromKBPerSecond(64)))
+	if got, want := firstLimiter.Limit(), int64(64*1024); got != want {
+		t.Fatalf("updated user shared limit = %d bytes/s, want %d", got, want)
 	}
 	if secondLimiter != UserRateLimiter(userID) {
 		t.Fatal("existing connections must retain the shared live limiter after an edit")
@@ -134,7 +230,7 @@ func TestUserBandwidthLimiterIsSharedAndUpdatesInPlace(t *testing.T) {
 
 func TestLoweringUserConnectionLimitOnlyAffectsNewAdmissions(t *testing.T) {
 	userID := nextUserRuntimeTestID(t)
-	SetUserRuntimeLimits(userID, 3, 0, 0)
+	SetUserRuntimeLimits(userID, LimitInt(3), nil)
 	first := &Client{UserId: userID}
 	second := &Client{UserId: userID}
 	third := &Client{UserId: userID}
@@ -143,7 +239,7 @@ func TestLoweringUserConnectionLimitOnlyAffectsNewAdmissions(t *testing.T) {
 		t.Fatal("connections below the initial user limit were rejected")
 	}
 
-	SetUserRuntimeLimits(userID, 1, 0, 0)
+	SetUserRuntimeLimits(userID, LimitInt(1), nil)
 	if fourth.GetConn() {
 		t.Fatal("a new connection bypassed the lowered user limit")
 	}

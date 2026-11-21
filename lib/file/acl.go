@@ -33,10 +33,15 @@ func (c *Client) syncSourceListsFromFields() {
 	if c == nil {
 		return
 	}
+	c.RLock()
+	priority := c.IpListPriority
+	black := append([]string(nil), c.BlackIpList...)
+	white := append([]string(nil), c.WhiteIpList...)
+	c.RUnlock()
 	c.SourceLists.aclMu.Lock()
-	c.SourceLists.IpListPriority = c.IpListPriority
-	c.SourceLists.BlackIpList = append([]string(nil), c.BlackIpList...)
-	c.SourceLists.WhiteIpList = append([]string(nil), c.WhiteIpList...)
+	c.SourceLists.IpListPriority = priority
+	c.SourceLists.BlackIpList = black
+	c.SourceLists.WhiteIpList = white
 	c.SourceLists.aclMu.Unlock()
 }
 
@@ -94,10 +99,15 @@ func (g *Glob) syncSourceListsFromFields() {
 	if g == nil {
 		return
 	}
+	g.RLock()
+	priority := g.IpListPriority
+	black := append([]string(nil), g.BlackIpList...)
+	white := append([]string(nil), g.WhiteIpList...)
+	g.RUnlock()
 	g.SourceLists.aclMu.Lock()
-	g.SourceLists.IpListPriority = g.IpListPriority
-	g.SourceLists.BlackIpList = append([]string(nil), g.BlackIpList...)
-	g.SourceLists.WhiteIpList = append([]string(nil), g.WhiteIpList...)
+	g.SourceLists.IpListPriority = priority
+	g.SourceLists.BlackIpList = black
+	g.SourceLists.WhiteIpList = white
 	g.SourceLists.aclMu.Unlock()
 }
 
@@ -107,10 +117,15 @@ func (g *Glob) SetSourceLists(priority int, black, white []string, scope acl.Sco
 	}
 	g.SourceLists.SetSourceLists(priority, black, white, scope, owner)
 	g.SourceLists.aclMu.RLock()
-	g.IpListPriority = g.SourceLists.IpListPriority
-	g.BlackIpList = append([]string(nil), g.SourceLists.BlackIpList...)
-	g.WhiteIpList = append([]string(nil), g.SourceLists.WhiteIpList...)
+	nextPriority := g.SourceLists.IpListPriority
+	nextBlack := append([]string(nil), g.SourceLists.BlackIpList...)
+	nextWhite := append([]string(nil), g.SourceLists.WhiteIpList...)
 	g.SourceLists.aclMu.RUnlock()
+	g.Lock()
+	g.IpListPriority = nextPriority
+	g.BlackIpList = nextBlack
+	g.WhiteIpList = nextWhite
+	g.Unlock()
 }
 
 func (g *Glob) SourceACL() *acl.Source {

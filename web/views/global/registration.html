@@ -59,8 +59,8 @@
         <div class="form-page-heading">
             <div class="dashboard-page-kicker" data-i18n-zh="系统配置" data-i18n-en="System settings">系统配置</div>
             <h1 id="registration-settings-title" data-i18n-zh="用户注册" data-i18n-en="User registration">用户注册</h1>
-            <p data-i18n-zh="管理注册与密码找回入口、新账号默认权益、限频及邮件服务。关闭注册同时关闭密码找回；默认额度与带宽使用 0 表示不限。"
-               data-i18n-en="Manage registration, password recovery, default limits and email. Disabling registration also disables recovery; zero means unlimited for quotas and bandwidth.">管理注册与密码找回入口、新账号默认权益、限频及邮件服务。关闭注册同时关闭密码找回；默认额度与带宽使用 0 表示不限。</p>
+            <p data-i18n-zh="管理注册与密码找回入口、新账号默认权益、限频及邮件服务。关闭注册同时关闭密码找回；默认额度与双向合计带宽留空表示不限，0 表示不包含，正数为上限。"
+               data-i18n-en="Manage registration, password recovery, default limits and email. Disabling registration also disables recovery; blank quotas and two-way bandwidth mean unlimited, zero means not included, and positive values are caps.">管理注册与密码找回入口、新账号默认权益、限频及邮件服务。关闭注册同时关闭密码找回；默认额度与双向合计带宽留空表示不限，0 表示不包含，正数为上限。</p>
             <div class="server-config-path"><i class="fa fa-code" aria-hidden="true"></i><span>{{.config_path}}</span></div>
         </div>
     </header>
@@ -93,8 +93,8 @@
             <span class="registration-overview__icon"><i class="fa fa-id-card" aria-hidden="true"></i></span>
             <div>
                 <strong data-i18n-zh="注册默认权益可以全部不限" data-i18n-en="Every registration default can be unlimited">注册默认权益可以全部不限</strong>
-                <p data-i18n-zh="客户端、隧道、并发连接、上下行带宽和有效期均支持 0 值。保存后会写入现有 nps.conf 并保留注释与自定义项。"
-                   data-i18n-en="Clients, tunnels, concurrent connections, directional bandwidth and validity all support zero. Saving updates the existing nps.conf while preserving comments and custom entries.">客户端、隧道、并发连接、上下行带宽和有效期均支持 0 值。保存后会写入现有 nps.conf 并保留注释与自定义项。</p>
+                <p data-i18n-zh="客户端、普通隧道、域名规则、并发连接和双向合计带宽：留空表示不限，0 表示不包含，正数为上限。保存后写入 SQLite 业务配置，nps.conf 中的启动参数保持不变。"
+                   data-i18n-en="Clients, ordinary tunnels, host rules, concurrent connections and two-way bandwidth: blank means unlimited, zero means not included, and positive values are caps. Settings are saved to SQLite without changing process settings in nps.conf.">客户端、普通隧道、域名规则、并发连接和双向合计带宽：留空表示不限，0 表示不包含，正数为上限。保存后写入 SQLite 业务配置，nps.conf 中的启动参数保持不变。</p>
             </div>
         </div>
         <div class="registration-overview__stats" aria-label="注册配置摘要">
@@ -112,8 +112,8 @@
     {{else}}
     <div class="registration-notice" role="status">
         <i class="fa fa-info-circle" aria-hidden="true"></i>
-        <div data-i18n-zh="保存只更新本页字段，不会覆盖 nps.conf 中的其他配置。注册开关、默认额度、限频和 SMTP 修改均需要重启 NPS 后生效。"
-             data-i18n-en="Saving updates only this page's fields and leaves the rest of nps.conf untouched. Registration, defaults, rate limits and SMTP changes take effect after NPS restarts.">保存只更新本页字段，不会覆盖 nps.conf 中的其他配置。注册开关、默认额度、限频和 SMTP 修改均需要重启 NPS 后生效。</div>
+        <div data-i18n-zh="保存只更新本页发生变化的字段，并写入 SQLite 业务配置；nps.conf 中的端口、证书等启动参数不受影响。注册开关与默认额度会即时生效。"
+             data-i18n-en="Saving updates only the fields changed on this page and writes them to SQLite; process settings such as ports and certificates in nps.conf are untouched. Registration access and defaults take effect immediately.">保存只更新本页发生变化的字段，并写入 SQLite 业务配置；nps.conf 中的端口、证书等启动参数不受影响。注册开关与默认额度会即时生效。</div>
     </div>
 
     <form id="registration-settings-form" class="form form-horz nps-form" autocomplete="off">
@@ -134,7 +134,7 @@
                         <p>{{$field.Description}}</p>
                     </div>
                     <div class="registration-field__control">
-                        {{if $field.Optional}}<label class="registration-optional"><input type="checkbox" name="config_enabled_{{$field.Key}}" value="1" data-registration-enabled="{{$field.Key}}"{{if $field.Enabled}} checked{{end}}><span data-i18n-zh="启用并写入此项" data-i18n-en="Enable and write this setting">启用并写入此项</span></label>{{end}}
+                        {{if $field.Optional}}<label class="registration-optional"><input type="checkbox" name="config_enabled_{{$field.Key}}" value="1" data-registration-enabled="{{$field.Key}}" data-registration-enabled-value="{{if $field.Enabled}}1{{else}}0{{end}}"{{if $field.Enabled}} checked{{end}}><span data-i18n-zh="启用并写入此项" data-i18n-en="Enable and write this setting">启用并写入此项</span></label>{{end}}
                         {{if eq $field.Type "bool"}}
                         <select id="registration-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-registration-input="{{$field.Key}}">
                             <option value="true"{{if eq $field.Value "true"}} selected{{end}}>true / 启用</option>
@@ -149,7 +149,7 @@
                         </div>
                         <span class="registration-secret-note" data-i18n-zh="敏感值不会回显；留空保持当前值。" data-i18n-en="Secret values are never echoed; leave blank to keep the current value.">敏感值不会回显；留空保持当前值。</span>
                         {{else}}
-                        <input id="registration-config-{{$field.Key}}" class="form-control" type="{{if eq $field.Type "int"}}number{{else}}text{{end}}" name="config_{{$field.Key}}" value="{{$field.Value}}" data-registration-input="{{$field.Key}}"{{if eq $field.Type "int"}} min="0" step="1"{{end}}>
+                        <input id="registration-config-{{$field.Key}}" class="form-control" type="{{if or (eq $field.Type "int") (eq $field.Type "float")}}number{{else}}text{{end}}" name="config_{{$field.Key}}" value="{{$field.Value}}" data-registration-input="{{$field.Key}}" data-registration-value="{{$field.Value}}" data-registration-type="{{$field.Type}}"{{if eq $field.Type "int"}} min="0" step="1"{{else if eq $field.Type "float"}} min="0" step="0.1"{{end}}>
                         {{end}}
                     </div>
                 </article>
@@ -161,7 +161,7 @@
         <div class="registration-savebar">
             <div>
                 <strong data-i18n-zh="保存用户注册配置" data-i18n-en="Save registration settings">保存用户注册配置</strong>
-                <span id="registration-save-note" data-i18n-zh="保存后重启 NPS 才会生效。" data-i18n-en="Restart NPS after saving to apply the changes.">保存后重启 NPS 才会生效。</span>
+                <span id="registration-save-note" data-i18n-zh="保存后注册入口与默认权益即时生效。" data-i18n-en="Registration access and defaults take effect immediately after saving.">保存后注册入口与默认权益即时生效。</span>
             </div>
             <button class="btn btn-primary" type="submit"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存配置" data-i18n-en="Save settings">保存配置</span></button>
         </div>
@@ -197,17 +197,51 @@ $(function () {
     form.on('submit', function (event) {
         event.preventDefault();
         if (!validateNpsForm(this, true)) return;
+        var dirty = {};
+        form.find('[data-registration-input][data-registration-value]').each(function () {
+            var key = $(this).attr('data-registration-input');
+            if (!key) return;
+            var original = this.getAttribute('data-registration-value') || '';
+            if (this.value !== original) dirty[key] = true;
+        });
+        form.find('[data-registration-enabled]').each(function () {
+            var key = $(this).attr('data-registration-enabled');
+            if (!key || !form.find('[data-registration-input="' + key + '"]').length) return;
+            if (this.checked !== (this.getAttribute('data-registration-enabled-value') === '1')) dirty[key] = true;
+        });
+        var payload = form.serializeArray().filter(function (item) {
+            if (item.name === 'config_dirty' || item.name === 'config_delta') return true;
+            if (item.name.indexOf('config_enabled_') === 0) {
+                return dirty[item.name.slice('config_enabled_'.length)] === true;
+            }
+            if (item.name.indexOf('config_') === 0) {
+                return dirty[item.name.slice('config_'.length)] === true;
+            }
+            return true;
+        });
+        form.find('[data-registration-enabled]').each(function () {
+            var key = $(this).attr('data-registration-enabled');
+            if (dirty[key] && !this.checked && form.find('[data-registration-input="' + key + '"]').length) {
+                payload.push({name: 'config_enabled_' + key, value: '0'});
+            }
+        });
+        Object.keys(dirty).forEach(function (key) {
+            if (!payload.some(function (item) { return item.name === 'config_dirty' && item.value === key; })) {
+                payload.push({name: 'config_dirty', value: key});
+            }
+        });
+        payload.push({name: 'config_delta', value: '1'});
         var submit = form.find('button[type="submit"]').prop('disabled', true);
         $.ajax({
             type: 'POST',
             url: '{{.web_base_url}}/global/registration/save',
-            data: form.serializeArray(),
+            data: payload,
             success: function (res) {
                 npsNotify(res.status ? 'success' : 'error', langreply(res.msg));
                 if (res.status) {
                     $('#registration-save-note').text(npsIsEnglish()
-                        ? 'Saved. Restart NPS to apply the changes.'
-                        : '配置已保存，重启 NPS 后生效。');
+                        ? 'Saved. Registration access and defaults are now active.'
+                        : '配置已保存，注册入口与默认权益已生效。');
                 }
             },
             error: function () {

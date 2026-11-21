@@ -706,6 +706,10 @@ func (s *ApiV1Controller) UserGet() {
 	if !s.requireAdmin() {
 		return
 	}
+	// The route is /users/:id, so the identifier arrives as a path parameter.
+	// Mirror it into the form like every other resource lookup; reading only
+	// the query string makes an existing user appear missing.
+	s.pathFormValue("id")
 	id := s.GetIntNoErr("id")
 	if id <= 0 {
 		s.apiFail(http.StatusNotFound, "not_found", "user ID not found")

@@ -60,7 +60,7 @@ npc.exe -server=1.1.1.1:8025 -vkey=xxx -tls_enable=true      # TLS 桥接（tls_
 ## 全局参数
 
 管理员进入「系统 → 全局参数」的「全局参数」Tab，可维护保存在
-`conf/global.json` 中的业务设置：
+SQLite 全局参数记录中的业务设置（`conf/nps.db`；旧 `global.json` 仅用于迁移和回滚导出）：
 
 | 字段 | 含义 |
 | --- | --- |

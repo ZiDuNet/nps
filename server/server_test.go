@@ -176,6 +176,32 @@ func TestTaskLifecycleRejectsNonPositiveIDs(t *testing.T) {
 	}
 }
 
+func TestAddTaskRejectsTaskOrClientRemovedBeforeDelayedStart(t *testing.T) {
+	db := file.GetDb()
+	previous := db.JsonDb
+	db.JsonDb = file.NewJsonDb(t.TempDir())
+	t.Cleanup(func() { db.JsonDb = previous })
+
+	client := &file.Client{Id: 10, VerifyKey: "delayed-client", Status: true}
+	task := &file.Tunnel{
+		Id:     11,
+		Mode:   "tcp",
+		Port:   9000,
+		Client: client,
+		Target: &file.Target{TargetStr: "127.0.0.1:80"},
+	}
+	if err := addTask(task); err == nil {
+		t.Fatal("AddTask must reject a persisted task that was deleted before startup")
+	}
+
+	db.JsonDb.Tasks.Store(task.Id, task)
+	replacement := &file.Client{Id: client.Id, VerifyKey: "replacement-client", Status: true}
+	db.JsonDb.Clients.Store(replacement.Id, replacement)
+	if err := addTask(task); err == nil {
+		t.Fatal("AddTask must reject a task whose old client pointer was replaced")
+	}
+}
+
 func TestRevokeUserClientsWithOnlyTouchesOwnedClients(t *testing.T) {
 	var clients sync.Map
 	clients.Store(1, &file.Client{Id: 1, UserId: 7})
@@ -184,6 +210,104 @@ func TestRevokeUserClientsWithOnlyTouchesOwnedClients(t *testing.T) {
 	revokeUserClientsWith(7, &clients, func(id int) { disconnected = append(disconnected, id) }, func(id int, _ bool) { removed = append(removed, id) })
 	if len(disconnected) != 1 || disconnected[0] != 1 || len(removed) != 1 || removed[0] != 1 {
 		t.Fatalf("revocation touched unexpected clients: disconnected=%v removed=%v", disconnected, removed)
+	}
+}
+
+func TestRevokeUserClientsRemovesOwnedResources(t *testing.T) {
+	dbUtils := file.GetDb()
+	oldDB := dbUtils.JsonDb
+	oldBridge := Bridge
+	db := file.NewJsonDb(t.TempDir())
+	dbUtils.JsonDb = db
+	Bridge = nil
+	t.Cleanup(func() {
+		dbUtils.JsonDb = oldDB
+		Bridge = oldBridge
+	})
+
+	client := file.NewClient("revoked-client", false, false)
+	client.Id = 81
+	client.UserId = 91
+	db.Clients.Store(client.Id, client)
+	db.Tasks.Store(82, &file.Tunnel{Id: 82, Client: client, Flow: file.NewFlow()})
+	db.Hosts.Store(83, &file.Host{Id: 83, Client: client, Flow: file.NewFlow()})
+
+	RevokeUserClients(client.UserId)
+
+	if _, err := dbUtils.GetTask(82); err == nil {
+		t.Fatal("explicit user revocation retained tunnel definition")
+	}
+	if _, err := dbUtils.GetHostById(83); err == nil {
+		t.Fatal("explicit user revocation retained host definition")
+	}
+}
+
+func TestExpiredClientPausesWithoutDeletingTunnelOrHost(t *testing.T) {
+	dbUtils := file.GetDb()
+	oldDB := dbUtils.JsonDb
+	oldBridge := Bridge
+	db := file.NewJsonDb(t.TempDir())
+	dbUtils.JsonDb = db
+	Bridge = nil
+	t.Cleanup(func() {
+		dbUtils.JsonDb = oldDB
+		Bridge = oldBridge
+	})
+
+	client := file.NewClient("expired-client", false, false)
+	client.Id = 41
+	client.UserId = 0
+	client.Status = true
+	client.ExpireTime = "2020-01-01 00:00:00"
+	db.Clients.Store(client.Id, client)
+	db.Tasks.Store(51, &file.Tunnel{Id: 51, Client: client, Flow: file.NewFlow()})
+	db.Hosts.Store(61, &file.Host{Id: 61, Client: client, Flow: file.NewFlow()})
+
+	checkClientExpire()
+
+	if client.Status {
+		t.Fatal("expired client remained enabled")
+	}
+	if _, err := dbUtils.GetTask(51); err != nil {
+		t.Fatalf("expiry deleted tunnel definition: %v", err)
+	}
+	if _, err := dbUtils.GetHostById(61); err != nil {
+		t.Fatalf("expiry deleted host definition: %v", err)
+	}
+}
+
+func TestExpiredUserRevocationKeepsOwnedResources(t *testing.T) {
+	dbUtils := file.GetDb()
+	oldDB := dbUtils.JsonDb
+	oldBridge := Bridge
+	db := file.NewJsonDb(t.TempDir())
+	dbUtils.JsonDb = db
+	Bridge = nil
+	t.Cleanup(func() {
+		dbUtils.JsonDb = oldDB
+		Bridge = oldBridge
+	})
+
+	user := &file.User{Id: 71, UserName: "expired", Password: "secret", Status: true, ExpireTime: "2020-01-01 00:00:00"}
+	db.Users.Store(user.Id, user)
+	client := file.NewClient("user-client", false, false)
+	client.Id = 72
+	client.UserId = user.Id
+	client.Status = true
+	db.Clients.Store(client.Id, client)
+	db.Tasks.Store(73, &file.Tunnel{Id: 73, Client: client, Flow: file.NewFlow()})
+	db.Hosts.Store(74, &file.Host{Id: 74, Client: client, Flow: file.NewFlow()})
+
+	checkUserExpire()
+
+	if user.Status {
+		t.Fatal("expired user remained enabled")
+	}
+	if _, err := dbUtils.GetTask(73); err != nil {
+		t.Fatalf("user expiry deleted tunnel definition: %v", err)
+	}
+	if _, err := dbUtils.GetHostById(74); err != nil {
+		t.Fatalf("user expiry deleted host definition: %v", err)
 	}
 }
 

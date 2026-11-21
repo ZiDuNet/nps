@@ -2,10 +2,15 @@
 
 本章说明从旧版本升级到 v1.1.x 后的数据变化和备份建议。
 
-当前版本的飞牛纯连接重连与日志顺序修复，见
-[1.1.47 升级说明](upgrade-1.1.47.md)；此前飞牛 FPK、服务端配置热更新和持久化 ID 回收边界，见
+> 从 v1.1.49 起，SQLite 正式成为默认业务数据存储。升级前必须完整阅读 [SQLite 数据存储与升级](server/sqlite-storage.md)。旧 JSON 必须先使用 `1.1.49` 二进制执行 JSON 网关；`-export-json` 可生成保留 SQLite 当前业务配置的 JSON 回滚目录。
+
+当前版本的 SQLite 数据迁移、备份和回滚边界，见
+[1.1.49 升级说明](upgrade-1.1.49.md)；此前飞牛纯连接重连与日志顺序修复，见
+[1.1.47 升级说明](upgrade-1.1.47.md)；更早的飞牛 FPK、服务端配置热更新和持久化 ID 回收边界，见
 [1.1.46 升级说明](upgrade-1.1.46.md)；此前登录兼容、日志手动清理和用量历史自动清理边界，见
 [1.1.45 升级说明](upgrade-1.1.45.md)。
+
+1.1.46 的持久化 ID 回收行为已由 1.1.49 的“跨重启只增不复用”策略取代；升级后不要期待删除最后一项或重启服务会重置资源 ID。
 
 ## 升级前备份
 
@@ -23,18 +28,11 @@ cp -a /opt/nps/conf /opt/nps/conf.bak.$(date +%Y%m%d%H%M%S)
 
 ## 数据文件
 
-NPS 仍使用 JSON 文件持久化，默认位于 `conf` 目录。
+当前版本以 `conf/nps.db` 为权威存储。运行中一致性备份要考虑 `nps.db-wal` 和 `nps.db-shm`；`nps.db.lock` 是可重建的单进程锁，不是业务数据。`nps.conf` 只保存监听、端口、TLS、日志等启动参数；注册策略、SMTP、HTTP 超时、PoW/TOTP 等运行期业务配置保存在数据库的 `settings` 表。
 
-| 文件 | 说明 |
-|------|------|
-| `nps.conf` | 服务端配置，包含管理员账号、端口、功能开关 |
-| `clients.json` | 客户端数据 |
-| `users.json` | 普通用户数据 |
-| `tasks.json` | 普通隧道数据 |
-| `hosts.json` | HTTP/HTTPS 域名规则 |
-| `global.json` | 全局参数（服务地址、全局容量与名单、使用说明、平台泛域名和 API 凭据等） |
+`clients.json`、`users.json`、`tasks.json`、`hosts.json` 和 `global.json` 现在只用于首次导入源、回滚导出或迁移归档。不要把这些文件重新覆盖到已运行的 SQLite 目录。
 
-每个对象文件使用 `*#*` 分隔多条 JSON 记录，这是当前项目的既有格式。
+首次启动会自动备份整个 `conf` 到同级 `conf.backup.YYYYMMDD-HHMMSS`，并写入 `conf/migration-report.json`。停服后复制整个 `conf` 是最可靠的备份方式。
 
 ## 用户自动迁移与旧客户端恢复
 
@@ -82,6 +80,17 @@ v1.1.1 已新增 `users.json`。服务启动时会自动执行一次兼容迁移
 NPC 不认识这两个字段时会忽略它们，原有连接协议和目标配置不受影响。
 
 ## 升级步骤
+
+### JSON 到 SQLite
+
+1. 停止旧 NPS，完整备份 `conf`。
+2. 使用 `1.1.49` 二进制的 `-json-gateway` 完成字段整形，确认 `conf/.json-gateway` 版本为 `1.1.49` 且覆盖全部数据文件。
+3. 使用同一个 `1.1.49` 二进制正常启动；程序会在提交数据库前生成 `conf.backup.*` 并执行导入。
+4. 检查 `conf/migration-report.json` 的 `status` 为 `success`，核对客户端、用户、隧道和 Host 数量。
+5. 验证登录、NPC 连接、TCP/UDP、域名反代、用户共享带宽和最大连接数后再放量。
+6. Docker 必须挂载整个 `/conf`，不能只挂载 `nps.conf` 或单个 `nps.db`。
+
+需要回滚到 JSON 时，先停服并运行 `nps -conf_path=<运行目录> -export-json=<输出目录>`。导出目录会同时包含 JSON、`.json-gateway` 和合并了 SQLite 业务配置的 `nps.conf`。详细边界见 [SQLite 数据存储与升级](server/sqlite-storage.md)。
 
 ### NPC 版本边界与无缝切换
 

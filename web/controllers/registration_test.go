@@ -20,43 +20,45 @@ func TestRegistrationExpireTimeUsesConfiguredDays(t *testing.T) {
 	}
 }
 
-func TestRegistrationPageShowsUnlimitedOnlyForZeroQuota(t *testing.T) {
+func TestRegistrationPageRendersThreeStateQuotas(t *testing.T) {
 	tpl := template.Must(template.New("register").Funcs(template.FuncMap{
 		"create_captcha": func() template.HTML { return "" },
 	}).ParseFiles("../views/login/register.html"))
 	tests := []struct {
-		name          string
-		clients       int
-		tunnels       int
-		maxConn       int
-		uploadLimit   int
-		downloadLimit int
-		days          int
-		required      []string
-		forbidden     []string
+		name      string
+		clients   string
+		tunnels   string
+		hosts     string
+		maxConn   string
+		bandwidth string
+		days      int
+		required  []string
+		forbidden []string
 	}{
 		{
-			name:    "zero means unlimited",
-			clients: 0,
-			tunnels: 0,
+			name:    "unlimited defaults",
+			clients: "",
+			tunnels: "",
+			hosts:   "",
+			maxConn: "",
 			days:    0,
 			required: []string{
-				"客户端 不限", "隧道 不限", "并发连接 不限",
-				"上行带宽 不限", "下行带宽 不限", "有效期：永久",
+				"客户端 不限", "隧道 不限", "域名规则 不限", "并发连接 不限",
+				"带宽（双向合计）不限", "有效期：永久",
 				"P2P 直连不占用 NPS 转发带宽和并发连接额度",
 			},
 		},
 		{
-			name:          "positive values render configured benefits",
-			clients:       1,
-			tunnels:       2,
-			maxConn:       3,
-			uploadLimit:   128,
-			downloadLimit: 256,
-			days:          7,
+			name:      "not included and configured values",
+			clients:   "不包含",
+			tunnels:   "2",
+			hosts:     "不包含",
+			maxConn:   "4",
+			bandwidth: "384 Mbps",
+			days:      7,
 			required: []string{
-				"客户端 1", "隧道 2", "并发连接 3",
-				"上行带宽 128 KB/s", "下行带宽 256 KB/s", "有效期：7 天",
+				"客户端 不包含", "隧道 2", "域名规则 不包含", "并发连接 4",
+				"带宽（双向合计）384 Mbps", "有效期：7 天",
 			},
 			forbidden: []string{"有效期：永久"},
 		},
@@ -68,9 +70,9 @@ func TestRegistrationPageShowsUnlimitedOnlyForZeroQuota(t *testing.T) {
 			err := tpl.ExecuteTemplate(&output, "register.html", map[string]interface{}{
 				"register_max_clients":    tt.clients,
 				"register_max_tunnels":    tt.tunnels,
+				"register_max_hosts":      tt.hosts,
 				"register_max_conn":       tt.maxConn,
-				"register_upload_limit":   tt.uploadLimit,
-				"register_download_limit": tt.downloadLimit,
+				"register_bandwidth_mbps": tt.bandwidth,
 				"register_expire_days":    tt.days,
 				"web_base_url":            "",
 				"version":                 "test",

@@ -94,17 +94,19 @@ Windows 使用管理员 CMD 或 PowerShell 执行 `nps.exe install/start/stop/re
 ```text
 conf/
 ├── nps.conf
-├── clients.json
-├── tasks.json
-├── hosts.json
-├── users.json
-├── global.json
+├── nps.db
+├── nps.db-wal
+├── nps.db-shm
+├── nps.db.lock
+├── migration-report.json
 └── web_sessions.json
 ```
 
 证书和 Geo 数据还会在 `conf` 下创建或引用相应文件，日志位置以配置为准。不要只备份
-`nps.conf` 而遗漏 JSON 数据和证书。`web_sessions.json` 保存 3 天免登设备的
+`nps.conf` 或运行中的单一 `nps.db`；一致备份必须停服后复制整个目录，涵盖 WAL、SHM 和证书。`web_sessions.json` 保存 3 天免登设备的
 服务端登记，删除后所有免登 Cookie 会失效，但正常账号密码登录不受影响。
+
+SQLite 迁移、维护和回滚见 [SQLite 数据存储与升级](sqlite-storage.md)。
 
 ## 审计与连接日志
 

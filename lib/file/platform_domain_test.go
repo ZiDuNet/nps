@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -68,14 +69,24 @@ func writePlatformDomainCertificate(t *testing.T, wildcard string) (string, stri
 }
 
 func testPlatformHost(id int, host, platformDomainID string) *Host {
+	return testPlatformHostForUser(id, id, host, platformDomainID)
+}
+
+func testPlatformHostForUser(id, userID int, host, platformDomainID string) *Host {
 	return &Host{
 		Id:               id,
 		Host:             host,
 		PlatformDomainID: platformDomainID,
 		Scheme:           "all",
 		Location:         "/",
-		Client:           &Client{Id: id, UserId: id},
+		Client:           &Client{Id: id, UserId: userID, Status: true},
 		Target:           &Target{TargetStr: "127.0.0.1:8080"},
+	}
+}
+
+func seedPlatformHostOwners(db *JsonDb, ids ...int) {
+	for _, id := range ids {
+		db.Users.Store(id, &User{Id: id, UserName: "platform-owner-" + strconv.Itoa(id), Status: true})
 	}
 }
 
@@ -151,6 +162,7 @@ func TestPlatformDomainAllowsHTTPOnlyWithoutCertificate(t *testing.T) {
 
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}
+	seedPlatformHostOwners(db, 1, 2)
 	if err := utils.SaveGlobal(&Glob{PlatformDomains: []PlatformDomain{domain}}); err != nil {
 		t.Fatalf("HTTP-only platform domain should save: %v", err)
 	}
@@ -173,6 +185,7 @@ func TestPlatformDomainAllowsHTTPOnlyWithoutCertificate(t *testing.T) {
 func TestPlatformDomainCannotLoseCertificateWhileHTTPSHostUsesIt(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}
+	seedPlatformHostOwners(db, 1)
 	configured := testPlatformDomainWithCertificate(t, "platform-1", "*.example.com")
 	if err := utils.SaveGlobal(&Glob{PlatformDomains: []PlatformDomain{configured}}); err != nil {
 		t.Fatal(err)
@@ -200,6 +213,7 @@ func TestPlatformDomainCannotLoseCertificateWhileHTTPSHostUsesIt(t *testing.T) {
 func TestPlatformDomainRejectsUnusableCertificateAtDataBoundary(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}
+	seedPlatformHostOwners(db, 1)
 	invalid := testPlatformDomain("platform-1", "*.example.com", "/missing/platform.pem", "/missing/platform.key")
 	if err := utils.SaveGlobal(&Glob{PlatformDomains: []PlatformDomain{invalid}}); err == nil {
 		t.Fatal("global settings must reject a platform domain with unreadable certificate files")
@@ -218,6 +232,7 @@ func TestPlatformDomainRejectsUnusableCertificateAtDataBoundary(t *testing.T) {
 func TestPlatformHostResolutionAndAvailability(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}
+	seedPlatformHostOwners(db, 1, 2, 3, 5)
 	domain := testPlatformDomainWithCertificate(t, "platform-1", "*.example.com")
 	if err := utils.SaveGlobal(&Glob{PlatformDomains: []PlatformDomain{
 		domain,
@@ -272,6 +287,7 @@ func TestPlatformHostResolutionAndAvailability(t *testing.T) {
 func TestPlatformDomainReferencesProtectWildcardAndSyncCertificatePaths(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}
+	seedPlatformHostOwners(db, 1)
 	initialDomain := testPlatformDomainWithCertificate(t, "platform-1", "*.example.com")
 	initial := &Glob{PlatformDomains: []PlatformDomain{
 		initialDomain,

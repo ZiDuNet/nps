@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -154,11 +155,33 @@ download_limit=512
 	if err != nil {
 		t.Fatalf("parse test config: %v", err)
 	}
-	if len(c.Tasks) != 1 || c.Tasks[0].UploadLimit != 256 || c.Tasks[0].DownloadLimit != 2048 {
+	if len(c.Tasks) != 1 || c.Tasks[0].UploadLimit != 256*8192 || c.Tasks[0].DownloadLimit != 2048*8192 {
 		t.Fatalf("task rate limits were not parsed: %#v", c.Tasks)
 	}
-	if len(c.Hosts) != 1 || c.Hosts[0].UploadLimit != 64 || c.Hosts[0].DownloadLimit != 512 {
+	if len(c.Hosts) != 1 || c.Hosts[0].UploadLimit != 64*8192 || c.Hosts[0].DownloadLimit != 512*8192 {
 		t.Fatalf("host rate limits were not parsed: %#v", c.Hosts)
+	}
+}
+
+func TestNewConfigKeepsRateLimitAboveInt32(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "npc.conf")
+	content := `[common]
+server_addr=127.0.0.1:8024
+vkey=replace-with-verify-key
+rate_limit=262144
+`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("write test config: %v", err)
+	}
+	c, err := NewConfig(path)
+	if err != nil {
+		t.Fatalf("parse test config: %v", err)
+	}
+	if c.CommonConfig == nil || c.CommonConfig.Client == nil {
+		t.Fatal("missing client config")
+	}
+	if got, want := c.CommonConfig.Client.RateLimit, int64(math.MaxInt32)+1; got != want {
+		t.Fatalf("rate limit = %d bps, want %d", got, want)
 	}
 }
 

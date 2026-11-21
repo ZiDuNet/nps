@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
 	"github.com/astaxie/beego"
 )
 
@@ -44,27 +45,44 @@ func (s *ApiV1Controller) UsersRegister() {
 		return
 	}
 
-	maxClients, err := registrationAPIIntParameter(s, registrationMaxClients(), "max_client", "max_client_num")
+	maxClients, err := registrationAPIQuotaParameter(s, registrationMaxClients(), "max_client", "max_client_num")
 	if err != nil {
 		s.apiFail(http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
-	maxTunnels, err := registrationAPIIntParameter(s, registrationMaxTunnels(), "max_tunnel", "max_tunnel_num")
+	maxTunnels, err := registrationAPIQuotaParameter(s, registrationMaxTunnels(), "max_tunnel", "max_tunnel_num")
 	if err != nil {
 		s.apiFail(http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
-	maxConn, err := registrationAPIIntParameter(s, registrationMaxConn(), "max_conn", "max_connection")
+	maxHosts, err := registrationAPIHostQuotaParameter(s, registrationMaxHosts(), "max_host", "max_host_num")
 	if err != nil {
 		s.apiFail(http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
-	uploadLimit, err := registrationAPIIntParameter(s, registrationUploadLimit(), "upload_limit", "upload_rate")
+	maxConn, err := registrationAPIQuotaParameter(s, registrationMaxConn(), "max_conn", "max_connection")
 	if err != nil {
 		s.apiFail(http.StatusBadRequest, "validation_error", err.Error())
 		return
 	}
-	downloadLimit, err := registrationAPIIntParameter(s, registrationDownloadLimit(), "download_limit", "download_rate")
+	bandwidth := registrationBandwidthBps()
+	if registrationAPIHasField(s, "bandwidth_limit") {
+		bandwidth, _, err = file.ParseMbpsQuotaInput(s.GetString("bandwidth_limit"))
+	} else if registrationAPIHasField(s, "bandwidth") {
+		bandwidth, _, err = file.ParseMbpsQuotaInput(s.GetString("bandwidth"))
+	} else if registrationAPIHasField(s, "upload_limit") && registrationAPIHasField(s, "download_limit") {
+		uploadBps := registrationLegacyAPIKB(s.GetString("upload_limit"))
+		downloadBps := registrationLegacyAPIKB(s.GetString("download_limit"))
+		if uploadBps == 0 || downloadBps == 0 {
+			bandwidth = file.UnlimitedInt64()
+		} else {
+			bandwidth = file.LimitInt64(uploadBps + downloadBps)
+		}
+	} else if registrationAPIHasField(s, "upload_limit") {
+		bandwidth = file.LimitInt64(registrationLegacyAPIKB(s.GetString("upload_limit")))
+	} else if registrationAPIHasField(s, "download_limit") {
+		bandwidth = file.LimitInt64(registrationLegacyAPIKB(s.GetString("download_limit")))
+	}
 	if err != nil {
 		s.apiFail(http.StatusBadRequest, "validation_error", err.Error())
 		return
@@ -88,18 +106,18 @@ func (s *ApiV1Controller) UsersRegister() {
 	}
 
 	user := &file.User{
-		UserName:      username,
-		Password:      password,
-		Email:         emailAddress,
-		Status:        true,
-		Remark:        remark,
-		MaxClientNum:  maxClients,
-		MaxTunnelNum:  maxTunnels,
-		MaxConn:       maxConn,
-		UploadLimit:   uploadLimit,
-		DownloadLimit: downloadLimit,
-		ExpireTime:    expireTime,
-		CreateTime:    now.Format("2006-01-02 15:04:05"),
+		UserName:       username,
+		Password:       password,
+		Email:          emailAddress,
+		Status:         true,
+		Remark:         remark,
+		MaxClientNum:   maxClients,
+		MaxTunnelNum:   maxTunnels,
+		MaxHostNum:     maxHosts,
+		MaxConn:        maxConn,
+		BandwidthLimit: bandwidth,
+		ExpireTime:     expireTime,
+		CreateTime:     now.Format("2006-01-02 15:04:05"),
 	}
 	if err := file.GetDb().NewUser(user); err != nil {
 		s.apiFail(http.StatusBadRequest, "registration_failed", err.Error())
@@ -144,6 +162,47 @@ func registrationAPIInt(raw string) (int, error) {
 		return 0, &registrationAPIParameterError{}
 	}
 	return value, nil
+}
+
+// registrationAPIQuotaParameter uses the same three-state contract as the
+// dashboard: an omitted field falls back to the configured default, blank or
+// null means unlimited, zero means the resource is not included, and a
+// positive value is the cap. Keeping one contract avoids an admin API call
+// silently turning a zero-quota plan into an unlimited account.
+func registrationAPIQuotaParameter(s *ApiV1Controller, fallback *int, keys ...string) (*int, error) {
+	for _, key := range keys {
+		if !registrationAPIHasField(s, key) {
+			continue
+		}
+		value, _, err := file.ParseIntQuotaInput(s.GetString(key))
+		return value, err
+	}
+	return file.IntQuotaSnapshot(fallback), nil
+}
+
+// registrationAPIHostQuotaParameter applies the same compatibility rules as
+// the other registration limits while keeping an omitted Host quota unlimited.
+// register_max_hosts can be absent from pre-upgrade profiles, where the field
+// did not exist and Host rules were not independently capped.
+func registrationAPIHostQuotaParameter(s *ApiV1Controller, fallback *int, keys ...string) (*int, error) {
+	for _, key := range keys {
+		if !registrationAPIHasField(s, key) {
+			continue
+		}
+		value, _, err := file.ParseIntQuotaInput(s.GetString(key))
+		return value, err
+	}
+	return file.IntQuotaSnapshot(fallback), nil
+}
+
+// registrationLegacyAPIKB accepts the historical KB/s API aliases only during
+// the compatibility window and converts them to bps for the new shared budget.
+func registrationLegacyAPIKB(raw string) int64 {
+	value, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil || value < 0 {
+		return 0
+	}
+	return rate.BpsFromKBPerSecond(value)
 }
 
 type registrationAPIParameterError struct{}

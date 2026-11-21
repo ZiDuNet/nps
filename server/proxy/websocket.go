@@ -41,7 +41,7 @@ type reverseProxyState struct {
 	client         *file.Client
 	clientID       int
 	clientRate     *rate.Rate
-	userRate       *rate.Directional
+	userRate       *rate.Shared
 	clientFlow     *file.Flow
 	config         file.Config
 	localProxy     bool

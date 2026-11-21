@@ -18,6 +18,7 @@ import (
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/ipreg"
+	"ehang.io/nps/lib/rate"
 )
 
 type GlobalController struct {
@@ -547,7 +548,7 @@ func (s *GlobalController) Index() {
 		s.Data["globalWhiteIpList"] = strings.Join(global.WhiteIpList, "\r\n")
 		s.Data["globalIpListPriority"] = global.IpListPriority
 		s.Data["globalMaxConn"] = global.MaxConn
-		s.Data["globalRateLimit"] = global.RateLimit
+		s.Data["globalRateLimit"] = rate.FormatMbps(global.RateLimit)
 		s.Data["serverUrl"] = global.ServerUrl
 		guideValue, guideError := usageGuideEditorValue(global)
 		s.Data["helpSourceInput"] = guideValue
@@ -647,15 +648,16 @@ func (s *GlobalController) Save() {
 	}
 
 	maxConn := s.GetIntNoErr("globalMaxConn")
-	rateLimit := s.GetIntNoErr("globalRateLimit")
 	if maxConn < 0 {
 		s.AjaxErr("全局最大连接数不能小于 0")
 		return
 	}
-	if rateLimit < 0 {
-		s.AjaxErr("全局限速不能小于 0")
+	rateLimitMbps, rateErr := strconv.ParseFloat(strings.TrimSpace(s.GetString("globalRateLimit")), 64)
+	if rateErr != nil || rateLimitMbps < 0 {
+		s.AjaxErr("全局出口总带宽必须是不小于 0 的数字，单位为 Mbps")
 		return
 	}
+	rateLimit := rate.BpsFromMbps(rateLimitMbps)
 	priority := s.GetIntNoErr("globalIpListPriority")
 	if priority != 1 {
 		priority = 0

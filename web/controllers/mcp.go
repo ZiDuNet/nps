@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
@@ -10,9 +11,13 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
 	"ehang.io/nps/lib/version"
+	npsserver "ehang.io/nps/server"
+	"ehang.io/nps/server/tool"
 	"ehang.io/nps/web/audit"
 	"github.com/astaxie/beego"
+	"github.com/astaxie/beego/logs"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -25,14 +30,11 @@ type mcpPrincipal struct {
 
 type mcpPrincipalKey struct{}
 
-// NewMCPHandler returns the Streamable HTTP MCP endpoint at /mcp. It is
-// disabled unless mcp_enabled is true (the default).
+// NewMCPHandler returns the Streamable HTTP MCP endpoint at /mcp. The opt-in
+// switch is checked per request so an administrator can enable it from the
+// settings panel without restarting NPS. When disabled, callers still receive
+// an unauthenticated 404 so the endpoint's state is not exposed.
 func NewMCPHandler() http.Handler {
-	if !beego.AppConfig.DefaultBool("mcp_enabled", true) {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "MCP is disabled", http.StatusNotFound)
-		})
-	}
 	mcpServer := server.NewMCPServer("nps", version.VERSION, server.WithToolCapabilities(true))
 	registerMCPTools(mcpServer)
 	handler := server.NewStreamableHTTPServer(mcpServer,
@@ -47,6 +49,10 @@ func NewMCPHandler() http.Handler {
 		server.WithDisableLocalhostProtection(true),
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !beego.AppConfig.DefaultBool("mcp_enabled", true) {
+			http.NotFound(w, r)
+			return
+		}
 		if _, ok := resolveMCPPrincipal(r); !ok {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="nps"`)
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -131,6 +137,67 @@ func mcpArgBool(args map[string]any, key string) bool {
 		return b
 	}
 	return false
+}
+
+// mcpSubmitsClientLimits reports whether the request attempted to change a
+// client-wide quota. Ordinary users manage their own devices but cannot widen
+// the resource limits an administrator assigned.
+func mcpSubmitsClientLimits(args map[string]any) bool {
+	for _, key := range []string{"max_conn", "max_tunnel", "rate_limit"} {
+		if _, ok := args[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// mcpClientLimits parses the optional client quotas. Client limits use the
+// historical zero-means-unlimited encoding, and rate_limit is expressed in
+// Mbps while Client.RateLimit stores bps.
+func mcpClientLimits(args map[string]any) (maxConn, maxTunnel int, rateLimitBps int64, err error) {
+	parseInt := func(key string) (int, error) {
+		value, ok := args[key]
+		if !ok || value == nil {
+			return 0, nil
+		}
+		parsed := mcpArgInt(args, key)
+		if parsed < 0 {
+			return 0, errors.New("客户端配额、连接数和带宽限制不能小于 0")
+		}
+		return parsed, nil
+	}
+	if maxConn, err = parseInt("max_conn"); err != nil {
+		return 0, 0, 0, err
+	}
+	if maxTunnel, err = parseInt("max_tunnel"); err != nil {
+		return 0, 0, 0, err
+	}
+	var rateLimit *int64
+	rateLimit, err = file.ParseLegacyMbpsAlias(mcpArgRawString(args, "rate_limit"))
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	if rateLimit == nil {
+		rateLimit = file.LimitInt64(0)
+	}
+	if *rateLimit < 0 {
+		return 0, 0, 0, errors.New("带宽限制不能小于 0")
+	}
+	return maxConn, maxTunnel, *rateLimit, nil
+}
+
+func mcpArgRawString(args map[string]any, key string) string {
+	switch value := args[key].(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case float64:
+		return strconv.FormatFloat(value, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(value)
+	case int64:
+		return strconv.FormatInt(value, 10)
+	}
+	return ""
 }
 
 func mcpJSON(data any) (*mcp.CallToolResult, error) {
@@ -520,43 +587,45 @@ func mcpGlobalConfig(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolR
 }
 
 type mcpClientDTO struct {
-	Id         int    `json:"id"`
-	UserId     int    `json:"user_id"`
-	Remark     string `json:"remark"`
-	Status     bool   `json:"status"`
-	IsConnect  bool   `json:"is_connect"`
-	Version    string `json:"version"`
-	Addr       string `json:"addr"`
-	LocalAddr  string `json:"local_addr"`
-	RateLimit  int    `json:"rate_limit_kb"`
-	MaxConn    int    `json:"max_conn"`
-	NowConn    int32  `json:"now_conn"`
-	MaxTunnel  int    `json:"max_tunnel"`
-	FlowLimit  int64  `json:"flow_limit_kb"`
-	ExpireTime string `json:"expire_time"`
-	CreateTime string `json:"create_time"`
+	Id            int    `json:"id"`
+	UserId        int    `json:"user_id"`
+	Remark        string `json:"remark"`
+	Status        bool   `json:"status"`
+	IsConnect     bool   `json:"is_connect"`
+	Version       string `json:"version"`
+	Addr          string `json:"addr"`
+	LocalAddr     string `json:"local_addr"`
+	RateLimit     int64  `json:"rate_limit_bps"`
+	RateLimitMbps string `json:"rate_limit_mbps"`
+	MaxConn       int    `json:"max_conn"`
+	NowConn       int32  `json:"now_conn"`
+	MaxTunnel     int    `json:"max_tunnel"`
+	FlowLimitMB   int64  `json:"flow_limit_mb"`
+	ExpireTime    string `json:"expire_time"`
+	CreateTime    string `json:"create_time"`
 }
 
 func buildMCPClientDTO(client *file.Client) mcpClientDTO {
 	client.RLock()
 	dto := mcpClientDTO{
-		Id:         client.Id,
-		UserId:     client.UserId,
-		Remark:     client.Remark,
-		Status:     client.Status,
-		IsConnect:  client.IsConnect,
-		Version:    client.Version,
-		Addr:       client.Addr,
-		LocalAddr:  client.LocalAddr,
-		RateLimit:  client.RateLimit,
-		MaxConn:    client.MaxConn,
-		NowConn:    client.NowConn,
-		MaxTunnel:  client.MaxTunnelNum,
-		ExpireTime: client.ExpireTime,
-		CreateTime: client.CreateTime,
+		Id:            client.Id,
+		UserId:        client.UserId,
+		Remark:        client.Remark,
+		Status:        client.Status,
+		IsConnect:     client.IsConnect,
+		Version:       client.Version,
+		Addr:          client.Addr,
+		LocalAddr:     client.LocalAddr,
+		RateLimit:     client.RateLimit,
+		RateLimitMbps: rate.FormatMbps(client.RateLimit),
+		MaxConn:       client.MaxConn,
+		NowConn:       client.NowConn,
+		MaxTunnel:     client.MaxTunnelNum,
+		ExpireTime:    client.ExpireTime,
+		CreateTime:    client.CreateTime,
 	}
 	if client.Flow != nil {
-		dto.FlowLimit = client.Flow.FlowLimit
+		dto.FlowLimitMB = client.Flow.FlowLimit
 	}
 	client.RUnlock()
 	return dto
@@ -598,7 +667,7 @@ func registerMCPClientTools(s *server.MCPServer) {
 		mcp.WithNumber("user_id", mcp.Description("归属用户 ID（仅管理员）")),
 		mcp.WithNumber("max_conn", mcp.Description("最大连接数，0 表示不限")),
 		mcp.WithNumber("max_tunnel", mcp.Description("最大隧道数，0 表示不限")),
-		mcp.WithNumber("rate_limit", mcp.Description("限速 KB/s，0 表示不限")),
+		mcp.WithNumber("rate_limit", mcp.Description("客户端共享双向合计带宽，单位 Mbps；0 表示不限")),
 	), mcpClientCreate)
 
 	s.AddTool(newMCPTool("nps_client_update", "更新客户端", false, false, true,
@@ -607,7 +676,7 @@ func registerMCPClientTools(s *server.MCPServer) {
 		mcp.WithString("remark", mcp.Description("备注")),
 		mcp.WithNumber("max_conn", mcp.Description("最大连接数")),
 		mcp.WithNumber("max_tunnel", mcp.Description("最大隧道数")),
-		mcp.WithNumber("rate_limit", mcp.Description("限速 KB/s")),
+		mcp.WithNumber("rate_limit", mcp.Description("客户端共享双向合计带宽，单位 Mbps；0 表示不限")),
 	), mcpClientUpdate)
 
 	s.AddTool(newMCPTool("nps_client_delete", "删除客户端", false, true, true,
@@ -628,12 +697,19 @@ func mcpClientCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 		return failure, nil
 	}
 	args := request.GetArguments()
+	if !principal.IsAdmin && mcpSubmitsClientLimits(args) {
+		return mcpError("普通用户不能设置客户端资源限额"), nil
+	}
+	maxConn, maxTunnel, rateLimitBps, err := mcpClientLimits(args)
+	if err != nil {
+		return mcpError(err.Error()), nil
+	}
 	client := &file.Client{
 		Remark:       mcpArgString(args, "remark"),
 		Status:       true,
-		MaxConn:      mcpArgInt(args, "max_conn"),
-		MaxTunnelNum: mcpArgInt(args, "max_tunnel"),
-		RateLimit:    mcpArgInt(args, "rate_limit"),
+		MaxConn:      maxConn,
+		MaxTunnelNum: maxTunnel,
+		RateLimit:    rateLimitBps,
 		Flow:         &file.Flow{FlowLimit: 0},
 		CreateTime:   time.Now().Format("2006-01-02 15:04:05"),
 	}
@@ -642,7 +718,11 @@ func mcpClientCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 	} else {
 		client.UserId = principal.UserID
 	}
-	if err := file.GetDb().NewClient(client); err != nil {
+	create := file.GetDb().NewClient
+	if principal.IsAdmin {
+		create = file.GetDb().NewClientAsAdmin
+	}
+	if err := create(client); err != nil {
 		return mcpError("创建客户端失败: " + err.Error()), nil
 	}
 	return mcpJSON(map[string]any{"id": client.Id, "vkey": client.VerifyKey})
@@ -658,6 +738,13 @@ func mcpClientUpdate(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 	if !principal.canTouchClient(id) {
 		return mcpError("无权操作该客户端"), nil
 	}
+	if !principal.IsAdmin && mcpSubmitsClientLimits(args) {
+		return mcpError("普通用户不能设置客户端资源限额"), nil
+	}
+	maxConn, maxTunnel, rateLimitBps, err := mcpClientLimits(args)
+	if err != nil {
+		return mcpError(err.Error()), nil
+	}
 	client, err := file.GetDb().GetClient(id)
 	if err != nil || client == nil {
 		return mcpError("客户端不存在"), nil
@@ -666,18 +753,23 @@ func mcpClientUpdate(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 	if remark, ok := args["remark"].(string); ok {
 		client.Remark = strings.TrimSpace(remark)
 	}
-	if v, ok := args["max_conn"]; ok {
-		client.MaxConn = mcpArgInt(args, "max_conn")
-		_ = v
-	}
-	if _, ok := args["max_tunnel"]; ok {
-		client.MaxTunnelNum = mcpArgInt(args, "max_tunnel")
-	}
-	if _, ok := args["rate_limit"]; ok {
-		client.RateLimit = mcpArgInt(args, "rate_limit")
+	if principal.IsAdmin {
+		if _, ok := args["max_conn"]; ok {
+			client.MaxConn = maxConn
+		}
+		if _, ok := args["max_tunnel"]; ok {
+			client.MaxTunnelNum = maxTunnel
+		}
+		if _, ok := args["rate_limit"]; ok {
+			client.RateLimit = rateLimitBps
+		}
 	}
 	client.Unlock()
-	if err := file.GetDb().UpdateClient(client); err != nil {
+	update := file.GetDb().UpdateClient
+	if principal.IsAdmin {
+		update = file.GetDb().UpdateClientAsAdmin
+	}
+	if err := update(client); err != nil {
 		return mcpError("更新客户端失败: " + err.Error()), nil
 	}
 	return mcpJSON(map[string]any{"id": id})
@@ -692,14 +784,27 @@ func mcpClientDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 	if !principal.canTouchClient(id) {
 		return mcpError("无权操作该客户端"), nil
 	}
+	var committedClients []*file.Client
+	var committedTasks []*file.Tunnel
+	afterCommit := func(clients []*file.Client, tasks []*file.Tunnel, _ []*file.Host) {
+		committedClients = clients
+		committedTasks = tasks
+	}
 	if principal.IsAdmin {
-		if err := file.GetDb().DelClient(id); err != nil {
+		if err := file.GetDb().DelClientCascadeWithHook(id, afterCommit); err != nil {
 			return mcpError("删除失败: " + err.Error()), nil
 		}
 	} else {
-		if err := file.GetDb().DelClientForUser(id, principal.UserID); err != nil {
+		if err := file.GetDb().DelClientCascadeForUserWithHook(id, principal.UserID, afterCommit); err != nil {
 			return mcpError("删除失败: " + err.Error()), nil
 		}
+	}
+	clientID := id
+	if len(committedClients) > 0 && committedClients[0] != nil {
+		clientID = committedClients[0].Id
+	}
+	if cleanupErr := npsserver.FinalizeCommittedClientDeletion(clientID, committedTasks); cleanupErr != nil {
+		logs.Warn("client %d was deleted but runtime cleanup failed: %v", clientID, cleanupErr)
 	}
 	return mcpJSON(map[string]any{"deleted": id})
 }
@@ -721,8 +826,11 @@ func mcpClientSetStatus(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 	client.Lock()
 	client.Status = mcpArgBool(args, "status")
 	client.Unlock()
-	if err := file.GetDb().UpdateClient(client); err != nil {
+	if err := file.GetDb().UpdateClientAsAdmin(client); err != nil {
 		return mcpError("更新状态失败: " + err.Error()), nil
+	}
+	if !mcpArgBool(args, "status") {
+		npsserver.DelClientConnect(id)
 	}
 	return mcpJSON(map[string]any{"id": id, "status": client.Status})
 }
@@ -763,17 +871,42 @@ func mcpTunnelCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 	if err != nil || client == nil {
 		return mcpError("客户端不存在"), nil
 	}
+	mode := mcpArgString(args, "mode")
+	if !supportedTunnelMode(mode) {
+		return mcpError("不支持的隧道模式"), nil
+	}
+	target := mcpArgString(args, "target")
+	if err := validateBridgeTargetPermission(principal.IsAdmin, target); err != nil {
+		return mcpError(err.Error()), nil
+	}
+	port := mcpArgInt(args, "port")
+	if port < 0 || port > 65535 {
+		return mcpError("端口必须在 0..65535 范围内"), nil
+	}
 	tunnel := &file.Tunnel{
-		Mode:   strings.ToLower(mcpArgString(args, "mode")),
-		Port:   mcpArgInt(args, "port"),
+		Mode:   mode,
+		Port:   port,
 		Status: true,
 		Client: client,
 		Remark: mcpArgString(args, "remark"),
-		Target: &file.Target{TargetStr: mcpArgString(args, "target")},
+		Target: &file.Target{TargetStr: target},
 		Flow:   &file.Flow{FlowLimit: 0},
 	}
-	if err := file.GetDb().NewTask(tunnel); err != nil {
+	if tunnel.Port == 0 {
+		tunnel.Port = tool.GenerateServerPort(tunnel.Mode)
+	}
+	create := file.GetDb().NewTask
+	if principal.IsAdmin {
+		create = file.GetDb().NewTaskAsAdmin
+	}
+	if err := create(tunnel); err != nil {
 		return mcpError("创建隧道失败: " + err.Error()), nil
+	}
+	if err := npsserver.AddTask(tunnel); err != nil {
+		if delErr := file.GetDb().DelTask(tunnel.Id); delErr != nil {
+			return mcpError("启动隧道失败: " + err.Error() + "; 回滚记录失败: " + delErr.Error()), nil
+		}
+		return mcpError("启动隧道失败: " + err.Error()), nil
 	}
 	return mcpJSON(map[string]any{"id": tunnel.Id})
 }
@@ -797,7 +930,7 @@ func mcpTunnelDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 	if !principal.canTouchClient(clientID) {
 		return mcpError("无权操作该隧道"), nil
 	}
-	if err := file.GetDb().DelTask(id); err != nil {
+	if err := npsserver.DelTask(id); err != nil {
 		return mcpError("删除失败: " + err.Error()), nil
 	}
 	return mcpJSON(map[string]any{"deleted": id})
@@ -823,11 +956,29 @@ func mcpTunnelSetStatus(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 	if !principal.canTouchClient(clientID) {
 		return mcpError("无权操作该隧道"), nil
 	}
-	tunnel.Lock()
-	tunnel.Status = mcpArgBool(args, "status")
-	tunnel.Unlock()
-	if err := file.GetDb().UpdateTask(tunnel); err != nil {
-		return mcpError("更新状态失败: " + err.Error()), nil
+	status := mcpArgBool(args, "status")
+	tunnel.RLock()
+	current := tunnel.Status
+	tunnel.RUnlock()
+	if status == current {
+		return mcpJSON(map[string]any{"id": id, "status": status})
+	}
+	var lifecycleErr error
+	if status {
+		lifecycleErr = npsserver.StartTask(id)
+	} else {
+		lifecycleErr = npsserver.StopServer(id)
+		if _, running := npsserver.RunList.Load(id); !running {
+			// A persisted task can be stopped already; reflect the requested
+			// state without failing the idempotent status call.
+			tunnel.Lock()
+			tunnel.Status = false
+			tunnel.Unlock()
+			lifecycleErr = file.GetDb().UpdateTask(tunnel)
+		}
+	}
+	if lifecycleErr != nil {
+		return mcpError("更新状态失败: " + lifecycleErr.Error()), nil
 	}
 	return mcpJSON(map[string]any{"id": id, "status": tunnel.Status})
 }
@@ -877,15 +1028,23 @@ func mcpHostCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 	if location == "" {
 		location = "/"
 	}
+	target := mcpArgString(args, "target")
+	if err := validateBridgeTargetPermission(principal.IsAdmin, target); err != nil {
+		return mcpError(err.Error()), nil
+	}
 	host := &file.Host{
 		Host:     strings.ToLower(mcpArgString(args, "host")),
 		Scheme:   scheme,
 		Location: location,
 		Client:   client,
-		Target:   &file.Target{TargetStr: mcpArgString(args, "target")},
+		Target:   &file.Target{TargetStr: target},
 		Remark:   mcpArgString(args, "remark"),
 	}
-	if err := file.GetDb().NewHost(host); err != nil {
+	create := file.GetDb().NewHost
+	if principal.IsAdmin {
+		create = file.GetDb().NewHostAsAdmin
+	}
+	if err := create(host); err != nil {
 		return mcpError("创建域名反代失败: " + err.Error()), nil
 	}
 	return mcpJSON(map[string]any{"id": host.Id})

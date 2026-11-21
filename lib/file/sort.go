@@ -177,11 +177,13 @@ func snapshotUser(user *User) userSortSnapshot {
 	user.RLock()
 	snapshot := userSortSnapshot{
 		id:       user.Id,
-		maxConn:  user.MaxConn,
 		username: user.UserName,
 		remark:   user.Remark,
 		email:    user.Email,
 		status:   user.Status,
+	}
+	if user.MaxConn != nil {
+		snapshot.maxConn = *user.MaxConn
 	}
 	user.RUnlock()
 	connections, _, uploadRate, downloadRate := UserRuntimeSnapshot(snapshot.id)

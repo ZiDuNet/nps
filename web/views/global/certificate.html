@@ -348,15 +348,15 @@
                         <article class="certificate-config-field{{if not $field.Enabled}} is-disabled{{end}}" data-cert-field="{{$field.Key}}"{{if or (eq $field.Key "ssl_path") (eq $field.Key "ssl_email") (eq $field.Key "ssl_ca") (eq $field.Key "ssl_zerossl_api") (eq $field.Key "ssl_cache_max") (eq $field.Key "ssl_cache_reload") (eq $field.Key "ssl_cache_idle")}} data-cert-depends-on="force_auto_ssl"{{else if or (eq $field.Key "web_cert_file") (eq $field.Key "web_key_file")}} data-cert-depends-on="web_open_ssl"{{else if eq $field.Key "tls_bridge_port"}} data-cert-depends-on="tls_enable"{{end}}{{if eq $field.Key "ssl_zerossl_api"}} data-cert-depends-match="ssl_ca:ZeroSSL"{{end}}>
                             <label for="certificate-config-{{$field.Key}}">{{$field.Label}} <code>{{$field.Key}}</code></label>
                             <p>{{$field.Description}}</p>
-                            {{if $field.Optional}}<label class="certificate-config-optional"><input type="checkbox" name="config_enabled_{{$field.Key}}" value="1" data-cert-enabled="{{$field.Key}}"{{if $field.Enabled}} checked{{end}}><span data-i18n-zh="启用并写入此项" data-i18n-en="Enable and write this setting">启用并写入此项</span></label>{{end}}
+                            {{if $field.Optional}}<label class="certificate-config-optional"><input type="checkbox" name="config_enabled_{{$field.Key}}" value="1" data-cert-enabled="{{$field.Key}}" data-cert-enabled-value="{{if $field.Enabled}}1{{else}}0{{end}}"{{if $field.Enabled}} checked{{end}}><span data-i18n-zh="启用并写入此项" data-i18n-en="Enable and write this setting">启用并写入此项</span></label>{{end}}
                             {{if eq $field.Type "bool"}}
-                            <select id="certificate-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-cert-input="{{$field.Key}}"><option value="true"{{if eq $field.Value "true"}} selected{{end}}>true / 启用</option><option value="false"{{if eq $field.Value "false"}} selected{{end}}>false / 关闭</option></select>
+                            <select id="certificate-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-cert-input="{{$field.Key}}" data-cert-value="{{$field.Value}}"><option value="true"{{if eq $field.Value "true"}} selected{{end}}>true / 启用</option><option value="false"{{if eq $field.Value "false"}} selected{{end}}>false / 关闭</option></select>
                             {{else if eq $field.Type "select"}}
-                            <select id="certificate-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-cert-input="{{$field.Key}}">{{range $option := $field.Options}}<option value="{{$option}}"{{if eq $field.Value $option}} selected{{end}}>{{$option}}</option>{{end}}</select>
+                            <select id="certificate-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-cert-input="{{$field.Key}}" data-cert-value="{{$field.Value}}">{{range $option := $field.Options}}<option value="{{$option}}"{{if eq $field.Value $option}} selected{{end}}>{{$option}}</option>{{end}}</select>
                             {{else if eq $field.Type "secret"}}
-                            <div class="input-group"><input id="certificate-config-{{$field.Key}}" class="form-control" type="password" name="config_{{$field.Key}}" data-cert-input="{{$field.Key}}" placeholder="{{if $field.Present}}已配置，留空保持{{else}}未配置{{end}}" autocomplete="new-password"><button type="button" class="btn btn-outline certificate-reveal" data-target="certificate-config-{{$field.Key}}" aria-label="显示或隐藏值"><i class="fa fa-eye" aria-hidden="true"></i></button></div><span class="certificate-secret-note" data-i18n-zh="敏感值不会回显；留空保持当前值。" data-i18n-en="Secret values are never echoed; leave blank to keep the current value.">敏感值不会回显；留空保持当前值。</span>
+                            <div class="input-group"><input id="certificate-config-{{$field.Key}}" class="form-control" type="password" name="config_{{$field.Key}}" data-cert-input="{{$field.Key}}" data-cert-value="" data-cert-secret="1" placeholder="{{if $field.Present}}已配置，留空保持{{else}}未配置{{end}}" autocomplete="new-password"><button type="button" class="btn btn-outline certificate-reveal" data-target="certificate-config-{{$field.Key}}" aria-label="显示或隐藏值"><i class="fa fa-eye" aria-hidden="true"></i></button></div><span class="certificate-secret-note" data-i18n-zh="敏感值不会回显；留空保持当前值。" data-i18n-en="Secret values are never echoed; leave blank to keep the current value.">敏感值不会回显；留空保持当前值。</span>
                             {{else}}
-                            <input id="certificate-config-{{$field.Key}}" class="form-control" type="{{if eq $field.Type "int"}}number{{else}}text{{end}}" name="config_{{$field.Key}}" value="{{$field.Value}}" data-cert-input="{{$field.Key}}"{{if eq $field.Type "int"}} min="0" step="1"{{end}}>
+                            <input id="certificate-config-{{$field.Key}}" class="form-control" type="{{if eq $field.Type "int"}}number{{else}}text{{end}}" name="config_{{$field.Key}}" value="{{$field.Value}}" data-cert-input="{{$field.Key}}" data-cert-value="{{$field.Value}}"{{if eq $field.Type "int"}} min="0" step="1"{{end}}>
                             {{end}}
                         </article>
                         {{end}}
@@ -699,8 +699,48 @@ $(function () {
     configForm.on('submit', function (event) {
         event.preventDefault();
         var button = document.getElementById('certificate-config-save');
+        var dirty = {};
+        configForm.find('[data-cert-input][data-cert-value]').each(function () {
+            var key = $(this).attr('data-cert-input');
+            if (!key) return;
+            var secret = this.getAttribute('data-cert-secret') === '1';
+            var original = this.getAttribute('data-cert-value') || '';
+            if (secret) {
+                if (this.value !== '') dirty[key] = true;
+            } else if (this.value !== original) {
+                dirty[key] = true;
+            }
+        });
+        configForm.find('[data-cert-enabled]').each(function () {
+            var key = $(this).attr('data-cert-enabled');
+            if (!key || !configField(key).length) return;
+            var original = this.getAttribute('data-cert-enabled-value') === '1';
+            if (this.checked !== original) dirty[key] = true;
+        });
+        var payload = configForm.serializeArray().filter(function (item) {
+            if (item.name === 'config_delta' || item.name === 'config_dirty') return true;
+            if (item.name.indexOf('config_enabled_') === 0) {
+                return dirty[item.name.slice('config_enabled_'.length)] === true;
+            }
+            if (item.name.indexOf('config_') === 0) {
+                return dirty[item.name.slice('config_'.length)] === true;
+            }
+            return true;
+        });
+        configForm.find('[data-cert-enabled]').each(function () {
+            var key = $(this).attr('data-cert-enabled');
+            if (dirty[key] && !this.checked && configField(key).length) {
+                payload.push({name: 'config_enabled_' + key, value: '0'});
+            }
+        });
+        Object.keys(dirty).forEach(function (key) {
+            if (!payload.some(function (item) { return item.name === 'config_dirty' && item.value === key; })) {
+                payload.push({name: 'config_dirty', value: key});
+            }
+        });
+        payload.push({name: 'config_delta', value: '1'});
         setBusy(button, true, localText('保存中…', 'Saving…'));
-        $.ajax({type: 'POST', url: '{{.web_base_url}}/global/certificate/config', data: configForm.serializeArray(), dataType: 'json'}).done(function (response) {
+        $.ajax({type: 'POST', url: '{{.web_base_url}}/global/certificate/config', data: payload, dataType: 'json'}).done(function (response) {
             if (!response || !response.status) {
                 npsNotify('error', (response && response.msg) || localText('证书配置保存失败', 'Failed to save certificate settings'));
                 return;

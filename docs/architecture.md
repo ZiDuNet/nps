@@ -35,17 +35,17 @@ NPS 由服务端 `nps`、内网客户端 `npc` 和可选的 NPC GUI 组成。服
 
 ## 数据持久化
 
-服务端使用 JSON 文件保存运行配置和管理数据，默认位于 `conf/`：
+SQLite 是业务数据的权威存储，默认位于 `conf/nps.db`；`nps.conf` 继续保存进程启动参数：
 
-| 文件 | 内容 |
+| 路径 | 内容 |
 | --- | --- |
-| `nps.conf` | 服务端端口、Web、TLS、权限和限制开关 |
-| `clients.json` | 客户端、VerifyKey、认证、流量和连接限制 |
-| `tasks.json` | TCP/UDP/代理/文件等隧道任务 |
-| `hosts.json` | HTTP(S) 域名、路径和证书规则 |
-| `users.json` | 普通用户、客户端归属和用户级配额 |
+| `nps.conf` | 端口、监听、Bridge、TLS、日志和其他启动参数 |
+| `nps.db` | 客户端、用户、隧道、Host、全局参数和运行期业务配置 |
+| `nps.db-wal` / `nps.db-shm` | SQLite WAL 及其共享内存索引 |
+| `nps.db.lock` | 单进程数据库实例锁 |
+| `migration-report.json` | 最近一次 JSON/SQLite 导入或导出报告 |
 
-修改 Web 面板中的客户端、隧道或域名后，服务端会更新对应 JSON 数据。升级前应完整备份 `conf/` 目录，回滚时也必须恢复同一目录下的配置和数据文件。
+Web 面板修改按实体差异提交；用户或客户端级联删除、全局平台域名与关联 Host 证书更新使用单事务。升级前必须停止服务并备份整个 `conf/`，因为仅复制运行中的 `nps.db` 可能遗漏 WAL。完整迁移、导出、权限和回滚步骤见 [SQLite 数据存储与升级](server/sqlite-storage.md)。
 
 ## 请求路径选择
 

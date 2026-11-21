@@ -1,11 +1,40 @@
 package file
 
 import (
+	"encoding/json"
+	"math"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestClientRateLimitJSONPreservesInt64Bps(t *testing.T) {
+	want := int64(math.MaxInt32) + 1
+	var legacy Client
+	if err := json.Unmarshal([]byte(`{"RateLimit":2147483648}`), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	if legacy.RateLimit != want {
+		t.Fatalf("legacy RateLimit = %d, want %d", legacy.RateLimit, want)
+	}
+
+	raw, err := json.Marshal(&Client{RateLimit: want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"RateLimit":2147483648`) {
+		t.Fatalf("RateLimit JSON = %s, want bps number", raw)
+	}
+	var decoded Client
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.RateLimit != want {
+		t.Fatalf("round-trip RateLimit = %d, want %d", decoded.RateLimit, want)
+	}
+}
 
 func TestClientGetConnReservesSlotsAtomically(t *testing.T) {
 	client := NewClient("test-vkey", false, false)

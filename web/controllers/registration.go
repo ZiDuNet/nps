@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"mime"
 	"net"
@@ -18,6 +19,8 @@ import (
 	"sync"
 	"time"
 
+	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
 	"github.com/astaxie/beego"
 )
 
@@ -365,24 +368,64 @@ func registrationEmailCodeCooldown() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-func registrationMaxClients() int {
-	return max(beego.AppConfig.DefaultInt("register_max_clients", 0), 0)
+// registrationQuotaDefault reads the same three-state quota contract used by
+// existing users: blank is unlimited, zero means the plan does not include the
+// resource, and a positive value is the cap. nps.conf files written by older
+// releases used zero for unlimited; settings.Init normalizes those imported
+// values to blank before startup, so an explicit zero saved from the current
+// panel keeps its "not included" meaning.
+func registrationQuotaDefault(key string) *int {
+	raw := strings.TrimSpace(beego.AppConfig.String(key))
+	if raw == "" {
+		return file.UnlimitedInt()
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 0 {
+		return file.UnlimitedInt()
+	}
+	return file.LimitInt(value)
 }
 
-func registrationMaxTunnels() int {
-	return max(beego.AppConfig.DefaultInt("register_max_tunnels", 0), 0)
+func registrationMaxClients() *int {
+	return registrationQuotaDefault("register_max_clients")
 }
 
-func registrationMaxConn() int {
-	return max(beego.AppConfig.DefaultInt("register_max_conn", 0), 0)
+func registrationMaxTunnels() *int {
+	return registrationQuotaDefault("register_max_tunnels")
 }
 
-func registrationUploadLimit() int {
-	return max(beego.AppConfig.DefaultInt("register_upload_limit", 0), 0)
+func registrationMaxHosts() *int {
+	return registrationQuotaDefault("register_max_hosts")
 }
 
-func registrationDownloadLimit() int {
-	return max(beego.AppConfig.DefaultInt("register_download_limit", 0), 0)
+func registrationMaxConn() *int {
+	return registrationQuotaDefault("register_max_conn")
+}
+
+// registrationBandwidthBps returns the default shared two-way bandwidth budget
+// for new accounts. register_bandwidth_limit is expressed in decimal Mbps;
+// register_upload_limit/register_download_limit are legacy KB/s aliases kept
+// only for existing configuration files.
+func registrationBandwidthBps() *int64 {
+	if raw := strings.TrimSpace(beego.AppConfig.String("register_bandwidth_limit")); raw != "" {
+		mbps, err := strconv.ParseFloat(raw, 64)
+		if err != nil || mbps < 0 || math.IsNaN(mbps) || math.IsInf(mbps, 0) {
+			return file.UnlimitedInt64()
+		}
+		return file.LimitInt64(rate.BpsFromMbps(mbps))
+	}
+	upload := max(beego.AppConfig.DefaultInt64("register_upload_limit", 0), 0)
+	download := max(beego.AppConfig.DefaultInt64("register_download_limit", 0), 0)
+	if upload == 0 && download == 0 {
+		return file.UnlimitedInt64()
+	}
+	if upload == 0 || download == 0 {
+		// The legacy directional pair cannot be represented faithfully by one
+		// shared budget. Treat a zero side as unlimited rather than silently
+		// inventing a cap that the old account never had.
+		return file.UnlimitedInt64()
+	}
+	return file.LimitInt64(rate.BpsFromKBPerSecond(upload + download))
 }
 
 func registrationExpireDays() int {

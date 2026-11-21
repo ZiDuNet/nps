@@ -12,11 +12,16 @@ type rateConn struct {
 }
 
 // NewRateConn preserves the legacy client-wide aggregate limiter and can
-// optionally layer resource-scoped directional limiters. Reads are backend to
-// visitor (download); writes are visitor to backend (upload).
-func NewRateConn(conn io.ReadWriteCloser, rate *Rate, entry ...*Directional) io.ReadWriteCloser {
+// optionally layer resource-scoped limiters. Reads are backend to visitor
+// (download); writes are visitor to backend (upload).
+func NewRateConn(conn io.ReadWriteCloser, rate *Rate, entry ...Limiter) io.ReadWriteCloser {
 	for _, limiter := range entry {
-		conn = NewDirectionalConn(conn, limiter)
+		switch typed := limiter.(type) {
+		case *Directional:
+			conn = NewDirectionalConn(conn, typed)
+		case *Shared:
+			conn = NewSharedConn(conn, typed)
+		}
 	}
 	return &rateConn{
 		conn: conn,

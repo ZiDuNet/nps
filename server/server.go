@@ -497,6 +497,24 @@ func addTask(t *file.Tunnel) error {
 	if t == nil {
 		return errors.New("task is nil")
 	}
+	// A create request can persist a task and then be delayed before AddTask.
+	// Revalidate the authoritative records while holding the lifecycle lock so
+	// a concurrent cascade delete cannot leave a listener for an orphaned task.
+	if t.Id > 0 {
+		current, exists := file.GetDb().JsonDb.Tasks.Load(t.Id)
+		if !exists || current != t {
+			return errors.New("隧道记录已被删除或替换")
+		}
+		t.RLock()
+		client := t.Client
+		t.RUnlock()
+		if client != nil {
+			currentClient, exists := file.GetDb().JsonDb.Clients.Load(client.Id)
+			if !exists || currentClient != client {
+				return errors.New("隧道所属客户端已被删除或替换")
+			}
+		}
+	}
 	if _, running := RunList.Load(t.Id); running {
 		return errors.New("task is already running")
 	}
@@ -595,19 +613,30 @@ func DelTask(id int) error {
 	taskLifecycleMu.Lock()
 	defer taskLifecycleMu.Unlock()
 	clientID := 0
-	if task, err := file.GetDb().GetTask(id); err == nil && task != nil {
+	task, err := file.GetDb().GetTask(id)
+	if err != nil {
+		return err
+	}
+	if task != nil {
 		task.RLock()
 		if task.Client != nil {
 			clientID = task.Client.Id
 		}
 		task.RUnlock()
 	}
-	if _, ok := RunList.Load(id); ok {
-		if err := stopServer(id); err != nil {
-			return err
+	err = file.GetDb().DelTaskWithHook(id, func(deleted *file.Tunnel) error {
+		value, running := RunList.Load(id)
+		if !running {
+			return nil
 		}
-	}
-	err := file.GetDb().DelTask(id)
+		if service, ok := value.(proxy.Service); ok && service != nil {
+			if err := service.Close(); err != nil {
+				return err
+			}
+		}
+		RunList.Delete(id)
+		return nil
+	})
 	if err == nil {
 		refreshClientHealthConfig(clientID)
 	}
@@ -927,6 +956,9 @@ func dealClientData() {
 
 // delete all host and tasks by client id
 func DelTunnelAndHostByClientId(clientId int, justDelNoStore bool) {
+	if err := StopTunnelAndHostByClientId(clientId, justDelNoStore); err != nil {
+		logs.Error("stop resources for client %d: %v", clientId, err)
+	}
 	var ids []int
 	file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
 		v, ok := value.(*file.Tunnel)
@@ -975,6 +1007,83 @@ func DelTunnelAndHostByClientId(clientId int, justDelNoStore bool) {
 	}
 }
 
+// StopTunnelAndHostByClientId closes runtime listeners owned by a client
+// without mutating persistent definitions. Explicit cascade deletes instead
+// use FinalizeCommittedClientDeletion so a failed transaction leaves listeners
+// running.
+func StopTunnelAndHostByClientId(clientID int, justDelNoStore bool) error {
+	ids := make([]int, 0)
+	file.GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
+		task, ok := value.(*file.Tunnel)
+		if !ok || task == nil {
+			return true
+		}
+		task.RLock()
+		noStore, taskID, client := task.NoStore, task.Id, task.Client
+		task.RUnlock()
+		if justDelNoStore && !noStore {
+			return true
+		}
+		if client == nil {
+			return true
+		}
+		client.RLock()
+		ownerID := client.Id
+		client.RUnlock()
+		if ownerID == clientID {
+			ids = append(ids, taskID)
+		}
+		return true
+	})
+
+	taskLifecycleMu.Lock()
+	defer taskLifecycleMu.Unlock()
+	var closeErrors []error
+	for _, id := range ids {
+		value, running := RunList.Load(id)
+		if !running {
+			continue
+		}
+		if service, ok := value.(proxy.Service); ok && service != nil {
+			if err := service.Close(); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("关闭隧道 %d: %w", id, err))
+				continue
+			}
+		}
+		RunList.Delete(id)
+	}
+	return errors.Join(closeErrors...)
+}
+
+// FinalizeCommittedClientDeletion closes listeners after the client deletion
+// transaction has committed. It operates on the captured records because they
+// are intentionally absent from the in-memory maps by this point.
+func FinalizeCommittedClientDeletion(clientID int, tasks []*file.Tunnel) error {
+	taskLifecycleMu.Lock()
+	defer taskLifecycleMu.Unlock()
+	var cleanupErrors []error
+	for _, task := range tasks {
+		if task == nil {
+			continue
+		}
+		task.RLock()
+		taskID := task.Id
+		task.RUnlock()
+		value, running := RunList.Load(taskID)
+		if !running {
+			continue
+		}
+		if service, ok := value.(proxy.Service); ok && service != nil {
+			if err := service.Close(); err != nil {
+				cleanupErrors = append(cleanupErrors, fmt.Errorf("关闭隧道 %d: %w", taskID, err))
+			}
+		}
+		RunList.Delete(taskID)
+	}
+	KickClientConnect(clientID)
+	return errors.Join(cleanupErrors...)
+}
+
 // close the client
 func DelClientConnect(clientId int) {
 	if Bridge != nil {
@@ -1000,17 +1109,24 @@ func DisconnectClientInstance(clientID int, instanceID string) error {
 	return Bridge.DisconnectClientInstance(clientID, instanceID)
 }
 
-// RevokeUserClients disconnects every client owned by a disabled/expired user
-// and removes its active proxy records. Existing TCP/UDP sessions therefore
-// cannot continue operating after the account is suspended.
+// PauseUserClients disconnects every client owned by a disabled/expired user.
+// Tunnel and host definitions are deliberately retained so renewing or
+// re-enabling the account can restore service without rebuilding resources.
+func PauseUserClients(userID int) {
+	revokeUserClientsWith(userID, &file.GetDb().JsonDb.Clients, DelClientConnect, nil)
+}
+
+// RevokeUserClients disconnects every client owned by a deleted user and
+// removes its tunnel and host definitions. This keeps the historical explicit
+// delete semantics: resources must not become orphaned after the owner row is
+// gone. Disable and expiry paths use PauseUserClients instead.
 func RevokeUserClients(userID int) {
 	revokeUserClientsWith(userID, &file.GetDb().JsonDb.Clients, DelClientConnect, DelTunnelAndHostByClientId)
 }
 
-// revokeUserClientsWith disconnects and removes proxy resources using
-// injectable callbacks. The production wrapper above supplies the server
-// lifecycle functions; keeping this helper pure makes revocation observable
-// without opening real listeners in tests.
+// revokeUserClientsWith disconnects and optionally removes proxy resources
+// using injectable callbacks. Keeping this helper pure makes both pause and
+// delete behavior observable without opening real listeners in tests.
 func revokeUserClientsWith(userID int, clients *sync.Map, disconnect func(int), removeResources func(int, bool)) {
 	if userID <= 0 || clients == nil {
 		return
@@ -1633,10 +1749,9 @@ func flowStoreLoop(interval time.Duration, stop <-chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			file.GetDb().JsonDb.StoreHostToJsonFile()
-			file.GetDb().JsonDb.StoreTasksToJsonFile()
-			file.GetDb().JsonDb.StoreClientsToJsonFile()
-			file.GetDb().JsonDb.StoreGlobalToJsonFile()
+			if err := file.GetDb().JsonDb.Flush(); err != nil {
+				logs.Error("periodic persistence failed: %v", err)
+			}
 		case <-stop:
 			return
 		}
@@ -1721,7 +1836,10 @@ func checkClientExpire() {
 		v.Unlock()
 		changed = true
 		DelClientConnect(clientID)
-		DelTunnelAndHostByClientId(clientID, false)
+		// Keep tunnel and host definitions when a client expires. The client
+		// is paused and disconnected; renewing it must not require rebuilding
+		// its resources. Explicit deletion still calls
+		// DelTunnelAndHostByClientId from ClientController.Del.
 		logs.Info("client id %d (remark: %s) reached effective expiry %s, auto paused", clientID, remark, effectiveExpireTime)
 		return true
 	})
@@ -1752,7 +1870,7 @@ func checkUserExpire() {
 		userID, userName, expireTime := v.Id, v.UserName, v.ExpireTime
 		v.Unlock()
 		changed = true
-		RevokeUserClients(userID)
+		PauseUserClients(userID)
 		logs.Info("user id %d (username: %s) expired at %s, auto paused", userID, userName, expireTime)
 		return true
 	})

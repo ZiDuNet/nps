@@ -198,19 +198,19 @@ allow_ports=9001-9009,10001,11000-12000
 
 ### 认证与 API
 
-- 管理员账号在 `nps.conf` 中；普通用户、客户端级 Web 登录账号保存在 JSON 数据文件中。
+- 管理员账号在 `nps.conf` 中；普通用户、客户端级 Web 登录账号保存在 SQLite；旧 JSON 只用于迁移和回滚导出。
 - 域名代理支持 Host 级 Basic；HTTP 正向代理和 SOCKS5 支持混合代理规则级 Basic，并在留空时回退客户端公共 Basic。
 - `/api/v1` 使用管理员签名或普通用户 Bearer Token；鉴权边界见[API 鉴权与兼容](api.md)，旧接口见[历史 Web API](webapi.md)。
 - 登录验证码通过 `open_captcha=true` 开启，登录尝试限制和安全部署建议见[部署与运行说明](description.md#web-管理保护)。
 
 ## 运维能力
 
-- **JSON 持久化**：客户端、隧道、域名、用户和全局配置保存在 `conf/`，方便备份、迁移和恢复。
+- **SQLite 持久化**：客户端、隧道、域名、用户、全局参数和运行期业务配置保存在 `conf/nps.db`；停服后备份整个 `conf` 以包含 WAL/SHM。详见[SQLite 数据存储与升级](../server/sqlite-storage.md)。
 - **系统服务**：NPS/NPC 支持安装、启动、停止、重启和卸载服务；命令见[运行命令速查](../run.md)。
 - **Docker 与多架构镜像**：服务端、客户端可容器化运行；注意容器的网络命名空间和端口发布，详见[Docker 部署](../docker.md)。
 - **GUI 客户端**：提供 Wails GUI，用于管理连接、日志、状态和更新，见[GUI 客户端](../gui.md)。
 - **日志和 pprof**：`log_level`/`log_path` 控制日志；`pprof_ip` 与 `pprof_port` 仅应在受控网络临时开启。
-- **流量持久化**：`flow_store_interval` 按分钟将流量写入配置数据；设置为空或 `0` 关闭定时持久化。
+- **流量持久化**：`flow_store_interval` 按分钟将变化的流量和规则按行写入 SQLite；设置为空或 `0` 关闭定时持久化。
 
 ## 当前不支持或需要谨慎使用的能力
 

@@ -2,7 +2,7 @@
 
 > 轻量级、高性能、功能完整的内网穿透代理服务器。
 
-当前版本：**v1.1.48**。本版本将登录改为无状态挑战，新增 MCP 服务端、`npsctl` CLI 和内置 NPS Skill，并将「账户管理」更名为「接入与安全」。旧 NPC、旧配置和业务 JSON 继续兼容，配置及业务数据无需手工迁移。
+当前源码版本：**v1.1.49**。从本版本起，SQLite 正式成为客户端、用户、隧道、Host、全局参数和运行期业务配置的权威存储，旧 NPC 协议继续兼容。生产升级必须先阅读 [SQLite 数据存储与升级](server/sqlite-storage.md)，不能直接用旧 JSON 覆盖现有数据库。
 
 ## 界面预览
 
@@ -13,7 +13,7 @@
 ## 文档口径
 
 - 当前正式源码版本以 `lib/version/version.go` 为准；本页写作时为
-  `1.1.48`。
+  `1.1.49`。
 - `nps.conf` 字段以[服务端配置文件参考](server/server_config.md)为准；
   [部署安全与参数速查](server_config.md)只说明安全边界和常用端口。
 - NPC 命令行与系统服务以[客户端配置与启动](client_config.md)为准；字段以
@@ -45,7 +45,7 @@
 - 用户与客户端分别支持到期时间：客户端到期不得晚于用户到期，客户端留空时跟随用户；用户未设置到期时，客户端可独立设置或永不过期。
 - 管理员可维护多个平台泛域名及其证书，用户可安全创建唯一子域名；证书外部续期后，新 TLS 连接自动使用有效的新文件。
 - 支持客户端到期、用户到期、IP 白名单/黑名单、验证码、带宽/流量/连接数限制。
-- 数据继续使用 JSON 文件持久化，便于轻量部署和备份。
+- SQLite 是业务数据权威存储，`nps.conf` 保留监听、端口、TLS 和日志等启动参数；升级、备份、WAL 维护和 JSON 回滚见 [SQLite 数据存储与升级](server/sqlite-storage.md)。
 - Bridge 支持 TCP、KCP、WebSocket、WSS 和可选 QUIC；KCP、WS、WSS、QUIC 可通过独立端口启用。TLS Bridge 仍使用独立 TLS 端口。现有同端口复用只覆盖受支持的 Bridge、HTTP(S) 和管理面板协议路由。
 - 客户端支持压缩/加密传输选项、SOCKS5 出站代理、P2P/Secret 本地访问端和 GUI 快捷启动命令。
 
@@ -59,33 +59,36 @@
 6. [隧道模式](tunnel.md)
 7. [系统架构](architecture.md)
 8. [服务端配置文件参考](server/server_config.md)
-9. [客户端配置](client_config.md)
-10. [Docker 部署](docker.md)
-11. [GUI 客户端](gui.md)
-12. [升级迁移](migrate.md)
-13. [对外 API v1](api.md)
-14. [MCP 接入](mcp.md)
-15. [发版规范](release.md)
-16. [1.1.48 升级说明](upgrade-1.1.48.md)
-17. [1.1.47 升级说明](upgrade-1.1.47.md)
-18. [1.1.46 升级说明](upgrade-1.1.46.md)
-19. [1.1.45 升级说明](upgrade-1.1.45.md)
-20. [1.1.44 升级说明](upgrade-1.1.44.md)
-21. [1.1.43 升级说明](upgrade-1.1.43.md)
-22. [1.1.42 本地升级说明](upgrade-1.1.42.md)
-23. [1.1.41 本地升级说明](upgrade-1.1.41.md)
-24. [1.1.40 本地升级说明](upgrade-1.1.40.md)
-25. [1.1.39 本地升级说明](upgrade-1.1.39.md)
-26. [1.1.38 本地升级说明](upgrade-1.1.38.md)
-27. [1.1.37 本地升级说明](upgrade-1.1.37.md)
-28. [1.1.36 本地升级说明](upgrade-1.1.36.md)
-29. [1.1.35 本地升级说明](upgrade-1.1.35.md)
-30. [1.1.34 本地升级说明](upgrade-1.1.34.md)
-31. [1.1.33 本地升级说明](upgrade-1.1.33.md)
-32. [1.1.32 本地升级说明](upgrade-1.1.32.md)
-33. [1.1.31 本地升级说明](upgrade-1.1.31.md)
-34. [1.1.30 本地升级说明](upgrade-1.1.30.md)
-35. [功能与兼容矩阵](feature-matrix.md)
+9. [SQLite 数据存储与升级](server/sqlite-storage.md)
+10. [客户端配置](client_config.md)
+11. [Docker 部署](docker.md)
+12. [GUI 客户端](gui.md)
+13. [升级迁移](migrate.md)
+14. [对外 API v1](api.md)
+15. [MCP 接入](mcp.md)
+16. [发版规范](release.md)
+17. [SQLite 通用升级说明](upgrade-sqlite.md)
+18. [1.1.49 升级说明](upgrade-1.1.49.md)
+19. [1.1.48 升级说明](upgrade-1.1.48.md)
+20. [1.1.47 升级说明](upgrade-1.1.47.md)
+21. [1.1.46 升级说明](upgrade-1.1.46.md)
+22. [1.1.45 升级说明](upgrade-1.1.45.md)
+23. [1.1.44 升级说明](upgrade-1.1.44.md)
+24. [1.1.43 升级说明](upgrade-1.1.43.md)
+25. [1.1.42 本地升级说明](upgrade-1.1.42.md)
+26. [1.1.41 本地升级说明](upgrade-1.1.41.md)
+27. [1.1.40 本地升级说明](upgrade-1.1.40.md)
+28. [1.1.39 本地升级说明](upgrade-1.1.39.md)
+29. [1.1.38 本地升级说明](upgrade-1.1.38.md)
+30. [1.1.37 本地升级说明](upgrade-1.1.37.md)
+31. [1.1.36 本地升级说明](upgrade-1.1.36.md)
+32. [1.1.35 本地升级说明](upgrade-1.1.35.md)
+33. [1.1.34 本地升级说明](upgrade-1.1.34.md)
+34. [1.1.33 本地升级说明](upgrade-1.1.33.md)
+35. [1.1.32 本地升级说明](upgrade-1.1.32.md)
+36. [1.1.31 本地升级说明](upgrade-1.1.31.md)
+37. [1.1.30 本地升级说明](upgrade-1.1.30.md)
+38. [功能与兼容矩阵](feature-matrix.md)
 
 ## 文档目录
 
@@ -104,6 +107,7 @@
 - [服务端使用](server/nps_use.md)
 - [使用说明页面配置](usage-guide.md)
 - [服务端配置文件参考](server/server_config.md)
+- [SQLite 数据存储与升级](server/sqlite-storage.md)
 - [部署安全与参数速查](server_config.md)
 - [服务端增强功能](server/nps_extend.md)
 - [Docker 部署](docker.md)
@@ -135,7 +139,9 @@
 - [用户体系](user.md)
 - [系统架构](architecture.md)
 - [升级迁移](migrate.md)
+- [SQLite 通用升级说明](upgrade-sqlite.md)
 - [发版规范](release.md)
+- [1.1.49 升级说明](upgrade-1.1.49.md)
 - [1.1.48 升级说明](upgrade-1.1.48.md)
 - [1.1.47 升级说明](upgrade-1.1.47.md)
 - [1.1.46 升级说明](upgrade-1.1.46.md)

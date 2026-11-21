@@ -178,9 +178,16 @@ func checkClientConnection(client *file.Client) error {
 	}
 	client.RLock()
 	flow := client.Flow
+	userID := client.UserId
 	client.RUnlock()
 	if flow != nil && flow.Exceeded() {
 		return errors.New("Traffic exceeded")
+	}
+	if userID > 0 && file.UserQuotaExcluded(userID, file.QuotaConnection) {
+		return errors.New("用户套餐不包含并发连接")
+	}
+	if userID > 0 && file.UserQuotaExcluded(userID, file.QuotaBandwidth) {
+		return errors.New("用户套餐不包含带宽")
 	}
 	if !client.GetConn() {
 		return errors.New("Connections exceed the current client limit")

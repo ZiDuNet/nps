@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	htmltemplate "html/template"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server"
 	"ehang.io/nps/server/tool"
@@ -128,8 +130,10 @@ type hostListRow struct {
 	HealthMaxFail        int
 	HealthCheckInterval  int
 	HttpHealthUrl        string
-	UploadLimit          int
-	DownloadLimit        int
+	UploadLimit          int64
+	DownloadLimit        int64
+	UploadLimitMbps      string
+	DownloadLimitMbps    string
 	UploadRate           int64
 	DownloadRate         int64
 	Client               hostListClient
@@ -166,10 +170,50 @@ type tunnelListRow struct {
 	// relying on the embedded Tunnel's omitempty fields.  A zero value means
 	// "unlimited" (for limits) or "no bytes in the last sample" (for rates),
 	// and callers should be able to distinguish that from a missing field.
-	UploadLimit   int   `json:"UploadLimit"`
-	DownloadLimit int   `json:"DownloadLimit"`
-	UploadRate    int64 `json:"UploadRate"`
-	DownloadRate  int64 `json:"DownloadRate"`
+	UploadLimit       int64  `json:"UploadLimit"`
+	DownloadLimit     int64  `json:"DownloadLimit"`
+	UploadLimitMbps   string `json:"UploadLimitMbps,omitempty"`
+	DownloadLimitMbps string `json:"DownloadLimitMbps,omitempty"`
+	UploadRate        int64  `json:"UploadRate"`
+	DownloadRate      int64  `json:"DownloadRate"`
+}
+
+// tunnelFormView decorates a persisted tunnel with display-only Mbps values.
+// Edit templates must never read the stored bps integer directly.
+type tunnelFormView struct {
+	*file.Tunnel
+	UploadLimitMbps   string
+	DownloadLimitMbps string
+}
+
+func newTunnelFormView(tunnel *file.Tunnel) *tunnelFormView {
+	if tunnel == nil {
+		return nil
+	}
+	upload, download := tunnel.RateLimitSnapshot()
+	return &tunnelFormView{
+		Tunnel:            tunnel,
+		UploadLimitMbps:   rate.FormatMbps(upload),
+		DownloadLimitMbps: rate.FormatMbps(download),
+	}
+}
+
+type hostFormView struct {
+	*file.Host
+	UploadLimitMbps   string
+	DownloadLimitMbps string
+}
+
+func newHostFormView(host *file.Host) *hostFormView {
+	if host == nil {
+		return nil
+	}
+	upload, download := host.RateLimitSnapshot()
+	return &hostFormView{
+		Host:              host,
+		UploadLimitMbps:   rate.FormatMbps(upload),
+		DownloadLimitMbps: rate.FormatMbps(download),
+	}
 }
 
 // MarshalJSON keeps write-only mixed-proxy credentials out of every list and
@@ -196,16 +240,20 @@ func (r *tunnelListRow) MarshalJSON() ([]byte, error) {
 	}
 	delete(payload, "ProxyAuth")
 	extras, err := json.Marshal(struct {
+		UploadLimitMbps     string `json:"UploadLimitMbps,omitempty"`
+		DownloadLimitMbps   string `json:"DownloadLimitMbps,omitempty"`
 		AccessHost          string `json:"AccessHost,omitempty"`
 		AccessAddr          string `json:"AccessAddr,omitempty"`
 		AccessAddress       string `json:"AccessAddress,omitempty"`
 		AccessURL           string `json:"AccessURL,omitempty"`
-		UploadLimit         int    `json:"UploadLimit"`
-		DownloadLimit       int    `json:"DownloadLimit"`
+		UploadLimit         int64  `json:"UploadLimit"`
+		DownloadLimit       int64  `json:"DownloadLimit"`
 		UploadRate          int64  `json:"UploadRate"`
 		DownloadRate        int64  `json:"DownloadRate"`
 		ProxyAuthConfigured bool   `json:"ProxyAuthConfigured"`
 	}{
+		UploadLimitMbps:     r.UploadLimitMbps,
+		DownloadLimitMbps:   r.DownloadLimitMbps,
 		AccessHost:          r.AccessHost,
 		AccessAddr:          r.AccessAddr,
 		AccessAddress:       r.AccessAddress,
@@ -290,6 +338,8 @@ func newHostListRows(hosts []*file.Host) []*hostListRow {
 		}
 		host.RUnlock()
 		row.UploadLimit, row.DownloadLimit = host.RateLimitSnapshot()
+		row.UploadLimitMbps = rate.FormatMbps(row.UploadLimit)
+		row.DownloadLimitMbps = rate.FormatMbps(row.DownloadLimit)
 		health := file.HealthConfigSnapshot(&host.Health)
 		row.HealthCheckType = health.HealthCheckType
 		row.HealthCheckTarget = health.HealthCheckTarget
@@ -358,15 +408,17 @@ func newTunnelListRows(tunnels []*file.Tunnel, requestHost string) []*tunnelList
 		uploadLimit, downloadLimit := tunnel.RateLimitSnapshot()
 		accessAddr := tunnelAccessAddress(host, port)
 		row := &tunnelListRow{
-			Tunnel:        tunnel,
-			AccessHost:    host,
-			AccessAddr:    accessAddr,
-			AccessAddress: accessAddr,
-			AccessURL:     "",
-			UploadLimit:   uploadLimit,
-			DownloadLimit: downloadLimit,
-			UploadRate:    uploadRate,
-			DownloadRate:  downloadRate,
+			Tunnel:            tunnel,
+			AccessHost:        host,
+			AccessAddr:        accessAddr,
+			AccessAddress:     accessAddr,
+			AccessURL:         "",
+			UploadLimit:       uploadLimit,
+			DownloadLimit:     downloadLimit,
+			UploadLimitMbps:   rate.FormatMbps(uploadLimit),
+			DownloadLimitMbps: rate.FormatMbps(downloadLimit),
+			UploadRate:        uploadRate,
+			DownloadRate:      downloadRate,
 		}
 		if accessAddr != "" {
 			row.AccessURL = "tcp://" + accessAddr
@@ -624,14 +676,14 @@ func parseHealthFromRequest(s *IndexController) (file.Health, error) {
 	return health, nil
 }
 
-func parseResourceRateLimits(s *IndexController, upload, download int) (int, int, error) {
+func parseResourceRateLimits(s *IndexController, upload, download int64) (int64, int64, error) {
 	if s == nil {
 		return 0, 0, errors.New("资源限速请求无效")
 	}
 	if s.Ctx != nil && s.Ctx.Request != nil {
 		_ = s.Ctx.Request.ParseForm()
 	}
-	parse := func(key string, current int) (int, error) {
+	parse := func(key string, current int64) (int64, error) {
 		if s.Ctx == nil || s.Ctx.Request == nil {
 			return current, nil
 		}
@@ -643,11 +695,11 @@ func parseResourceRateLimits(s *IndexController, upload, download int) (int, int
 		if value == "" {
 			return 0, nil
 		}
-		parsed, parseErr := strconv.Atoi(value)
-		if parseErr != nil || parsed < 0 {
-			return 0, fmt.Errorf("%s 必须是大于或等于 0 的整数", key)
+		parsedMbps, parseErr := strconv.ParseFloat(value, 64)
+		if parseErr != nil || parsedMbps < 0 || math.IsNaN(parsedMbps) || math.IsInf(parsedMbps, 0) {
+			return 0, fmt.Errorf("%s 必须是大于或等于 0 的数字（Mbps）", key)
 		}
-		return parsed, nil
+		return rate.BpsFromMbps(parsedMbps), nil
 	}
 	var err error
 	if upload, err = parse("upload_limit", upload); err != nil {
@@ -1407,18 +1459,30 @@ func (s *IndexController) Add() {
 			s.AjaxErr("permission denied")
 			return
 		}
-		if reached, userID := clientTunnelLimitReached(t.Client); reached {
-			s.AjaxErr("The number of tunnels exceeds the limit")
-			return
-		} else if userID != 0 && file.GetDb().IsUserTunnelLimitReached(userID) {
-			s.AjaxErr("The number of user tunnels exceeds the limit")
-			return
+		if !s.IsAdmin() {
+			if reached, userID := clientTunnelLimitReached(t.Client); reached {
+				s.AjaxErr("The number of tunnels exceeds the limit")
+				return
+			} else if userID != 0 && file.GetDb().IsUserTunnelLimitReached(userID) {
+				s.AjaxErr("The number of user tunnels exceeds the limit")
+				return
+			}
 		}
-		if err := file.GetDb().NewTask(t); err != nil {
+		var createErr error
+		if s.IsAdmin() {
+			createErr = file.GetDb().NewTaskAsAdmin(t)
+		} else {
+			createErr = file.GetDb().NewTask(t)
+		}
+		if err := createErr; err != nil {
 			s.AjaxErr(err.Error())
 			return
 		}
 		if err := server.AddTask(t); err != nil {
+			if rollbackErr := file.GetDb().DelTask(t.Id); rollbackErr != nil {
+				s.AjaxErr("启动隧道失败: " + err.Error() + "; 回滚记录失败: " + rollbackErr.Error())
+				return
+			}
 			s.AjaxErr(err.Error())
 			return
 		} else {
@@ -1513,18 +1577,30 @@ func (s *IndexController) Copy() {
 			return
 		}
 
-		if reached, userID := clientTunnelLimitReached(newTask.Client); reached {
-			s.AjaxErr("The number of tunnels exceeds the limit")
-			return
-		} else if userID != 0 && file.GetDb().IsUserTunnelLimitReached(userID) {
-			s.AjaxErr("The number of user tunnels exceeds the limit")
-			return
+		if !s.IsAdmin() {
+			if reached, userID := clientTunnelLimitReached(newTask.Client); reached {
+				s.AjaxErr("The number of tunnels exceeds the limit")
+				return
+			} else if userID != 0 && file.GetDb().IsUserTunnelLimitReached(userID) {
+				s.AjaxErr("The number of user tunnels exceeds the limit")
+				return
+			}
 		}
-		if err := file.GetDb().NewTask(newTask); err != nil {
+		var copyErr error
+		if s.IsAdmin() {
+			copyErr = file.GetDb().NewTaskAsAdmin(newTask)
+		} else {
+			copyErr = file.GetDb().NewTask(newTask)
+		}
+		if err := copyErr; err != nil {
 			s.AjaxErr(err.Error())
 			return
 		}
 		if err := server.AddTask(newTask); err != nil {
+			if rollbackErr := file.GetDb().DelTask(newTask.Id); rollbackErr != nil {
+				s.AjaxErr("启动隧道失败: " + err.Error() + "; 回滚记录失败: " + rollbackErr.Error())
+				return
+			}
 			s.AjaxErr(err.Error())
 			return
 		} else {
@@ -1576,7 +1652,7 @@ func (s *IndexController) Edit() {
 			s.error()
 			return
 		} else {
-			s.Data["t"] = t
+			s.Data["t"] = newTunnelFormView(t)
 			t.RLock()
 			s.Data["BlackIpList"] = strings.Join(t.BlackIpList, "\r\n")
 			s.Data["WhiteIpList"] = strings.Join(t.WhiteIpList, "\r\n")
@@ -1635,7 +1711,7 @@ func (s *IndexController) Edit() {
 			desiredClient.RLock()
 			desiredClientID, desiredUserID := desiredClient.Id, desiredClient.UserId
 			desiredClient.RUnlock()
-			if desiredClientID != currentClientID {
+			if desiredClientID != currentClientID && !s.IsAdmin() {
 				if reached, _ := clientTunnelLimitReached(desiredClient); reached {
 					s.AjaxErr("The number of tunnels exceeds the limit")
 					return
@@ -1701,6 +1777,8 @@ func (s *IndexController) Edit() {
 			resetExport := int64(s.GetIntNoErr("reset_export_flow"))
 			t.RLock()
 			currentMaxConn := t.MaxConn
+			currentStatus, currentRunError := t.Status, t.RunError
+			currentHTTPProxy, currentSocks5Proxy := t.HttpProxy, t.Socks5Proxy
 			var currentFlowLimitMB int64
 			if t.Flow != nil {
 				currentFlowLimitMB = t.Flow.FlowLimit
@@ -1750,52 +1828,58 @@ func (s *IndexController) Edit() {
 			}
 			desiredTarget := &file.Target{TargetStr: desiredTargetValue}
 			desiredTarget.LocalProxy = s.requestedLocalProxy(s.GetBoolNoErr("local_proxy"))
-			// Build the replacement atomically. Proxy workers take the same
-			// task lock when selecting their client, target and mode.
-			t.Lock()
-			t.Client = desiredClient
-			t.Port = desiredPort
-			t.ServerIp = s.getEscapeString("server_ip")
-			t.Mode = desiredMode
-			t.Target = desiredTarget
-			t.Password = s.getEscapeString("password")
-			t.ProxyAuth = desiredProxyAuth
-			t.TargetType = desiredTargetType
-			t.Id = id
-			t.LocalPath = s.getEscapeString("local_path")
-			t.ProtoVersion = s.getEscapeString("proto_version")
-			t.StripPre = s.getEscapeString("strip_pre")
-			t.Remark = s.getEscapeString("remark")
-			if desiredMode == "mixProxy" && mixSubmitted {
-				t.HttpProxy = mixHTTP
-				t.Socks5Proxy = mixSocks5
+			// Submit a detached replacement. The data layer copies these fields
+			// onto the live object and restores them if persistence fails, so an
+			// in-place edit cannot leave a half-updated tunnel in memory.
+			replacement := &file.Tunnel{
+				Id:             id,
+				Port:           desiredPort,
+				ServerIp:       s.getEscapeString("server_ip"),
+				Mode:           desiredMode,
+				Status:         currentStatus,
+				RunError:       currentRunError,
+				Client:         desiredClient,
+				Target:         desiredTarget,
+				Password:       s.getEscapeString("password"),
+				ProxyAuth:      desiredProxyAuth,
+				TargetType:     desiredTargetType,
+				LocalPath:      s.getEscapeString("local_path"),
+				ProtoVersion:   s.getEscapeString("proto_version"),
+				StripPre:       s.getEscapeString("strip_pre"),
+				Remark:         s.getEscapeString("remark"),
+				HttpProxy:      currentHTTPProxy,
+				Socks5Proxy:    currentSocks5Proxy,
+				MaxConn:        desiredMaxConn,
+				Flow:           file.NewFlow(),
+				RateLimits:     file.RateLimits{UploadLimit: desiredUploadLimit, DownloadLimit: desiredDownloadLimit},
+				RegisteredOnly: desiredRegisteredOnly,
 			}
-			t.SetRateLimits(desiredUploadLimit, desiredDownloadLimit)
-			t.MaxConn = desiredMaxConn
-			if resetFlowSubmitted {
-				if t.Flow == nil {
-					t.Flow = file.NewFlow()
-				}
-				t.Flow.ResetCounters(resetInlet, resetExport)
+			if desiredMode == "mixProxy" && mixSubmitted {
+				replacement.HttpProxy = mixHTTP
+				replacement.Socks5Proxy = mixSocks5
 			}
 			if t.Flow != nil {
-				t.Flow.SetLimit(desiredFlowLimitMB)
-			} else {
-				t.Flow = &file.Flow{FlowLimit: desiredFlowLimitMB}
+				t.Flow.RLock()
+				replacement.Flow.ResetCounters(t.Flow.InletFlow, t.Flow.ExportFlow)
+				replacement.Flow.LegacyTotal = t.Flow.LegacyTotal
+				replacement.Flow.AccountingVersion = t.Flow.AccountingVersion
+				t.Flow.RUnlock()
 			}
-			copyHealthConfig(&t.Health, &desiredHealth)
-			t.RegisteredOnly = desiredRegisteredOnly
-			t.Unlock()
+			if resetFlowSubmitted {
+				replacement.Flow.ResetCounters(resetInlet, resetExport)
+			}
+			replacement.Flow.SetLimit(desiredFlowLimitMB)
+			copyHealthConfig(&replacement.Health, &desiredHealth)
 			if desiredMode == "mixProxy" && mixSubmitted {
-				if err := t.SetDestinationACL(destACLMode, destACLRules); err != nil {
+				if err := replacement.SetDestinationACL(destACLMode, destACLRules); err != nil {
 					s.AjaxErr("目标 ACL 无效: " + err.Error())
 					return
 				}
 			}
 			if aclSubmitted {
-				t.SetSourceLists(aclPriority, aclBlack, aclWhite, acl.ScopeUser, "tunnel")
+				replacement.SetSourceLists(aclPriority, aclBlack, aclWhite, acl.ScopeUser, "tunnel")
 			}
-			if err := file.GetDb().UpdateTask(t); err != nil {
+			if err := file.GetDb().UpdateTaskWithOwnerChange(replacement, currentClient, s.IsAdmin()); err != nil {
 				s.AjaxErr("modified error")
 				return
 			}
@@ -2035,9 +2119,16 @@ func (s *IndexController) HostStop() {
 		}
 		h.RUnlock()
 		h.Lock()
+		previousClose := h.IsClose
 		h.IsClose = true
 		h.Unlock()
-		file.GetDb().JsonDb.StoreHostToJsonFile()
+		if err := file.GetDb().JsonDb.StoreHostToJsonFileErr(); err != nil {
+			h.Lock()
+			h.IsClose = previousClose
+			h.Unlock()
+			s.AjaxErr("停用失败")
+			return
+		}
 		refreshHealthConfig(clientID)
 		s.auditHostAction("host.stop", h)
 	}
@@ -2060,9 +2151,16 @@ func (s *IndexController) HostStart() {
 		}
 		h.RUnlock()
 		h.Lock()
+		previousClose := h.IsClose
 		h.IsClose = false
 		h.Unlock()
-		file.GetDb().JsonDb.StoreHostToJsonFile()
+		if err := file.GetDb().JsonDb.StoreHostToJsonFileErr(); err != nil {
+			h.Lock()
+			h.IsClose = previousClose
+			h.Unlock()
+			s.AjaxErr("启用失败")
+			return
+		}
 		refreshHealthConfig(clientID)
 		s.auditHostAction("host.start", h)
 	}
@@ -2177,15 +2275,23 @@ func (s *IndexController) AddHost() {
 			s.AjaxErr("permission denied")
 			return
 		}
-		if reached, userID := clientTunnelLimitReached(h.Client); reached {
-			s.AjaxErr("The number of tunnels exceeds the limit")
-			return
-		} else if userID != 0 && file.GetDb().IsUserTunnelLimitReached(userID) {
-			s.AjaxErr("The number of user tunnels exceeds the limit")
-			return
+		if !s.IsAdmin() {
+			h.Client.RLock()
+			hostUserID := h.Client.UserId
+			h.Client.RUnlock()
+			if hostUserID != 0 && file.GetDb().IsUserHostLimitReached(hostUserID) {
+				s.AjaxErr("The number of user host rules exceeds the limit")
+				return
+			}
 		}
 
-		if err := file.GetDb().NewHost(h); err != nil {
+		var createErr error
+		if s.IsAdmin() {
+			createErr = file.GetDb().NewHostAsAdmin(h)
+		} else {
+			createErr = file.GetDb().NewHost(h)
+		}
+		if err := createErr; err != nil {
 			s.AjaxErr("add fail, " + err.Error())
 			return
 		}
@@ -2203,7 +2309,7 @@ func (s *IndexController) EditHost() {
 			s.error()
 			return
 		} else {
-			s.Data["h"] = h
+			s.Data["h"] = newHostFormView(h)
 			h.RLock()
 			s.Data["BlackIpList"] = strings.Join(h.BlackIpList, "\r\n")
 			s.Data["WhiteIpList"] = strings.Join(h.WhiteIpList, "\r\n")
@@ -2285,13 +2391,13 @@ func (s *IndexController) EditHost() {
 			desiredClient.RLock()
 			desiredClientID, desiredUserID := desiredClient.Id, desiredClient.UserId
 			desiredClient.RUnlock()
-			if desiredClientID != currentClientID {
-				if reached, _ := clientTunnelLimitReached(desiredClient); reached {
-					s.AjaxErr("The number of tunnels exceeds the limit")
-					return
-				}
+			if desiredClientID != currentClientID && !s.IsAdmin() {
 				if desiredUserID != 0 && desiredUserID != currentUserID && file.GetDb().IsUserTunnelLimitReached(desiredUserID) {
 					s.AjaxErr("The number of user tunnels exceeds the limit")
+					return
+				}
+				if desiredUserID != 0 && desiredUserID != currentUserID && file.GetDb().IsUserHostLimitReached(desiredUserID) {
+					s.AjaxErr("The number of user host rules exceeds the limit")
 					return
 				}
 			}
@@ -2398,7 +2504,7 @@ func (s *IndexController) EditHost() {
 				Health:               desiredHealth,
 			}
 			replacement.SetSourceLists(aclPriority, aclBlack, aclWhite, acl.ScopeUser, "host")
-			if err := file.GetDb().UpdateHost(replacement); err != nil {
+			if err := file.GetDb().UpdateHostWithOwnerChange(replacement, currentClient, s.IsAdmin()); err != nil {
 				s.AjaxErr("modified error," + err.Error())
 				return
 			}

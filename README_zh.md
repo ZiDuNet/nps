@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.48</sub>
+﻿# NPS <sub>v1.1.49</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -39,6 +39,7 @@ NPS 是一款轻量级、高性能、功能强大的**内网穿透**代理服务
 - **账号登录** — 兼容用户名/绑定邮箱登录和可关闭的客户端级 VKey 登录；开放注册时支持邮件找回密码，重置后撤销旧网页会话
 - **审计与连接日志** — 页面从文件尾部查询最近 2000 条，保留用户隔离；管理员可按保留天数手动清理当前日志，既有历史查询 API 不变
 - 🔒 **安全增强** — 首次启动随机密码、IP 白名单/黑名单、验证码、登录 PoW、管理员 TOTP、3 天免登设备管理和限速限流
+- 🗄️ **SQLite 数据底座** — 客户端、用户、隧道、Host、全局参数和运行期业务配置事务化保存到 `conf/nps.db`；一致备份必须停服后复制整个 `conf`，包含 WAL 和 SHM。详见 [SQLite 数据存储与升级](docs/server/sqlite-storage.md)
 - 🌐 **域名代理** — 自定义 Header、URL 路由、平台泛域名池、规则诊断、自动 HTTPS 与证书热更新
 - 🔐 **TLS 加密** — 客户端与服务端之间 TLS 加密通信
 - 📦 **Docker 部署** — 多平台镜像（amd64/arm/arm64），一键启动
@@ -69,6 +70,8 @@ docker run -d --name nps \
 ```
 
 新安装默认只监听本机。使用上面的 Docker 示例时，请在宿主机访问 `http://127.0.0.1:8081`，或通过 HTTPS 反向代理发布该回环端口。首次启动会在终端打印管理员账号 `admin` 和随机生成的密码。发布模板中的 `CHANGE_ME` 和历史弱默认值会自动轮换；显式自定义值或留空值会保留（历史共享密钥 `public_vkey=123` 会被关闭）。
+
+从 v1.1.49 起，`conf/nps.db` 是业务数据权威存储。旧 JSON 升级必须先使用 v1.1.49 二进制运行 JSON 网关，并完整备份 `conf`；运行中不能只复制单个数据库文件。
 
 <details>
 <summary>📋 端口说明</summary>
@@ -135,13 +138,13 @@ nps/
 ├── server/            # 服务端核心（代理模式实现）
 ├── client/            # 客户端核心
 ├── lib/               # 公共库
-│   ├── file/          # 数据模型 + JSON 持久化
+│   ├── file/          # 数据模型 + SQLite/JSON 迁移
 │   ├── conn/          # 连接协议封装
 │   ├── nps_mux/       # 多路复用库
 │   ├── rate/          # 限速器
 │   └── crypt/         # TLS 证书管理
 ├── web/               # Web 管理面板（Beego）
-├── conf/              # 配置文件 + 数据存储
+├── conf/              # 启动配置 + SQLite 数据
 ├── docs/              # 文档网站（VuePress）
 ├── build.sh           # 跨平台构建脚本
 ├── Makefile           # 构建/测试/CI
@@ -216,6 +219,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.49** (2026-11-21) - SQLite 正式成为业务数据权威存储，启用 WAL、单进程锁、事务化级联删除、运行期业务配置、受控 JSON 迁移、迁移报告和可回滚的 `-export-json`。旧 JSON 必须先由 v1.1.49 网关整形；标记缺失或数据无效时拒绝启动且不创建数据库。详见[SQLite 升级说明](docs/upgrade-1.1.49.md)。
 - **v1.1.48** (2026-11-20) - 登录改为无状态挑战（`/auth/challenge`），修复 Nginx 反代缓存或多实例部署下反复出现 `login_expired` 的问题；新增 MCP 服务端（`/mcp`）、`npsctl` CLI 与内置 NPS Skill，并随 Release 发布各平台 `npsctl` 二进制和 `nps-skill.tar.gz`。「账户管理」更名为「接入与安全」，增加 Agent 接入说明。详见[升级说明](docs/upgrade-1.1.48.md)。
 - **v1.1.47** (2026-11-17) - 修复飞牛纯连接模式断线后不自动重连（子进程按 `auto_reconnection` 退出交由管理进程每 5 秒重建），并将内嵌日志视图改为最新在前显示。
 - **v1.1.46** (2026-11-17) - 新增飞牛 fnOS 原生 NPC 客户端 FPK 包（NPC-Pro），内置设置页支持快捷指令/手动配置、直接编辑 `npc.conf`、多 VKey 独立运行与轮转日志；FPK 与 Docker 客户端禁用服务端远程自更新。服务端配置保存支持部分运行时参数即时生效，版本检查改为服务端缓存，删除最后一个客户端/隧道/Host 后回收持久化 ID。详见[升级说明](docs/upgrade-1.1.46.md)。

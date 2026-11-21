@@ -132,7 +132,7 @@ type udpTaskSnapshot struct {
 	clientFlow   *file.Flow
 	taskFlow     *file.Flow
 	clientRate   *rate.Rate
-	userRate     *rate.Directional
+	userRate     *rate.Shared
 	targetStr    string
 	localProxy   bool
 	serverIP     string

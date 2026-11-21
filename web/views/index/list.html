@@ -318,8 +318,8 @@
             var trafficCard = card('tachometer-alt', label('连接与流量', 'Connections & traffic'),
                 kv(label('出口流量', 'Export flow'), text(changeunit(flow.ExportFlow)))
                 + kv(label('入口流量', 'Inlet flow'), text(changeunit(flow.InletFlow)))
-                + kv(label('上行限速 / 当前', 'Upload limit / current'), text(String(row.UploadLimit || 0) + ' KB/s / ' + changeunit(row.UploadRate || 0) + '/s'))
-                + kv(label('下行限速 / 当前', 'Download limit / current'), text(String(row.DownloadLimit || 0) + ' KB/s / ' + changeunit(row.DownloadRate || 0) + '/s'))
+                + kv(label('上行限速 / 当前', 'Upload limit / current'), text(String(row.UploadLimitMbps || 0) + ' Mbps / ' + changeunit(row.UploadRate || 0) + '/s'))
+                + kv(label('下行限速 / 当前', 'Download limit / current'), text(String(row.DownloadLimitMbps || 0) + ' Mbps / ' + changeunit(row.DownloadRate || 0) + '/s'))
                 + (row.Mode === 'tcp' ? kv(label('当前连接', 'Current connections'), text(row.CurrentConnections || 0)) : '')
                 + kv(label('隧道最大连接', 'Tunnel max connections'), text((row.MaxConn || 0) > 0 ? row.MaxConn : (english ? 'Unlimited' : '不限')))
                 + kv(label('客户端连接限额', 'Client connection limit'), text(client.MaxConn > 0 ? client.MaxConn : (english ? 'Unlimited' : '不限')))

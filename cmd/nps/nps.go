@@ -25,6 +25,7 @@ import (
 	"ehang.io/nps/lib/connectionlog"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/install"
+	"ehang.io/nps/lib/settings"
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server/connection"
 	"ehang.io/nps/server/tool"
@@ -50,6 +51,8 @@ var (
 	confPath         = flag.String("conf_path", "", "set current confPath")
 	serverCmd        = flag.Bool("server", false, "NPS管理脚本")
 	npsLogPath       = flag.String("log_path", "", "nps log path")
+	jsonGateway      = flag.Bool("json-gateway", false, "normalize legacy JSON data once and exit")
+	exportJSON       = flag.String("export-json", "", "export the SQLite database to a JSON directory and exit")
 	ipRegisterMu     sync.Mutex
 	ipRegisterServer *server.IPRegistrationServer
 	accessListMu     sync.Mutex
@@ -94,6 +97,30 @@ func main() {
 			logPath = strings.Replace(v, "-log_path=", "", -1)
 		}
 	}
+	if strings.TrimSpace(*confPath) != "" {
+		common.ConfPath = strings.TrimSpace(*confPath)
+	}
+	// Data maintenance commands must observe -conf_path before they touch the
+	// filesystem. Keeping these after the argument scan also covers the
+	// separated "--conf_path <dir>" form.
+	if *jsonGateway {
+		result, err := file.RunJSONGateway(common.GetRunPath())
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "JSON gateway failed:", err)
+			os.Exit(1)
+		}
+		fmt.Printf("JSON gateway complete: clients=%d users=%d tunnels=%d hosts=%d marker=%s\n",
+			result.Clients, result.Users, result.Tunnels, result.Hosts, result.MarkerPath)
+		return
+	}
+	if *exportJSON != "" {
+		if err := file.ExportSQLiteToJSON(common.GetRunPath(), *exportJSON); err != nil {
+			fmt.Fprintln(os.Stderr, "export JSON failed:", err)
+			os.Exit(1)
+		}
+		fmt.Println("JSON export complete:", *exportJSON)
+		return
+	}
 	// Parse the explicit configuration directory before entering the
 	// management menu.  This keeps `nps -server -conf_path=...` consistent
 	// with normal service commands and prevents menu actions from silently
@@ -109,6 +136,12 @@ func main() {
 
 	if err := beego.LoadAppConfig("ini", filepath.Join(common.GetRunPath(), "conf", "nps.conf")); err != nil {
 		log.Fatalln("load config file error", err.Error())
+	}
+	if err := file.InitStorage(common.GetRunPath()); err != nil {
+		log.Fatalln("initialize data storage failed:", err)
+	}
+	if err := settings.Init(common.GetRunPath(), file.GetDb().JsonDb.SQLite()); err != nil {
+		log.Fatalln("initialize business settings failed:", err)
 	}
 	file.SetConnectionHistoryLimit(beego.AppConfig.DefaultInt("client_history_limit", 5))
 	file.SetFlowLimitType(beego.AppConfig.String("flow_limit_type"))
@@ -496,6 +529,11 @@ func (p *nps) Stop(s service.Service) error {
 	closeIPRegistrationServer()
 	stopAccessListWatcher()
 	p.stopOnce.Do(func() { close(p.exit) })
+	if db := file.GetDb(); db != nil && db.JsonDb != nil {
+		if err := db.JsonDb.Flush(); err != nil {
+			logs.Error("flush final data snapshot failed:", err)
+		}
+	}
 	if service.Interactive() {
 		os.Exit(0)
 	}

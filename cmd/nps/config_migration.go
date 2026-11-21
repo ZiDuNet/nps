@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"ehang.io/nps/lib/settings"
 )
 
 // migrateConfigFile applies the release template to an existing configuration
@@ -228,6 +230,13 @@ func mergeMissingConfigFields(content, template string) (string, []string) {
 	for _, rawLine := range strings.Split(template, "\n") {
 		line := strings.TrimSuffix(rawLine, "\r")
 		if key, ok := configEntryKey(line); ok {
+			if settings.IsManagedKey(key) || settings.IsLegacyRemovedKey(key) {
+				// Runtime business keys belong to SQLite after the settings
+				// migration. Re-adding them here would let a later restart
+				// import a stale defaults copy over the authoritative value.
+				pending = pending[:0]
+				continue
+			}
 			if _, optional := configMigrationOptionalKeys[key]; optional {
 				// An omitted optional setting is intentional. Do not carry its
 				// template comments into a later block either.

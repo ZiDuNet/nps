@@ -1,11 +1,15 @@
 # 更新日志
 
-## 未发布
+## v1.1.49 (2026-11-21)
 
+- SQLite 正式成为客户端、用户、隧道、Host、全局参数和运行期业务配置的权威存储，启用 WAL、单进程锁、事务化级联删除、平台域名关联更新、迁移报告和 `-export-json` 回滚。
+- 旧 JSON 必须由 `1.1.49` 二进制执行 `-json-gateway`；缺失或旧版标记、损坏记录、ID/归属/路由冲突会 fail closed，不创建 SQLite。首次导入前自动完整备份 `conf`。
+- 注册策略、SMTP、HTTP 超时、PoW/TOTP 和 MCP 等运行期业务配置写入 `settings` 表；监听、端口、TLS、日志等启动参数继续保留在 `nps.conf`。
 - MCP 改为无状态 Streamable HTTP，不再要求 `Mcp-Session-Id`；`GET /mcp` 返回 405，工具补齐安全标注、真实分页总数、JSON 401 和缺失认证主体保护。
 - MCP 审计与 REST 审计统一账号范围：普通用户仅看本人记录，管理员查看全局。
 - `npsctl` 修复子命令后帮助参数、未知尾随参数、凭据冲突、服务端 URL 校验和 `status:0` 成功误判；MCP 片段只自动填入用户 Token 或 `npsa_` 管理密钥。
 - Agent 接入页、Skill 和 MCP 文档同步 `type: "http"`、无会话头、权限范围和分页说明。
+- Bridge、NPC 控制消息、快捷命令和既有 `/api/v1` 字段不变，旧 NPC 可直接连接。详见 [1.1.49 升级说明](upgrade-1.1.49.md)。
 
 ## v1.1.48 (2026-11-20)
 

@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
 )
 
 type CommonConfig struct {
@@ -246,7 +248,8 @@ func dealCommon(s string) *CommonConfig {
 		case "disable_remote_update":
 			c.DisableRemoteUpdate = common.GetBoolByStr(value)
 		case "rate_limit":
-			ensureClientConfig(c).RateLimit = common.GetIntNoErrByStr(value)
+			rateLimitKBps, _ := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+			ensureClientConfig(c).RateLimit = rate.BpsFromKBPerSecond(rateLimitKBps)
 		case "flow_limit":
 			client := ensureClientConfig(c)
 			if client.Flow == nil {
@@ -290,9 +293,9 @@ func dealHost(s string) *file.Host {
 		case "host":
 			h.Host = value
 		case "upload_limit":
-			h.UploadLimit = max(common.GetIntNoErrByStr(value), 0)
+			h.UploadLimit = rate.BpsFromKBPerSecond(int64(max(common.GetIntNoErrByStr(value), 0)))
 		case "download_limit":
-			h.DownloadLimit = max(common.GetIntNoErrByStr(value), 0)
+			h.DownloadLimit = rate.BpsFromKBPerSecond(int64(max(common.GetIntNoErrByStr(value), 0)))
 		case "target_addr":
 			h.Target.TargetStr = strings.ReplaceAll(value, ",", "\n")
 		case "proxy_protocol":
@@ -392,9 +395,9 @@ func dealTunnel(s string) *file.Tunnel {
 		}
 		switch key {
 		case "upload_limit":
-			t.UploadLimit = max(common.GetIntNoErrByStr(value), 0)
+			t.UploadLimit = rate.BpsFromKBPerSecond(int64(max(common.GetIntNoErrByStr(value), 0)))
 		case "download_limit":
-			t.DownloadLimit = max(common.GetIntNoErrByStr(value), 0)
+			t.DownloadLimit = rate.BpsFromKBPerSecond(int64(max(common.GetIntNoErrByStr(value), 0)))
 		case "server_port":
 			t.Ports = value
 		case "server_ip":

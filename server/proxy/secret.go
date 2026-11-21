@@ -45,7 +45,7 @@ func (s *SecretServer) HandleSecret(src net.Conn) error {
 		return errors.New("secret task is nil")
 	}
 	task.RLock()
-	client, target, flow, targetType := task.Client, task.Target, task.Flow, task.TargetType
+	client, target, targetType := task.Client, task.Target, task.TargetType
 	task.RUnlock()
 	if client == nil || target == nil {
 		_ = src.Close()
@@ -115,9 +115,12 @@ func (s *SecretServer) HandleSecret(src net.Conn) error {
 			// The visitor stream carries length-framed datagrams; the provider
 			// receives the same stream and unframes it, so the server only has
 			// to relay the bytes between the two sides.
-			err = proxy.DealClientDatagram(wrapped, client, targetAddr, replay, connType, nil, flow, localProxy, task, nil)
+			// Let DealClient fall back to the client flow so Secret relay
+			// traffic is accounted exactly like an ordinary tunnel. The task
+			// flow is still recorded separately by the forwarding layer.
+			err = proxy.DealClientDatagram(wrapped, client, targetAddr, replay, connType, nil, nil, localProxy, task, nil)
 		} else {
-			err = proxy.DealClient(wrapped, client, targetAddr, replay, connType, nil, flow, localProxy, task, nil)
+			err = proxy.DealClient(wrapped, client, targetAddr, replay, connType, nil, nil, localProxy, task, nil)
 		}
 		if err != nil {
 			logs.Debug("secret connection failed: %v", err)

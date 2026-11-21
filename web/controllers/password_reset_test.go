@@ -174,7 +174,8 @@ func fmtBool(value bool) string {
 func TestRecoveryResetPreservesUserAndRevokesSessions(t *testing.T) {
 	configureRecoveryTest(t)
 	user := &file.User{Id: 7, UserName: "alice", Email: "alice@example.com", Password: "old-pass", Status: true,
-		Remark: "keep-remark", APIKeyHash: "keep-api", MaxConn: 17, UploadLimit: 99, MaxClientNum: 8, MaxTunnelNum: 11, DashboardKeyHash: "keep-dashboard"}
+		Remark: "keep-remark", APIKeyHash: "keep-api", MaxConn: file.LimitInt(17), BandwidthLimit: file.LimitInt64(99 * 8192),
+		MaxClientNum: file.LimitInt(8), MaxTunnelNum: file.LimitInt(11), DashboardKeyHash: "keep-dashboard"}
 	file.GetDb().JsonDb.Users.Store(7, user)
 	id, _, _, binding := passwordResetBinding(user)
 	code, _, err := passwordResetCodes.issueBound(user.Email, "192.0.2.1", time.Now(), passwordResetTTL, passwordResetCooldown, binding)
@@ -188,7 +189,11 @@ func TestRecoveryResetPreservesUserAndRevokesSessions(t *testing.T) {
 	if recorder.Code != http.StatusOK || controller.Data["json"].(map[string]interface{})["status"] != 1 {
 		t.Fatalf("reset failed: %s", recorder.Body)
 	}
-	if user.Password != "new-password" || user.Email != "alice@example.com" || user.Remark != "keep-remark" || user.APIKeyHash != "keep-api" || user.MaxConn != 17 || user.UploadLimit != 99 || user.MaxClientNum != 8 || user.MaxTunnelNum != 11 || user.DashboardKeyHash != "keep-dashboard" {
+	if user.Password != "new-password" || user.Email != "alice@example.com" || user.Remark != "keep-remark" ||
+		user.APIKeyHash != "keep-api" || user.MaxConn == nil || *user.MaxConn != 17 ||
+		user.BandwidthLimit == nil || *user.BandwidthLimit != 99*8192 ||
+		user.MaxClientNum == nil || *user.MaxClientNum != 8 ||
+		user.MaxTunnelNum == nil || *user.MaxTunnelNum != 11 || user.DashboardKeyHash != "keep-dashboard" {
 		t.Fatal("password reset lost unrelated user fields")
 	}
 	if rememberLoginDevices.SessionEpochValid("user:7", 0) {
@@ -316,12 +321,15 @@ func TestRevokedSessionCannotIssueNewRememberCredential(t *testing.T) {
 
 func TestRegularPasswordChangePreservesEmailAndUserLimits(t *testing.T) {
 	configureRecoveryTest(t)
-	file.GetDb().JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Password: "old-pass", Email: "alice@example.com", Status: true, MaxConn: 9, UploadLimit: 10, DownloadLimit: 11})
+	file.GetDb().JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Password: "old-pass", Email: "alice@example.com", Status: true,
+		MaxConn: file.LimitInt(9), BandwidthLimit: file.LimitInt64(21 * 8192)})
 	login, _ := authAuditController(url.Values{"new_password": {"new-pass"}, "confirm_password": {"new-pass"}, "current_password": {"old-pass"}}, map[interface{}]interface{}{"auth": true, "isAdmin": false, sessionPrincipalKey: sessionPrincipalUser, "userId": 7})
 	controller := &UserController{BaseController: BaseController{Controller: login.Controller}}
 	runClientPermissionAction(t, controller.ChangePassword)
 	user, _ := file.GetDb().GetUser(7)
-	if user.Password != "new-pass" || user.Email != "alice@example.com" || user.MaxConn != 9 || user.UploadLimit != 10 || user.DownloadLimit != 11 {
+	if user.Password != "new-pass" || user.Email != "alice@example.com" ||
+		user.MaxConn == nil || *user.MaxConn != 9 ||
+		user.BandwidthLimit == nil || *user.BandwidthLimit != 21*8192 {
 		t.Fatal("regular password change discarded recovery email or limits")
 	}
 }

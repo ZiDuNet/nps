@@ -38,3 +38,25 @@ func TestAPIV1UpdateStatusRequiresAdmin(t *testing.T) {
 		t.Fatalf("status=%d response=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestAPIV1ClientInstancesAllowsAdminAndFiltersOrdinaryUsers(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	db.JsonDb.Clients.Store(1, &file.Client{Id: 1, UserId: 7, Status: true})
+	withAPIV1TestAuthKey(t)
+	withAPIV1TestBridge(t)
+
+	controller, recorder := newAPIV1TestController(t, http.MethodGet, "/api/v1/clients/1/instances?"+apiV1SignedQuery().Encode(), nil, "")
+	controller.Prepare()
+	controller.Ctx.Input.SetParam(":id", "1")
+	runClientPermissionAction(t, controller.ClientInstances)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("admin instances status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+
+	controller, recorder = newAPIV1TestController(t, http.MethodGet, "/api/v1/clients/1/instances", nil, "")
+	controller.Ctx.Input.SetParam(":id", "1")
+	runClientPermissionAction(t, controller.ClientInstances)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("unauthenticated instances status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+}

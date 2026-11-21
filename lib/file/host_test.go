@@ -1,11 +1,13 @@
 package file
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"ehang.io/nps/lib/acl"
+	"ehang.io/nps/lib/rate"
 )
 
 func TestPreviewTargetDoesNotAdvanceRoundRobin(t *testing.T) {
@@ -176,6 +178,9 @@ func TestHostRouteConflictHandlesWildcardAndSchemeOverlap(t *testing.T) {
 func TestNewHostRejectsOverlappingCrossTenantRoute(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}
+	for _, user := range []*User{{Id: 1, UserName: "owner-1", Status: true}, {Id: 2, UserName: "owner-2", Status: true}} {
+		db.Users.Store(user.Id, user)
+	}
 	first := &Host{Id: 1, Host: "app.example.com", Location: "/", Scheme: "all", Client: &Client{Id: 1, UserId: 1}, Target: &Target{TargetStr: "127.0.0.1:8080"}}
 	if err := utils.NewHost(first); err != nil {
 		t.Fatal(err)
@@ -279,6 +284,9 @@ func TestNewHostRejectsDuplicatePlatformPrefixWithoutPersistingRecord(t *testing
 	runPath := t.TempDir()
 	db := NewJsonDb(runPath)
 	utils := &DbUtils{JsonDb: db}
+	for id := 1; id <= 2; id++ {
+		db.Users.Store(id, &User{Id: id, UserName: fmt.Sprintf("platform-owner-%d", id), Status: true})
+	}
 	domain := testPlatformDomainWithCertificate(t, "platform-host-regression", "*.example.com")
 	if err := utils.SaveGlobal(&Glob{PlatformDomains: []PlatformDomain{domain}}); err != nil {
 		t.Fatal(err)
@@ -311,6 +319,9 @@ func TestNewHostRejectsDuplicatePlatformPrefixWithoutPersistingRecord(t *testing
 func TestNewHostRejectsIDCollisionWithoutOverwritingExistingHost(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
 	utils := &DbUtils{JsonDb: db}
+	for id := 1; id <= 2; id++ {
+		db.Users.Store(id, &User{Id: id, UserName: fmt.Sprintf("collision-owner-%d", id), Status: true})
+	}
 	existing := &Host{Id: 1, Host: "one.example.com", Scheme: "http", Location: "/", Client: &Client{Id: 1}, Target: &Target{TargetStr: "127.0.0.1:8080"}}
 	if err := utils.NewHost(existing); err != nil {
 		t.Fatal(err)
@@ -337,6 +348,84 @@ func TestNewHostRollsBackInMemoryRecordWhenPersistenceFails(t *testing.T) {
 	}
 	if _, exists := db.Hosts.Load(1); exists {
 		t.Fatal("failed create must roll back the in-memory record")
+	}
+}
+
+func TestUpdateTaskPersistenceFailureRestoresLiveFields(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	client := &Client{Id: 1, Status: true}
+	db.Clients.Store(client.Id, client)
+	stored := &Tunnel{
+		Id: 1, Port: 9000, Mode: "tcp", Status: true, Client: client,
+		Target: &Target{TargetStr: "127.0.0.1:8080"}, Flow: NewFlow(),
+	}
+	stored.SetSourceLists(acl.DenyFirst, nil, []string{"198.51.100.0/24"}, acl.ScopeUser, "tunnel")
+	if err := utils.NewTask(stored); err != nil {
+		t.Fatal(err)
+	}
+	// Renaming the temporary JSON file over an existing directory reliably
+	// fails after the replacement has been applied in memory.
+	db.TaskFilePath = t.TempDir()
+	replacement := &Tunnel{
+		Id: 1, Port: 9001, Mode: "tcp", Status: true, Client: client,
+		Target: &Target{TargetStr: "127.0.0.1:8081"}, Remark: "new",
+		Flow: NewFlow(), RegisteredOnly: true,
+	}
+	replacement.SetSourceLists(acl.DenyFirst, nil, []string{"203.0.113.0/24"}, acl.ScopeUser, "tunnel")
+	if err := utils.UpdateTask(replacement); err == nil {
+		t.Fatal("UpdateTask should report a persistence failure")
+	}
+	stored.RLock()
+	port, target, remark, registeredOnly := stored.Port, stored.Target, stored.Remark, stored.RegisteredOnly
+	stored.RUnlock()
+	if port != 9000 || target == nil || target.TargetStr != "127.0.0.1:8080" || remark != "" || registeredOnly {
+		t.Fatalf("failed update left live fields changed: port=%d target=%#v remark=%q registeredOnly=%t", port, target, remark, registeredOnly)
+	}
+	if source := stored.SourceACL(); source == nil || !source.AllowsString("198.51.100.8:443") || source.AllowsString("203.0.113.8:443") {
+		t.Fatal("failed update did not restore the compiled source policy")
+	}
+	if _, exists := db.Tasks.Load(1); !exists {
+		t.Fatal("failed update removed the stored tunnel")
+	}
+}
+
+func TestUpdateTaskKeepsFlowCountersAndRateBuckets(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	client := &Client{Id: 1, Status: true}
+	db.Clients.Store(client.Id, client)
+	stored := &Tunnel{
+		Id: 1, Port: 9000, Mode: "tcp", Status: true, Client: client,
+		Target: &Target{TargetStr: "127.0.0.1:8080"}, Flow: NewFlow(),
+		RateLimits: RateLimits{UploadLimit: rate.BpsFromMbps(10)},
+	}
+	if err := utils.NewTask(stored); err != nil {
+		t.Fatal(err)
+	}
+	stored.Flow.Add(100, 200)
+	limiter := stored.RateLimiter()
+	replacement := &Tunnel{
+		Id: 1, Port: 9000, Mode: "tcp", Status: true, Client: client,
+		Target: &Target{TargetStr: "127.0.0.1:8080"}, Flow: NewFlow(),
+		RateLimits: RateLimits{UploadLimit: rate.BpsFromMbps(20), DownloadLimit: rate.BpsFromMbps(30)},
+	}
+	if err := utils.UpdateTask(replacement); err != nil {
+		t.Fatal(err)
+	}
+	stored.RLock()
+	flow := stored.Flow
+	stored.RUnlock()
+	inlet, export, _ := flow.Snapshot()
+	if inlet != 100 || export != 200 {
+		t.Fatalf("flow counters = (%d, %d), want (100, 200)", inlet, export)
+	}
+	upload, download := stored.RateLimitSnapshot()
+	if upload != rate.BpsFromMbps(20) || download != rate.BpsFromMbps(30) {
+		t.Fatalf("limits = (%d, %d), want bps for 20/30 Mbps", upload, download)
+	}
+	if stored.RateLimiter() != limiter {
+		t.Fatal("update replaced the active rate bucket instead of reusing it")
 	}
 }
 
