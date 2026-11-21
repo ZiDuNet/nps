@@ -36,6 +36,9 @@ jobs:
           go build -trimpath ./cmd/nps
           go build -trimpath ./cmd/npc
 
+      - name: Verify release target matrix
+        run: bash scripts/check-release-targets.sh
+
       - name: Test core packages
         run: >-
           go test -race
@@ -96,11 +99,18 @@ jobs:
           package_version=$(node -p 'require("./package.json").version')
           wails_version=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("../wails.json", "utf8")).info.productVersion)')
           plist_versions=$(grep -A1 -E 'CFBundleVersion|CFBundleShortVersionString' ../build/darwin/Info.plist | grep '<string>' | sed -E 's/.*<string>([^<]+)<\/string>.*/\1/')
+          windows_info_versions=$(node -e 'const x=require("../build/windows/info.json"); console.log(x.fixed.file_version); console.log(x.info["0000"].ProductVersion)')
+          windows_manifest_version=$(sed -nE 's/.*<assemblyIdentity .*name="com\.nps\.client".*version="([^"]+)".*/\1/p' ../build/windows/wails.exe.manifest | head -n 1)
+          build_config_version=$(sed -nE 's/^  version: "([^"]+)".*/\1/p' ../build/config.yml)
           test -n "$source_version"
           test "$package_version" = "$source_version"
           test "$wails_version" = "$source_version"
           test "$(printf '%s\n' "$plist_versions" | sort -u | wc -l | tr -d ' ')" = 1
           test "$(printf '%s\n' "$plist_versions" | head -n 1)" = "$source_version"
+          test "$(printf '%s\n' "$windows_info_versions" | sort -u | wc -l | tr -d ' ')" = 1
+          test "$(printf '%s\n' "$windows_info_versions" | head -n 1)" = "$source_version"
+          test "$windows_manifest_version" = "$source_version.0"
+          test "$build_config_version" = "$source_version"
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile

@@ -26,6 +26,7 @@ import (
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/settings"
+	_ "ehang.io/nps/lib/store/sqlitedriver"
 	"ehang.io/nps/lib/version"
 	"ehang.io/nps/server/connection"
 	"ehang.io/nps/server/tool"

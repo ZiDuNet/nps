@@ -14,8 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	_ "modernc.org/sqlite"
 )
 
 const SchemaVersion = 1

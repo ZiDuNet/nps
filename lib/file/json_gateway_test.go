@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/version"
 )
 
 func writeGatewayTestRecords(t *testing.T, path string, records ...string) {
@@ -184,7 +185,7 @@ func TestRunJSONGatewayRecoversWhenMarkerIsLostAfterRewrite(t *testing.T) {
 	if _, err := RunJSONGateway(runPath); err != nil {
 		t.Fatalf("first RunJSONGateway() = %v", err)
 	}
-	backupPath := clientsPath + ".pre-gateway.bak." + jsonGatewayMinVersion
+	backupPath := clientsPath + ".pre-gateway.bak." + version.VERSION
 	backupBefore, err := os.ReadFile(backupPath)
 	if err != nil {
 		t.Fatal(err)

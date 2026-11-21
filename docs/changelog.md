@@ -1,5 +1,11 @@
 # 更新日志
 
+## v1.1.50 (2026-11-21)
+
+- 修复 `v1.1.49` 的 SQLite 驱动被公共存储包带入 NPC，导致 Linux MIPS 多架构发布打包失败的问题。
+- SQLite 驱动注册改为仅由 NPS 服务端入口加载；NPC 不再编译 SQLite/`modernc.org/libc`，MIPS NPC 继续发布。无法提供 SQLite 存储的 MIPS server 退出正式发布矩阵。
+- CI 新增全部正式服务端架构和全部历史 NPC 架构的交叉编译检查。Bridge、NPC 协议、快捷命令、API 和 SQLite 数据格式不变；旧 MIPS NPC 仍可连接受支持架构的新服务端，从 1.1.49 升级无需重复执行 JSON 网关。详见 [1.1.50 升级说明](upgrade-1.1.50.md)。
+
 ## v1.1.49 (2026-11-21)
 
 - SQLite 正式成为客户端、用户、隧道、Host、全局参数和运行期业务配置的权威存储，启用 WAL、单进程锁、事务化级联删除、平台域名关联更新、迁移报告和 `-export-json` 回滚。
