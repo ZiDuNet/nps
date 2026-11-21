@@ -2,6 +2,7 @@ package file
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,7 @@ func TestClientLocalProxyAllowedScopes(t *testing.T) {
 		userID     int
 		allowLocal bool
 		allowUser  bool
+		noDisplay  bool
 		want       bool
 	}{
 		{name: "global gate closed", clientID: 1, userID: 0, allowUser: true, want: false},
@@ -26,10 +28,11 @@ func TestClientLocalProxyAllowedScopes(t *testing.T) {
 		{name: "tenant default denied", clientID: 3, userID: 9, allowLocal: true, want: false},
 		{name: "tenant opt in", clientID: 4, userID: 9, allowLocal: true, allowUser: true, want: true},
 		{name: "internal synthetic client", clientID: -1, userID: 9, want: true},
+		{name: "public onboarding client", clientID: -2, userID: 0, noDisplay: true, allowLocal: true, allowUser: true, want: false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client := &Client{Id: test.clientID, UserId: test.userID}
+			client := &Client{Id: test.clientID, UserId: test.userID, NoDisplay: test.noDisplay}
 			if got := client.LocalProxyAllowed(test.allowLocal, test.allowUser); got != test.want {
 				t.Fatalf("LocalProxyAllowed() = %t, want %t", got, test.want)
 			}
@@ -54,6 +57,30 @@ func TestUserEmailIsNormalizedAndUnique(t *testing.T) {
 	withoutEmail := &User{UserName: "bob", Password: "secret", Status: true}
 	if err := utils.NewUser(withoutEmail); err != nil {
 		t.Fatalf("legacy user without email should remain valid: %v", err)
+	}
+}
+
+func TestNewUserAdvancesExplicitIDHighWaterAndRejectsOverwrite(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	first := &User{Id: 7, UserName: "alice", Password: "secret", Status: true}
+	if err := utils.NewUser(first); err != nil {
+		t.Fatal(err)
+	}
+	duplicate := &User{Id: 7, UserName: "bob", Password: "secret", Status: true}
+	if err := utils.NewUser(duplicate); err == nil {
+		t.Fatal("explicit duplicate user ID must be rejected")
+	}
+	stored, err := utils.GetUser(7)
+	if err != nil || stored != first {
+		t.Fatal("duplicate explicit ID overwrote the existing user")
+	}
+	next := &User{UserName: "carol", Password: "secret", Status: true}
+	if err := utils.NewUser(next); err != nil {
+		t.Fatal(err)
+	}
+	if next.Id != 8 {
+		t.Fatalf("next user ID = %d, want 8", next.Id)
 	}
 }
 
@@ -289,14 +316,62 @@ func TestClientOwnerValidationAndResourceCounts(t *testing.T) {
 	}
 
 	counts := utils.GetUserResourceCounts()[user.Id]
-	if counts.ClientCount != 2 || counts.TunnelCount != 2 {
+	if counts.ClientCount != 2 || counts.TunnelCount != 1 || counts.HostCount != 1 {
 		t.Fatalf("unexpected resource counts: %#v", counts)
 	}
 }
 
-func TestUserTunnelLimitCountsClientsTunnelsAndHosts(t *testing.T) {
+func TestOwnershipTransferRespectsTargetUserTunnelQuota(t *testing.T) {
 	db := NewJsonDb(t.TempDir())
-	user := &User{Id: 1, UserName: "alice", Status: true, MaxTunnelNum: 2}
+	utils := &DbUtils{JsonDb: db}
+	ownerA := &User{Id: 1, UserName: "owner-a", Password: "secret", Status: true}
+	ownerB := &User{Id: 2, UserName: "owner-b", Password: "secret", Status: true, MaxTunnelNum: LimitInt(1)}
+	clientA := &Client{Id: 1, UserId: ownerA.Id, VerifyKey: "client-a", Status: true}
+	clientB := &Client{Id: 2, UserId: ownerB.Id, VerifyKey: "client-b", Status: true}
+	db.Users.Store(ownerA.Id, ownerA)
+	db.Users.Store(ownerB.Id, ownerB)
+	db.Clients.Store(clientA.Id, clientA)
+	db.Clients.Store(clientB.Id, clientB)
+	db.Tasks.Store(1, &Tunnel{Id: 1, Mode: "tcp", Port: 10001, Status: true, Client: clientB, Target: &Target{TargetStr: "127.0.0.1:80"}})
+	db.Tasks.Store(2, &Tunnel{Id: 2, Mode: "tcp", Port: 10002, Status: true, Client: clientA, Target: &Target{TargetStr: "127.0.0.1:80"}})
+
+	transfer := &Tunnel{Id: 2, Mode: "tcp", Port: 10002, Status: true, Client: clientB, Target: &Target{TargetStr: "127.0.0.1:80"}}
+	if err := utils.UpdateTaskWithOwnerChange(transfer, clientA, false); !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("ownership transfer err = %v, want ErrQuotaExceeded", err)
+	}
+	stored, err := utils.GetTask(2)
+	if err != nil || stored.Client == nil || stored.Client.Id != clientA.Id {
+		t.Fatalf("rejected transfer must restore the previous client: %#v, %v", stored, err)
+	}
+}
+
+func TestOwnershipTransferRespectsTargetUserHostQuota(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	utils := &DbUtils{JsonDb: db}
+	ownerA := &User{Id: 1, UserName: "owner-a", Password: "secret", Status: true}
+	ownerB := &User{Id: 2, UserName: "owner-b", Password: "secret", Status: true, MaxHostNum: LimitInt(1)}
+	clientA := &Client{Id: 1, UserId: ownerA.Id, VerifyKey: "client-a", Status: true}
+	clientB := &Client{Id: 2, UserId: ownerB.Id, VerifyKey: "client-b", Status: true}
+	db.Users.Store(ownerA.Id, ownerA)
+	db.Users.Store(ownerB.Id, ownerB)
+	db.Clients.Store(clientA.Id, clientA)
+	db.Clients.Store(clientB.Id, clientB)
+	db.Hosts.Store(1, &Host{Id: 1, Host: "b.example.com", Location: "/", Scheme: "http", Client: clientB, Target: &Target{TargetStr: "127.0.0.1:80"}})
+	db.Hosts.Store(2, &Host{Id: 2, Host: "a.example.com", Location: "/", Scheme: "http", Client: clientA, Target: &Target{TargetStr: "127.0.0.1:80"}})
+
+	transfer := &Host{Id: 2, Host: "a.example.com", Location: "/", Scheme: "http", Client: clientB, Target: &Target{TargetStr: "127.0.0.1:80"}}
+	if err := utils.UpdateHostWithOwnerChange(transfer, clientA, false); !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("host ownership transfer err = %v, want ErrQuotaExceeded", err)
+	}
+	stored, err := utils.GetHostById(2)
+	if err != nil || stored.Client == nil || stored.Client.Id != clientA.Id {
+		t.Fatalf("rejected host transfer must restore the previous client: %#v, %v", stored, err)
+	}
+}
+
+func TestUserQuotasCountTunnelsAndHostsIndependently(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	user := &User{Id: 1, UserName: "alice", Status: true, MaxTunnelNum: LimitInt(1), MaxHostNum: LimitInt(1)}
 	clientA := &Client{Id: 1, UserId: user.Id, VerifyKey: "client-a", Status: true}
 	clientB := &Client{Id: 2, UserId: user.Id, VerifyKey: "client-b", Status: true}
 	otherClient := &Client{Id: 3, VerifyKey: "other", Status: true}
@@ -309,13 +384,78 @@ func TestUserTunnelLimitCountsClientsTunnelsAndHosts(t *testing.T) {
 	db.Tasks.Store(2, &Tunnel{Id: 2, Client: otherClient})
 
 	utils := &DbUtils{JsonDb: db}
-	if !utils.IsUserTunnelLimitReached(user.Id) {
-		t.Fatal("expected user tunnel limit to be reached")
+	if !utils.IsUserTunnelLimitReached(user.Id) || !utils.IsUserHostLimitReached(user.Id) {
+		t.Fatal("expected both independent user limits to be reached")
 	}
 
-	user.MaxTunnelNum = 3
-	if utils.IsUserTunnelLimitReached(user.Id) {
-		t.Fatal("expected user tunnel limit not to be reached")
+	user.MaxTunnelNum = LimitInt(3)
+	if utils.IsUserTunnelLimitReached(user.Id) || !utils.IsUserHostLimitReached(user.Id) {
+		t.Fatal("tunnel and host limits must be accounted independently")
+	}
+}
+
+func TestUserQuotasIgnoreNoStoreRuntimeResources(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	user := &User{Id: 1, UserName: "alice", Status: true, MaxTunnelNum: LimitInt(1), MaxHostNum: LimitInt(1)}
+	client := &Client{Id: 1, UserId: user.Id, VerifyKey: "client-a", Status: true}
+	db.Users.Store(user.Id, user)
+	db.Clients.Store(client.Id, client)
+	db.Tasks.Store(-1, &Tunnel{Id: -1, NoStore: true, Client: client})
+	db.Hosts.Store(-1, &Host{Id: -1, NoStore: true, Client: client})
+	utils := &DbUtils{JsonDb: db}
+
+	if got := utils.GetUserTunnelNum(user.Id); got != 0 {
+		t.Fatalf("NoStore tunnel counted against user quota: %d", got)
+	}
+	if got := utils.GetUserHostNum(user.Id); got != 0 {
+		t.Fatalf("NoStore host counted against user quota: %d", got)
+	}
+	if utils.IsUserTunnelLimitReached(user.Id) || utils.IsUserHostLimitReached(user.Id) {
+		t.Fatal("NoStore runtime resources must not consume persistent user quotas")
+	}
+	counts := utils.GetUserResourceCounts()[user.Id]
+	if counts.TunnelCount != 0 || counts.HostCount != 0 {
+		t.Fatalf("NoStore runtime resources must not appear in user usage: %#v", counts)
+	}
+}
+
+func TestUserQuotaThreeStates(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		limit     *int
+		used      int
+		wantState string
+		wantBlock bool
+	}{
+		{name: "unlimited ignores usage", limit: UnlimitedInt(), used: 1 << 20, wantState: "unlimited"},
+		{name: "not included blocks at zero", limit: NotIncludedInt(), used: 0, wantState: "not_included", wantBlock: true},
+		{name: "positive allows below limit", limit: LimitInt(3), used: 2, wantState: "limited"},
+		{name: "positive blocks at limit", limit: LimitInt(3), used: 3, wantState: "limited", wantBlock: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := IntQuotaReached(test.used, test.limit); got != test.wantBlock {
+				t.Fatalf("IntQuotaReached(%d, %v) = %t, want %t", test.used, test.limit, got, test.wantBlock)
+			}
+		})
+	}
+	for _, test := range []struct {
+		raw  string
+		want *int
+	}{
+		{raw: "", want: nil},
+		{raw: "0", want: NotIncludedInt()},
+		{raw: "5", want: LimitInt(5)},
+	} {
+		got, submitted, err := ParseIntQuotaInput(test.raw)
+		if err != nil || !submitted {
+			t.Fatalf("ParseIntQuotaInput(%q) = %v, %t, %v", test.raw, got, submitted, err)
+		}
+		if (got == nil) != (test.want == nil) || (got != nil && *got != *test.want) {
+			t.Fatalf("ParseIntQuotaInput(%q) = %v, want %v", test.raw, got, test.want)
+		}
+	}
+	if _, _, err := ParseIntQuotaInput("-1"); err == nil {
+		t.Fatal("negative quota must be rejected")
 	}
 }
 

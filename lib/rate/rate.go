@@ -12,6 +12,11 @@ import (
 )
 
 type Rate struct {
+	// Keep atomically accessed 64-bit fields at the start of the allocation.
+	// This guarantees their required 8-byte alignment on 32-bit platforms.
+	_          [0]atomic.Int64
+	consumed   int64
+	NowRate    int64
 	limiter    *xrate.Limiter
 	addSize    int64
 	burst      int
@@ -22,8 +27,6 @@ type Rate struct {
 	startOnce  sync.Once
 	ctx        context.Context
 	cancel     context.CancelFunc
-	consumed   int64
-	NowRate    int64
 	lazySample bool
 	sampleMu   sync.Mutex
 	sampleAt   time.Time

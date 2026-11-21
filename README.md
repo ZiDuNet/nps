@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.48</sub>
+﻿# NPS <sub>v1.1.49</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -28,6 +28,7 @@ Administrators can create users and assign multiple clients to one user; ordinar
 - **Account sign-in** — Username or linked-email login, optional client-scoped VKey login, and email password recovery while registration is open; recovery revokes previous browser sessions
 - **Audit and connection journals** — The console reads the latest 2,000 records from each file with user isolation; administrators can prune older records by retention days without changing the existing history-query APIs
 - 🔒 **Security** — Random password on first start, IP whitelist/blacklist, CAPTCHA, login PoW, administrator TOTP, remembered-device management, and rate limiting
+- 🗄️ **SQLite storage** — Transactional clients, users, tunnels, hosts, global settings and runtime business configuration in `conf/nps.db`; stop the service before copying the full `conf` directory, including WAL and SHM. See [SQLite storage and upgrade](docs/server/sqlite-storage.md)
 - 🌐 **Domain Proxy** — Custom headers, URL routing, platform wildcard domain pools, route diagnostics, auto HTTPS and certificate hot reload
 - 🔐 **TLS Encryption** — TLS encrypted communication between client and server
 - 📦 **Docker** — Multi-arch images (amd64/arm/arm64), one-command deployment
@@ -59,6 +60,8 @@ docker run -d --name nps \
 ```
 
 New installations bind the panel to loopback. For the Docker example above, open `http://127.0.0.1:8081` on the host or put an HTTPS reverse proxy in front of the loopback port. The username is `admin`, and a random password is printed in the terminal on first launch. Known `CHANGE_ME` and historical weak template values are rotated automatically; explicit custom or empty values are preserved (except the historical shared `public_vkey=123`, which is disabled).
+
+Starting with v1.1.49, `conf/nps.db` is the authoritative business-data store. Upgrade from legacy JSON by running the v1.1.49 JSON gateway first and taking a complete `conf` backup; never copy only the live database file.
 
 <details>
 <summary>📋 Port Reference</summary>
@@ -125,13 +128,13 @@ nps/
 ├── server/            # Server core (proxy mode implementations)
 ├── client/            # Client core
 ├── lib/               # Shared libraries
-│   ├── file/          # Data models + JSON persistence
+│   ├── file/          # Data models + SQLite/JSON migration
 │   ├── conn/          # Connection protocol
 │   ├── nps_mux/       # Multiplexing library
 │   ├── rate/          # Rate limiter
 │   └── crypt/         # TLS certificate management
 ├── web/               # Web panel (Beego)
-├── conf/              # Config + data storage
+├── conf/              # Startup config + SQLite data
 ├── docs/              # Documentation site (VuePress)
 ├── build.sh           # Cross-platform build script
 ├── Makefile           # Build / test / CI
@@ -202,6 +205,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.49** (2026-11-21) - Promoted SQLite to the authoritative business-data store with WAL, a single-process lock, transactional cascade deletes, runtime settings, guarded JSON migration, migration reports, and lossless `-export-json` rollback. Legacy JSON must first be normalized by the v1.1.49 gateway; invalid or unmarked data fails closed without creating a database. See the [SQLite upgrade notes](docs/upgrade-1.1.49.md).
 - **v1.1.48** (2026-11-20) - Replaced session-bound login challenges with stateless `/auth/challenge` verification, fixing `login_expired` behind Nginx caching or multi-instance deployments. Added the `/mcp` Model Context Protocol server, the `npsctl` CLI, and a bundled NPS Skill distributed as a GitHub release asset. Renamed Account Management to Access & Security and added Agent integration guidance. Release assets now include per-platform `npsctl` binaries and `nps-skill.tar.gz`. See the [upgrade notes](docs/upgrade-1.1.48.md).
 - **v1.1.47** (2026-11-17) - Fixed the fnOS pure-connection mode so it auto-reconnects after a bridge drop: the child process now exits per `auto_reconnection` and the manager recreates it every 5 seconds, and the embedded log view now shows newest entries first.
 - **v1.1.46** (2026-11-17) - Added the fnOS (飞牛) native NPC FPK package (NPC-Pro) with an embedded settings page, quick-command/manual forms, direct `npc.conf` editing, multi-VKey sub-process management and rotated logs; FPK and Docker clients disable server-pushed self-update. Server-side config now hot-reloads the supported runtime subset, version checks are cached server-side, and persistent IDs are reclaimed after the last client/tunnel/host is removed. See the [upgrade notes](docs/upgrade-1.1.46.md).

@@ -298,10 +298,17 @@ func (s *DashboardAccessController) Generate() {
 			return
 		}
 		user.Lock()
+		previousHash, previousCiphertext := user.DashboardKeyHash, user.DashboardKeyCiphertext
 		user.DashboardKeyHash = hash
 		user.DashboardKeyCiphertext = ciphertext
 		user.Unlock()
-		file.GetDb().JsonDb.StoreUsersToJsonFile()
+		if err := file.GetDb().JsonDb.StoreUsersToJsonFileErr(); err != nil {
+			user.Lock()
+			user.DashboardKeyHash, user.DashboardKeyCiphertext = previousHash, previousCiphertext
+			user.Unlock()
+			s.AjaxErr("大屏密钥保存失败")
+			return
+		}
 		s.auditMutation("dashboard.key_rotate", "dashboard", userID, userID, "", nil, nil)
 	}
 	s.Data["json"] = map[string]interface{}{
@@ -336,10 +343,17 @@ func (s *DashboardAccessController) Revoke() {
 			return
 		}
 		user.Lock()
+		previousHash, previousCiphertext := user.DashboardKeyHash, user.DashboardKeyCiphertext
 		user.DashboardKeyHash = ""
 		user.DashboardKeyCiphertext = ""
 		user.Unlock()
-		file.GetDb().JsonDb.StoreUsersToJsonFile()
+		if err := file.GetDb().JsonDb.StoreUsersToJsonFileErr(); err != nil {
+			user.Lock()
+			user.DashboardKeyHash, user.DashboardKeyCiphertext = previousHash, previousCiphertext
+			user.Unlock()
+			s.AjaxErr("大屏密钥撤销失败")
+			return
+		}
 		s.auditMutation("dashboard.key_revoke", "dashboard", userID, userID, "", nil, nil)
 	}
 	s.AjaxOk("大屏密钥已撤销")

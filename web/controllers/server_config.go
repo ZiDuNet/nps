@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -16,6 +17,7 @@ import (
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/connectionlog"
 	filelib "ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/settings"
 	"ehang.io/nps/server"
 	"ehang.io/nps/server/tool"
 	"ehang.io/nps/web/audit"
@@ -44,27 +46,58 @@ type serverConfigMeta struct {
 // material, log adapters, P2P transports and the session store stay restart-
 // only because their values are captured once during startup.
 var hotReloadServerConfigKeys = map[string]struct{}{
-	"allow_ports":                {},
-	"allow_flow_limit":           {},
-	"allow_rate_limit":           {},
-	"allow_connection_num_limit": {},
-	"allow_tunnel_num_limit":     {},
-	"allow_multi_ip":             {},
-	"allow_local_proxy":          {},
-	"allow_user_login":           {},
-	"allow_user_register":        {},
-	"allow_user_change_username": {},
-	"allow_user_vkey_login":      {},
-	"open_captcha":               {},
-	"register_captcha":           {},
-	"register_email_verify":      {},
-	"show_http_proxy_port":       {},
-	"http_proxy_access_port":     {},
-	"https_proxy_access_port":    {},
-	"client_history_limit":       {},
-	"flow_store_interval":        {},
-	"audit_log_path":             {},
-	"connection_log_path":        {},
+	"allow_ports":                  {},
+	"allow_multi_ip":               {},
+	"allow_local_proxy":            {},
+	"allow_user_local":             {},
+	"allow_secret_link":            {},
+	"allow_secret_local":           {},
+	"allow_remote_update":          {},
+	"allow_time_limit":             {},
+	"allow_user_login":             {},
+	"allow_user_register":          {},
+	"allow_user_change_username":   {},
+	"allow_user_vkey_login":        {},
+	"allow_x_real_ip":              {},
+	"trusted_proxy_ips":            {},
+	"x_nps_http_only":              {},
+	"open_captcha":                 {},
+	"force_pow":                    {},
+	"pow_bits":                     {},
+	"mcp_enabled":                  {},
+	"flow_limit_type":              {},
+	"system_info_display":          {},
+	"show_http_proxy_port":         {},
+	"http_proxy_access_port":       {},
+	"https_proxy_access_port":      {},
+	"http_add_origin_header":       {},
+	"http_forwarded_header_mode":   {},
+	"http_forwarded_trust_mode":    {},
+	"register_captcha":             {},
+	"register_email_verify":        {},
+	"register_max_clients":         {},
+	"register_max_tunnels":         {},
+	"register_max_hosts":           {},
+	"register_max_conn":            {},
+	"register_bandwidth_limit":     {},
+	"register_upload_limit":        {},
+	"register_download_limit":      {},
+	"register_expire_days":         {},
+	"register_rate_window":         {},
+	"register_rate_limit":          {},
+	"register_ip_rate_limit":       {},
+	"register_email_code_ttl":      {},
+	"register_email_code_cooldown": {},
+	"smtp_host":                    {},
+	"smtp_port":                    {},
+	"smtp_security":                {},
+	"smtp_username":                {},
+	"smtp_password":                {},
+	"smtp_from":                    {},
+	"client_history_limit":         {},
+	"flow_store_interval":          {},
+	"audit_log_path":               {},
+	"connection_log_path":          {},
 }
 
 // applyServerConfigHotReload pushes the newly persisted values into the
@@ -108,6 +141,8 @@ func applyHotReloadKey(key, value string) {
 		}
 	case "flow_store_interval":
 		server.RestartFlowStoreTimer()
+	case "flow_limit_type":
+		filelib.SetFlowLimitType(value)
 	case "audit_log_path":
 		audit.Configure(value)
 	case "connection_log_path":
@@ -322,11 +357,13 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 
 	"allow_user_register":          {Label: "允许普通用户注册", Category: "注册配置", Description: "打开后登录页显示注册与找回密码入口；关闭时注册和找回页面、提交接口均不可用。找回密码需要已绑定邮箱并配置 SMTP。", Type: "bool"},
 	"register_captcha":             {Label: "注册图片验证码", Category: "注册配置", Description: "注册提交时是否必须填写图片验证码。建议保持开启，防止自动化批量注册。", Type: "bool"},
-	"register_max_clients":         {Label: "默认客户端配额", Category: "注册配置", Description: "新注册用户默认最多可拥有的客户端数；0 表示不限制。", Type: "int"},
-	"register_max_tunnels":         {Label: "默认隧道配额", Category: "注册配置", Description: "新注册用户默认最多可创建的总隧道数，域名反代也计入；0 表示不限制。", Type: "int"},
-	"register_max_conn":            {Label: "默认最大并发连接数", Category: "注册配置", Description: "新注册用户所有客户端共享的 NPS 转发并发上限；0 表示不限制。P2P 直连不计入。", Type: "int"},
-	"register_upload_limit":        {Label: "默认上行带宽", Category: "注册配置", Description: "新注册用户所有客户端共享的访问者到后端方向带宽，单位 KB/s；0 表示不限制。", Type: "int"},
-	"register_download_limit":      {Label: "默认下行带宽", Category: "注册配置", Description: "新注册用户所有客户端共享的后端到访问者方向带宽，单位 KB/s；0 表示不限制。", Type: "int"},
+	"register_max_clients":         {Label: "默认客户端配额", Category: "注册配置", Description: "新注册用户默认最多可拥有的客户端数；留空表示不限，0 表示不包含，正数为上限。", Type: "int", Optional: true},
+	"register_max_tunnels":         {Label: "默认隧道配额", Category: "注册配置", Description: "新注册用户默认最多可创建的普通隧道数；留空表示不限，0 表示不包含，正数为上限。Host 域名规则由独立配额控制。", Type: "int", Optional: true},
+	"register_max_hosts":           {Label: "默认域名规则配额", Category: "注册配置", Description: "新注册用户默认最多可创建的 Host 域名规则数，同一域名的每条路径规则分别计数；留空表示不限，0 表示不包含，正数为上限。", Type: "int", Optional: true},
+	"register_max_conn":            {Label: "默认最大并发连接数", Category: "注册配置", Description: "新注册用户所有客户端共享的 NPS 转发并发上限；留空表示不限，0 表示不包含，正数为上限。P2P 直连不计入。", Type: "int", Optional: true},
+	"register_bandwidth_limit":     {Label: "默认带宽（双向合计）", Category: "注册配置", Description: "新注册用户所有客户端读写共享的双向合计带宽，单位 Mbps；留空表示不限，0 表示不包含，正数为上限。", Type: "float", Optional: true},
+	"register_upload_limit":        {Label: "旧版默认上行带宽（兼容）", Category: "注册配置", Description: "旧版兼容字段，单位 KB/s；仅在 register_bandwidth_limit 未设置时读取，并与下行带宽相加转换为双向合计。", Type: "int", Optional: true},
+	"register_download_limit":      {Label: "旧版默认下行带宽（兼容）", Category: "注册配置", Description: "旧版兼容字段，单位 KB/s；仅在 register_bandwidth_limit 未设置时读取，并与上行带宽相加转换为双向合计。", Type: "int", Optional: true},
 	"register_expire_days":         {Label: "默认注册有效期", Category: "注册配置", Description: "新注册用户从注册成功时起默认有效天数；0 表示永久有效。", Type: "int"},
 	"register_rate_window":         {Label: "注册限频窗口", Category: "注册配置", Description: "注册提交次数和同 IP 成功注册数的统计窗口，单位秒。", Type: "int"},
 	"register_rate_limit":          {Label: "注册提交次数上限", Category: "注册配置", Description: "同一 IP 或同一用户名在一个窗口内允许提交的注册次数；0 表示不限制。", Type: "int"},
@@ -346,12 +383,8 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"allow_secret_local":           {Label: "允许 Secret 访问服务端本地", Category: "用户与资源权限", Description: "允许 Secret 代理连接 NPS 所在主机的本地地址；默认关闭。", Type: "bool", Optional: true},
 	"allow_remote_update":          {Label: "允许远程升级客户端", Category: "用户与资源权限", Description: "管理员是否可以从 Web 面板向在线 NPC 下发升级指令。", Type: "bool", Optional: true},
 	"allow_time_limit":             {Label: "启用客户端时间限制", Category: "用户与资源权限", Description: "按客户端到期时间拒绝已过期连接。", Type: "bool", Optional: true},
-	"allow_flow_limit":             {Label: "允许流量配额", Category: "用户与资源权限", Description: "是否在客户端页面维护流量上限。"},
 	"flow_limit_type":              {Label: "流量配额计算口径", Category: "用户与资源权限", Description: "total 按上下行总量计算；actual 按实际消耗计算（总量乘 2）。", Type: "select", Options: []string{"total", "actual"}},
-	"allow_rate_limit":             {Label: "允许带宽配额", Category: "用户与资源权限", Description: "是否在客户端和隧道页面维护带宽上限。"},
-	"allow_tunnel_num_limit":       {Label: "允许隧道数量配额", Category: "用户与资源权限", Description: "是否限制客户端和用户的隧道数量。"},
 	"allow_local_proxy":            {Label: "允许本地代理", Category: "用户与资源权限", Description: "是否允许隧道使用服务端本地代理访问目标。"},
-	"allow_connection_num_limit":   {Label: "允许连接数配额", Category: "用户与资源权限", Description: "是否维护客户端最大连接数。"},
 	"allow_multi_ip":               {Label: "允许绑定监听地址", Category: "用户与资源权限", Description: "是否允许每条隧道绑定不同的服务端监听 IP。"},
 	"system_info_display":          {Label: "显示系统监控", Category: "用户与资源权限", Description: "仪表盘是否显示 CPU、内存和网络信息。"},
 
@@ -462,11 +495,11 @@ var registrationConfigGroups = []struct {
 }{
 	{
 		Name:        "注册入口与默认权益",
-		Description: "控制登录页注册入口，并设置新账号默认获得的客户端、隧道、并发连接、带宽和有效期。所有数值为 0 时表示不限。",
+		Description: "控制登录页注册入口，并设置新账号默认获得的客户端、隧道、域名规则、并发连接、带宽和有效期。额度留空表示不限，0 表示不包含，正数为上限。",
 		Keys: []string{
 			"allow_user_register", "register_captcha", "register_email_verify",
-			"register_max_clients", "register_max_tunnels", "register_max_conn",
-			"register_upload_limit", "register_download_limit", "register_expire_days",
+			"register_max_clients", "register_max_tunnels", "register_max_hosts", "register_max_conn",
+			"register_bandwidth_limit", "register_expire_days",
 		},
 	},
 	{
@@ -494,6 +527,11 @@ var registrationConfigKeySet = func() map[string]struct{} {
 			keys[key] = struct{}{}
 		}
 	}
+	// Legacy directional bandwidth aliases are read for upgrade compatibility
+	// only. They belong to neither registration form nor the general visual
+	// editor; the source editor remains able to read and preserve them.
+	keys["register_upload_limit"] = struct{}{}
+	keys["register_download_limit"] = struct{}{}
 	return keys
 }()
 
@@ -569,19 +607,19 @@ var serverConfigKeyPriority = map[string]int{
 	"auth_key": 10, "auth_crypt_key": 20,
 
 	"allow_user_register": 10, "register_email_verify": 20, "register_captcha": 30,
-	"register_max_clients": 40, "register_max_tunnels": 50, "register_max_conn": 60,
-	"register_upload_limit": 70, "register_download_limit": 80, "register_expire_days": 90,
-	"register_rate_window": 100, "register_rate_limit": 110, "register_ip_rate_limit": 120,
-	"register_email_code_ttl": 130, "register_email_code_cooldown": 140,
-	"smtp_host": 150, "smtp_port": 160, "smtp_security": 170,
-	"smtp_username": 180, "smtp_password": 190, "smtp_from": 200,
+	"register_max_clients": 40, "register_max_tunnels": 50, "register_max_hosts": 60, "register_max_conn": 70,
+	"register_bandwidth_limit": 80, "register_upload_limit": 90, "register_download_limit": 100, "register_expire_days": 110,
+	"register_rate_window": 120, "register_rate_limit": 130, "register_ip_rate_limit": 140,
+	"register_email_code_ttl": 150, "register_email_code_cooldown": 160,
+	"smtp_host": 170, "smtp_port": 180, "smtp_security": 190,
+	"smtp_username": 200, "smtp_password": 210, "smtp_from": 220,
 
 	"allow_user_login": 10, "allow_user_vkey_login": 20, "allow_user_change_username": 30,
 	"allow_user_local": 40, "allow_secret_link": 50, "allow_secret_local": 60,
-	"allow_remote_update": 70, "allow_time_limit": 80, "allow_flow_limit": 90,
-	"flow_limit_type": 100, "allow_rate_limit": 110, "allow_tunnel_num_limit": 120,
-	"allow_local_proxy": 130, "allow_connection_num_limit": 140,
-	"allow_multi_ip": 150, "system_info_display": 160,
+	"allow_remote_update": 70, "allow_time_limit": 80,
+	"flow_limit_type":   100,
+	"allow_local_proxy": 130,
+	"allow_multi_ip":    150, "system_info_display": 160,
 
 	"http_add_origin_header": 10, "http_forwarded_header_mode": 11, "http_forwarded_trust_mode": 12,
 	"http_proxy_response_timeout": 20, "http_client_upload_stall_timeout": 21,
@@ -629,6 +667,18 @@ func serverConfigKeyValues(content string) map[string]string {
 			continue
 		}
 		values[key] = strings.TrimSpace(parts[1])
+	}
+	return values
+}
+
+// effectiveServerConfigSnapshot overlays runtime settings on the file values.
+// The settings table is authoritative for business keys after startup, so a
+// page that reads only nps.conf would silently show defaults and then write
+// those stale defaults back on the next save.
+func effectiveServerConfigSnapshot(content string) map[string]string {
+	values := serverConfigKeyValues(content)
+	for key, value := range settings.Snapshot() {
+		values[key] = value
 	}
 	return values
 }
@@ -716,10 +766,15 @@ func inferServerConfigType(key, value string) string {
 // value is a valid value for required settings, but for an optional listener,
 // secret, path, or feature knob it means the feature is not enabled and the
 // panel should offer to omit the key entirely.
-func serverConfigValueEnabled(meta serverConfigMeta, value string) bool {
+func serverConfigValueEnabled(key string, meta serverConfigMeta, value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return false
+	}
+	if isThreeStateServerConfigKey(key) {
+		// Zero is a meaningful "not included" quota for these fields, not a
+		// disabled/omitted optional key. The key being present is what matters.
+		return true
 	}
 	switch meta.Type {
 	case "bool":
@@ -729,6 +784,19 @@ func serverConfigValueEnabled(meta serverConfigMeta, value string) bool {
 		return err == nil && n != 0
 	default:
 		return true
+	}
+}
+
+// isThreeStateServerConfigKey reports whether an optional field uses the
+// unlimited / not-included / capped quota contract instead of the usual
+// present-and-nonzero feature-switch semantics.
+func isThreeStateServerConfigKey(key string) bool {
+	switch key {
+	case "register_max_clients", "register_max_tunnels", "register_max_hosts",
+		"register_max_conn", "register_bandwidth_limit":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -755,7 +823,7 @@ func serverConfigCatalogKeys() []string {
 }
 
 func serverConfigSections(content string) ([]serverConfigSectionView, []serverConfigUnknownView, error) {
-	values := serverConfigKeyValues(content)
+	values := effectiveServerConfigSnapshot(content)
 	templateValues := serverConfigKeyValues(npsconf.DefaultNpsConf)
 	keys := serverConfigCatalogKeys()
 	seen := make(map[string]struct{}, len(keys))
@@ -782,7 +850,7 @@ func serverConfigSections(content string) ([]serverConfigSectionView, []serverCo
 		if strings.TrimSpace(field.DisplayValue) == "" {
 			field.DisplayValue = "未配置"
 		}
-		field.Enabled = present && serverConfigValueEnabled(meta, value)
+		field.Enabled = present && serverConfigValueEnabled(key, meta, value)
 		if !meta.Optional {
 			// A required key missing from an older configuration must remain
 			// editable so the administrator can repair it from the panel.
@@ -1007,8 +1075,8 @@ func (s *GlobalController) Config() {
 }
 
 // Registration presents the registration and new-user default limits as a
-// dedicated business settings page while continuing to store every value in
-// nps.conf.
+// dedicated business settings page. Its keys are persisted in the SQLite
+// settings table and injected into Beego at startup.
 func (s *GlobalController) Registration() {
 	if !s.RequireAdmin() {
 		return
@@ -1051,7 +1119,7 @@ func (s *GlobalController) SaveRegistration() {
 		s.AjaxErr("读取 nps.conf 失败: " + err.Error())
 		return
 	}
-	updates, err := parseServerConfigUpdatesForKeys(s.Ctx.Request, string(content), registrationConfigKeys())
+	updates, err := parseServerConfigUpdatesForEffectiveConfig(s.Ctx.Request, string(content), registrationConfigKeys())
 	if err != nil {
 		s.AjaxErr(err.Error())
 		return
@@ -1061,31 +1129,63 @@ func (s *GlobalController) SaveRegistration() {
 		s.AjaxErr("保存用户注册配置失败: " + err.Error())
 		return
 	}
-	s.auditMutation("global.registration_config.update", "nps.conf", 0, 0, "", nil, map[string]string{"changed": strconv.Itoa(len(changed))})
+	s.auditMutation("global.registration_config.update", "sqlite.settings", 0, 0, "", nil, map[string]string{"changed": strconv.Itoa(len(changed))})
+	hot, restartRequired := applySavedServerConfig(changed)
+	message := "用户注册配置已保存，需要重启 NPS 才会生效"
+	if len(changed) == 0 {
+		message = "用户注册配置未发生变化"
+	} else if len(hot) > 0 && !restartRequired {
+		message = "用户注册配置已保存并即时生效"
+	} else if len(hot) > 0 {
+		message = "用户注册配置已保存，部分参数已即时生效，其余需要重启 NPS"
+	}
 	s.Data["json"] = s.withRequestMeta(map[string]interface{}{
 		"status":           1,
-		"msg":              "用户注册配置已保存，需要重启 NPS 才会生效",
+		"msg":              message,
 		"changed":          changed,
-		"restart_required": len(changed) > 0,
+		"restart_required": restartRequired,
+		"hot_reloaded":     hot,
 	})
 	s.ServeJSON()
 }
 
 func parseServerConfigUpdates(request *http.Request, content string) ([]serverConfigUpdate, error) {
-	return parseServerConfigUpdatesForKeys(request, content, generalServerConfigKeys())
+	return parseServerConfigUpdatesForEffectiveConfig(request, content, generalServerConfigKeys())
 }
 
 func parseServerConfigUpdatesForKeys(request *http.Request, content string, keys []string) ([]serverConfigUpdate, error) {
+	return parseServerConfigUpdatesWithValues(request, serverConfigKeyValues(content), keys)
+}
+
+func parseServerConfigUpdatesForEffectiveConfig(request *http.Request, content string, keys []string) ([]serverConfigUpdate, error) {
+	return parseServerConfigUpdatesWithValues(request, effectiveServerConfigSnapshot(content), keys)
+}
+
+func parseServerConfigUpdatesWithValues(request *http.Request, current map[string]string, keys []string) ([]serverConfigUpdate, error) {
 	if request == nil {
 		return nil, errors.New("请求无效")
 	}
 	if err := request.ParseForm(); err != nil {
 		return nil, fmt.Errorf("读取配置失败: %w", err)
 	}
-	current := serverConfigKeyValues(content)
+	// A visual-editor save must be a delta, not a full replacement. Older or
+	// cached pages render template defaults for fields that were never shown as
+	// changed; submitting the entire form would then overwrite live listeners.
+	// The explicit marker also makes a missed frontend update fail closed
+	// instead of silently rewriting unrelated settings.
+	if request.FormValue("config_delta") != "1" {
+		return nil, errServerConfigFormNeedsRefresh
+	}
+	dirtyKeys, err := requestedServerConfigDirtyKeys(request, keys)
+	if err != nil {
+		return nil, err
+	}
 	defaults := serverConfigKeyValues(npsconf.DefaultNpsConf)
 	updates := make([]serverConfigUpdate, 0)
 	for _, key := range keys {
+		if _, dirty := dirtyKeys[key]; !dirty {
+			continue
+		}
 		if _, supported := serverConfigMetaByKey[key]; !supported {
 			continue
 		}
@@ -1106,7 +1206,15 @@ func parseServerConfigUpdatesForKeys(request *http.Request, content string, keys
 		}
 		enabled := true
 		if meta.Optional {
-			enabled = request.FormValue("config_enabled_"+key) != ""
+			marker := strings.TrimSpace(request.FormValue("config_enabled_" + key))
+			enabled = false
+			if marker != "" {
+				parsed, parseErr := strconv.ParseBool(marker)
+				if parseErr != nil {
+					return nil, fmt.Errorf("配置 %s 的启用标记无效", key)
+				}
+				enabled = parsed
+			}
 		}
 		clearSecret := request.FormValue("config_clear_"+key) != ""
 		if meta.Optional && !enabled {
@@ -1140,6 +1248,34 @@ func parseServerConfigUpdatesForKeys(request *http.Request, content string, keys
 		return nil, err
 	}
 	return updates, nil
+}
+
+var errServerConfigFormNeedsRefresh = errors.New("配置页版本过旧或未加载修改标记，请刷新页面后重试")
+
+func requestedServerConfigDirtyKeys(request *http.Request, allowed []string) (map[string]struct{}, error) {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, key := range allowed {
+		allowedSet[key] = struct{}{}
+	}
+	dirty := make(map[string]struct{})
+	submitted := request.Form["config_dirty"]
+	if len(submitted) == 0 && request.PostForm != nil {
+		submitted = request.PostForm["config_dirty"]
+	}
+	for _, key := range submitted {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, ok := allowedSet[key]; !ok {
+			return nil, fmt.Errorf("配置字段 %s 不属于当前页面", key)
+		}
+		dirty[key] = struct{}{}
+	}
+	if len(dirty) == 0 {
+		return nil, errServerConfigFormNeedsRefresh
+	}
+	return dirty, nil
 }
 
 func effectiveServerConfigValues(current map[string]string, updates []serverConfigUpdate) map[string]string {
@@ -1268,6 +1404,16 @@ func validateServerConfigValue(key string, meta serverConfigMeta, value string) 
 		if strings.Contains(key, "port") && n > 65535 {
 			return fmt.Errorf("配置 %s 端口范围必须是 0-65535", key)
 		}
+	case "float":
+		n, err := strconv.ParseFloat(value, 64)
+		if err != nil || n < 0 || math.IsNaN(n) || math.IsInf(n, 0) {
+			return fmt.Errorf("配置 %s 必须是非负数字", key)
+		}
+		if key == "register_bandwidth_limit" {
+			if n > float64(math.MaxInt64)/1_000_000 {
+				return fmt.Errorf("配置 %s 超出可表示范围", key)
+			}
+		}
 	case "select":
 		valid := false
 		for _, option := range meta.Options {
@@ -1326,12 +1472,26 @@ func writeServerConfig(path string, updates []serverConfigUpdate) ([]string, err
 		return nil, err
 	}
 	original := string(data)
+	managed := make(map[string]serverConfigUpdate)
+	remaining := make([]serverConfigUpdate, 0, len(updates))
+	for _, update := range updates {
+		if settings.IsManagedKey(update.Key) {
+			managed[update.Key] = update
+			continue
+		}
+		remaining = append(remaining, update)
+	}
+	updates = remaining
+	managedChanged, err := saveManagedServerConfig(managed)
+	if err != nil {
+		return nil, err
+	}
 	updateByKey := make(map[string]serverConfigUpdate, len(updates))
 	for _, update := range updates {
 		updateByKey[update.Key] = update
 	}
 	seen := make(map[string]struct{})
-	changed := make([]string, 0)
+	changed := append([]string(nil), managedChanged...)
 	lines := strings.SplitAfter(original, "\n")
 	result := make([]string, 0, len(lines)+len(updates)+2)
 	for _, line := range lines {
@@ -1380,6 +1540,41 @@ func writeServerConfig(path string, updates []serverConfigUpdate) ([]string, err
 		return nil, err
 	}
 	return uniqueStrings(changed), nil
+}
+
+// saveManagedServerConfig commits runtime business keys through the settings
+// manager. It performs the same change calculation as the file writer so the
+// caller can report omitted optional fields and no-op saves consistently.
+func saveManagedServerConfig(updates map[string]serverConfigUpdate) ([]string, error) {
+	if len(updates) == 0 {
+		return nil, nil
+	}
+	current := settings.Snapshot()
+	values := make(map[string]string)
+	deleteKeys := make([]string, 0)
+	changed := make([]string, 0)
+	for key, update := range updates {
+		if update.Omit {
+			if _, exists := current[key]; exists {
+				deleteKeys = append(deleteKeys, key)
+				changed = append(changed, key)
+			}
+			continue
+		}
+		if current[key] == update.Value {
+			continue
+		}
+		values[key] = update.Value
+		changed = append(changed, key)
+	}
+	if len(values) == 0 && len(deleteKeys) == 0 {
+		return nil, nil
+	}
+	if err := settings.Save(values, deleteKeys); err != nil {
+		return nil, err
+	}
+	sort.Strings(changed)
+	return changed, nil
 }
 
 func uniqueStrings(values []string) []string {
@@ -1491,7 +1686,7 @@ func applySavedServerConfig(changedKeys []string) (map[string]interface{}, bool)
 		logs.Warn("读取已保存的 nps.conf 失败，跳过热更新：%v", err)
 		return nil, true
 	}
-	values := serverConfigKeyValues(string(content))
+	values := effectiveServerConfigSnapshot(string(content))
 	hot := applyServerConfigHotReload(values, changedKeys)
 	return hot, hasRestartOnlyChanges(changedKeys)
 }

@@ -172,8 +172,12 @@ func validP2PHandshake(fields []string) bool {
 	}
 	t.RLock()
 	valid := t.Status && t.Mode == "p2p"
+	client := t.Client
 	t.RUnlock()
-	return valid
+	if !valid || client == nil {
+		return false
+	}
+	return file.GetDb().IsClientActive(client)
 }
 
 func (s *P2PServer) sweepSessions() {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -217,5 +218,15 @@ func TestMCPClientsReturnRealTotalWithPagination(t *testing.T) {
 	clients, _ := page["clients"].([]mcpClientDTO)
 	if len(clients) != 1 || clients[0].Id != 2 {
 		t.Fatalf("page clients = %#v, want client 2", clients)
+	}
+}
+
+func TestMCPClientRateLimitKeepsInt64Bps(t *testing.T) {
+	_, _, rateLimitBps, err := mcpClientLimits(map[string]any{"rate_limit": 2147.483648})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := int64(math.MaxInt32) + 1; rateLimitBps != want {
+		t.Fatalf("rate limit = %d bps, want %d", rateLimitBps, want)
 	}
 }

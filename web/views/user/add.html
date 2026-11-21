@@ -50,39 +50,40 @@
                     </div>
 
                     <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="为该用户设置资源配额" data-section-summary-en="Set quotas for this user"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
+                    <div class="help-block" data-i18n-zh="留空表示不限；填 0 表示套餐不包含该资源；填正整数表示上限。" data-i18n-en="Blank means unlimited; 0 means the plan does not include the resource; a positive integer sets the cap.">留空表示不限；填 0 表示套餐不包含该资源；填正整数表示上限。</div>
                     <div class="form-group">
                         <label class="form-label font-bold" for="user-max-client" data-i18n-zh="最大客户端数" data-i18n-en="Client limit">最大客户端数</label>
                         <div class="form-group-wrapper">
-                            <input id="user-max-client" class="form-control" type="number" min="0" step="1" name="max_client" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-max-client-hint">
+                            <input id="user-max-client" class="form-control" type="number" min="0" step="1" name="max_client" inputmode="numeric" data-placeholder-zh="不填=不限，0=不包含" data-placeholder-en="Blank = unlimited, 0 = not included" placeholder="不填=不限，0=不包含" aria-describedby="user-max-client-hint">
                             <span id="user-max-client-hint" class="help-block" data-i18n-zh="限制该用户可拥有的客户端数量；管理员分配和用户自建都会占用此配额。" data-i18n-en="Limits the clients this user can own. Both admin assignments and self-created clients consume it.">限制该用户可拥有的客户端数量；管理员分配和用户自建都会占用此配额。</span>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label font-bold" for="user-max-tunnel" data-i18n-zh="总隧道上限" data-i18n-en="Tunnel limit">总隧道上限</label>
+                        <label class="form-label font-bold" for="user-max-tunnel" data-i18n-zh="普通隧道上限" data-i18n-en="Tunnel limit">普通隧道上限</label>
                         <div class="form-group-wrapper">
-                            <input id="user-max-tunnel" class="form-control" type="number" min="0" step="1" name="max_tunnel" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-max-tunnel-hint">
-                            <span id="user-max-tunnel-hint" class="help-block" data-i18n-zh="所有名下客户端共享此上限，普通隧道和域名规则都会计入。" data-i18n-en="All owned clients share this limit. Both tunnels and host rules count toward it.">所有名下客户端共享此上限，普通隧道和域名规则都会计入。</span>
+                            <input id="user-max-tunnel" class="form-control" type="number" min="0" step="1" name="max_tunnel" inputmode="numeric" data-placeholder-zh="不填=不限，0=不包含" data-placeholder-en="Blank = unlimited, 0 = not included" placeholder="不填=不限，0=不包含" aria-describedby="user-max-tunnel-hint">
+                            <span id="user-max-tunnel-hint" class="help-block" data-i18n-zh="所有名下客户端的普通隧道共享此上限；域名规则不计入。" data-i18n-en="All ordinary tunnels owned by this user share this limit; host rules do not count.">所有名下客户端的普通隧道共享此上限；域名规则不计入。</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-bold" for="user-max-host" data-i18n-zh="域名规则上限" data-i18n-en="Host rule limit">域名规则上限</label>
+                        <div class="form-group-wrapper">
+                            <input id="user-max-host" class="form-control" type="number" min="0" step="1" name="max_host" inputmode="numeric" data-placeholder-zh="不填=不限，0=不包含" data-placeholder-en="Blank = unlimited, 0 = not included" placeholder="不填=不限，0=不包含" aria-describedby="user-max-host-hint">
+                            <span id="user-max-host-hint" class="help-block" data-i18n-zh="所有名下客户端的 Host 规则共享此上限；同一域名的多条路径分别计数。" data-i18n-en="Host rules owned by this user share this limit; multiple paths on one domain count separately.">所有名下客户端的 Host 规则共享此上限；同一域名的多条路径分别计数。</span>
                         </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label font-bold" for="user-max-conn" data-i18n-zh="最大并发连接数" data-i18n-en="Maximum concurrent connections">最大并发连接数</label>
                         <div class="form-group-wrapper">
-                            <input id="user-max-conn" class="form-control" type="number" min="0" step="1" name="max_conn" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-max-conn-hint">
+                            <input id="user-max-conn" class="form-control" type="number" min="0" step="1" name="max_conn" inputmode="numeric" data-placeholder-zh="不填=不限，0=不包含" data-placeholder-en="Blank = unlimited, 0 = not included" placeholder="不填=不限，0=不包含" aria-describedby="user-max-conn-hint">
                             <span id="user-max-conn-hint" class="help-block" data-i18n-zh="该用户所有客户端共享的 NPS 转发并发数；0 表示不限。P2P 直连不计入。" data-i18n-en="Shared NPS forwarding connections across all clients owned by this user; 0 means unlimited. Direct P2P traffic is not counted.">该用户所有客户端共享的 NPS 转发并发数；0 表示不限。P2P 直连不计入。</span>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label font-bold" for="user-upload-limit" data-i18n-zh="上行带宽（KB/s）" data-i18n-en="Upload bandwidth (KB/s)">上行带宽（KB/s）</label>
+                        <label class="form-label font-bold" for="user-bandwidth-limit" data-i18n-zh="带宽（双向合计，Mbps）" data-i18n-en="Bandwidth (two-way total, Mbps)">带宽（双向合计，Mbps）</label>
                         <div class="form-group-wrapper">
-                            <input id="user-upload-limit" class="form-control" type="number" min="0" step="1" name="upload_limit" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-upload-limit-hint">
-                            <span id="user-upload-limit-hint" class="help-block" data-i18n-zh="访问者发往后端方向的总带宽，由该用户所有客户端和资源共享；0 表示不限。" data-i18n-en="Aggregate visitor-to-backend bandwidth shared by all of this user's clients and resources; 0 means unlimited.">访问者发往后端方向的总带宽，由该用户所有客户端和资源共享；0 表示不限。</span>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label font-bold" for="user-download-limit" data-i18n-zh="下行带宽（KB/s）" data-i18n-en="Download bandwidth (KB/s)">下行带宽（KB/s）</label>
-                        <div class="form-group-wrapper">
-                            <input id="user-download-limit" class="form-control" type="number" min="0" step="1" name="download_limit" inputmode="numeric" data-placeholder-zh="不填或 0 表示不限" data-placeholder-en="Blank or 0 means unlimited" placeholder="不填或 0 表示不限" aria-describedby="user-download-limit-hint">
-                            <span id="user-download-limit-hint" class="help-block" data-i18n-zh="后端返回访问者方向的总带宽，由该用户所有客户端和资源共享；0 表示不限。" data-i18n-en="Aggregate backend-to-visitor bandwidth shared by all of this user's clients and resources; 0 means unlimited.">后端返回访问者方向的总带宽，由该用户所有客户端和资源共享；0 表示不限。</span>
+                            <input id="user-bandwidth-limit" class="form-control" type="number" min="0" step="0.1" name="bandwidth_limit" inputmode="decimal" data-placeholder-zh="不填=不限，0=不包含" data-placeholder-en="Blank = unlimited, 0 = not included" placeholder="不填=不限，0=不包含" aria-describedby="user-bandwidth-limit-hint">
+                            <span id="user-bandwidth-limit-hint" class="help-block" data-i18n-zh="该用户所有客户端的上传 + 下载合计不能超过此值，读写共用同一个额度；1 Mbps ≈ 0.125 MB/s。" data-i18n-en="Upload plus download across all clients of this user share one ceiling; 1 Mbps ≈ 0.125 MB/s.">该用户所有客户端的上传 + 下载合计不能超过此值，读写共用同一个额度；1 Mbps ≈ 0.125 MB/s。</span>
                         </div>
                     </div>
 

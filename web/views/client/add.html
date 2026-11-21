@@ -59,7 +59,6 @@
 
                     {{if eq true .isAdmin}}
                     <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="按需设置流量、带宽和连接配额" data-section-summary-en="Optional flow, rate, and connection quotas"><i class="fa fa-sliders-h" aria-hidden="true"></i><span data-i18n-zh="资源限制" data-i18n-en="Resource limits">资源限制</span></div>
-                    {{if eq true .allow_flow_limit}}
                     <div class="form-group" id="flow_limit">
                         <label class="form-label font-bold" for="client-flow-limit" langtag="word-flowlimit"></label>
                         <div class="form-group-wrapper">
@@ -68,18 +67,14 @@
                             <span class="help-block m-b-none" data-i18n-zh="客户端累计流量上限，单位 MB；留空或 0 表示不限。达到上限后该客户端的转发会被暂停。" data-i18n-en="Cumulative client traffic limit in MB; blank or 0 means unlimited. Forwarding is paused when the limit is reached.">客户端累计流量上限，单位 MB；留空或 0 表示不限。达到上限后该客户端的转发会被暂停。</span>
                         </div>
                     </div>
-                    {{end}}
-                    {{if eq true .allow_rate_limit}}
                     <div class="form-group" id="rate_limit">
                         <label class="form-label font-bold" for="client-rate-limit" langtag="word-ratelimit"></label>
                         <div class="form-group-wrapper">
-                            <input id="client-rate-limit" class="form-control" type="number" name="rate_limit" min="0" step="1" inputmode="numeric" placeholder="" langtag="info-unrestricted">
-                            <span class="help-block m-b-none form-unit-hint"><span langtag="word-unit"></span><span class="form-unit-suffix">: KB/S</span></span>
-                            <span class="help-block m-b-none" data-i18n-zh="客户端所有转发连接共享的带宽上限，单位 KB/s；留空或 0 表示不限。" data-i18n-en="Shared bandwidth limit for all forwarding connections of this client in KB/s; blank or 0 means unlimited.">客户端所有转发连接共享的带宽上限，单位 KB/s；留空或 0 表示不限。</span>
+                            <input id="client-rate-limit" class="form-control" type="number" name="rate_limit" min="0" step="0.1" inputmode="decimal" placeholder="" langtag="info-unrestricted">
+                            <span class="help-block m-b-none form-unit-hint"><span langtag="word-unit"></span><span class="form-unit-suffix">: Mbps</span></span>
+                            <span class="help-block m-b-none" data-i18n-zh="客户端所有转发连接共享的双向合计带宽，单位 Mbps；留空或 0 表示不限，1 Mbps ≈ 0.125 MB/s。" data-i18n-en="Shared two-way bandwidth for all forwarding connections of this client in Mbps; blank or 0 means unlimited; 1 Mbps ≈ 0.125 MB/s.">客户端所有转发连接共享的双向合计带宽，单位 Mbps；留空或 0 表示不限，1 Mbps ≈ 0.125 MB/s。</span>
                         </div>
                     </div>
-                    {{end}}
-                    {{if eq true .allow_connection_num_limit}}
                     <div class="form-group" id="max_conn">
                         <label class="form-label font-bold" for="client-max-conn" langtag="word-maxconnections"></label>
                         <div class="form-group-wrapper">
@@ -87,16 +82,13 @@
                             <span class="help-block m-b-none" data-i18n-zh="客户端同时建立的转发连接上限；0 表示不限。TCP 按连接、UDP 按会话计数。" data-i18n-en="Maximum concurrent forwarding connections for this client; 0 means unlimited. TCP counts connections and UDP counts sessions.">客户端同时建立的转发连接上限；0 表示不限。TCP 按连接、UDP 按会话计数。</span>
                         </div>
                     </div>
-                    {{end}}
-                    {{if eq true .allow_tunnel_num_limit}}
                     <div class="form-group" id="max_tunnel">
                         <label class="form-label font-bold" for="client-max-tunnel" langtag="word-maxtunnels"></label>
                         <div class="form-group-wrapper">
                             <input id="client-max-tunnel" class="form-control" type="number" name="max_tunnel" min="0" step="1" inputmode="numeric" placeholder="" langtag="info-unrestricted">
-                            <span class="help-block m-b-none" data-i18n-zh="客户端可创建的普通隧道和 Host 域名规则总数上限；0 表示不限。" data-i18n-en="Maximum number of tunnels and Host rules this client may create; 0 means unlimited.">客户端可创建的普通隧道和 Host 域名规则总数上限；0 表示不限。</span>
+                            <span class="help-block m-b-none" data-i18n-zh="客户端可创建的普通隧道数上限；0 表示不限。Host 域名规则由用户级额度单独控制。" data-i18n-en="Maximum number of ordinary tunnels this client may create; 0 means unlimited. Host rules are limited separately by the user quota.">客户端可创建的普通隧道数上限；0 表示不限。Host 域名规则由用户级额度单独控制。</span>
                         </div>
                     </div>
-                    {{end}}
                     {{end}}
 
                     <div class="form-section-title" data-section-tier="advanced" data-section-summary-zh="验证密钥与客户端身份选项" data-section-summary-en="Verify keys and client identity options"><i class="fa fa-key" aria-hidden="true"></i><span data-i18n-zh="认证配置" data-i18n-en="Authentication">认证配置</span></div>

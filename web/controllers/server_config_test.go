@@ -14,6 +14,9 @@ import (
 	"testing"
 
 	npsconf "ehang.io/nps/conf"
+	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/settings"
+	"ehang.io/nps/lib/store"
 )
 
 func TestServerConfigTemplateParses(t *testing.T) {
@@ -182,7 +185,9 @@ func TestRegistrationSettingsTemplateRendersBenefitControls(t *testing.T) {
 		"register_email_verify=true",
 		"register_max_clients=1",
 		"register_max_tunnels=2",
+		"register_max_hosts=4",
 		"register_max_conn=3",
+		"register_bandwidth_limit=384",
 		"register_upload_limit=128",
 		"register_download_limit=256",
 		"register_expire_days=0",
@@ -224,13 +229,17 @@ func TestRegistrationSettingsTemplateRendersBenefitControls(t *testing.T) {
 		`name="config_allow_user_register"`,
 		`name="config_register_max_clients" value="1"`,
 		`name="config_register_max_tunnels" value="2"`,
+		`name="config_register_max_hosts" value="4"`,
 		`name="config_register_max_conn" value="3"`,
-		`name="config_register_upload_limit" value="128"`,
-		`name="config_register_download_limit" value="256"`,
+		`name="config_register_bandwidth_limit" value="384"`,
 		`name="config_register_expire_days" value="0"`,
 		`name="config_smtp_password"`,
 		`data-registration-field`,
+		`data-registration-enabled-value="1"`,
+		`data-registration-value="384"`,
 		"/global/registration/save",
+		"config_delta",
+		"config_dirty",
 	} {
 		if !strings.Contains(page, marker) {
 			t.Fatalf("registration settings page is missing %q", marker)
@@ -249,7 +258,9 @@ func TestRegistrationScopedUpdatesPreserveUnrelatedSettings(t *testing.T) {
 		"register_email_verify=false",
 		"register_max_clients=0",
 		"register_max_tunnels=0",
+		"register_max_hosts=0",
 		"register_max_conn=0",
+		"register_bandwidth_limit=",
 		"register_upload_limit=0",
 		"register_download_limit=0",
 		"register_expire_days=0",
@@ -262,23 +273,36 @@ func TestRegistrationScopedUpdatesPreserveUnrelatedSettings(t *testing.T) {
 		"custom_deployment_flag=keep-me",
 	}, "\n")
 	form := url.Values{
-		"config_allow_user_register":          {"true"},
-		"config_register_captcha":             {"true"},
-		"config_register_email_verify":        {"false"},
-		"config_register_max_clients":         {"0"},
-		"config_register_max_tunnels":         {"0"},
-		"config_register_max_conn":            {"12"},
-		"config_register_upload_limit":        {"128"},
-		"config_register_download_limit":      {"256"},
-		"config_register_expire_days":         {"30"},
-		"config_register_rate_window":         {"60"},
-		"config_register_rate_limit":          {"5"},
-		"config_register_ip_rate_limit":       {"3"},
-		"config_register_email_code_ttl":      {"600"},
-		"config_register_email_code_cooldown": {"60"},
-		"config_enabled_smtp_password":        {"1"},
-		"config_smtp_password":                {""},
-		"config_web_port":                     {"9999"},
+		"config_allow_user_register":              {"true"},
+		"config_register_captcha":                 {"true"},
+		"config_register_email_verify":            {"false"},
+		"config_enabled_register_max_clients":     {"1"},
+		"config_register_max_clients":             {"0"},
+		"config_enabled_register_max_tunnels":     {"1"},
+		"config_register_max_tunnels":             {"0"},
+		"config_enabled_register_max_hosts":       {"1"},
+		"config_register_max_hosts":               {"4"},
+		"config_enabled_register_max_conn":        {"1"},
+		"config_register_max_conn":                {"12"},
+		"config_enabled_register_bandwidth_limit": {"1"},
+		"config_register_bandwidth_limit":         {"512"},
+		"config_register_expire_days":             {"30"},
+		"config_register_rate_window":             {"60"},
+		"config_register_rate_limit":              {"5"},
+		"config_register_ip_rate_limit":           {"3"},
+		"config_register_email_code_ttl":          {"600"},
+		"config_register_email_code_cooldown":     {"60"},
+		"config_enabled_smtp_password":            {"1"},
+		"config_smtp_password":                    {""},
+		"config_web_port":                         {"9999"},
+		"config_delta":                            {"1"},
+		"config_dirty": {
+			"allow_user_register", "register_captcha", "register_email_verify",
+			"register_max_clients", "register_max_tunnels", "register_max_hosts", "register_max_conn",
+			"register_bandwidth_limit", "register_expire_days", "register_rate_window",
+			"register_rate_limit", "register_ip_rate_limit", "register_email_code_ttl",
+			"register_email_code_cooldown", "smtp_password",
+		},
 	}
 	request := httptest.NewRequest(http.MethodPost, "/global/registration/save", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -288,11 +312,16 @@ func TestRegistrationScopedUpdatesPreserveUnrelatedSettings(t *testing.T) {
 	}
 	effective := effectiveServerConfigValues(serverConfigKeyValues(content), updates)
 	if effective["allow_user_register"] != "true" ||
-		effective["register_max_conn"] != "12" ||
-		effective["register_upload_limit"] != "128" ||
-		effective["register_download_limit"] != "256" ||
+		effective["register_max_hosts"] != "4" ||
+		effective["register_bandwidth_limit"] != "512" ||
 		effective["register_expire_days"] != "30" {
 		t.Fatalf("registration updates were not applied: %#v", effective)
+	}
+	if effective["register_max_clients"] != "0" || effective["register_max_tunnels"] != "0" {
+		t.Fatalf("three-state zero updates were not persisted: %#v", effective)
+	}
+	if effective["register_upload_limit"] != "0" || effective["register_download_limit"] != "0" {
+		t.Fatalf("legacy directional bandwidth fields must be preserved without visual updates: %#v", effective)
 	}
 	if effective["smtp_password"] != "existing-secret" {
 		t.Fatal("leaving an enabled masked SMTP password blank should preserve the current value")
@@ -371,6 +400,8 @@ func TestCertificateScopedUpdatesDoNotRemoveUnrelatedOptionalSettings(t *testing
 		"config_web_open_ssl":           {"false"},
 		"config_tls_enable":             {"false"},
 		"config_http_proxy_port":        {"9999"},
+		"config_delta":                  {"1"},
+		"config_dirty":                  {"force_auto_ssl", "web_open_ssl", "tls_enable"},
 	}
 	request := httptest.NewRequest(http.MethodPost, "/global/certificate/config", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -489,6 +520,109 @@ func TestServerConfigMissingRequiredFieldRemainsEditable(t *testing.T) {
 	t.Fatal("web_ip field was not found")
 }
 
+func withSettingsFixture(t *testing.T, conf string) string {
+	t.Helper()
+	previous := common.ConfPath
+	common.ConfPath = t.TempDir()
+	t.Cleanup(func() {
+		common.ConfPath = previous
+		settings.ResetForTest()
+	})
+	confPath := filepath.Join(common.ConfPath, "conf")
+	if err := os.MkdirAll(confPath, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(confPath, "nps.conf")
+	if err := os.WriteFile(path, []byte(conf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sqlite, err := store.Open(filepath.Join(confPath, "nps.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlite.Close() })
+	settings.ResetForTest()
+	if err := settings.Init(common.ConfPath, sqlite); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestServerConfigSectionsRenderManagedKeysOnce(t *testing.T) {
+	path := withSettingsFixture(t, "web_port=8081\nallow_user_login=true\nregister_rate_limit=7\n")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sections, _, err := serverConfigSections(string(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := make(map[string]int)
+	for _, section := range sections {
+		for _, field := range section.Fields {
+			seen[field.Key]++
+		}
+	}
+	for _, key := range []string{"allow_user_login", "register_rate_limit"} {
+		if seen[key] != 1 {
+			t.Fatalf("%s rendered %d times, want exactly once", key, seen[key])
+		}
+	}
+}
+
+func TestSaveServerConfigSourceRejectsStaleRevisionBeforeSettingsWrite(t *testing.T) {
+	path := withSettingsFixture(t, "web_port=8081\nallow_user_login=false\n")
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(string(original), "web_port=8081", "web_port=18081", 1) + "allow_user_login=true\n"
+	staleRevision := serverConfigSourceRevision(append(append([]byte(nil), original...), '\n'))
+	if _, _, err := saveServerConfigSource(path, updated, staleRevision, common.GetRunPath()); !errors.Is(err, errServerConfigSourceConflict) {
+		t.Fatalf("stale source revision error = %v, want conflict", err)
+	}
+	if got, ok := settings.Get("allow_user_login"); !ok || got != "false" {
+		t.Fatalf("stale save changed SQLite setting: %q, %v", got, ok)
+	}
+	current, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(current) != string(original) {
+		t.Fatalf("stale save changed nps.conf: %s", current)
+	}
+}
+
+func TestSaveServerConfigSourceMovesManagedKeysToSQLiteAndStripsFile(t *testing.T) {
+	path := withSettingsFixture(t, "web_port=8081\nallow_user_login=false\n")
+	original, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.TrimRight(string(original), "\n") + "\nallow_user_login=true\n"
+	changed, _, err := saveServerConfigSource(path, updated, serverConfigSourceRevision(original), common.GetRunPath())
+	if err != nil {
+		t.Fatalf("saveServerConfigSource() error = %v", err)
+	}
+	if !changed {
+		t.Fatal("managed setting change was not reported")
+	}
+	if got, ok := settings.Get("allow_user_login"); !ok || got != "true" {
+		t.Fatalf("SQLite setting = %q, %v", got, ok)
+	}
+	stored, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(stored), "allow_user_login=") {
+		t.Fatalf("managed key was left in nps.conf: %s", stored)
+	}
+	if !strings.Contains(string(stored), "web_port=8081") {
+		t.Fatalf("boot setting was removed from nps.conf: %s", stored)
+	}
+}
+
 func TestValidateServerConfigSourceAcceptsDefaultTemplate(t *testing.T) {
 	if err := validateServerConfigSource(npsconf.DefaultNpsConf); err != nil {
 		t.Fatalf("default nps.conf source rejected: %v", err)
@@ -509,14 +643,14 @@ func TestValidateServerConfigSourceRejectsMalformedAndInvalidValues(t *testing.T
 }
 
 func TestSaveServerConfigSourceUsesRevisionAndPreservesContent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nps.conf")
+	path := withSettingsFixture(t, "")
 	original := "# keep this comment\nweb_port=8081\ncustom_flag=yes\n"
 	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
 		t.Fatal(err)
 	}
 	revision := serverConfigSourceRevision([]byte(original))
 	updated := "# keep this comment\nweb_port=18081\ncustom_flag=yes\n"
-	changed, nextRevision, err := saveServerConfigSource(path, updated, revision)
+	changed, nextRevision, err := saveServerConfigSource(path, updated, revision, common.GetRunPath())
 	if err != nil {
 		t.Fatalf("saveServerConfigSource() error = %v", err)
 	}
@@ -530,7 +664,7 @@ func TestSaveServerConfigSourceUsesRevisionAndPreservesContent(t *testing.T) {
 	if string(data) != updated {
 		t.Fatalf("source content was not preserved exactly:\n%s", data)
 	}
-	if _, _, err := saveServerConfigSource(path, updated+"\n", revision); !errors.Is(err, errServerConfigSourceConflict) {
+	if _, _, err := saveServerConfigSource(path, updated+"\n", revision, common.GetRunPath()); !errors.Is(err, errServerConfigSourceConflict) {
 		t.Fatalf("stale revision error = %v, want conflict", err)
 	}
 }
@@ -581,6 +715,10 @@ func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
 		}
 		form.Set("config_"+key, value)
 	}
+	form.Set("config_delta", "1")
+	for _, key := range generalServerConfigKeys() {
+		form.Add("config_dirty", key)
+	}
 	request := httptest.NewRequest("POST", "/global/config/save", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	updates, err := parseServerConfigUpdates(request, npsconf.DefaultNpsConf)
@@ -595,6 +733,20 @@ func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
 	}
 	if !foundOmit {
 		t.Fatal("an optional setting that was not enabled should be omitted")
+	}
+
+	form.Set("config_enabled_http_proxy_port", "0")
+	form.Set("config_http_proxy_port", "8080")
+	request = httptest.NewRequest("POST", "/global/config/save", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	updates, err = parseServerConfigUpdates(request, npsconf.DefaultNpsConf)
+	if err != nil {
+		t.Fatalf("parseServerConfigUpdates(disabled=0) error = %v", err)
+	}
+	for _, update := range updates {
+		if update.Key == "http_proxy_port" && !update.Omit {
+			t.Fatal("explicit config_enabled_*=0 must omit the optional setting")
+		}
 	}
 
 	form.Set("config_enabled_http_proxy_port", "1")
@@ -657,6 +809,15 @@ func TestParseGeneralServerConfigUpdatesIgnoresDedicatedPageSettingsAndRelations
 		"bridge_cert_file=conf/ssl/bridge.pem",
 	}, "\n")
 	request := httptest.NewRequest(http.MethodPost, "/global/config/save", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	form.Set("config_delta", "1")
+	for key := range form {
+		if strings.HasPrefix(key, "config_") && key != "config_delta" && key != "config_dirty" &&
+			!strings.HasPrefix(key, "config_enabled_") {
+			form.Add("config_dirty", strings.TrimPrefix(key, "config_"))
+		}
+	}
+	request = httptest.NewRequest(http.MethodPost, "/global/config/save", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	updates, err := parseServerConfigUpdates(request, current)
 	if err != nil {

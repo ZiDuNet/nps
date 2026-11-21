@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -350,6 +351,77 @@ func TestClientIdentityRenamePreservesClientIdentity(t *testing.T) {
 				t.Fatalf("rename must change only the label, got id=%d owner=%d remark=%q", saved.Id, saved.UserId, saved.Remark)
 			}
 		})
+	}
+}
+
+func TestClientJSONPatchRateLimitPreservesUnsubmittedFields(t *testing.T) {
+	utils := useClientPermissionTestDb(t)
+	utils.JsonDb.Users.Store(1, &file.User{
+		Id: 1, UserName: "alice", Password: "secret", Status: true,
+	})
+	client := &file.Client{
+		Id:               9,
+		UserId:           1,
+		VerifyKey:        "keep-vkey",
+		Status:           true,
+		Remark:           "keep-remark",
+		Cnf:              &file.Config{U: "keep-user", P: "keep-password", Compress: true, Crypt: true},
+		ConfigConnAllow:  true,
+		RateLimit:        50_000_000,
+		MaxConn:          20,
+		MaxTunnelNum:     3,
+		Flow:             &file.Flow{FlowLimit: 1024},
+		WebUserName:      "keep-legacy",
+		WebPassword:      "keep-legacy-password",
+		ExpireTime:       "2035-01-01 00:00:00",
+		BlackIpList:      []string{"192.0.2.10"},
+		WhiteIpList:      []string{"198.51.100.10"},
+		IpListPriority:   1,
+		RegisterKey:      "keep-register",
+		RegisterMaxHours: 9,
+		RegisteredOnly:   true,
+	}
+	utils.JsonDb.Clients.Store(client.Id, client)
+	t.Cleanup(func() {
+		client.RLock()
+		rate := client.Rate
+		client.RUnlock()
+		if rate != nil {
+			rate.Stop()
+		}
+	})
+
+	sessionValues := testUserSession(1)
+	sessionValues["isAdmin"] = true
+	controller, recorder := newClientPermissionController(t, "Edit", url.Values{
+		"id":         {"9"},
+		"rate_limit": {"2147.483648"},
+	}, sessionValues)
+	runClientPermissionAction(t, controller.Edit)
+	if response := readClientPermissionResponse(t, recorder); response["status"] != float64(1) {
+		t.Fatalf("JSON-like PATCH response = %#v", response)
+	}
+
+	saved, err := utils.GetClient(9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved.RLock()
+	defer saved.RUnlock()
+	if want := int64(math.MaxInt32) + 1; saved.RateLimit != want {
+		t.Fatalf("rate limit = %d bps, want %d", saved.RateLimit, want)
+	}
+	if saved.VerifyKey != "keep-vkey" || saved.Remark != "keep-remark" || saved.UserId != 1 ||
+		saved.MaxConn != 20 || saved.MaxTunnelNum != 3 || saved.Flow == nil || saved.Flow.FlowLimit != 1024 ||
+		saved.ExpireTime != "2035-01-01 00:00:00" || !saved.ConfigConnAllow || !saved.RegisteredOnly ||
+		saved.RegisterKey != "keep-register" || saved.RegisterMaxHours != 9 ||
+		saved.Cnf == nil || saved.Cnf.U != "keep-user" || saved.Cnf.P != "keep-password" ||
+		!saved.Cnf.Compress || !saved.Cnf.Crypt ||
+		strings.Join(saved.BlackIpList, ",") != "192.0.2.10" ||
+		strings.Join(saved.WhiteIpList, ",") != "198.51.100.10" ||
+		saved.IpListPriority != 1 ||
+		saved.WebUserName != "keep-legacy" || saved.WebPassword != "keep-legacy-password" {
+		t.Fatalf("rate-limit-only PATCH changed other fields: %#v", saved)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/crypt"
+	"ehang.io/nps/lib/settings"
 	"github.com/astaxie/beego"
 	beecontext "github.com/astaxie/beego/context"
 )
@@ -213,11 +214,10 @@ func (s *SecurityController) TOTPConfirm() {
 		s.AjaxErr("认证器动态验证码不正确，请确认设备时间后重试")
 		return
 	}
-	if _, err := writeServerConfig(serverConfigPath(), []serverConfigUpdate{{Key: "totp_secret", Value: secret}}); err != nil {
+	if err := settings.Save(map[string]string{"totp_secret": secret}, nil); err != nil {
 		s.AjaxErr("保存 TOTP 配置失败: " + err.Error())
 		return
 	}
-	_ = beego.AppConfig.Set("totp_secret", secret)
 	if err := refreshAdminSessionsAfterCredentialChange(&s.Controller, s.Ctx, time.Now()); err != nil {
 		s.AjaxErr("TOTP 已保存，但旧登录会话清理失败，请立即在“登录设备与免登凭证”中退出所有设备")
 		return
@@ -246,11 +246,10 @@ func (s *SecurityController) TOTPDisable() {
 		s.AjaxErr("认证器动态验证码不正确")
 		return
 	}
-	if _, err := writeServerConfig(serverConfigPath(), []serverConfigUpdate{{Key: "totp_secret", Value: "", Omit: true}}); err != nil {
+	if err := settings.Save(nil, []string{"totp_secret"}); err != nil {
 		s.AjaxErr("关闭 TOTP 失败: " + err.Error())
 		return
 	}
-	_ = beego.AppConfig.Set("totp_secret", "")
 	if err := refreshAdminSessionsAfterCredentialChange(&s.Controller, s.Ctx, time.Now()); err != nil {
 		s.AjaxErr("TOTP 已关闭，但旧登录会话清理失败，请立即在“登录设备与免登凭证”中退出所有设备")
 		return
@@ -273,17 +272,14 @@ func (s *SecurityController) SavePoW() {
 		s.AjaxErr("PoW 难度必须是 8-28 之间的整数")
 		return
 	}
-	updates := []serverConfigUpdate{
-		{Key: "force_pow", Value: strconv.FormatBool(enabled)},
-		{Key: "pow_bits", Value: strconv.Itoa(bits)},
-	}
-	changed, err := writeServerConfig(serverConfigPath(), updates)
-	if err != nil {
+	changed := []string{"force_pow", "pow_bits"}
+	if err := settings.Save(map[string]string{
+		"force_pow": strconv.FormatBool(enabled),
+		"pow_bits":  strconv.Itoa(bits),
+	}, nil); err != nil {
 		s.AjaxErr("保存 PoW 配置失败: " + err.Error())
 		return
 	}
-	_ = beego.AppConfig.Set("force_pow", strconv.FormatBool(enabled))
-	_ = beego.AppConfig.Set("pow_bits", strconv.Itoa(bits))
 	s.auditMutation("security.pow.update", "nps.conf", 0, 0, "", nil, map[string]string{"changed": strconv.Itoa(len(changed))})
 	s.Data["json"] = s.withRequestMeta(map[string]interface{}{
 		"status": 1, "msg": "登录 PoW 配置已保存并立即生效", "changed": changed,

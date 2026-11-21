@@ -438,13 +438,13 @@ func CopyWaitGroupWithLimits(conn1, conn2 net.Conn, crypt bool, snappy bool, rt 
 // P2P connections deliberately keep using the no-user-limit path.
 func CopyWaitGroupWithUserLimits(conn1, conn2 net.Conn, crypt bool, snappy bool, rt *rate.Rate,
 	flow *file.Flow, isServer bool, rb []byte, task *file.Tunnel, host *file.Host,
-	userRate *rate.Directional, tlsFingerprint ...string) (in, out int64) {
+	userRate *rate.Shared, tlsFingerprint ...string) (in, out int64) {
 	return copyWaitGroupWithUserLimits(conn1, conn2, crypt, snappy, rt, flow, isServer, rb, task, host, userRate, tlsFingerprint...)
 }
 
 func copyWaitGroupWithUserLimits(conn1, conn2 net.Conn, crypt bool, snappy bool, rt *rate.Rate,
 	flow *file.Flow, isServer bool, rb []byte, task *file.Tunnel, host *file.Host,
-	userRate *rate.Directional, tlsFingerprint ...string) (in, out int64) {
+	userRate *rate.Shared, tlsFingerprint ...string) (in, out int64) {
 	//var in, out int64
 	//var wg sync.WaitGroup
 	connHandle := GetConnWithUserLimits(conn1, crypt, snappy, rt, isServer, task, host, userRate, tlsFingerprint...)
@@ -494,7 +494,7 @@ func GetConnWithLimits(conn net.Conn, cpt, snappy bool, rt *rate.Rate, isServer 
 // GetConnWithUserLimits layers an optional user-wide shared bucket without
 // changing the historical helper used by NPC and non-forwarding paths.
 func GetConnWithUserLimits(conn net.Conn, cpt, snappy bool, rt *rate.Rate, isServer bool,
-	task *file.Tunnel, host *file.Host, userRate *rate.Directional, tlsFingerprint ...string) io.ReadWriteCloser {
+	task *file.Tunnel, host *file.Host, userRate *rate.Shared, tlsFingerprint ...string) io.ReadWriteCloser {
 	var wrapped io.ReadWriteCloser = conn
 	if cpt {
 		if isServer {
@@ -505,7 +505,7 @@ func GetConnWithUserLimits(conn net.Conn, cpt, snappy bool, rt *rate.Rate, isSer
 	} else if snappy {
 		wrapped = NewSnappyConn(conn)
 	}
-	var entry []*rate.Directional
+	var entry []rate.Limiter
 	if task != nil {
 		entry = append(entry, task.RateLimiter())
 	}

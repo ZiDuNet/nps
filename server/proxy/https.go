@@ -708,6 +708,21 @@ func (https *HttpsServer) handleHTTPSJustProxy(c net.Conn, host *file.Host, host
 		_ = c.Close()
 		return
 	}
+	if SourceDenied(c.RemoteAddr(), hostClient, &host.SourceLists, "host") || IsGlobalBlackIp(c.RemoteAddr().String()) ||
+		isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isHostRegisteredOnlyBlocked(hostClient, host, c.RemoteAddr().String()) {
+		logs.Warn("https just-proxy connection rejected by IP policy, host %s, remote addr %s", hostName, c.RemoteAddr().String())
+		_ = c.Close()
+		return
+	}
+	if err := https.CheckFlowAndConnNum(hostClient); err != nil {
+		hostClient.RLock()
+		clientID := hostClient.Id
+		hostClient.RUnlock()
+		logs.Warn("client id %d, host id %d, error %s, when https just-proxy connection", clientID, host.Id, err.Error())
+		_ = c.Close()
+		return
+	}
+	defer hostClient.AddConn()
 	targetAddr, err := hostTarget.GetRandomTarget()
 	if err != nil {
 		_ = c.Close()
@@ -768,6 +783,21 @@ func (https *HttpsServer) handleTLSOffloadWithCert(c net.Conn, host *file.Host, 
 		_ = tlsConn.Close()
 		return
 	}
+	if SourceDenied(c.RemoteAddr(), hostClient, &host.SourceLists, "host") || IsGlobalBlackIp(c.RemoteAddr().String()) ||
+		isClientBlackBlocked(hostClient, c.RemoteAddr().String()) || isHostRegisteredOnlyBlocked(hostClient, host, c.RemoteAddr().String()) {
+		logs.Warn("tls offload connection rejected by IP policy, host %s, remote addr %s", hostName, c.RemoteAddr().String())
+		_ = tlsConn.Close()
+		return
+	}
+	if err := https.CheckFlowAndConnNum(hostClient); err != nil {
+		hostClient.RLock()
+		clientID := hostClient.Id
+		hostClient.RUnlock()
+		logs.Warn("client id %d, host id %d, error %s, when tls offload connection", clientID, host.Id, err.Error())
+		_ = tlsConn.Close()
+		return
+	}
+	defer hostClient.AddConn()
 	targetAddr, err := hostTarget.GetRandomTarget()
 	if err != nil {
 		_ = tlsConn.Close()

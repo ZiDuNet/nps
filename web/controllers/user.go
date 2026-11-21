@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
 	"ehang.io/nps/server"
+	"github.com/astaxie/beego/logs"
 )
 
 type UserController struct {
@@ -19,25 +21,32 @@ type UserController struct {
 // userListRow deliberately keeps the historical response shape while never
 // sending stored credentials to the browser.
 type userListRow struct {
-	Id            int
-	UserName      string
-	Password      string
-	Email         string
-	Status        bool
-	Remark        string
-	ClientCount   int
-	TunnelCount   int
-	MaxClientNum  int
-	MaxTunnelNum  int
-	MaxConn       int
-	UploadLimit   int
-	DownloadLimit int
-	Connections   int64
-	UploadRate    int64
-	DownloadRate  int64
-	ExpireTime    string
-	CreateTime    string
-	APIKeyEnabled bool
+	Id             int
+	UserName       string
+	Password       string
+	Email          string
+	Status         bool
+	Remark         string
+	ClientCount    int
+	TunnelCount    int
+	HostCount      int
+	MaxClientNum   *int
+	MaxTunnelNum   *int
+	MaxHostNum     *int
+	MaxConn        *int
+	BandwidthLimit *int64
+	MaxClientState string
+	MaxTunnelState string
+	MaxHostState   string
+	MaxConnState   string
+	BandwidthState string
+	BandwidthMbps  string
+	Connections    int64
+	UploadRate     int64
+	DownloadRate   int64
+	ExpireTime     string
+	CreateTime     string
+	APIKeyEnabled  bool
 }
 
 func newUserListRows(users []*file.User) []*userListRow {
@@ -52,49 +61,74 @@ func newUserListRowsWithResourceCounts(users []*file.User, counts map[int]file.U
 		}
 		user.RLock()
 		id, userName, status := user.Id, user.UserName, user.Status
-		email, remark, maxClientNum, maxTunnelNum := user.Email, user.Remark, user.MaxClientNum, user.MaxTunnelNum
-		maxConn, uploadLimit, downloadLimit := user.MaxConn, user.UploadLimit, user.DownloadLimit
+		email, remark := user.Email, user.Remark
+		maxClientNum := file.IntQuotaSnapshot(user.MaxClientNum)
+		maxTunnelNum := file.IntQuotaSnapshot(user.MaxTunnelNum)
+		maxHostNum := file.IntQuotaSnapshot(user.MaxHostNum)
+		maxConn := file.IntQuotaSnapshot(user.MaxConn)
+		bandwidthLimit := file.Int64QuotaSnapshot(user.BandwidthLimit)
 		expireTime, createTime, apiKeyHash := user.ExpireTime, user.CreateTime, user.APIKeyHash
 		user.RUnlock()
 		connections, _, uploadRate, downloadRate := file.UserRuntimeSnapshot(id)
 		resourceCounts := counts[id]
+		bandwidthMbps := ""
+		if bandwidthLimit != nil {
+			bandwidthMbps = rate.FormatMbps(*bandwidthLimit)
+		}
 		rows = append(rows, &userListRow{
-			Id:            id,
-			UserName:      html.UnescapeString(userName),
-			Password:      "",
-			Email:         html.UnescapeString(email),
-			Status:        status,
-			Remark:        html.UnescapeString(remark),
-			ClientCount:   resourceCounts.ClientCount,
-			TunnelCount:   resourceCounts.TunnelCount,
-			MaxClientNum:  maxClientNum,
-			MaxTunnelNum:  maxTunnelNum,
-			MaxConn:       maxConn,
-			UploadLimit:   uploadLimit,
-			DownloadLimit: downloadLimit,
-			Connections:   connections,
-			UploadRate:    uploadRate,
-			DownloadRate:  downloadRate,
-			ExpireTime:    expireTime,
-			CreateTime:    createTime,
-			APIKeyEnabled: strings.TrimSpace(apiKeyHash) != "",
+			Id:             id,
+			UserName:       html.UnescapeString(userName),
+			Password:       "",
+			Email:          html.UnescapeString(email),
+			Status:         status,
+			Remark:         html.UnescapeString(remark),
+			ClientCount:    resourceCounts.ClientCount,
+			TunnelCount:    resourceCounts.TunnelCount,
+			HostCount:      resourceCounts.HostCount,
+			MaxClientNum:   maxClientNum,
+			MaxTunnelNum:   maxTunnelNum,
+			MaxHostNum:     maxHostNum,
+			MaxConn:        maxConn,
+			BandwidthLimit: bandwidthLimit,
+			MaxClientState: quotaState(maxClientNum),
+			MaxTunnelState: quotaState(maxTunnelNum),
+			MaxHostState:   quotaState(maxHostNum),
+			MaxConnState:   quotaState(maxConn),
+			BandwidthState: quotaInt64State(bandwidthLimit),
+			BandwidthMbps:  bandwidthMbps,
+			Connections:    connections,
+			UploadRate:     uploadRate,
+			DownloadRate:   downloadRate,
+			ExpireTime:     expireTime,
+			CreateTime:     createTime,
+			APIKeyEnabled:  strings.TrimSpace(apiKeyHash) != "",
 		})
 	}
 	return rows
 }
 
-func normalizeUserTunnelLimit(limit int) int {
-	if limit < 0 {
-		return 0
+// quotaState exposes the three-state user quota as a stable wire value so the
+// dashboard never has to infer "0 means not included" from a numeric field.
+func quotaState(value *int) string {
+	switch {
+	case value == nil:
+		return "unlimited"
+	case *value == 0:
+		return "not_included"
+	default:
+		return "limited"
 	}
-	return limit
 }
 
-func normalizeUserClientLimit(limit int) int {
-	if limit < 0 {
-		return 0
+func quotaInt64State(value *int64) string {
+	switch {
+	case value == nil:
+		return "unlimited"
+	case *value == 0:
+		return "not_included"
+	default:
+		return "limited"
 	}
-	return limit
 }
 
 func normalizeUserExpireTime(value string) (string, error) {
@@ -120,7 +154,74 @@ func parseUserStatus(value string) (bool, error) {
 	return strconv.ParseBool(value)
 }
 
-func newUserUpdateCandidate(existing *file.User, username, password, email, remark string, maxClientNum, maxTunnelNum, maxConn, uploadLimit, downloadLimit int, expireTime string) *file.User {
+// userQuotaForm parses the three-state user quota fields. A missing field keeps
+// the existing stored value, a blank field clears it to unlimited, and zero is
+// preserved as the explicit "not included" state.
+type userQuotaForm struct {
+	maxClientNum *int
+	maxTunnelNum *int
+	maxHostNum   *int
+	maxConn      *int
+	bandwidthBps *int64
+}
+
+func parseUserQuotaForm(s *UserController, existing *file.User) (userQuotaForm, error) {
+	form := userQuotaForm{}
+	if existing != nil {
+		existing.RLock()
+		form.maxClientNum = file.IntQuotaSnapshot(existing.MaxClientNum)
+		form.maxTunnelNum = file.IntQuotaSnapshot(existing.MaxTunnelNum)
+		form.maxHostNum = file.IntQuotaSnapshot(existing.MaxHostNum)
+		form.maxConn = file.IntQuotaSnapshot(existing.MaxConn)
+		form.bandwidthBps = file.Int64QuotaSnapshot(existing.BandwidthLimit)
+		existing.RUnlock()
+	}
+	if s == nil || s.Ctx == nil || s.Ctx.Request == nil {
+		return form, nil
+	}
+	if err := s.Ctx.Request.ParseForm(); err != nil {
+		return form, err
+	}
+	intFields := []struct {
+		key     string
+		target  **int
+		current *int
+	}{
+		{"max_client", &form.maxClientNum, form.maxClientNum},
+		{"max_tunnel", &form.maxTunnelNum, form.maxTunnelNum},
+		{"max_host", &form.maxHostNum, form.maxHostNum},
+		{"max_conn", &form.maxConn, form.maxConn},
+	}
+	for _, field := range intFields {
+		values, submitted := s.Ctx.Request.Form[field.key]
+		if !submitted {
+			continue
+		}
+		raw := ""
+		if len(values) > 0 {
+			raw = values[len(values)-1]
+		}
+		parsed, _, parseErr := file.ParseIntQuotaInput(raw)
+		if parseErr != nil {
+			return form, parseErr
+		}
+		*field.target = parsed
+	}
+	if values, submitted := s.Ctx.Request.Form["bandwidth_limit"]; submitted {
+		raw := ""
+		if len(values) > 0 {
+			raw = values[len(values)-1]
+		}
+		parsed, _, parseErr := file.ParseMbpsQuotaInput(raw)
+		if parseErr != nil {
+			return form, parseErr
+		}
+		form.bandwidthBps = parsed
+	}
+	return form, nil
+}
+
+func newUserUpdateCandidate(existing *file.User, username, password, email, remark string, quotas userQuotaForm, expireTime string) *file.User {
 	existing.RLock()
 	id, existingPassword, existingAPIKeyHash, existingAPIKeyCiphertext, existingDashboardKeyHash, existingDashboardKeyCiphertext, status, createTime := existing.Id, existing.Password, existing.APIKeyHash, existing.APIKeyCiphertext, existing.DashboardKeyHash, existing.DashboardKeyCiphertext, existing.Status, existing.CreateTime
 	existing.RUnlock()
@@ -135,11 +236,11 @@ func newUserUpdateCandidate(existing *file.User, username, password, email, rema
 		DashboardKeyCiphertext: existingDashboardKeyCiphertext,
 		Status:                 status,
 		Remark:                 remark,
-		MaxClientNum:           maxClientNum,
-		MaxTunnelNum:           maxTunnelNum,
-		MaxConn:                maxConn,
-		UploadLimit:            uploadLimit,
-		DownloadLimit:          downloadLimit,
+		MaxClientNum:           quotas.maxClientNum,
+		MaxTunnelNum:           quotas.maxTunnelNum,
+		MaxHostNum:             quotas.maxHostNum,
+		MaxConn:                quotas.maxConn,
+		BandwidthLimit:         quotas.bandwidthBps,
 		ExpireTime:             expireTime,
 		CreateTime:             createTime,
 	}
@@ -193,11 +294,18 @@ func (s *UserController) RegenerateAPIKey() {
 		return
 	}
 	user.Lock()
+	previousHash, previousCiphertext := user.APIKeyHash, user.APIKeyCiphertext
 	user.APIKeyHash = tokenHash
 	user.APIKeyCiphertext = ciphertext
 	username := user.UserName
 	user.Unlock()
-	file.GetDb().JsonDb.StoreUsersToJsonFile()
+	if err := file.GetDb().JsonDb.StoreUsersToJsonFileErr(); err != nil {
+		user.Lock()
+		user.APIKeyHash, user.APIKeyCiphertext = previousHash, previousCiphertext
+		user.Unlock()
+		s.AjaxErr("API 密钥保存失败")
+		return
+	}
 	s.auditMutation("user.api_key_rotate", "user", targetID, targetID, "", nil, map[string]string{"username": username})
 	s.Data["json"] = map[string]interface{}{"status": 1, "msg": "API Token 已生成，可随时在接入与安全页面再次查看", "token": token}
 	s.ServeJSON()
@@ -292,11 +400,18 @@ func (s *UserController) RevokeAPIKey() {
 		return
 	}
 	user.Lock()
+	previousHash, previousCiphertext := user.APIKeyHash, user.APIKeyCiphertext
 	user.APIKeyHash = ""
 	user.APIKeyCiphertext = ""
 	username := user.UserName
 	user.Unlock()
-	file.GetDb().JsonDb.StoreUsersToJsonFile()
+	if err := file.GetDb().JsonDb.StoreUsersToJsonFileErr(); err != nil {
+		user.Lock()
+		user.APIKeyHash, user.APIKeyCiphertext = previousHash, previousCiphertext
+		user.Unlock()
+		s.AjaxErr("API 密钥撤销失败")
+		return
+	}
 	s.auditMutation("user.api_key_revoke", "user", targetID, targetID, "", nil, map[string]string{"username": username})
 	s.AjaxOk("API 密钥已撤销")
 }
@@ -350,19 +465,24 @@ func (s *UserController) Add() {
 		s.AjaxErr(err.Error())
 		return
 	}
+	quotas, err := parseUserQuotaForm(s, nil)
+	if err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
 	u := &file.User{
-		UserName:      s.getEscapeString("username"),
-		Password:      s.GetString("password"),
-		Email:         strings.TrimSpace(s.GetString("email")),
-		Status:        true,
-		Remark:        s.getEscapeString("remark"),
-		MaxClientNum:  normalizeUserClientLimit(s.GetIntNoErr("max_client")),
-		MaxTunnelNum:  normalizeUserTunnelLimit(s.GetIntNoErr("max_tunnel")),
-		MaxConn:       normalizeUserClientLimit(s.GetIntNoErr("max_conn")),
-		UploadLimit:   normalizeUserClientLimit(s.GetIntNoErr("upload_limit")),
-		DownloadLimit: normalizeUserClientLimit(s.GetIntNoErr("download_limit")),
-		ExpireTime:    expireTime,
-		CreateTime:    time.Now().Format("2006-01-02 15:04:05"),
+		UserName:       s.getEscapeString("username"),
+		Password:       s.GetString("password"),
+		Email:          strings.TrimSpace(s.GetString("email")),
+		Status:         true,
+		Remark:         s.getEscapeString("remark"),
+		MaxClientNum:   quotas.maxClientNum,
+		MaxTunnelNum:   quotas.maxTunnelNum,
+		MaxHostNum:     quotas.maxHostNum,
+		MaxConn:        quotas.maxConn,
+		BandwidthLimit: quotas.bandwidthBps,
+		ExpireTime:     expireTime,
+		CreateTime:     time.Now().Format("2006-01-02 15:04:05"),
 	}
 	if err := file.GetDb().NewUser(u); err != nil {
 		s.AjaxErr(err.Error())
@@ -382,6 +502,13 @@ func (s *UserController) Edit() {
 			return
 		}
 		s.Data["u"] = u
+		u.RLock()
+		bandwidth := int64(0)
+		if u.BandwidthLimit != nil {
+			bandwidth = *u.BandwidthLimit
+		}
+		u.RUnlock()
+		s.Data["bandwidthMbps"] = rate.FormatMbps(bandwidth)
 		s.SetInfo("edit user")
 		s.display()
 		return
@@ -399,17 +526,18 @@ func (s *UserController) Edit() {
 		s.AjaxErr(err.Error())
 		return
 	}
+	quotas, err := parseUserQuotaForm(s, u)
+	if err != nil {
+		s.AjaxErr(err.Error())
+		return
+	}
 	updated := newUserUpdateCandidate(
 		u,
 		s.getEscapeString("username"),
 		s.GetString("password"),
 		strings.TrimSpace(s.GetString("email")),
 		s.getEscapeString("remark"),
-		normalizeUserClientLimit(s.GetIntNoErr("max_client")),
-		normalizeUserTunnelLimit(s.GetIntNoErr("max_tunnel")),
-		normalizeUserClientLimit(s.GetIntNoErr("max_conn")),
-		normalizeUserClientLimit(s.GetIntNoErr("upload_limit")),
-		normalizeUserClientLimit(s.GetIntNoErr("download_limit")),
+		quotas,
 		expireTime,
 	)
 	if err := file.GetDb().UpdateUser(updated); err != nil {
@@ -472,8 +600,13 @@ func (s *UserController) ChangePassword() {
 
 	user.RLock()
 	username, currentPassword, status, remark := user.UserName, user.Password, user.Status, user.Remark
-	email, maxConn, uploadLimit, downloadLimit := user.Email, user.MaxConn, user.UploadLimit, user.DownloadLimit
-	maxClientNum, maxTunnelNum, expireTime, createTime, apiKeyHash, apiKeyCiphertext, dashboardKeyHash, dashboardKeyCiphertext := user.MaxClientNum, user.MaxTunnelNum, user.ExpireTime, user.CreateTime, user.APIKeyHash, user.APIKeyCiphertext, user.DashboardKeyHash, user.DashboardKeyCiphertext
+	email := user.Email
+	maxConn := file.IntQuotaSnapshot(user.MaxConn)
+	bandwidthLimit := file.Int64QuotaSnapshot(user.BandwidthLimit)
+	maxClientNum := file.IntQuotaSnapshot(user.MaxClientNum)
+	maxTunnelNum := file.IntQuotaSnapshot(user.MaxTunnelNum)
+	maxHostNum := file.IntQuotaSnapshot(user.MaxHostNum)
+	expireTime, createTime, apiKeyHash, apiKeyCiphertext, dashboardKeyHash, dashboardKeyCiphertext := user.ExpireTime, user.CreateTime, user.APIKeyHash, user.APIKeyCiphertext, user.DashboardKeyHash, user.DashboardKeyCiphertext
 	user.RUnlock()
 	if !s.IsAdmin() {
 		current := s.GetString("current_password")
@@ -492,8 +625,7 @@ func (s *UserController) ChangePassword() {
 		Password:               newPassword,
 		Email:                  email,
 		MaxConn:                maxConn,
-		UploadLimit:            uploadLimit,
-		DownloadLimit:          downloadLimit,
+		BandwidthLimit:         bandwidthLimit,
 		APIKeyHash:             apiKeyHash,
 		APIKeyCiphertext:       apiKeyCiphertext,
 		DashboardKeyHash:       dashboardKeyHash,
@@ -502,6 +634,7 @@ func (s *UserController) ChangePassword() {
 		Remark:                 remark,
 		MaxClientNum:           maxClientNum,
 		MaxTunnelNum:           maxTunnelNum,
+		MaxHostNum:             maxHostNum,
 		ExpireTime:             expireTime,
 		CreateTime:             createTime,
 	}
@@ -533,12 +666,19 @@ func (s *UserController) ChangeStatus() {
 		return
 	}
 	user.Lock()
+	previousStatus := user.Status
 	user.Status = status
 	user.Unlock()
-	if !status {
-		server.RevokeUserClients(id)
+	if err := file.GetDb().JsonDb.StoreUsersToJsonFileErr(); err != nil {
+		user.Lock()
+		user.Status = previousStatus
+		user.Unlock()
+		s.AjaxErr("用户状态保存失败")
+		return
 	}
-	file.GetDb().JsonDb.StoreUsersToJsonFile()
+	if !status {
+		server.PauseUserClients(id)
+	}
 	s.auditMutation("user.status_change", "user", id, id, "", nil, map[string]string{"status": strconv.FormatBool(status)})
 	s.AjaxOk("modified success")
 }
@@ -565,13 +705,54 @@ func (s *UserController) Del() {
 		return
 	}
 	user.Lock()
+	previousStatus := user.Status
 	user.Status = false
 	user.Unlock()
-	file.GetDb().JsonDb.StoreUsersToJsonFile()
-	server.RevokeUserClients(id)
-	if err := file.GetDb().DelUser(id); err != nil {
+	if err := file.GetDb().JsonDb.StoreUsersToJsonFileErr(); err != nil {
+		user.Lock()
+		user.Status = previousStatus
+		user.Unlock()
+		s.AjaxErr("停用用户失败")
+		return
+	}
+	restoreStatus := func() {
+		user.Lock()
+		user.Status = previousStatus
+		user.Unlock()
+		if persistErr := file.GetDb().JsonDb.StoreUsersToJsonFileErr(); persistErr != nil {
+			logs.Error("restore user %d status after delete failure: %v", id, persistErr)
+		}
+	}
+	var committedClients []*file.Client
+	var committedTunnels []*file.Tunnel
+	afterCommit := func(clients []*file.Client, tasks []*file.Tunnel, _ []*file.Host) {
+		committedClients = clients
+		committedTunnels = tasks
+	}
+	if err := file.GetDb().DelUserCascadeWithHook(id, afterCommit); err != nil {
+		restoreStatus()
 		s.AjaxErr("delete error")
 		return
+	}
+	if len(committedClients) > 0 {
+		tasksByClient := make(map[int][]*file.Tunnel)
+		for _, task := range committedTunnels {
+			if task == nil || task.Client == nil {
+				continue
+			}
+			task.RLock()
+			clientID := task.Client.Id
+			task.RUnlock()
+			tasksByClient[clientID] = append(tasksByClient[clientID], task)
+		}
+		for _, client := range committedClients {
+			if client == nil {
+				continue
+			}
+			if cleanupErr := server.FinalizeCommittedClientDeletion(client.Id, tasksByClient[client.Id]); cleanupErr != nil {
+				logs.Warn("user %d was deleted but client %d runtime cleanup failed: %v", id, client.Id, cleanupErr)
+			}
+		}
 	}
 	s.auditMutation("user.delete", "user", id, id, "", nil, nil)
 	s.AjaxOk("delete success")

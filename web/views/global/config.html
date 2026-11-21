@@ -231,11 +231,11 @@
                         </div>
                         <div class="server-config-field__control">
                             {{if $field.Editable}}
-                                {{if $field.Optional}}<label class="server-config-optional"><input type="checkbox" name="config_enabled_{{$field.Key}}" value="1" data-config-enabled="{{$field.Key}}"{{if $field.Enabled}} checked{{end}}><span data-i18n-zh="启用并写入此项" data-i18n-en="Enable and write this setting">启用并写入此项</span></label>{{end}}
+                                {{if $field.Optional}}<label class="server-config-optional"><input type="checkbox" name="config_enabled_{{$field.Key}}" value="1" data-config-enabled="{{$field.Key}}" data-config-enabled-value="{{if $field.Enabled}}1{{else}}0{{end}}"{{if $field.Enabled}} checked{{end}}><span data-i18n-zh="启用并写入此项" data-i18n-en="Enable and write this setting">启用并写入此项</span></label>{{end}}
                                 {{if eq $field.Type "bool"}}
-                                    <select id="server-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}"><option value="true"{{if eq $field.Value "true"}} selected{{end}}>true / 启用</option><option value="false"{{if eq $field.Value "false"}} selected{{end}}>false / 关闭</option></select>
+                                    <select id="server-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}" data-config-value="{{$field.Value}}"><option value="true"{{if eq $field.Value "true"}} selected{{end}}>true / 启用</option><option value="false"{{if eq $field.Value "false"}} selected{{end}}>false / 关闭</option></select>
                                 {{else if eq $field.Type "select"}}
-                                    <select id="server-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}">{{range $option := $field.Options}}<option value="{{$option}}"{{if eq $field.Value $option}} selected{{end}}>{{$option}}</option>{{end}}</select>
+                                    <select id="server-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}" data-config-value="{{$field.Value}}">{{range $option := $field.Options}}<option value="{{$option}}"{{if eq $field.Value $option}} selected{{end}}>{{$option}}</option>{{end}}</select>
                                 {{else if eq $field.Type "secret"}}
                                     <div class="input-group"><input id="server-config-{{$field.Key}}" class="form-control" type="password" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}" placeholder="{{if $field.Present}}已配置，留空保持{{else}}未配置{{end}}" autocomplete="new-password"><button type="button" class="btn btn-outline server-config-reveal server-config-secret-reveal" data-target="server-config-{{$field.Key}}" aria-label="显示或隐藏值" title="显示或隐藏值"><i class="fa fa-eye" aria-hidden="true"></i></button></div>
                                     <span class="server-config-secret-note" data-i18n-zh="敏感值不会回显；留空保持当前值。" data-i18n-en="Secret values are never echoed; leave blank to keep the current value.">敏感值不会回显；留空保持当前值。</span>
@@ -269,7 +269,7 @@
 
             <div class="server-config-empty" id="server-config-empty"><i class="fa fa-search" aria-hidden="true"></i><div data-i18n-zh="没有匹配的配置项" data-i18n-en="No matching settings">没有匹配的配置项</div></div>
             <div class="server-config-savebar">
-                <div class="server-config-savebar__copy"><strong data-i18n-zh="保存可视化配置" data-i18n-en="Save visual configuration">保存可视化配置</strong><span data-i18n-zh="保存后会保留注释和自定义项，并提示是否需要重启。" data-i18n-en="Comments and custom entries are preserved; the panel will ask whether to restart.">保存后会保留注释和自定义项，并提示是否需要重启。</span></div>
+                <div class="server-config-savebar__copy"><strong data-i18n-zh="保存可视化配置" data-i18n-en="Save visual configuration">保存可视化配置</strong><span data-i18n-zh="只提交本页实际修改的字段；未修改的监听端口和自定义项不会被覆盖。" data-i18n-en="Only fields changed on this page are submitted; untouched listeners and custom entries are never overwritten.">只提交本页实际修改的字段；未修改的监听端口和自定义项不会被覆盖。</span></div>
                 <p class="server-config-restart-note" id="server-config-restart-note" hidden data-i18n-zh="配置已保存，重启后才会生效。" data-i18n-en="Configuration saved; restart NPS to apply it.">配置已保存，重启后才会生效。</p>
                 <button class="btn btn-primary" type="submit" id="server-config-save"><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="保存配置" data-i18n-en="Save configuration">保存配置</span></button>
             </div>
@@ -319,18 +319,41 @@ $(function () {
     var sourceNeedsPageReload = false;
     var currentView = 'ui';
     var configValuesTouched = false;
+    var configDirtyKeys = {};
 
     function localText(zh, en) { return npsIsEnglish() ? en : zh; }
     function hydrateInitialValues() {
         if (configValuesTouched) return;
         form.find('[data-config-input][data-config-value]').each(function () {
-            if (this.tagName === 'SELECT' || this.type === 'password') return;
+            if (this.type === 'password') return;
+            this.value = this.getAttribute('data-config-value') || '';
+        });
+        form.find('[data-config-input][data-config-value]').each(function () {
+            if (this.tagName !== 'SELECT') return;
             this.value = this.getAttribute('data-config-value') || '';
         });
     }
-    form.on('input change', '[data-config-input]', function () { configValuesTouched = true; });
+    function markConfigDirty(key) {
+        configValuesTouched = true;
+        configDirtyKeys[key] = true;
+    }
+    form.on('input change', '[data-config-input]', function () {
+        var key = $(this).attr('data-config-input');
+        var input = $(this);
+        if (input.attr('data-config-value') !== undefined && input.attr('type') !== 'password') {
+            if (String(input.val()) === String(input.attr('data-config-value') || '')) {
+                delete configDirtyKeys[key];
+                return;
+            }
+        }
+        markConfigDirty(key);
+    });
+    form.on('change', '[data-config-enabled]', function () {
+        markConfigDirty($(this).attr('data-config-enabled'));
+    });
     form.on('reset', function () {
         configValuesTouched = false;
+        configDirtyKeys = {};
         window.setTimeout(hydrateInitialValues, 0);
     });
     hydrateInitialValues();
@@ -357,8 +380,42 @@ $(function () {
         var field = checkbox.closest('[data-config-field]');
         form.find('[data-config-input="' + key + '"]').prop('disabled', !enabled);
         field.toggleClass('is-disabled', !enabled);
+        var original = checkbox.attr('data-config-enabled-value') === '1';
+        if (!checkbox.length || enabled === original) {
+            delete configDirtyKeys[key];
+        }
     }
     form.find('[data-config-enabled]').each(function () { syncOptional($(this).attr('data-config-enabled')); }).on('change', function () { syncOptional($(this).attr('data-config-enabled')); });
+    function configSubmitPayload() {
+        var payload = form.serializeArray();
+        var selected = {};
+        Object.keys(configDirtyKeys).forEach(function (key) {
+            var input = form.find('[data-config-input="' + key + '"]');
+            if (!input.length) return;
+            var enabled = form.find('[data-config-enabled="' + key + '"]');
+            if (enabled.length && !enabled.prop('checked')) {
+                selected[key] = true;
+                payload.push({name: 'config_dirty', value: key});
+                return;
+            }
+            if (input.attr('data-config-value') !== undefined && input.attr('type') !== 'password' &&
+                String(input.val()) === String(input.attr('data-config-value') || '')) {
+                return;
+            }
+            selected[key] = true;
+            payload.push({name: 'config_dirty', value: key});
+        });
+        payload = payload.filter(function (item) {
+            if (item.name === 'config_dirty' || item.name === 'config_delta') return true;
+            if (item.name.indexOf('config_enabled_') === 0) {
+                return selected[item.name.slice('config_enabled_'.length)] === true;
+            }
+            if (item.name.indexOf('config_') !== 0) return true;
+            return selected[item.name.slice('config_'.length)] === true;
+        });
+        payload.push({name: 'config_delta', value: '1'});
+        return payload;
+    }
     form.on('click', '[data-config-section-toggle]', function (event) {
         if ($(event.target).closest('button').length) return;
         $(this).closest('[data-config-section]').find('[data-config-section-button]').trigger('click');
@@ -439,7 +496,7 @@ $(function () {
         event.preventDefault();
         var save = $('#server-config-save');
         save.prop('disabled', true);
-        $.ajax({type: 'POST', url: '{{.web_base_url}}/global/config/save', data: form.serializeArray(), dataType: 'json'}).done(function (response) {
+        $.ajax({type: 'POST', url: '{{.web_base_url}}/global/config/save', data: configSubmitPayload(), dataType: 'json'}).done(function (response) {
             if (!response || !response.status) {
                 npsNotify('error', (response && response.msg) || localText('配置保存失败', 'Failed to save'));
                 return;

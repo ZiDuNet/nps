@@ -12,15 +12,14 @@ import (
 func TestUserListRowsRedactPasswords(t *testing.T) {
 	rows := newUserListRows([]*file.User{
 		{
-			Id:            7,
-			UserName:      "alice",
-			Password:      "do-not-expose",
-			APIKeyHash:    "stored-hash",
-			Status:        true,
-			Remark:        "<script>alert(1)</script>",
-			MaxConn:       12,
-			UploadLimit:   128,
-			DownloadLimit: 256,
+			Id:             7,
+			UserName:       "alice",
+			Password:       "do-not-expose",
+			APIKeyHash:     "stored-hash",
+			Status:         true,
+			Remark:         "<script>alert(1)</script>",
+			MaxConn:        file.LimitInt(12),
+			BandwidthLimit: file.LimitInt64(128*8192 + 256*8192),
 		},
 	})
 
@@ -38,7 +37,7 @@ func TestUserListRowsRedactPasswords(t *testing.T) {
 	if !strings.Contains(got, `"APIKeyEnabled":true`) {
 		t.Fatalf("user list response did not expose only API token state: %s", got)
 	}
-	for _, marker := range []string{`"MaxConn":12`, `"UploadLimit":128`, `"DownloadLimit":256`} {
+	for _, marker := range []string{`"MaxConn":12`, `"BandwidthLimit":3145728`, `"BandwidthState":"limited"`} {
 		if !strings.Contains(got, marker) {
 			t.Fatalf("user list response did not expose runtime limit %s: %s", marker, got)
 		}
@@ -61,7 +60,7 @@ func TestUserListRowsExposeResourceCounts(t *testing.T) {
 	}
 
 	content := readUserTemplateForTest(t, "../views/user/list.html")
-	for _, marker := range []string{"field: 'ClientCount'", "field: 'TunnelCount'", "客户端配额（已用 / 上限）", "总隧道配额（已用 / 上限）", "user-identity-remark", "row.Remark"} {
+	for _, marker := range []string{"field: 'ClientCount'", "field: 'TunnelCount'", "客户端配额（已用 / 上限）", "普通隧道配额（已用 / 上限）", "user-identity-remark", "row.Remark"} {
 		if !strings.Contains(content, marker) {
 			t.Fatalf("user list template misses resource count marker: %s", marker)
 		}
@@ -77,12 +76,18 @@ func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 		DashboardKeyHash: "dashboard-hash",
 		Status:           true,
 		Remark:           "before",
-		MaxTunnelNum:     3,
+		MaxTunnelNum:     file.LimitInt(3),
 		ExpireTime:       "2026-01-01 00:00:00",
 		CreateTime:       "2025-01-01 00:00:00",
 	}
 
-	updated := newUserUpdateCandidate(existing, "alice-updated", "", "alice@example.com", "after", 0, 6, 12, 128, 256, "2027-01-01 00:00:00")
+	updated := newUserUpdateCandidate(existing, "alice-updated", "", "alice@example.com", "after", userQuotaForm{
+		maxClientNum: file.NotIncludedInt(),
+		maxTunnelNum: file.LimitInt(6),
+		maxHostNum:   file.LimitInt(12),
+		maxConn:      file.LimitInt(9),
+		bandwidthBps: file.LimitInt64(384 * 8192),
+	}, "2027-01-01 00:00:00")
 	if updated == existing {
 		t.Fatal("update candidate must not mutate the stored user in place")
 	}
@@ -92,27 +97,26 @@ func TestNewUserUpdateCandidateKeepsExistingPasswordWhenBlank(t *testing.T) {
 	if updated.APIKeyHash != "api-hash" || updated.DashboardKeyHash != "dashboard-hash" {
 		t.Fatalf("credential hashes were not preserved: api=%q dashboard=%q", updated.APIKeyHash, updated.DashboardKeyHash)
 	}
-	if updated.MaxConn != 12 || updated.UploadLimit != 128 || updated.DownloadLimit != 256 {
+	if updated.MaxConn == nil || *updated.MaxConn != 9 || updated.BandwidthLimit == nil || *updated.BandwidthLimit != 384*8192 {
 		t.Fatalf("user runtime limits were not copied: %#v", updated)
 	}
-	if existing.UserName != "alice" || existing.Remark != "before" || existing.MaxTunnelNum != 3 {
+	if existing.UserName != "alice" || existing.Remark != "before" || existing.MaxTunnelNum == nil || *existing.MaxTunnelNum != 3 {
 		t.Fatalf("building an update candidate mutated the existing user: %#v", existing)
 	}
 
-	updated = newUserUpdateCandidate(existing, "alice", "replacement<password>&", "alice@example.com", "before", 0, 3, 0, 0, 0, existing.ExpireTime)
+	updated = newUserUpdateCandidate(existing, "alice", "replacement<password>&", "alice@example.com", "before", userQuotaForm{
+		maxClientNum: file.UnlimitedInt(),
+		maxTunnelNum: file.LimitInt(3),
+		maxHostNum:   file.UnlimitedInt(),
+		maxConn:      file.UnlimitedInt(),
+		bandwidthBps: file.UnlimitedInt64(),
+	}, existing.ExpireTime)
 	if updated.Password != "replacement<password>&" {
 		t.Fatalf("supplied password should replace the credential, got %q", updated.Password)
 	}
 }
 
 func TestNormalizeUserInput(t *testing.T) {
-	if got := normalizeUserTunnelLimit(-1); got != 0 {
-		t.Fatalf("negative tunnel limit should become unlimited, got %d", got)
-	}
-	if got := normalizeUserTunnelLimit(4); got != 4 {
-		t.Fatalf("positive tunnel limit changed unexpectedly, got %d", got)
-	}
-
 	valid, err := normalizeUserExpireTime("2026-12-31 23:59")
 	if err != nil || valid != "2026-12-31 23:59:00" {
 		t.Fatalf("valid expiration was not normalized: value=%q err=%v", valid, err)

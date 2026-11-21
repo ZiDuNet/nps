@@ -53,26 +53,21 @@ func TestDefaultNpsConfMatchesCheckedInTemplate(t *testing.T) {
 
 func TestMergeMissingConfigFieldsPreservesValuesCommentsAndEmptyValues(t *testing.T) {
 	config := "# old config\r\nweb_port=19001\r\ncustom_setting=keep\r\ntotp_secret=\r\n#pow_bits=5\r\n"
-	template := "# Web\nweb_port=8081\n# TOTP\ntotp_secret=default\n# New option description\nnew_option=true\n# PoW\npow_bits=20\n"
+	template := "# Web\nweb_port=8081\n# Existing empty\ncustom_setting=x\n# New option description\nnew_option=true\n# Another option\nsecond_option=20\n"
 
 	merged, added := mergeMissingConfigFields(config, template)
 	if strings.Contains(merged, "web_port=8081") || !strings.Contains(merged, "web_port=19001\r\n") {
 		t.Fatalf("existing non-default value was not preserved: %q", merged)
 	}
-	if strings.Count(merged, "totp_secret=") != 1 || !strings.Contains(merged, "totp_secret=\r\n") {
+	if strings.Count(merged, "custom_setting=") != 1 || !strings.Contains(merged, "custom_setting=keep\r\n") {
 		t.Fatalf("explicit empty value was not preserved: %q", merged)
 	}
-	if !strings.Contains(merged, "#pow_bits=5\r\n") || !strings.Contains(merged, "pow_bits=20") {
-		t.Fatalf("commented key should not satisfy the active setting: %q", merged)
-	}
-	if !strings.Contains(merged, "new_option=true") || !strings.Contains(merged, "# New option description") {
+	if !strings.Contains(merged, "new_option=true") || !strings.Contains(merged, "# New option description") ||
+		!strings.Contains(merged, "second_option=20") {
 		t.Fatalf("missing setting and its documentation were not appended: %q", merged)
 	}
-	if !strings.Contains(merged, "custom_setting=keep\r\n") {
-		t.Fatalf("unknown existing setting was not preserved: %q", merged)
-	}
-	if len(added) != 2 || added[0] != "new_option" || added[1] != "pow_bits" {
-		t.Fatalf("added keys = %#v, want new_option and pow_bits", added)
+	if len(added) != 2 || added[0] != "new_option" || added[1] != "second_option" {
+		t.Fatalf("added keys = %#v, want new_option and second_option", added)
 	}
 
 	again, addedAgain := mergeMissingConfigFields(merged, template)
@@ -99,7 +94,7 @@ func TestMergeMissingConfigFieldsDoesNotReaddDisabledOptionalSettings(t *testing
 	}
 }
 
-func TestMergeMissingConfigFieldsAddsRegistrationRuntimeLimits(t *testing.T) {
+func TestMergeMissingConfigFieldsDoesNotReaddManagedRegistrationSettings(t *testing.T) {
 	template := strings.Join([]string{
 		"allow_user_register=false",
 		"register_max_clients=0",
@@ -111,31 +106,9 @@ func TestMergeMissingConfigFieldsAddsRegistrationRuntimeLimits(t *testing.T) {
 	}, "\n")
 	existing := "allow_user_register=true\nregister_max_clients=2\nregister_max_tunnels=4\nregister_expire_days=7\n"
 	merged, added := mergeMissingConfigFields(existing, template)
-	for _, key := range []string{"register_max_conn", "register_upload_limit", "register_download_limit"} {
-		if !strings.Contains(merged, key+"=0") {
-			t.Fatalf("missing registration runtime limit %q was not migrated: %q", key, merged)
-		}
-		if !containsTestString(added, key) {
-			t.Fatalf("migration did not report added key %q: %#v", key, added)
-		}
+	if merged != existing || len(added) != 0 {
+		t.Fatalf("managed registration keys must not be written back to nps.conf: %q, %#v", merged, added)
 	}
-	for _, preserved := range []string{
-		"allow_user_register=true", "register_max_clients=2",
-		"register_max_tunnels=4", "register_expire_days=7",
-	} {
-		if !strings.Contains(merged, preserved) {
-			t.Fatalf("existing registration setting %q was not preserved: %q", preserved, merged)
-		}
-	}
-}
-
-func containsTestString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }
 
 func TestMigrateConfigCompatibilityMapsUpstreamAliases(t *testing.T) {
@@ -310,12 +283,12 @@ func TestMigrateConfigFileIsIdempotentAndPreservesExistingValues(t *testing.T) {
 	if err := os.WriteFile(path, []byte(old), 0640); err != nil {
 		t.Fatal(err)
 	}
-	template := "# panel\nweb_port=8081\n# generated\ntotp_secret=\n# new\ndisconnect_timeout=60\n"
+	template := "# panel\nweb_port=8081\n# new\nconnection_spool_limit=60\n"
 	changed, added, secrets, err := migrateConfigFile(path, template)
 	if err != nil {
 		t.Fatalf("migrate config: %v", err)
 	}
-	if !changed || len(secrets) != 0 || len(added) != 1 || added[0] != "disconnect_timeout" {
+	if !changed || len(secrets) != 0 || len(added) != 1 || added[0] != "connection_spool_limit" {
 		t.Fatalf("migration result changed=%v added=%#v secrets=%#v", changed, added, secrets)
 	}
 	data, err := os.ReadFile(path)
@@ -326,7 +299,7 @@ func TestMigrateConfigFileIsIdempotentAndPreservesExistingValues(t *testing.T) {
 	if !strings.Contains(got, "web_port=19001\r\n") || !strings.Contains(got, "web_password=custom-secret\r\n") || !strings.Contains(got, "custom_option=keep\r\n") {
 		t.Fatalf("existing values were not preserved: %q", got)
 	}
-	if strings.Contains(got, "totp_secret=") || !strings.Contains(got, "disconnect_timeout=60") {
+	if !strings.Contains(got, "connection_spool_limit=60") {
 		t.Fatalf("missing options were not appended exactly once: %q", got)
 	}
 	info, err := os.Stat(path)

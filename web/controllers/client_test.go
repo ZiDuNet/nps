@@ -159,8 +159,9 @@ func TestClientEditTemplateAllowsRenamingIdentity(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var output bytes.Buffer
 			if err := tpl.Execute(&output, map[string]interface{}{
-				"c":       &file.Client{Id: 42, Remark: tt.remark, Cnf: &file.Config{}, Flow: &file.Flow{}},
-				"isAdmin": tt.isAdmin,
+				"c":                   &file.Client{Id: 42, Remark: tt.remark, Cnf: &file.Config{}, Flow: &file.Flow{}},
+				"isAdmin":             tt.isAdmin,
+				"clientRateLimitMbps": "0",
 			}); err != nil {
 				t.Fatalf("render client edit: %v", err)
 			}

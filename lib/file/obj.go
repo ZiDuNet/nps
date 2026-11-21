@@ -231,18 +231,20 @@ type Config struct {
 }
 
 type Client struct {
-	SourceLists       `json:"-"`
-	Cnf               *Config
-	Id                int        //id
-	UserId            int        //关联的普通用户 id
-	UserName          string     `json:"-"` //关联用户名称，仅用于展示
-	VerifyKey         string     //verify key
-	Addr              string     //the ip of client
-	LocalAddr         string     // client private/LAN addresses reported by npc
-	Remark            string     //remark
-	Status            bool       //is allow connect
-	IsConnect         bool       //is the client connect
-	RateLimit         int        //rate /kb
+	SourceLists `json:"-"`
+	Cnf         *Config
+	Id          int    //id
+	UserId      int    //关联的普通用户 id
+	UserName    string `json:"-"` //关联用户名称，仅用于展示
+	VerifyKey   string //verify key
+	Addr        string //the ip of client
+	LocalAddr   string // client private/LAN addresses reported by npc
+	Remark      string //remark
+	Status      bool   //is allow connect
+	IsConnect   bool   //is the client connect
+	// RateLimit is the client-wide shared two-way ceiling in bits per second.
+	// Zero retains the historical "use the default ceiling" behavior.
+	RateLimit         int64
 	Flow              *Flow      //flow setting
 	Rate              *rate.Rate //rate limit
 	NoStore           bool       //no store to file
@@ -281,12 +283,24 @@ type Client struct {
 // LocalProxyAllowed reports whether this client may ask the server to connect
 // through its own network namespace. The global switch is always required;
 // user-owned clients also require the administrator's explicit tenant-level
-// opt-in. Synthetic negative IDs are internal server services.
+// opt-in. Internal synthetic negative IDs are server-owned services, while
+// public onboarding clients share the negative namespace but must never gain
+// that privilege.
 func (c *Client) LocalProxyAllowed(allowLocalProxy, allowUserLocal bool) bool {
 	if c == nil {
 		return false
 	}
-	if c.Id < 0 {
+	c.RLock()
+	clientID, noStore, noDisplay := c.Id, c.NoStore, c.NoDisplay
+	c.RUnlock()
+	// Public onboarding clients are runtime-only and must never inherit the
+	// server-local privileges reserved for synthetic management services,
+	// even though they share the negative ID namespace. NoDisplay covers older
+	// public records, while NoStore covers the current onboarding flow.
+	if noStore || noDisplay {
+		return false
+	}
+	if clientID < 0 {
 		return true
 	}
 	if !allowLocalProxy {
@@ -315,20 +329,105 @@ type User struct {
 	APIKeyCiphertext string `json:"api_key_ciphertext,omitempty"`
 	Status           bool
 	Remark           string
-	// MaxClientNum limits the number of clients owned by this user. A zero
-	// value intentionally means unlimited so records written by older NPS
-	// versions remain compatible when decoded from JSON.
-	MaxClientNum int
-	MaxTunnelNum int
-	// MaxConn, UploadLimit and DownloadLimit apply across every client owned
-	// by this user. Zero means unlimited. Rate limits use KB/s and share the
-	// same directional semantics as client, tunnel and host limits.
-	MaxConn       int
-	UploadLimit   int
-	DownloadLimit int
-	ExpireTime    string
-	CreateTime    string
+	// User-level quotas use three states: nil is unlimited, zero means the
+	// plan does not include the resource, and a positive value is the cap.
+	// Older JSON writes zero for unlimited; the JSON gateway normalizes it to
+	// nil before the SQLite import so upgrading cannot lock existing accounts.
+	MaxClientNum *int
+	MaxTunnelNum *int
+	MaxHostNum   *int
+	// MaxConn and BandwidthLimit apply across every client owned by this
+	// user. BandwidthLimit is stored in bits per second and is a shared
+	// two-way budget.
+	MaxConn        *int
+	BandwidthLimit *int64
+	ExpireTime     string
+	CreateTime     string
 	sync.RWMutex
+}
+
+// Quota helpers keep the three-state encoding out of callers. A nil pointer is
+// unlimited; zero is an explicit "not included"; positive values are caps.
+func UnlimitedInt() *int {
+	return nil
+}
+
+func NotIncludedInt() *int {
+	zero := 0
+	return &zero
+}
+
+func LimitInt(value int) *int {
+	return &value
+}
+
+func UnlimitedInt64() *int64 {
+	return nil
+}
+
+func NotIncludedInt64() *int64 {
+	zero := int64(0)
+	return &zero
+}
+
+func LimitInt64(value int64) *int64 {
+	return &value
+}
+
+func IntQuotaUnlimited(value *int) bool {
+	return value == nil
+}
+
+func IntQuotaNotIncluded(value *int) bool {
+	return value != nil && *value == 0
+}
+
+func IntQuotaReached(used int, limit *int) bool {
+	if limit == nil {
+		return false
+	}
+	return *limit <= 0 || used >= *limit
+}
+
+func Int64QuotaUnlimited(value *int64) bool {
+	return value == nil
+}
+
+func Int64QuotaNotIncluded(value *int64) bool {
+	return value != nil && *value == 0
+}
+
+func Int64QuotaReached(value *int64) bool {
+	if value == nil {
+		return false
+	}
+	return *value <= 0
+}
+
+func IntQuotaSnapshot(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+func Int64QuotaSnapshot(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+// IntQuotaDisplayValue flattens the three-state quota for read-only DTOs.
+// Unlimited and "not included" both render as zero on the wire; callers that
+// need to distinguish them should carry the pointer itself instead.
+func IntQuotaDisplayValue(value *int) int {
+	if value == nil || *value <= 0 {
+		return 0
+	}
+	return *value
 }
 
 func NewClient(vKey string, noStore bool, noDisplay bool) *Client {
@@ -476,26 +575,6 @@ func (s *Client) GetTunnelNum() (num int) {
 	s.RUnlock()
 	GetDb().JsonDb.Tasks.Range(func(key, value interface{}) bool {
 		v, ok := value.(*Tunnel)
-		if !ok || v == nil {
-			return true
-		}
-		v.RLock()
-		client := v.Client
-		v.RUnlock()
-		if client == nil {
-			return true
-		}
-		client.RLock()
-		candidateID := client.Id
-		client.RUnlock()
-		if candidateID == clientID {
-			num++
-		}
-		return true
-	})
-
-	GetDb().JsonDb.Hosts.Range(func(key, value interface{}) bool {
-		v, ok := value.(*Host)
 		if !ok || v == nil {
 			return true
 		}
@@ -866,12 +945,14 @@ type PlatformDomain struct {
 }
 
 type Glob struct {
-	SourceLists     `json:"-"`
-	BlackIpList     []string
-	WhiteIpList     []string
-	IpListPriority  int
-	MaxConn         int
-	RateLimit       int // aggregate forwarding rate in KB/s; zero means unlimited
+	SourceLists    `json:"-"`
+	BlackIpList    []string
+	WhiteIpList    []string
+	IpListPriority int
+	MaxConn        int
+	// RateLimit is the aggregate forwarding budget in bits per second and
+	// covers both directions. Zero means unlimited.
+	RateLimit       int64
 	ServerUrl       string
 	PlatformDomains []PlatformDomain
 	// UsageGuideMode and UsageGuideSource configure the authenticated Help

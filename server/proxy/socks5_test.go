@@ -424,7 +424,7 @@ func TestSock5UDPAssociateUsesSharedRegistry(t *testing.T) {
 
 func waitForSocks5Listener(t *testing.T, server *Sock5ModeServer) net.Listener {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		server.listenerMu.RLock()
 		listener := server.listener

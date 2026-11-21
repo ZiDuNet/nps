@@ -17,13 +17,35 @@ import (
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/quickcommand"
+	"ehang.io/nps/lib/rate"
 	npsversion "ehang.io/nps/lib/version"
 	"ehang.io/nps/server"
 	"github.com/astaxie/beego"
+	"github.com/astaxie/beego/logs"
 )
 
 type ClientController struct {
 	BaseController
+}
+
+// clientRateLimitBps parses the client bandwidth field. The dashboard and API
+// express it in decimal Mbps; storage remains bps as required by the token
+// buckets. A blank field keeps the historical unlimited/default behavior.
+func clientRateLimitBps(s *ClientController) (int64, error) {
+	_ = s.Ctx.Request.ParseForm()
+	values := s.Ctx.Request.Form["rate_limit"]
+	raw := ""
+	if len(values) > 0 {
+		raw = values[len(values)-1]
+	}
+	value, _, err := file.ParseMbpsQuotaInput(raw)
+	if err != nil {
+		return 0, err
+	}
+	if value == nil {
+		return 0, nil
+	}
+	return *value, nil
 }
 
 type clientListRow struct {
@@ -37,7 +59,8 @@ type clientListRow struct {
 	Remark              string
 	Status              bool
 	IsConnect           bool
-	RateLimit           int
+	RateLimit           int64
+	RateLimitMbps       string
 	Flow                clientListFlow
 	Rate                clientListRate
 	NoStore             bool
@@ -67,6 +90,24 @@ type clientListRow struct {
 	ConnectionProtocols []string
 	ConnectionCommands  []clientBridgeCommand
 	Instances           []clientInstanceRow
+}
+
+// clientFormView decorates the persisted client with a display-only Mbps
+// value. Templates keep using the embedded model, while the bandwidth form no
+// longer exposes the raw bps integer.
+type clientFormView struct {
+	*file.Client
+	RateLimitMbps string
+}
+
+func newClientFormView(client *file.Client) *clientFormView {
+	if client == nil {
+		return nil
+	}
+	client.RLock()
+	rateLimit := client.RateLimit
+	client.RUnlock()
+	return &clientFormView{Client: client, RateLimitMbps: rate.FormatMbps(rateLimit)}
 }
 
 type clientInstanceRow struct {
@@ -158,7 +199,7 @@ type clientEditSnapshot struct {
 	verifyKey        string
 	userID           int
 	remark           string
-	rateLimit        int
+	rateLimit        int64
 	flow             *file.Flow
 	flowLimit        int64
 	maxConn          int
@@ -400,6 +441,7 @@ func newClientListRows(clients []*file.Client) []*clientListRow {
 			Status:           client.Status,
 			IsConnect:        client.IsConnect,
 			RateLimit:        client.RateLimit,
+			RateLimitMbps:    rate.FormatMbps(client.RateLimit),
 			NoStore:          client.NoStore,
 			MaxConn:          client.MaxConn,
 			NowConn:          atomic.LoadInt32(&client.NowConn),
@@ -784,6 +826,11 @@ func (s *ClientController) Add() {
 		if !s.RequirePost() {
 			return
 		}
+		rateLimitBps, rateErr := clientRateLimitBps(s)
+		if rateErr != nil {
+			s.AjaxErr(rateErr.Error())
+			return
+		}
 		isAdmin := s.IsAdmin()
 		var t *file.Client
 		if isAdmin {
@@ -821,7 +868,7 @@ func (s *ClientController) Add() {
 					Crypt:    s.GetBoolNoErr("crypt"),
 				},
 				ConfigConnAllow: s.GetBoolNoErr("config_conn_allow"),
-				RateLimit:       s.GetIntNoErr("rate_limit"),
+				RateLimit:       rateLimitBps,
 				MaxConn:         s.GetIntNoErr("max_conn"),
 				WebUserName:     webUsername,
 				WebPassword:     webPassword,
@@ -862,7 +909,11 @@ func (s *ClientController) Add() {
 			s.AjaxErr(err.Error())
 			return
 		}
-		if err := file.GetDb().NewClient(t); err != nil {
+		create := file.GetDb().NewClient
+		if isAdmin {
+			create = file.GetDb().NewClientAsAdmin
+		}
+		if err := create(t); err != nil {
 			s.AjaxErr(err.Error())
 			return
 		}
@@ -911,7 +962,9 @@ func (s *ClientController) Edit() {
 			s.error()
 			return
 		} else {
-			s.Data["c"] = c
+			view := newClientFormView(c)
+			s.Data["c"] = view
+			s.Data["clientRateLimitMbps"] = view.RateLimitMbps
 			if s.IsAdmin() {
 				s.Data["users"], _ = file.GetDb().GetUserList(0, 10000, "")
 			} else if c != nil {
@@ -933,6 +986,11 @@ func (s *ClientController) Edit() {
 			s.AjaxErr("client ID not found")
 			return
 		}
+		rateLimitBps, rateErr := clientRateLimitBps(s)
+		if rateErr != nil {
+			s.AjaxErr(rateErr.Error())
+			return
+		}
 
 		isAdmin := s.IsAdmin()
 		if !isAdmin && !isAllowedClient(c.Id, s.GetAllowedClientIds()) {
@@ -941,68 +999,93 @@ func (s *ClientController) Edit() {
 			s.AjaxErr("permission denied")
 			return
 		}
-		if isAdmin && !file.GetDb().VerifyVkey(s.getEscapeString("vkey"), c.Id) {
+		if isAdmin && s.Ctx.Request.FormValue("vkey") != "" && !file.GetDb().VerifyVkey(s.getEscapeString("vkey"), c.Id) {
 			s.AjaxErr("Vkey duplicate, please reset")
 			return
 		}
 
 		before := snapshotClientForEdit(c)
+		// /api/v1 PATCH merges only the JSON fields the caller sent into the
+		// request form. Treat omitted fields as "keep the stored value" rather
+		// than letting the legacy getters return empty strings and erase auth
+		// material, remarks, or limits.
+		_ = s.Ctx.Request.ParseForm()
+		fieldSubmitted := func(key string) bool {
+			_, submitted := s.Ctx.Request.Form[key]
+			return submitted
+		}
 		currentBasicPassword := ""
 		if before.cnf != nil {
 			currentBasicPassword = before.cnf.P
 		}
-		remark := s.getEscapeString("remark")
-		cnfUser := s.getEscapeString("u")
+		remark := before.remark
+		if fieldSubmitted("remark") {
+			remark = s.getEscapeString("remark")
+		}
+		cnfUser := ""
+		if before.cnf != nil {
+			cnfUser = before.cnf.U
+		}
+		if fieldSubmitted("u") {
+			cnfUser = s.getEscapeString("u")
+		}
 		cnfPassword := keepClientBasicPassword(currentBasicPassword, s.getEscapeString("p"))
-		compress := common.GetBoolByStr(s.getEscapeString("compress"))
-		cryptEnabled := s.GetBoolNoErr("crypt")
-		blackIPList := RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n"))
-		whiteIPList := RemoveRepeatedElement(strings.Split(s.getEscapeString("whiteiplist"), "\r\n"))
+		compress := false
+		cryptEnabled := false
+		if before.cnf != nil {
+			compress, cryptEnabled = before.cnf.Compress, before.cnf.Crypt
+		}
+		if fieldSubmitted("compress") {
+			compress = common.GetBoolByStr(s.getEscapeString("compress"))
+		}
+		if fieldSubmitted("crypt") {
+			cryptEnabled = s.GetBoolNoErr("crypt")
+		}
+		blackIPList := append([]string(nil), before.blackIPList...)
+		whiteIPList := append([]string(nil), before.whiteIPList...)
+		if fieldSubmitted("blackiplist") {
+			blackIPList = RemoveRepeatedElement(strings.Split(s.getEscapeString("blackiplist"), "\r\n"))
+		}
+		if fieldSubmitted("whiteiplist") {
+			whiteIPList = RemoveRepeatedElement(strings.Split(s.getEscapeString("whiteiplist"), "\r\n"))
+		}
 		ipListPriority := s.GetIntNoErr("iplistpriority")
-		registerKey := strings.TrimSpace(s.getEscapeString("register_key"))
-		registerMaxHours := max(s.GetIntNoErr("register_max_hours"), 0)
-		registeredOnly := s.GetBoolNoErr("registered_only")
-		_ = s.Ctx.Request.ParseForm()
-		if _, submitted := s.Ctx.Request.Form["blackiplist"]; !submitted {
-			blackIPList = append([]string(nil), before.blackIPList...)
+		registerKey := before.registerKey
+		if fieldSubmitted("register_key") {
+			registerKey = strings.TrimSpace(s.getEscapeString("register_key"))
 		}
-		if _, submitted := s.Ctx.Request.Form["whiteiplist"]; !submitted {
-			whiteIPList = append([]string(nil), before.whiteIPList...)
+		registerMaxHours := before.registerMaxHours
+		if fieldSubmitted("register_max_hours") {
+			registerMaxHours = max(s.GetIntNoErr("register_max_hours"), 0)
 		}
-		if _, submitted := s.Ctx.Request.Form["iplistpriority"]; !submitted {
+		registeredOnly := before.registeredOnly
+		if fieldSubmitted("registered_only") {
+			registeredOnly = s.GetBoolNoErr("registered_only")
+		}
+		if !fieldSubmitted("iplistpriority") {
 			ipListPriority = before.ipListPriority
 		}
 		verifyKey := before.verifyKey
 		if isAdmin {
-			verifyKey = s.getEscapeString("vkey")
-		} else {
-			// Older user-facing forms did not submit registration controls. Keep
-			// their existing values when an old client calls this endpoint.
-			_ = s.Ctx.Request.ParseForm()
-			if _, submitted := s.Ctx.Request.Form["register_key"]; !submitted {
-				registerKey = before.registerKey
-			}
-			if _, submitted := s.Ctx.Request.Form["register_max_hours"]; !submitted {
-				registerMaxHours = before.registerMaxHours
-			}
-			if _, submitted := s.Ctx.Request.Form["registered_only"]; !submitted {
-				registeredOnly = before.registeredOnly
+			if fieldSubmitted("vkey") {
+				verifyKey = s.getEscapeString("vkey")
 			}
 		}
 
 		selectedUserID := before.userID
 		legacyUsername, legacyPassword, expireTime := "", "", before.expireTime
 		if isAdmin {
-			expireTime, err = normalizeUserExpireTime(s.GetString("expire_time"))
-			if err != nil {
-				s.AjaxErr("到期时间格式无效")
-				return
+			if fieldSubmitted("expire_time") {
+				expireTime, err = normalizeUserExpireTime(s.GetString("expire_time"))
+				if err != nil {
+					s.AjaxErr("到期时间格式无效")
+					return
+				}
 			}
 		} else {
 			// 普通用户同样可以给“自己的客户端”设置独立到期时间；
 			// 未提交该字段时保留原值，边界由 ValidateClientAssignment 校验。
-			_ = s.Ctx.Request.ParseForm()
-			if _, submitted := s.Ctx.Request.Form["expire_time"]; submitted {
+			if fieldSubmitted("expire_time") {
 				expireTime, err = normalizeUserExpireTime(s.GetString("expire_time"))
 				if err != nil {
 					s.AjaxErr("到期时间格式无效")
@@ -1011,11 +1094,21 @@ func (s *ClientController) Edit() {
 			}
 		}
 		if isAdmin {
+			webUsername, webPassword := "", ""
+			if before.webUserName != "" && !fieldSubmitted("web_username") {
+				webUsername = before.webUserName
+			}
+			if fieldSubmitted("web_username") {
+				webUsername = s.getEscapeString("web_username")
+			}
+			if fieldSubmitted("web_password") {
+				webPassword = s.getEscapeString("web_password")
+			}
 			legacyUsername, legacyPassword, err = mergeLegacyClientLogin(
 				before.webUserName,
 				before.webPassword,
-				s.getEscapeString("web_username"),
-				s.getEscapeString("web_password"),
+				webUsername,
+				webPassword,
 				s.GetBoolNoErr("clear_legacy_web_login"),
 			)
 			if err != nil {
@@ -1034,7 +1127,11 @@ func (s *ClientController) Edit() {
 				}
 			}
 		}
-		if err := file.GetDb().ValidateClientAssignment(&file.Client{
+		validateAssignment := file.GetDb().ValidateClientAssignment
+		if isAdmin {
+			validateAssignment = file.GetDb().ValidateClientAssignmentAsAdmin
+		}
+		if err := validateAssignment(&file.Client{
 			Id:         c.Id,
 			UserId:     selectedUserID,
 			ExpireTime: expireTime,
@@ -1059,20 +1156,31 @@ func (s *ClientController) Edit() {
 			c.Flow = &file.Flow{}
 		}
 		if isAdmin {
-			c.VerifyKey = s.getEscapeString("vkey")
+			c.VerifyKey = verifyKey
 			c.UserId = selectedUserID
-			c.Flow.SetLimit(int64(s.GetIntNoErr("flow_limit")))
+			if fieldSubmitted("flow_limit") {
+				c.Flow.SetLimit(int64(s.GetIntNoErr("flow_limit")))
+			}
 			if s.GetBoolNoErr("reset_flow") {
 				inlet := int64(s.GetIntNoErr("reset_inlet_flow"))
 				export := int64(s.GetIntNoErr("reset_export_flow"))
 				c.Flow.ResetCounters(inlet, export)
 			}
-			c.RateLimit = s.GetIntNoErr("rate_limit")
-			c.MaxConn = s.GetIntNoErr("max_conn")
-			c.MaxTunnelNum = s.GetIntNoErr("max_tunnel")
+			_, rateSubmitted := s.Ctx.Request.Form["rate_limit"]
+			if rateSubmitted {
+				c.RateLimit = rateLimitBps
+			}
+			if fieldSubmitted("max_conn") {
+				c.MaxConn = s.GetIntNoErr("max_conn")
+			}
+			if fieldSubmitted("max_tunnel") {
+				c.MaxTunnelNum = s.GetIntNoErr("max_tunnel")
+			}
 			c.WebUserName = legacyUsername
 			c.WebPassword = legacyPassword
-			c.ConfigConnAllow = s.GetBoolNoErr("config_conn_allow")
+			if fieldSubmitted("config_conn_allow") {
+				c.ConfigConnAllow = s.GetBoolNoErr("config_conn_allow")
+			}
 		}
 		c.ExpireTime = expireTime
 		c.Remark = remark
@@ -1088,7 +1196,11 @@ func (s *ClientController) Edit() {
 		c.RegisteredOnly = registeredOnly
 		c.Unlock()
 		c.SetSourceLists(ipListPriority, blackIPList, whiteIPList, acl.ScopeUser, "client")
-		if err := file.GetDb().UpdateClient(c); err != nil {
+		updateClient := file.GetDb().UpdateClient
+		if isAdmin {
+			updateClient = file.GetDb().UpdateClientAsAdmin
+		}
+		if err := updateClient(c); err != nil {
 			before.restore(c)
 			s.AjaxErr(err.Error())
 			return
@@ -1167,10 +1279,17 @@ func (s *ClientController) ChangeStatus() {
 	if client, err := file.GetDb().GetClient(id); err == nil {
 		status := s.GetBoolNoErr("status")
 		client.Lock()
+		previousStatus := client.Status
 		client.Status = status
 		ownerID := client.UserId
 		client.Unlock()
-		file.GetDb().JsonDb.StoreClientsToJsonFile()
+		if err := file.GetDb().JsonDb.StoreClientsToJsonFileErr(); err != nil {
+			client.Lock()
+			client.Status = previousStatus
+			client.Unlock()
+			s.AjaxErr("状态保存失败")
+			return
+		}
 		if !status {
 			server.DelClientConnect(client.Id)
 		}
@@ -1198,22 +1317,33 @@ func (s *ClientController) Del() {
 	client.RLock()
 	ownerID := client.UserId
 	client.RUnlock()
+	var committedClients []*file.Client
+	var committedTasks []*file.Tunnel
+	afterCommit := func(clients []*file.Client, tasks []*file.Tunnel, _ []*file.Host) {
+		committedClients = clients
+		committedTasks = tasks
+	}
 	if s.IsAdmin() {
-		err = file.GetDb().DelClient(id)
+		err = file.GetDb().DelClientCascadeWithHook(id, afterCommit)
 	} else {
 		userID, ok := s.currentUserPrincipalID()
 		if !ok {
 			s.rejectRequest(http.StatusForbidden, "permission denied")
 			return
 		}
-		err = file.GetDb().DelClientForUser(id, userID)
+		err = file.GetDb().DelClientCascadeForUserWithHook(id, userID, afterCommit)
 	}
 	if err != nil {
 		s.AjaxErr("delete error")
 		return
 	}
-	server.DelTunnelAndHostByClientId(id, false)
-	server.KickClientConnect(id)
+	clientID := id
+	if len(committedClients) > 0 && committedClients[0] != nil {
+		clientID = committedClients[0].Id
+	}
+	if cleanupErr := server.FinalizeCommittedClientDeletion(clientID, committedTasks); cleanupErr != nil {
+		logs.Warn("client %d was deleted but runtime cleanup failed: %v", clientID, cleanupErr)
+	}
 	s.auditMutation("client.delete", "client", id, ownerID, "", nil, nil)
 	s.AjaxOk("delete success")
 }

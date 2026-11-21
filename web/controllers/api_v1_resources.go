@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"os"
+	"sort"
 	"strings"
 
 	"ehang.io/nps/server"
@@ -75,7 +76,7 @@ func (s *ApiV1Controller) ClientUpdateStatus() {
 func (s *ApiV1Controller) ClientInstances() {
 	s.pathFormValue("id")
 	id, err := s.GetInt("id")
-	if err != nil || id <= 0 || !isAllowedClient(id, s.GetAllowedClientIds()) {
+	if err != nil || id <= 0 || (!s.IsAdmin() && !isAllowedClient(id, s.GetAllowedClientIds())) {
 		s.apiRespond(404, map[string]interface{}{"status": 0, "code": "not_found", "msg": "客户端不存在"})
 		return
 	}
@@ -95,7 +96,7 @@ func (s *ApiV1Controller) ClientInstances() {
 func (s *ApiV1Controller) ClientInstanceDisconnect() {
 	s.pathFormValue("id")
 	id, err := s.GetInt("id")
-	if err != nil || id <= 0 || !isAllowedClient(id, s.GetAllowedClientIds()) {
+	if err != nil || id <= 0 || (!s.IsAdmin() && !isAllowedClient(id, s.GetAllowedClientIds())) {
 		s.apiRespond(404, map[string]interface{}{"status": 0, "code": "not_found", "msg": "客户端不存在"})
 		return
 	}
@@ -275,7 +276,9 @@ func (s *ApiV1Controller) UserTokenStatus() {
 	s.emitLegacy(s.invokeSafe("user", "APIKeyStatus", &UserController{}, false))
 }
 
-// GlobalConfig returns the parsed nps.conf with sensitive values masked.
+// GlobalConfig returns the effective configuration with sensitive values
+// masked. Business settings are authoritative in SQLite after startup, so
+// reading only nps.conf would hide migrated values from automation.
 func (s *ApiV1Controller) GlobalConfig() {
 	if !s.requireAdmin() {
 		return
@@ -285,7 +288,7 @@ func (s *ApiV1Controller) GlobalConfig() {
 		s.apiFail(500, "config_unavailable", "读取 nps.conf 失败: "+err.Error())
 		return
 	}
-	values := serverConfigKeyValues(string(content))
+	values := effectiveServerConfigSnapshot(string(content))
 	masked := make(map[string]string, len(values))
 	for key, value := range values {
 		if serverConfigSensitive(key) && strings.TrimSpace(value) != "" {
@@ -300,11 +303,69 @@ func (s *ApiV1Controller) GlobalConfig() {
 	})
 }
 
-// GlobalConfigSave writes the editable nps.conf keys.
+// GlobalConfigSave writes the editable configuration keys. The legacy action
+// requires an explicit changed-key set, so derive it from the fields actually
+// present in this request. This keeps an API PATCH from deleting optional
+// settings that the caller did not mention while preserving the same
+// validation and hot-reload path as the console.
 func (s *ApiV1Controller) GlobalConfigSave() {
 	if !s.requireAdmin() {
 		return
 	}
+	form := s.Ctx.Request.Form
+	if form == nil {
+		_ = s.Ctx.Request.ParseForm()
+		form = s.Ctx.Request.Form
+	}
+	known := make(map[string]struct{})
+	for _, key := range serverConfigCatalogKeys() {
+		known[key] = struct{}{}
+	}
+	dirty := make([]string, 0)
+	seen := make(map[string]struct{})
+	submit := func(name, value string) {
+		form.Set("config_"+name, value)
+		form.Add("config_dirty", name)
+		// The legacy parser drops a non-empty optional value when its
+		// config_enabled_<key> marker is absent. An API caller that explicitly
+		// submits a value is asking for the field to be enabled, so synthesize
+		// the marker only when the caller did not control enablement itself.
+		if meta, ok := serverConfigMetaByKey[name]; ok && meta.Optional &&
+			form.Get("config_enabled_"+name) == "" && form.Get("config_clear_"+name) == "" {
+			form.Set("config_enabled_"+name, "1")
+		}
+	}
+	for key, values := range s.Ctx.Request.PostForm {
+		if key == "config_delta" || key == "config_dirty" ||
+			strings.HasPrefix(key, "config_enabled_") || strings.HasPrefix(key, "config_clear_") {
+			continue
+		}
+		name := key
+		if strings.HasPrefix(key, "config_") {
+			name = strings.TrimPrefix(key, "config_")
+		}
+		if _, supported := known[name]; !supported {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		value := ""
+		if len(values) > 0 {
+			value = values[len(values)-1]
+		}
+		submit(name, value)
+	}
+	dirty = append(dirty, form["config_dirty"]...)
+	sort.Strings(dirty)
+	form.Set("config_delta", "1")
+	form["config_dirty"] = dirty
+	if s.Ctx.Request.PostForm == nil {
+		s.Ctx.Request.PostForm = form
+	}
+	s.Ctx.Request.PostForm["config_dirty"] = dirty
+	s.Ctx.Request.PostForm.Set("config_delta", "1")
 	s.emitLegacy(s.invokeSafe("global", "SaveConfig", &GlobalController{}, true))
 }
 

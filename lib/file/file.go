@@ -3,17 +3,20 @@ package file
 import (
 	"encoding/json"
 	"errors"
-	"github.com/astaxie/beego/logs"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/rate"
+	"ehang.io/nps/lib/store"
+	"github.com/astaxie/beego/logs"
 )
 
 func NewJsonDb(runPath string) *JsonDb {
@@ -53,7 +56,19 @@ type JsonDb struct {
 	ClientFilePath    string //client file path
 	UserFilePath      string //user file path
 	GlobalFilePath    string //global file path
+	// sqlite is optional. When set, the in-memory maps remain authoritative
+	// for reads while every mutation is persisted through the SQLite store.
+	sqlite            *store.Store
+	persistMu         sync.Mutex
+	deletedClientRefs sync.Map
 }
+
+const (
+	metaClientIDHighWater = "id_high_water.client"
+	metaUserIDHighWater   = "id_high_water.user"
+	metaTaskIDHighWater   = "id_high_water.tunnel"
+	metaHostIDHighWater   = "id_high_water.host"
+)
 
 func (s *JsonDb) LoadTaskFromJsonFile() {
 	loadSyncMapFromFile(s.TaskFilePath, func(v string) {
@@ -88,7 +103,7 @@ func (s *JsonDb) LoadTaskFromJsonFile() {
 			post.MaxConn = 0
 		}
 		// Resource limit buckets are runtime-only and are created lazily on the
-		// first connection. Keep the persisted KB/s values untouched.
+		// first connection. Keep the persisted bps values untouched.
 		post.Flow.NormalizeLegacyAccounting()
 		// Runtime connection counts and startup errors never survive a restart.
 		post.CurrentConnections = 0
@@ -106,11 +121,7 @@ func (s *JsonDb) LoadClientFromJsonFile() {
 		if json.Unmarshal([]byte(v), &post) != nil || post == nil {
 			return
 		}
-		if post.RateLimit > 0 {
-			post.Rate = rate.NewRate(int64(post.RateLimit) * 1024)
-		} else {
-			post.Rate = rate.NewRate((2 << 23) * 1024)
-		}
+		post.Rate = rate.NewRate(clientRateBytes(post.RateLimit))
 		post.Rate.Start()
 		if post.Flow == nil {
 			post.Flow = NewFlow()
@@ -136,7 +147,7 @@ func (s *JsonDb) LoadUserFromJsonFile() {
 			return
 		}
 		s.Users.Store(post.Id, post)
-		SetUserRuntimeLimits(post.Id, post.MaxConn, post.UploadLimit, post.DownloadLimit)
+		SetUserRuntimeLimits(post.Id, post.MaxConn, post.BandwidthLimit)
 		if post.Id > int(s.UserIncreaseId) {
 			s.UserIncreaseId = int32(post.Id)
 		}
@@ -205,7 +216,7 @@ func (s *JsonDb) LoadGlobalFromJsonFile() {
 		post.syncSourceListsFromFields()
 		post.CompileSourceLists(acl.ScopeGlobal, "global")
 		SetGlobalMaxConn(post.MaxConn)
-		rate.SetGlobalLimit(int64(post.RateLimit) * 1024)
+		rate.SetGlobalLimit(rate.BytesPerSecondFromBps(post.RateLimit))
 	})
 }
 
@@ -265,41 +276,287 @@ func (s *JsonDb) StoreHostToJsonFile() {
 // replaced. The legacy no-return wrapper remains for callers whose API cannot
 // yet surface persistence errors.
 func (s *JsonDb) StoreHostToJsonFileErr() error {
-	hostLock.Lock()
-	defer hostLock.Unlock()
-	return storeSyncMapToFile(&s.Hosts, s.HostFilePath)
+	return s.persistKinds(store.KindHost)
 }
 
 var taskLock sync.Mutex
 
 func (s *JsonDb) StoreTasksToJsonFile() {
-	taskLock.Lock()
-	storeSyncMapToFile(&s.Tasks, s.TaskFilePath)
-	taskLock.Unlock()
+	_ = s.StoreTasksToJsonFileErr()
+}
+
+func (s *JsonDb) StoreTasksToJsonFileErr() error {
+	return s.persistKinds(store.KindTunnel)
 }
 
 var clientLock sync.Mutex
 
 func (s *JsonDb) StoreClientsToJsonFile() {
-	clientLock.Lock()
-	storeSyncMapToFile(&s.Clients, s.ClientFilePath)
-	clientLock.Unlock()
+	_ = s.StoreClientsToJsonFileErr()
+}
+
+func (s *JsonDb) StoreClientsToJsonFileErr() error {
+	return s.persistKinds(store.KindClient)
 }
 
 var userLock sync.Mutex
 
 func (s *JsonDb) StoreUsersToJsonFile() {
-	userLock.Lock()
-	storeSyncMapToFile(&s.Users, s.UserFilePath)
-	userLock.Unlock()
+	_ = s.StoreUsersToJsonFileErr()
+}
+
+func (s *JsonDb) StoreUsersToJsonFileErr() error {
+	return s.persistKinds(store.KindUser)
+}
+
+// SetSQLite switches persistence to the supplied store. The in-memory maps
+// stay authoritative for the runtime, matching the historical JSON design and
+// keeping proxy hot paths free of database access.
+func (s *JsonDb) SetSQLite(sqlite *store.Store) {
+	if s == nil {
+		return
+	}
+	s.sqlite = sqlite
+}
+
+// Flush persists every in-memory entity kind and the global settings snapshot.
+// Shutdown uses this after stopping writers so the last flow_store_interval of
+// accumulated traffic is not lost.
+func (s *JsonDb) Flush() error {
+	if s == nil {
+		return nil
+	}
+	// Entity mutations update the in-memory maps before their SQLite
+	// transaction starts. Block those mutations while the periodic snapshot is
+	// assembled so Flush cannot persist a half-completed cascade or ownership
+	// transfer. The order matches the mutation methods.
+	globalMutationMu.Lock()
+	defer globalMutationMu.Unlock()
+	hostMutationMu.Lock()
+	defer hostMutationMu.Unlock()
+	taskMutationMu.Lock()
+	defer taskMutationMu.Unlock()
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	return s.persistKinds(
+		store.KindHost,
+		store.KindTunnel,
+		store.KindClient,
+		store.KindUser,
+		store.KindGlobal,
+	)
+}
+
+func (s *JsonDb) SQLite() *store.Store {
+	if s == nil {
+		return nil
+	}
+	return s.sqlite
+}
+
+func entityRows(m *sync.Map) map[int][]byte {
+	rows := make(map[int][]byte)
+	m.Range(func(key, value interface{}) bool {
+		id, ok := key.(int)
+		if !ok || id == 0 {
+			return true
+		}
+		data, keep := marshalStoredEntity(value)
+		if !keep {
+			return true
+		}
+		rows[id] = data
+		return true
+	})
+	return rows
+}
+
+func globalRows(global *Glob) (map[int][]byte, error) {
+	if global == nil {
+		return nil, nil
+	}
+	global.RLock()
+	defer global.RUnlock()
+	data, err := json.Marshal(global)
+	if err != nil {
+		return nil, err
+	}
+	return map[int][]byte{0: data}, nil
+}
+
+// persistKinds snapshots one or more entity kinds and commits them as one
+// logical operation. SQLite receives a single diff transaction; the legacy
+// JSON backend keeps its file-by-file behavior.
+func (s *JsonDb) persistKinds(kinds ...string) error {
+	if s == nil || len(kinds) == 0 {
+		return nil
+	}
+	// Serialize snapshot construction with every persistence operation. A
+	// delayed writer that snapshots after another mutation cannot overwrite the
+	// newer transaction with stale rows, and multi-kind snapshots stay ordered.
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
+	if s.sqlite != nil {
+		snapshots := make(map[string]map[int][]byte, len(kinds))
+		for _, kind := range kinds {
+			switch kind {
+			case store.KindClient:
+				snapshots[kind] = entityRows(&s.Clients)
+			case store.KindTunnel:
+				snapshots[kind] = entityRows(&s.Tasks)
+			case store.KindHost:
+				snapshots[kind] = entityRows(&s.Hosts)
+			case store.KindUser:
+				snapshots[kind] = entityRows(&s.Users)
+			case store.KindGlobal:
+				rows, err := globalRows(s.getGlobal())
+				if err != nil {
+					return fmt.Errorf("序列化全局参数: %w", err)
+				}
+				snapshots[kind] = rows
+			default:
+				return fmt.Errorf("未知实体类型 %q", kind)
+			}
+		}
+		return s.sqlite.ReplaceKindsWithMeta(snapshots, s.idHighWaterMeta())
+	}
+	for _, kind := range kinds {
+		var err error
+		switch kind {
+		case store.KindClient:
+			clientLock.Lock()
+			err = storeSyncMapToFile(&s.Clients, s.ClientFilePath)
+			clientLock.Unlock()
+		case store.KindTunnel:
+			taskLock.Lock()
+			err = storeSyncMapToFile(&s.Tasks, s.TaskFilePath)
+			taskLock.Unlock()
+		case store.KindHost:
+			hostLock.Lock()
+			err = storeSyncMapToFile(&s.Hosts, s.HostFilePath)
+			hostLock.Unlock()
+		case store.KindUser:
+			userLock.Lock()
+			err = storeSyncMapToFile(&s.Users, s.UserFilePath)
+			userLock.Unlock()
+		case store.KindGlobal:
+			globalLock.Lock()
+			err = storeGlobalToFile(s.getGlobal(), s.GlobalFilePath)
+			globalLock.Unlock()
+		default:
+			return fmt.Errorf("未知实体类型 %q", kind)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *JsonDb) idHighWaterMeta() map[string]string {
+	return map[string]string{
+		metaClientIDHighWater: fmt.Sprint(atomic.LoadInt32(&s.ClientIncreaseId)),
+		metaUserIDHighWater:   fmt.Sprint(atomic.LoadInt32(&s.UserIncreaseId)),
+		metaTaskIDHighWater:   fmt.Sprint(atomic.LoadInt32(&s.TaskIncreaseId)),
+		metaHostIDHighWater:   fmt.Sprint(atomic.LoadInt32(&s.HostIncreaseId)),
+	}
+}
+
+// marshalStoredEntity returns a consistent snapshot without persisting
+// runtime-only records. Keep the JSON and SQLite writers on this single path so
+// both backends observe the same locking and NoStore semantics.
+func marshalStoredEntity(value interface{}) ([]byte, bool) {
+	data, keep, _ := marshalStoredEntityWithError(value)
+	return data, keep
+}
+
+func marshalStoredEntityWithError(value interface{}) ([]byte, bool, error) {
+	switch obj := value.(type) {
+	case *Tunnel:
+		if obj == nil || obj.NoStore {
+			return nil, false, nil
+		}
+		obj.RLock()
+		defer obj.RUnlock()
+		if obj.Client != nil {
+			obj.Client.RLock()
+			defer obj.Client.RUnlock()
+		}
+		if obj.Flow != nil {
+			obj.Flow.RLock()
+			defer obj.Flow.RUnlock()
+		}
+		if obj.Target != nil {
+			obj.Target.RLock()
+			defer obj.Target.RUnlock()
+		}
+		obj.RateLimits.rateMu.Lock()
+		defer obj.RateLimits.rateMu.Unlock()
+		obj.SourceLists.aclMu.RLock()
+		defer obj.SourceLists.aclMu.RUnlock()
+		obj.Health.HealthRLock()
+		defer obj.Health.HealthRUnlock()
+		data, err := json.Marshal(obj)
+		return data, true, err
+	case *Host:
+		if obj == nil || obj.NoStore {
+			return nil, false, nil
+		}
+		obj.RLock()
+		defer obj.RUnlock()
+		if obj.Client != nil {
+			obj.Client.RLock()
+			defer obj.Client.RUnlock()
+		}
+		if obj.Flow != nil {
+			obj.Flow.RLock()
+			defer obj.Flow.RUnlock()
+		}
+		if obj.Target != nil {
+			obj.Target.RLock()
+			defer obj.Target.RUnlock()
+		}
+		obj.RateLimits.rateMu.Lock()
+		defer obj.RateLimits.rateMu.Unlock()
+		obj.SourceLists.aclMu.RLock()
+		defer obj.SourceLists.aclMu.RUnlock()
+		obj.Health.HealthRLock()
+		defer obj.Health.HealthRUnlock()
+		data, err := json.Marshal(obj)
+		return data, true, err
+	case *Client:
+		if obj == nil || obj.NoStore {
+			return nil, false, nil
+		}
+		obj.RLock()
+		defer obj.RUnlock()
+		if obj.Flow != nil {
+			obj.Flow.RLock()
+			defer obj.Flow.RUnlock()
+		}
+		data, err := json.Marshal(obj)
+		return data, true, err
+	case *User:
+		if obj == nil {
+			return nil, false, nil
+		}
+		obj.RLock()
+		defer obj.RUnlock()
+		data, err := json.Marshal(obj)
+		return data, true, err
+	default:
+		return nil, false, nil
+	}
 }
 
 var globalLock sync.Mutex
 
 func (s *JsonDb) StoreGlobalToJsonFile() {
-	globalLock.Lock()
-	storeGlobalToFile(s.getGlobal(), s.GlobalFilePath)
-	globalLock.Unlock()
+	_ = s.StoreGlobalToJsonFileErr()
+}
+
+func (s *JsonDb) StoreGlobalToJsonFileErr() error {
+	return s.persistKinds(store.KindGlobal)
 }
 
 func cloneGlobal(global *Glob) *Glob {
@@ -355,6 +612,19 @@ func (s *JsonDb) GetHostId() int32 {
 	return atomic.AddInt32(&s.HostIncreaseId, 1)
 }
 
+// markDeletedClient keeps a short-lived identity tombstone so a request that
+// captured the old *Client before deletion cannot create a resource after its
+// ID or fields have been reused.
+func (s *JsonDb) markDeletedClient(client *Client) {
+	if s == nil || client == nil {
+		return
+	}
+	s.deletedClientRefs.Store(client, struct{}{})
+	time.AfterFunc(time.Hour, func() {
+		s.deletedClientRefs.Delete(client)
+	})
+}
+
 // GetTemporaryClientID returns a negative ID for an ephemeral client. The
 // counter is intentionally independent from ClientIncreaseId so public or
 // runtime-only clients do not create gaps in clients.json IDs.
@@ -370,32 +640,6 @@ func (s *JsonDb) GetTemporaryTaskID() int32 {
 // GetTemporaryHostID returns a negative ID for an ephemeral host rule.
 func (s *JsonDb) GetTemporaryHostID() int32 {
 	return atomic.AddInt32(&s.temporaryHostID, -1)
-}
-
-// reclaimPersistentID resets a resource counter when its table emptied out.
-// Deleting the last record otherwise leaves the counter high forever, so
-// recreated deployments keep climbing through ID gaps (yisier/nps #362).
-// The table must be empty rather than merely missing ID 1, otherwise resetting
-// the counter would hand the next allocation an ID that is still in use. CAS
-// keeps this safe against a concurrent allocation that wins the race.
-func (s *JsonDb) reclaimPersistentID(counter *int32, table *sync.Map) {
-	empty := true
-	table.Range(func(_, _ interface{}) bool {
-		empty = false
-		return false
-	})
-	if !empty {
-		return
-	}
-	for {
-		current := atomic.LoadInt32(counter)
-		if current <= 0 {
-			return
-		}
-		if atomic.CompareAndSwapInt32(counter, current, 0) {
-			return
-		}
-	}
 }
 
 func loadSyncMapFromFile(filePath string, f func(value string)) {
@@ -443,80 +687,8 @@ func storeSyncMapToFile(m *sync.Map, filePath string) error {
 		}
 	}()
 	m.Range(func(key, value interface{}) bool {
-		var b []byte
-		var err error
-		switch obj := value.(type) {
-		case *Tunnel:
-			if obj.NoStore {
-				return true
-			}
-			obj.RLock()
-			if obj.Client != nil {
-				obj.Client.RLock()
-			}
-			if obj.Flow != nil {
-				obj.Flow.RLock()
-			}
-			if obj.Target != nil {
-				obj.Target.RLock()
-			}
-			b, err = json.Marshal(obj)
-			if obj.Target != nil {
-				obj.Target.RUnlock()
-			}
-			if obj.Flow != nil {
-				obj.Flow.RUnlock()
-			}
-			if obj.Client != nil {
-				obj.Client.RUnlock()
-			}
-			obj.RUnlock()
-		case *Host:
-			if obj.NoStore {
-				return true
-			}
-			obj.RLock()
-			if obj.Client != nil {
-				obj.Client.RLock()
-			}
-			if obj.Flow != nil {
-				obj.Flow.RLock()
-			}
-			if obj.Target != nil {
-				obj.Target.RLock()
-			}
-			b, err = json.Marshal(obj)
-			if obj.Target != nil {
-				obj.Target.RUnlock()
-			}
-			if obj.Flow != nil {
-				obj.Flow.RUnlock()
-			}
-			if obj.Client != nil {
-				obj.Client.RUnlock()
-			}
-			obj.RUnlock()
-		case *Client:
-			if obj.NoStore {
-				return true
-			}
-			obj.RLock()
-			if obj.Flow != nil {
-				obj.Flow.RLock()
-			}
-			b, err = json.Marshal(obj)
-			if obj.Flow != nil {
-				obj.Flow.RUnlock()
-			}
-			obj.RUnlock()
-		case *User:
-			obj.RLock()
-			b, err = json.Marshal(obj)
-			obj.RUnlock()
-		//case *Glob:
-		//	obj := value.(*Glob)
-		//	b, err = json.Marshal(obj)
-		default:
+		b, keep, err := marshalStoredEntityWithError(value)
+		if !keep {
 			return true
 		}
 		if err != nil {
@@ -560,12 +732,12 @@ func storeSyncMapToFile(m *sync.Map, filePath string) error {
 	return nil
 }
 
-func storeGlobalToFile(m *Glob, filePath string) {
+func storeGlobalToFile(m *Glob, filePath string) error {
 	file, err := os.Create(filePath + ".tmp")
 	// first create a temporary file to store
 	if err != nil {
 		logs.Error(err, "create temp file err")
-		return
+		return err
 	}
 	defer func() {
 		_ = file.Close()
@@ -575,18 +747,26 @@ func storeGlobalToFile(m *Glob, filePath string) {
 	b, err = json.Marshal(m)
 	if err != nil {
 		logs.Error(err, "marshal json err")
-		return
+		return err
 	}
 	_, err = file.Write(b)
 	if err != nil {
 		logs.Error(err, "write file err")
-		return
+		return err
 	}
-	_ = file.Sync()
+	if err := file.Sync(); err != nil {
+		logs.Error(err, "sync file err")
+		return err
+	}
 	// must close file first, then rename it
-	_ = file.Close()
+	if err := file.Close(); err != nil {
+		logs.Error(err, "close file err")
+		return err
+	}
 	err = os.Rename(filePath+".tmp", filePath)
 	if err != nil {
 		logs.Error(err, "store to file err, data will lost")
+		return err
 	}
+	return nil
 }

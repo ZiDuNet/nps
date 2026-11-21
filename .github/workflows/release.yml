@@ -53,9 +53,17 @@ jobs:
           package_version=$(node -p 'require("./package.json").version')
           wails_version=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("../wails.json", "utf8")).info.productVersion)')
           plist_versions=$(grep -A1 -E 'CFBundleVersion|CFBundleShortVersionString' ../build/darwin/Info.plist | grep '<string>' | sed -E 's/.*<string>([^<]+)<\/string>.*/\1/')
+          android_version=$(sed -nE 's/.*android:versionName="([^"]+)".*/\1/p' ../../../../gui/npc/AndroidManifest.xml)
+          android_code=$(sed -nE 's/.*android:versionCode="([^"]+)".*/\1/p' ../../../../gui/npc/AndroidManifest.xml)
+          expected_android_code="${source_version##*.}"
+          fnos_version=$(sed -nE 's/^version = ([^ ]+)$/\1/p' ../../../../packaging/fnos/manifest)
           test -n "$source_version"
           test "$package_version" = "$source_version"
           test "$wails_version" = "$source_version"
+          test "$android_version" = "$source_version"
+          test "$fnos_version" = "$source_version"
+          test -n "$android_code"
+          test "$android_code" = "$expected_android_code"
           test "$(printf '%s\n' "$plist_versions" | sort -u | wc -l | tr -d ' ')" = 1
           test "$(printf '%s\n' "$plist_versions" | head -n 1)" = "$source_version"
       - name: Download Go dependencies

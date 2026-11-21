@@ -778,13 +778,10 @@ func clientTunnelQuotaError(client *file.Client) error {
 		return errors.New("客户端记录无效")
 	}
 	client.RLock()
-	maxTunnelNum, userID := client.MaxTunnelNum, client.UserId
+	maxTunnelNum := client.MaxTunnelNum
 	client.RUnlock()
 	if maxTunnelNum > 0 && client.GetTunnelNum() >= maxTunnelNum {
 		return errors.New("客户端隧道数量已达到限制")
-	}
-	if userID > 0 && file.GetDb().IsUserTunnelLimitReached(userID) {
-		return errors.New("用户隧道数量已达到限制")
 	}
 	return nil
 }
@@ -2586,9 +2583,15 @@ func (s *Bridge) SendLinkInfo(clientId int, link *conn.Link, t *file.Tunnel) (ta
 
 func bridgeAllowsLocalProxy(clientID int) bool {
 	if clientID < 0 {
-		return true
+		// Public onboarding clients and runtime NPC records share the negative
+		// namespace. Only server-owned synthetic services may skip the tenant
+		// gates; a public client must not inherit local-proxy access.
+		return !file.GetDb().IsPublicClient(clientID)
 	}
 	client, _ := file.GetDb().GetClient(clientID)
+	if client == nil {
+		return false
+	}
 	return client.LocalProxyAllowed(
 		beego.AppConfig.DefaultBool("allow_local_proxy", false),
 		beego.AppConfig.DefaultBool("allow_user_local", false),
@@ -2601,7 +2604,7 @@ func bridgeAllowsLocalProxy(clientID int) bool {
 // Bridge control plane or management panel.
 func bridgeTargetOwnedByAdministrator(clientID int) bool {
 	if clientID < 0 {
-		return true
+		return !file.GetDb().IsPublicClient(clientID)
 	}
 	client, err := file.GetDb().GetClient(clientID)
 	if err != nil || client == nil {
@@ -2811,7 +2814,7 @@ func updateFileTaskTarget(clientID, port int, targetValue string) bool {
 
 func nestedTunnelOwnerAllowed(sourceClientID, destinationTaskID int) bool {
 	if sourceClientID < 0 {
-		return true
+		return !file.GetDb().IsPublicClient(sourceClientID)
 	}
 	sourceClient, err := file.GetDb().GetClient(sourceClientID)
 	if err != nil || sourceClient == nil {
@@ -2838,7 +2841,10 @@ func nestedTunnelOwnerAllowed(sourceClientID, destinationTaskID int) bool {
 
 func nestedTunnelTenantAllowed(sourceClientID, sourceUserID, destinationClientID, destinationUserID int) bool {
 	if sourceClientID < 0 {
-		return true
+		// The caller resolves negative IDs: internal server services are
+		// admitted by nestedTunnelOwnerAllowed, while public onboarding clients
+		// are rejected there. This pure helper stays conservative.
+		return false
 	}
 	if sourceUserID > 0 {
 		return destinationUserID == sourceUserID
@@ -2964,12 +2970,6 @@ loop:
 			s.configMu.Lock()
 			hasHost := client.HasHost(h)
 			if !hasHost {
-				if err := clientTunnelQuotaError(client); err != nil {
-					s.configMu.Unlock()
-					fail = true
-					c.WriteAddFail()
-					break loop
-				}
 				if file.GetDb().IsHostExist(h) {
 					s.configMu.Unlock()
 					fail = true

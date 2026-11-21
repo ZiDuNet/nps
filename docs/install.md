@@ -37,7 +37,7 @@
 
 ## NPS 服务端：Docker 部署
 
-Docker 部署必须挂载 `/conf`。`clients.json`、`users.json`、`tasks.json`、`hosts.json` 和 `nps.conf` 都在这里，容器重建后是否丢数据就看这个目录有没有保留。
+Docker 部署必须挂载整个 `/conf`。从 v1.1.49 起，权威业务数据是 `nps.db`，运行中还可能依赖 `nps.db-wal`、`nps.db-shm` 和可重建的 `nps.db.lock`；容器重建后是否丢数据取决于整个目录是否保留。`nps.conf` 只保存监听、端口、TLS、日志等启动参数。
 
 ```bash
 mkdir -p /opt/nps/conf

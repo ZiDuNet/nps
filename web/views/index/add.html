@@ -221,12 +221,12 @@
                         <div class="form-group-wrapper"><input id="tunnel-flow-limit" class="form-control" type="number" min="0" step="1" name="flow_limit" value="0"><span class="help-block" data-i18n-zh="本隧道累计可通过的总流量上限；0 表示不限。入口与出口流量合计计算，达到上限后连接会被切断。" data-i18n-en="Total traffic quota for this tunnel; 0 means unlimited. Inbound and outbound traffic count together; connections are cut once the quota is reached.">本隧道累计可通过的总流量上限；0 表示不限。入口与出口流量合计计算，达到上限后连接会被切断。</span></div>
                     </div>
                     <div class="form-group tunnel-mode-field" id="upload_limit" data-tunnel-field="upload_limit">
-                        <label class="form-label font-bold" for="tunnel-upload-limit" data-i18n-zh="上行限速（KB/s）" data-i18n-en="Upload limit (KB/s)">上行限速（KB/s）</label>
-                        <div class="form-group-wrapper"><input id="tunnel-upload-limit" class="form-control" type="number" min="0" step="1" name="upload_limit" value="0"><span class="help-block" data-i18n-zh="访问者到内网服务的速度；0 表示不限速。同一隧道的所有连接共享此额度。" data-i18n-en="Visitor to private service speed; 0 means unlimited. All connections on this tunnel share the limit.">访问者到内网服务的速度；0 表示不限速。同一隧道的所有连接共享此额度。</span></div>
+                        <label class="form-label font-bold" for="tunnel-upload-limit" data-i18n-zh="上行限速（Mbps）" data-i18n-en="Upload limit (Mbps)">上行限速（Mbps）</label>
+                        <div class="form-group-wrapper"><input id="tunnel-upload-limit" class="form-control" type="number" min="0" step="0.1" name="upload_limit" value="0"><span class="help-block" data-i18n-zh="访问者到内网服务的速度，单位 Mbps；0 表示不限速。同一隧道的所有连接共享此额度。" data-i18n-en="Visitor to private service speed in Mbps; 0 means unlimited. All connections on this tunnel share the limit.">访问者到内网服务的速度，单位 Mbps；0 表示不限速。同一隧道的所有连接共享此额度。</span></div>
                     </div>
                     <div class="form-group tunnel-mode-field" id="download_limit" data-tunnel-field="download_limit">
-                        <label class="form-label font-bold" for="tunnel-download-limit" data-i18n-zh="下行限速（KB/s）" data-i18n-en="Download limit (KB/s)">下行限速（KB/s）</label>
-                        <div class="form-group-wrapper"><input id="tunnel-download-limit" class="form-control" type="number" min="0" step="1" name="download_limit" value="0"><span class="help-block" data-i18n-zh="内网服务到访问者的速度；0 表示不限速。同一隧道的所有连接共享此额度。" data-i18n-en="Private service to visitor speed; 0 means unlimited. All connections on this tunnel share the limit.">内网服务到访问者的速度；0 表示不限速。同一隧道的所有连接共享此额度。</span></div>
+                        <label class="form-label font-bold" for="tunnel-download-limit" data-i18n-zh="下行限速（Mbps）" data-i18n-en="Download limit (Mbps)">下行限速（Mbps）</label>
+                        <div class="form-group-wrapper"><input id="tunnel-download-limit" class="form-control" type="number" min="0" step="0.1" name="download_limit" value="0"><span class="help-block" data-i18n-zh="内网服务到访问者的速度，单位 Mbps；0 表示不限速。同一隧道的所有连接共享此额度。" data-i18n-en="Private service to visitor speed in Mbps; 0 means unlimited. All connections on this tunnel share the limit.">内网服务到访问者的速度，单位 Mbps；0 表示不限速。同一隧道的所有连接共享此额度。</span></div>
                     </div>
 
                     {{if or (not .dedicated) (eq $mode "tcp")}}

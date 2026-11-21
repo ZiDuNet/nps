@@ -54,9 +54,9 @@
                         <small class="help-block" data-i18n-zh="所有客户端和代理入口共用的并发上限；0 表示不限。" data-i18n-en="Shared connection limit for all clients and listeners; 0 means unlimited.">所有客户端和代理入口共用的并发上限；0 表示不限。</small>
                     </label>
                     <label class="global-field" for="global-rate-limit">
-                        <span class="global-field__label" data-i18n-zh="全局限速（KB/s）" data-i18n-en="Global rate limit (KB/s)">全局限速（KB/s）</span>
-                        <input id="global-rate-limit" class="form-control" type="number" min="0" step="1" name="globalRateLimit" value="{{.globalRateLimit}}">
-                        <small class="help-block" data-i18n-zh="所有转发流量共享的总带宽上限，会叠加在客户端限速之上；0 表示不限。" data-i18n-en="Aggregate forwarding bandwidth applied in addition to client limits; 0 means unlimited.">所有转发流量共享的总带宽上限，会叠加在客户端限速之上；0 表示不限。</small>
+                        <span class="global-field__label" data-i18n-zh="全局出口总带宽（双向合计，Mbps）" data-i18n-en="Global egress bandwidth (two-way total, Mbps)">全局出口总带宽（双向合计，Mbps）</span>
+                        <input id="global-rate-limit" class="form-control" type="number" min="0" step="0.1" name="globalRateLimit" value="{{.globalRateLimit}}">
+                        <small class="help-block" data-i18n-zh="服务器所有转发流量的读写合计上限，是出口保险丝；0 表示不限。用户级和客户端级带宽只能在此额度内进一步收窄。" data-i18n-en="Combined read and write ceiling for all forwarding traffic on this server, acting as an egress fuse; 0 means unlimited. User and client limits can only narrow it.">服务器所有转发流量的读写合计上限，是出口保险丝；0 表示不限。用户级和客户端级带宽只能在此额度内进一步收窄。</small>
                     </label>
                 </div>
             </section>

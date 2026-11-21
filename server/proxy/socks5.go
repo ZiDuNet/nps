@@ -71,7 +71,7 @@ type socksTaskSnapshot struct {
 	taskFlow     *file.Flow
 	taskRate     *rate.Directional
 	clientRate   *rate.Rate
-	userRate     *rate.Directional
+	userRate     *rate.Shared
 	localProxy   bool
 	serverIP     string
 	multiAccount map[string]string

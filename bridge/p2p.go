@@ -691,6 +691,8 @@ func (s *Bridge) resolveP2PTarget(passwordMd5 string) (t *file.Tunnel, node *Nod
 		return nil, nil, p2pproto.CodeRefused, fmt.Sprintf("task %d is disabled", t.Id)
 	case t.Client == nil:
 		return nil, nil, p2pproto.CodeRefused, fmt.Sprintf("task %d has no client", t.Id)
+	case !file.GetDb().IsClientActive(t.Client):
+		return nil, nil, p2pproto.CodeRefused, fmt.Sprintf("task %d owner is disabled or expired", t.Id)
 	}
 	client := s.selectSession(t.Client.Id, "signal")
 	if client == nil {

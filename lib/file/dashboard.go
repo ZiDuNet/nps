@@ -19,9 +19,7 @@ func (s *DbUtils) SetGlobalDashboardKey(hash, ciphertext string) error {
 	global.DashboardKeyHash = hash
 	global.DashboardKeyCiphertext = ciphertext
 	global.Unlock()
-	s.JsonDb.setGlobal(global)
-	s.JsonDb.StoreGlobalToJsonFile()
-	return nil
+	return s.SaveGlobal(global)
 }
 
 // SetGlobalDashboardKeyHash is retained for callers that only need to manage

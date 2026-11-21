@@ -6,8 +6,8 @@
 ## 版本号规则
 
 - 版本号唯一来源：`lib/version/version.go` 的 `VERSION`。
-- 正式 tag 必须等于 `v{VERSION}`，例如源码为 `1.1.48` 时 tag 只能是
-  `v1.1.48`。
+- 正式 tag 必须等于 `v{VERSION}`，例如源码为 `1.1.49` 时 tag 只能是
+  `v1.1.49`。
 - tag 必须指向当前 `origin/master` 的提交；`release.yml` 的
   `validate_release` 会强制校验这两点。
 - 补丁版本只递增最后一位；不要复用或移动已发布 tag，回滚请发新补丁版本。
@@ -20,6 +20,8 @@
 | `cmd/npc/npc-gui/wails.json` | `info.productVersion` 同步 |
 | `cmd/npc/npc-gui/frontend/package.json` | `version` 同步 |
 | `cmd/npc/npc-gui/build/darwin/Info.plist` | `CFBundleVersion` 与 `CFBundleShortVersionString` 同步 |
+| `gui/npc/AndroidManifest.xml` | `versionName` 同步，`versionCode` 单调递增 |
+| `packaging/fnos/manifest` | `version` 同步；打包脚本仍会在构建时覆盖 |
 | `cmd/npsctl/main.go` | 从 `lib/version` 读取，禁止另写常量 |
 | `CHANGELOG.md` | 顶部存在 `## [x.y.z]` 段落，供 Release Notes 使用 |
 | `README.md` / `README_zh.md` | 标题版本号与「近期更新」条目 |
@@ -32,6 +34,7 @@
 - `docs/api.md`：`/api/v1` 字段、权限或错误码有变化时。
 - `docs/mcp.md`：MCP 工具、认证、会话或客户端配置有变化时。
 - `docs/usage-guide.md`：面板菜单、按钮或操作流程有变化时。
+- `docs/server/sqlite-storage.md`、`docs/upgrade-sqlite.md`：数据存储、迁移、备份、WAL、导出或回滚行为有变化时。
 - `README*.md` 与 `docs/screenshots/`：界面截图需要更新时。
 - `web/skills/nps/SKILL.md` 和 `web/skills/nps/scripts/npc-help.sh`：CLI、Skill、NPC
   部署方式有变化时。

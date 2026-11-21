@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/rate"
 	"ehang.io/nps/server"
 )
 
@@ -28,8 +29,8 @@ type liveUserSnapshot struct {
 	Clients         int    `json:"clients"`
 	Connections     int64  `json:"connections"`
 	ConnectionLimit int    `json:"connectionLimit"`
-	UploadLimit     int    `json:"uploadLimit"`
-	DownloadLimit   int    `json:"downloadLimit"`
+	BandwidthLimit  int64  `json:"bandwidthLimit"`
+	BandwidthMbps   string `json:"bandwidthMbps"`
 	UploadRate      int64  `json:"uploadRate"`
 	DownloadRate    int64  `json:"downloadRate"`
 }
@@ -142,13 +143,23 @@ func (s *BaseController) liveDataSnapshot(clientIDs, userIDs map[int]struct{}, i
 			continue
 		}
 		user.RLock()
+		connectionLimit := 0
+		if user.MaxConn != nil {
+			connectionLimit = *user.MaxConn
+		}
+		bandwidthLimit := int64(0)
+		if user.BandwidthLimit != nil {
+			bandwidthLimit = *user.BandwidthLimit
+		}
 		row := liveUserSnapshot{
 			UserID:          userID,
 			UserName:        html.UnescapeString(user.UserName),
-			ConnectionLimit: user.MaxConn,
-			UploadLimit:     user.UploadLimit,
-			DownloadLimit:   user.DownloadLimit,
+			ConnectionLimit: connectionLimit,
+			BandwidthLimit:  bandwidthLimit,
 			Clients:         clientsPerUser[userID],
+		}
+		if bandwidthLimit > 0 {
+			row.BandwidthMbps = rate.FormatMbps(bandwidthLimit)
 		}
 		user.RUnlock()
 		var runtimeLimit int64

@@ -160,8 +160,8 @@ $('#table').npsTable({
         var accessCard = card('shield-alt', label('访问与限速', 'Access & limits'),
             kv(label('仅允许已登记 IP', 'Registered IPs only'), text(onOff(row.RegisteredOnly)))
             + kv(label('名单冲突策略', 'List policy'), text(row.IpListPriority === 1 ? (english ? 'Allow first' : '白名单优先') : (english ? 'Deny first' : '黑名单优先')))
-            + kv(label('上行限速 / 当前', 'Upload limit / current'), text(String(row.UploadLimit || 0) + ' KB/s / ' + changeunit(row.UploadRate || 0) + '/s'))
-            + kv(label('下行限速 / 当前', 'Download limit / current'), text(String(row.DownloadLimit || 0) + ' KB/s / ' + changeunit(row.DownloadRate || 0) + '/s'))
+            + kv(label('上行限速 / 当前', 'Upload limit / current'), text(String(row.UploadLimitMbps || 0) + ' Mbps / ' + changeunit(row.UploadRate || 0) + '/s'))
+            + kv(label('下行限速 / 当前', 'Download limit / current'), text(String(row.DownloadLimitMbps || 0) + ' Mbps / ' + changeunit(row.DownloadRate || 0) + '/s'))
             + (((row.BlackIpList || []).length || (row.WhiteIpList || []).length)
                 ? chips(label('来源名单', 'Source lists'), (row.BlackIpList || []).concat(row.WhiteIpList || []))
                 : ''));

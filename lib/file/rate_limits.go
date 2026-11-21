@@ -1,29 +1,22 @@
 package file
 
 import (
-	"math"
 	"sync"
 
 	"ehang.io/nps/lib/rate"
 )
 
-// RateLimits stores per-resource limits in KB/s. Runtime buckets are not
-// persisted; zero means unlimited and remains compatible with old JSON files.
+// RateLimits stores per-resource limits in bits per second. Runtime buckets
+// are not persisted; zero means unlimited.
 type RateLimits struct {
-	UploadLimit   int `json:"UploadLimit,omitempty"`
-	DownloadLimit int `json:"DownloadLimit,omitempty"`
+	UploadLimit   int64 `json:"UploadLimit,omitempty"`
+	DownloadLimit int64 `json:"DownloadLimit,omitempty"`
 	rateMu        sync.Mutex
 	runtimeRate   *rate.Directional
 }
 
-func limitBytes(k int) int64 {
-	if k <= 0 {
-		return 0
-	}
-	if uint64(k) > uint64(math.MaxInt64/1024) {
-		return math.MaxInt64
-	}
-	return int64(k) * 1024
+func limitBytes(bps int64) int64 {
+	return rate.BytesPerSecondFromBps(bps)
 }
 
 // RateLimiter returns the shared runtime buckets for this resource.
@@ -39,21 +32,21 @@ func (r *RateLimits) RateLimiter() *rate.Directional {
 	return r.runtimeRate
 }
 
-// SetRateLimits applies new values to existing and future connections.
-func (r *RateLimits) SetRateLimits(upload, download int) {
+// SetRateLimits applies new bps values to existing and future connections.
+func (r *RateLimits) SetRateLimits(uploadBps, downloadBps int64) {
 	if r == nil {
 		return
 	}
-	if upload < 0 {
-		upload = 0
+	if uploadBps < 0 {
+		uploadBps = 0
 	}
-	if download < 0 {
-		download = 0
+	if downloadBps < 0 {
+		downloadBps = 0
 	}
 	r.rateMu.Lock()
-	r.UploadLimit, r.DownloadLimit = upload, download
+	r.UploadLimit, r.DownloadLimit = uploadBps, downloadBps
 	if r.runtimeRate != nil {
-		r.runtimeRate.SetLimits(limitBytes(upload), limitBytes(download))
+		r.runtimeRate.SetLimits(limitBytes(uploadBps), limitBytes(downloadBps))
 	}
 	r.rateMu.Unlock()
 }
@@ -91,8 +84,8 @@ func (r *RateLimits) CurrentRates() (int64, int64) {
 	return d.Throughput()
 }
 
-// RateLimitSnapshot returns a race-safe copy of the configured KB/s values.
-func (r *RateLimits) RateLimitSnapshot() (upload, download int) {
+// RateLimitSnapshot returns a race-safe copy of the configured bps values.
+func (r *RateLimits) RateLimitSnapshot() (upload, download int64) {
 	if r == nil {
 		return 0, 0
 	}

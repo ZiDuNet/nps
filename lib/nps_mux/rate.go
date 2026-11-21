@@ -11,6 +11,10 @@ import (
 // connection. Access to the bucket is serialized so concurrent readers and
 // writers cannot overspend tokens or race with shutdown.
 type Rate struct {
+	// Keep the atomically accessed 64-bit sample at the start of the allocation.
+	// This guarantees its required 8-byte alignment on 32-bit platforms.
+	_                 [0]atomic.Int64
+	NowRate           int64
 	bucketSize        int64
 	bucketSurplusSize int64
 	bucketAddSize     int64
@@ -20,7 +24,6 @@ type Rate struct {
 	mu                sync.Mutex
 	cond              *sync.Cond
 	stopped           bool
-	NowRate           int64
 }
 
 func NewRate(addSize int64) *Rate {

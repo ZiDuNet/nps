@@ -23,6 +23,7 @@ import (
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/rate"
+	"ehang.io/nps/lib/store"
 )
 
 type DbUtils struct {
@@ -39,16 +40,28 @@ type OwnerFilter struct {
 }
 
 var (
-	Db               *DbUtils
 	once             sync.Once
 	hostMutationMu   sync.Mutex
 	clientMutationMu sync.Mutex
+	taskMutationMu   sync.Mutex
+	globalMutationMu sync.Mutex
 )
 
 // init csv from file
 func GetDb() *DbUtils {
 	once.Do(func() {
+		dbMu.RLock()
+		if Db != nil {
+			dbMu.RUnlock()
+			return
+		}
+		dbMu.RUnlock()
 		jsonDb := NewJsonDb(common.GetRunPath())
+		dbMu.Lock()
+		defer dbMu.Unlock()
+		if Db != nil {
+			return
+		}
 		jsonDb.LoadClientFromJsonFile()
 		jsonDb.LoadUserFromJsonFile()
 		jsonDb.LoadTaskFromJsonFile()
@@ -185,8 +198,8 @@ func (s *DbUtils) NewUser(u *User) error {
 		return err
 	}
 	u.Email = email
-	if u.MaxClientNum < 0 || u.MaxTunnelNum < 0 || u.MaxConn < 0 || u.UploadLimit < 0 || u.DownloadLimit < 0 {
-		return errors.New("用户配额、连接数和带宽限制不能小于 0")
+	if err := validateUserQuotas(u); err != nil {
+		return err
 	}
 	expireTime, err := NormalizeExpiryTime(u.ExpireTime)
 	if err != nil {
@@ -194,6 +207,8 @@ func (s *DbUtils) NewUser(u *User) error {
 	}
 	u.ExpireTime = expireTime
 
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()
 	if !s.VerifyUserLoginName(u.UserName, u.Id) {
@@ -205,13 +220,27 @@ func (s *DbUtils) NewUser(u *User) error {
 	if u.Id == 0 {
 		u.Id = int(s.JsonDb.GetUserId())
 	}
+	if u.Id > int(^uint32(0)>>1) {
+		return errors.New("用户 ID 超出支持范围")
+	}
+	if _, exists := s.JsonDb.Users.Load(u.Id); exists {
+		return fmt.Errorf("用户 ID %d 已存在", u.Id)
+	}
+	for current := atomic.LoadInt32(&s.JsonDb.UserIncreaseId); u.Id > int(current); current = atomic.LoadInt32(&s.JsonDb.UserIncreaseId) {
+		if atomic.CompareAndSwapInt32(&s.JsonDb.UserIncreaseId, current, int32(u.Id)) {
+			break
+		}
+	}
 	if u.CreateTime == "" {
 		u.CreateTime = time.Now().Format("2006-01-02 15:04:05")
 	}
 	u.Status = true
 	s.JsonDb.Users.Store(u.Id, u)
-	s.JsonDb.StoreUsersToJsonFile()
-	SetUserRuntimeLimits(u.Id, u.MaxConn, u.UploadLimit, u.DownloadLimit)
+	if err := s.JsonDb.StoreUsersToJsonFileErr(); err != nil {
+		s.JsonDb.Users.Delete(u.Id)
+		return fmt.Errorf("保存用户失败: %w", err)
+	}
+	SetUserRuntimeLimits(u.Id, u.MaxConn, u.BandwidthLimit)
 	return nil
 }
 
@@ -230,8 +259,8 @@ func (s *DbUtils) UpdateUser(u *User) error {
 		return err
 	}
 	u.Email = email
-	if u.MaxClientNum < 0 || u.MaxTunnelNum < 0 || u.MaxConn < 0 || u.UploadLimit < 0 || u.DownloadLimit < 0 {
-		return errors.New("用户配额、连接数和带宽限制不能小于 0")
+	if err := validateUserQuotas(u); err != nil {
+		return err
 	}
 	expireTime, err := NormalizeExpiryTime(u.ExpireTime)
 	if err != nil {
@@ -239,6 +268,8 @@ func (s *DbUtils) UpdateUser(u *User) error {
 	}
 	u.ExpireTime = expireTime
 
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()
 	if !s.VerifyUserLoginName(u.UserName, u.Id) {
@@ -247,12 +278,20 @@ func (s *DbUtils) UpdateUser(u *User) error {
 	if !s.VerifyUserEmail(u.Email, u.Id) {
 		return errors.New("邮箱已被其他用户使用")
 	}
-	if existing, getErr := s.GetUser(u.Id); getErr == nil && existing != nil {
+	existing, _ := s.GetUser(u.Id)
+	if existing != nil {
 		existing.RLock()
-		existingMaxClientNum, existingExpireTime := existing.MaxClientNum, existing.ExpireTime
+		existingMaxClientNum, existingMaxTunnelNum, existingMaxHostNum := existing.MaxClientNum, existing.MaxTunnelNum, existing.MaxHostNum
+		existingExpireTime := existing.ExpireTime
 		existing.RUnlock()
-		if u.MaxClientNum != existingMaxClientNum && u.MaxClientNum > 0 && s.getUserClientNumLocked(u.Id, 0) > u.MaxClientNum {
+		if reducedBelowUsage(u.MaxClientNum, existingMaxClientNum, s.getUserClientNumLocked(u.Id, 0)) {
 			return errors.New("最大客户端数不能低于已分配客户端数量")
+		}
+		if reducedBelowUsage(u.MaxTunnelNum, existingMaxTunnelNum, s.GetUserTunnelNum(u.Id)) {
+			return errors.New("最大隧道数不能低于已创建隧道数量")
+		}
+		if reducedBelowUsage(u.MaxHostNum, existingMaxHostNum, s.GetUserHostNum(u.Id)) {
+			return errors.New("最大域名规则数不能低于已创建域名规则数量")
 		}
 		if u.ExpireTime != existingExpireTime {
 			if err := s.validateUserExpiryForClientsLocked(u.Id, u.ExpireTime); err != nil {
@@ -261,8 +300,54 @@ func (s *DbUtils) UpdateUser(u *User) error {
 		}
 	}
 	s.JsonDb.Users.Store(u.Id, u)
-	s.JsonDb.StoreUsersToJsonFile()
-	SetUserRuntimeLimits(u.Id, u.MaxConn, u.UploadLimit, u.DownloadLimit)
+	if err := s.JsonDb.StoreUsersToJsonFileErr(); err != nil {
+		if existing != nil {
+			s.JsonDb.Users.Store(u.Id, existing)
+		} else {
+			s.JsonDb.Users.Delete(u.Id)
+		}
+		return fmt.Errorf("保存用户失败: %w", err)
+	}
+	SetUserRuntimeLimits(u.Id, u.MaxConn, u.BandwidthLimit)
+	return nil
+}
+
+func sameIntQuota(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+// reducedBelowUsage reports a new finite cap that is lower than the resources
+// already allocated. Unlimited (nil) and "not included" (zero) are intentional
+// block states, so they are not treated as accidental shrink operations.
+func reducedBelowUsage(next, previous *int, used int) bool {
+	if next == nil || *next <= 0 || *next >= used {
+		return false
+	}
+	return !sameIntQuota(next, previous)
+}
+
+func validateUserQuotas(u *User) error {
+	if u == nil {
+		return errors.New("用户记录无效")
+	}
+	if u.MaxClientNum != nil && *u.MaxClientNum < 0 {
+		return errors.New("用户配额、连接数和带宽限制不能小于 0")
+	}
+	if u.MaxTunnelNum != nil && *u.MaxTunnelNum < 0 {
+		return errors.New("用户配额、连接数和带宽限制不能小于 0")
+	}
+	if u.MaxHostNum != nil && *u.MaxHostNum < 0 {
+		return errors.New("用户配额、连接数和带宽限制不能小于 0")
+	}
+	if u.MaxConn != nil && *u.MaxConn < 0 {
+		return errors.New("用户配额、连接数和带宽限制不能小于 0")
+	}
+	if u.BandwidthLimit != nil && *u.BandwidthLimit < 0 {
+		return errors.New("用户配额、连接数和带宽限制不能小于 0")
+	}
 	return nil
 }
 
@@ -270,20 +355,42 @@ func (s *DbUtils) DelUser(id int) error {
 	if id <= 0 {
 		return errors.New("用户 ID 无效")
 	}
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()
-	if user, err := s.GetUser(id); err == nil && user != nil {
-		user.Lock()
-		user.Status = false
-		user.Unlock()
+	user, userExists := s.JsonDb.Users.Load(id)
+	if userExists {
+		if typed, ok := user.(*User); !ok || typed == nil {
+			return errors.New("用户记录无效")
+		}
 	}
+	previousUserStatus := false
+	if typed, ok := user.(*User); ok && typed != nil {
+		typed.Lock()
+		previousUserStatus = typed.Status
+		typed.Status = false
+		typed.Unlock()
+	}
+	type clientDeletionState struct {
+		userID    int
+		status    bool
+		isConnect bool
+	}
+	previousClients := make(map[int]clientDeletionState)
 	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
-		c, ok := value.(*Client)
-		if !ok || c == nil {
+		clientID, ok := key.(int)
+		c, valid := value.(*Client)
+		if !ok || !valid || c == nil {
 			return true
 		}
 		c.Lock()
 		if c.UserId == id {
+			previousClients[clientID] = clientDeletionState{
+				userID:    c.UserId,
+				status:    c.Status,
+				isConnect: c.IsConnect,
+			}
 			c.UserId = 0
 			// Do not leave an orphaned client usable after its owner is deleted.
 			// The controller revokes live sessions before this method is called;
@@ -295,8 +402,178 @@ func (s *DbUtils) DelUser(id int) error {
 		return true
 	})
 	s.JsonDb.Users.Delete(id)
-	s.JsonDb.StoreUsersToJsonFile()
-	s.JsonDb.StoreClientsToJsonFile()
+	if err := s.JsonDb.persistKinds(store.KindUser, store.KindClient); err != nil {
+		if userExists {
+			s.JsonDb.Users.Store(id, user)
+			if typed, ok := user.(*User); ok && typed != nil {
+				typed.Lock()
+				typed.Status = previousUserStatus
+				typed.Unlock()
+			}
+		}
+		for clientID, previous := range previousClients {
+			if current, ok := s.JsonDb.Clients.Load(clientID); ok {
+				if client, valid := current.(*Client); valid && client != nil {
+					client.Lock()
+					client.UserId = previous.userID
+					client.Status = previous.status
+					client.IsConnect = previous.isConnect
+					client.Unlock()
+				}
+			}
+		}
+		return fmt.Errorf("保存用户删除结果失败: %w", err)
+	}
+	CleanupUserRuntime(id)
+	return nil
+}
+
+// ClientCascadeCommit receives committed records for runtime cleanup. It runs
+// while the data mutation locks are still held, so implementations must only
+// capture the records and defer lifecycle-locking cleanup until after the
+// delete method returns. Persistent IDs are monotonic and never recycled.
+type ClientCascadeCommit func(clients []*Client, tunnels []*Tunnel, hosts []*Host)
+
+// DelUserCascade removes the account and every owned client resource in one
+// persistence operation.
+func (s *DbUtils) DelUserCascade(id int) error {
+	return s.DelUserCascadeWithHook(id, nil)
+}
+
+// DelUserCascadeWithHook invokes onCommitted only after the SQLite transaction
+// succeeds. A persistence failure therefore leaves live listeners untouched.
+func (s *DbUtils) DelUserCascadeWithHook(id int, onCommitted ClientCascadeCommit) error {
+	if id <= 0 {
+		return errors.New("用户 ID 无效")
+	}
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
+	hostMutationMu.Lock()
+	defer hostMutationMu.Unlock()
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+
+	userValue, ok := s.JsonDb.Users.Load(id)
+	if !ok {
+		return errors.New("未找到用户")
+	}
+	user, valid := userValue.(*User)
+	if !valid || user == nil {
+		return errors.New("用户记录无效")
+	}
+
+	ownedClientIDs := make(map[int]struct{})
+	s.JsonDb.Clients.Range(func(key, value interface{}) bool {
+		client, valid := value.(*Client)
+		if !valid || client == nil {
+			return true
+		}
+		client.RLock()
+		userID, clientID := client.UserId, client.Id
+		client.RUnlock()
+		if userID == id {
+			if clientID <= 0 {
+				if intID, ok := key.(int); ok {
+					clientID = intID
+				}
+			}
+			ownedClientIDs[clientID] = struct{}{}
+		}
+		return true
+	})
+
+	type removedEntity struct {
+		kind  string
+		key   int
+		value interface{}
+	}
+	removed := make([]removedEntity, 0)
+	removedClients := make([]*Client, 0, len(ownedClientIDs))
+	removedTunnels := make([]*Tunnel, 0)
+	removedHosts := make([]*Host, 0)
+	removeOwned := func(kind string, values *sync.Map) {
+		values.Range(func(key, value interface{}) bool {
+			entityID, ok := key.(int)
+			if !ok {
+				return true
+			}
+			var client *Client
+			switch obj := value.(type) {
+			case *Client:
+				client = obj
+			case *Tunnel:
+				if obj != nil {
+					client = obj.Client
+				}
+			case *Host:
+				if obj != nil {
+					client = obj.Client
+				}
+			}
+			if client == nil {
+				return true
+			}
+			client.RLock()
+			clientID := client.Id
+			client.RUnlock()
+			if _, owned := ownedClientIDs[clientID]; !owned {
+				return true
+			}
+			if previous, loaded := values.LoadAndDelete(entityID); loaded {
+				removed = append(removed, removedEntity{kind: kind, key: entityID, value: previous})
+				switch entity := previous.(type) {
+				case *Client:
+					removedClients = append(removedClients, entity)
+				case *Tunnel:
+					removedTunnels = append(removedTunnels, entity)
+				case *Host:
+					removedHosts = append(removedHosts, entity)
+				}
+			}
+			return true
+		})
+	}
+	removeOwned(store.KindTunnel, &s.JsonDb.Tasks)
+	removeOwned(store.KindHost, &s.JsonDb.Hosts)
+	removeOwned(store.KindClient, &s.JsonDb.Clients)
+	s.JsonDb.Users.Delete(id)
+
+	if err := s.JsonDb.persistKinds(store.KindUser, store.KindClient, store.KindTunnel, store.KindHost); err != nil {
+		s.JsonDb.Users.Store(id, userValue)
+		for _, entity := range removed {
+			switch entity.kind {
+			case store.KindClient:
+				s.JsonDb.Clients.Store(entity.key, entity.value)
+			case store.KindTunnel:
+				s.JsonDb.Tasks.Store(entity.key, entity.value)
+			case store.KindHost:
+				s.JsonDb.Hosts.Store(entity.key, entity.value)
+			}
+		}
+		return fmt.Errorf("保存用户级联删除结果失败: %w", err)
+	}
+
+	for _, client := range removedClients {
+		if client != nil {
+			s.JsonDb.markDeletedClient(client)
+		}
+	}
+	if onCommitted != nil {
+		onCommitted(removedClients, removedTunnels, removedHosts)
+	}
+	for _, entity := range removed {
+		if entity.kind != store.KindClient {
+			continue
+		}
+		if client, valid := entity.value.(*Client); valid && client != nil {
+			client.RLock()
+			clientRate := client.Rate
+			client.RUnlock()
+			if clientRate != nil {
+				clientRate.Stop()
+			}
+		}
+	}
 	CleanupUserRuntime(id)
 	return nil
 }
@@ -396,10 +673,7 @@ func (s *DbUtils) ResetUserPassword(id int, email, previous, password string) er
 	}
 	user.Password = password
 	user.Unlock()
-	userLock.Lock()
-	err = storeSyncMapToFile(&s.JsonDb.Users, s.JsonDb.UserFilePath)
-	userLock.Unlock()
-	if err != nil {
+	if err = s.JsonDb.StoreUsersToJsonFileErr(); err != nil {
 		user.Lock()
 		user.Password = previous
 		user.Unlock()
@@ -422,6 +696,27 @@ func (s *DbUtils) ValidateClientOwner(userID int) error {
 	}
 	if _, err := s.GetUser(userID); err != nil {
 		return errors.New("所属用户不存在")
+	}
+	return nil
+}
+
+// requireStoredClientReferenceLocked rejects a stale *Client captured before a
+// concurrent delete. Pointer equality is intentional: an ID may be reused by a
+// later application/restart, and a new client with the same ID must not accept
+// tunnels created for the removed record. In-process fixtures may still pass a
+// never-registered pointer, matching the historical helper behavior.
+func (s *DbUtils) requireStoredClientReferenceLocked(client *Client) error {
+	if client == nil {
+		return errors.New("所属客户端不存在")
+	}
+	if _, deleted := s.JsonDb.deletedClientRefs.Load(client); deleted {
+		return errors.New("所属客户端已被删除或替换，请刷新后重试")
+	}
+	client.RLock()
+	clientID := client.Id
+	client.RUnlock()
+	if current, ok := s.JsonDb.Clients.Load(clientID); ok && current != client {
+		return errors.New("所属客户端已被删除或替换，请刷新后重试")
 	}
 	return nil
 }
@@ -511,6 +806,10 @@ func (s *DbUtils) getUserClientNumLocked(userID, excludedClientID int) int {
 // the current client ID as excludedClientID makes the helper safe for an
 // ownership-preserving edit or a reassignment operation.
 func (s *DbUtils) ValidateClientOwnerQuota(userID, excludedClientID int) error {
+	if userID == 0 {
+		// Unassigned clients are administrator-owned resources.
+		return nil
+	}
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()
 	return s.validateClientOwnerQuotaLocked(userID, excludedClientID)
@@ -530,10 +829,10 @@ func (s *DbUtils) validateClientOwnerQuotaLocked(userID, excludedClientID int) e
 	user.RLock()
 	maxClientNum := user.MaxClientNum
 	user.RUnlock()
-	if maxClientNum < 0 {
+	if maxClientNum != nil && *maxClientNum < 0 {
 		return errors.New("所属用户的最大客户端数无效")
 	}
-	if maxClientNum > 0 && s.getUserClientNumLocked(userID, excludedClientID) >= maxClientNum {
+	if IntQuotaReached(s.getUserClientNumLocked(userID, excludedClientID), maxClientNum) {
 		return errors.New("客户端数量已达到所属用户的配额上限")
 	}
 	return nil
@@ -593,6 +892,18 @@ func validateClientExpiryBounds(clientExpireTime, userExpireTime string) error {
 // expiry-bound checks. NewClient and UpdateClient use the locked counterpart
 // so concurrent creates and owner transfers cannot oversubscribe a user.
 func (s *DbUtils) ValidateClientAssignment(client *Client, excludedClientID int) error {
+	return s.validateClientAssignment(client, excludedClientID, false)
+}
+
+// ValidateClientAssignmentAsAdmin applies the same owner/expiry integrity
+// checks without charging the newly selected owner's customer quota.
+// Administrator-managed records are outside the plan entitlement boundary,
+// but they must still point at an existing owner and obey its expiry.
+func (s *DbUtils) ValidateClientAssignmentAsAdmin(client *Client, excludedClientID int) error {
+	return s.validateClientAssignment(client, excludedClientID, true)
+}
+
+func (s *DbUtils) validateClientAssignment(client *Client, excludedClientID int, bypassUserQuota bool) error {
 	if client == nil {
 		return errors.New("客户端记录无效")
 	}
@@ -601,14 +912,99 @@ func (s *DbUtils) ValidateClientAssignment(client *Client, excludedClientID int)
 	client.RUnlock()
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()
+	if bypassUserQuota {
+		if err := s.ValidateClientOwner(userID); err != nil {
+			return err
+		}
+		return s.validateClientExpiryForOwnerLocked(userID, expireTime)
+	}
 	return s.validateClientAssignmentLocked(userID, expireTime, excludedClientID)
 }
 
 func (s *DbUtils) validateClientAssignmentLocked(userID int, clientExpireTime string, excludedClientID int) error {
+	if userID == 0 {
+		return nil
+	}
 	if err := s.validateClientOwnerQuotaLocked(userID, excludedClientID); err != nil {
 		return err
 	}
-	return s.validateClientExpiryForOwnerLocked(userID, clientExpireTime)
+	if err := s.validateClientExpiryForOwnerLocked(userID, clientExpireTime); err != nil {
+		return err
+	}
+	return s.validateClientTransferQuotaLocked(userID, excludedClientID)
+}
+
+// validateClientTransferQuotaLocked prevents an owner transfer from silently
+// pushing a client's existing tunnels or host rules past the target user's
+// plan. The quota is charged per resource, not per client, because the resource
+// stays allocated before and after the transfer.
+func (s *DbUtils) validateClientTransferQuotaLocked(userID, clientID int) error {
+	if userID <= 0 || clientID <= 0 {
+		return nil
+	}
+	source, err := s.GetClient(clientID)
+	if err != nil || source == nil {
+		return nil
+	}
+	source.RLock()
+	sourceOwner := source.UserId
+	source.RUnlock()
+	if sourceOwner == userID {
+		return nil
+	}
+	user, err := s.GetUser(userID)
+	if err != nil || user == nil {
+		return errors.New("所属用户不存在")
+	}
+	user.RLock()
+	maxTunnelNum, maxHostNum := user.MaxTunnelNum, user.MaxHostNum
+	user.RUnlock()
+	tunnels, hosts := 0, 0
+	s.JsonDb.Tasks.Range(func(_, value interface{}) bool {
+		tunnel, ok := value.(*Tunnel)
+		if !ok || tunnel == nil {
+			return true
+		}
+		tunnel.RLock()
+		client, noStore := tunnel.Client, tunnel.NoStore
+		tunnel.RUnlock()
+		if noStore || client == nil {
+			return true
+		}
+		client.RLock()
+		owner := client.Id
+		client.RUnlock()
+		if owner == clientID {
+			tunnels++
+		}
+		return true
+	})
+	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.RLock()
+		client, noStore := host.Client, host.NoStore
+		host.RUnlock()
+		if noStore || client == nil {
+			return true
+		}
+		client.RLock()
+		owner := client.Id
+		client.RUnlock()
+		if owner == clientID {
+			hosts++
+		}
+		return true
+	})
+	if IntQuotaReached(s.GetUserTunnelNum(userID)+tunnels, maxTunnelNum) {
+		return errors.New("转移后的隧道数会超过目标用户的套餐上限")
+	}
+	if IntQuotaReached(s.GetUserHostNum(userID)+hosts, maxHostNum) {
+		return errors.New("转移后的域名规则数会超过目标用户的套餐上限")
+	}
+	return nil
 }
 
 // EffectiveClientExpireTime returns the date that actually governs a client.
@@ -747,6 +1143,13 @@ func (s *DbUtils) VerifyUserEmail(email string, id int) bool {
 }
 
 func (s *DbUtils) MigrateUsersFromClients() error {
+	return s.migrateUsersFromClients(true)
+}
+
+// migrateUsersFromClients normalizes legacy ownership in memory. Import paths
+// pass persist=false so a failed SQLite transaction cannot rewrite the only
+// rollback source.
+func (s *DbUtils) migrateUsersFromClients(persist bool) error {
 	type credential struct {
 		userId   int
 		password string
@@ -864,11 +1267,10 @@ func (s *DbUtils) MigrateUsersFromClients() error {
 		changedClients = true
 		return true
 	})
-	if changedUsers {
-		s.JsonDb.StoreUsersToJsonFile()
-	}
-	if changedClients {
-		s.JsonDb.StoreClientsToJsonFile()
+	if persist && (changedUsers || changedClients) {
+		if err := s.JsonDb.persistKinds(store.KindUser, store.KindClient); err != nil {
+			return fmt.Errorf("保存旧客户端账号迁移失败: %w", err)
+		}
 	}
 	return nil
 }
@@ -892,11 +1294,11 @@ func (s *DbUtils) UserClientIds(userId int) map[int]struct{} {
 }
 
 // UserResourceCounts is the compact resource summary shown in the user
-// management table. TunnelCount follows the same accounting as the user's
-// tunnel quota and therefore includes both ordinary tunnels and HTTP hosts.
+// management table. Tunnel and host quotas use independent counters.
 type UserResourceCounts struct {
 	ClientCount int
 	TunnelCount int
+	HostCount   int
 }
 
 // GetUserResourceCounts returns current ownership counts without exposing any
@@ -920,7 +1322,10 @@ func (s *DbUtils) GetUserResourceCounts() map[int]UserResourceCounts {
 		return true
 	})
 
-	countTunnel := func(client *Client) {
+	countTunnel := func(client *Client, noStore bool) {
+		if noStore {
+			return
+		}
 		userID := s.ownerUserID(client)
 		if userID <= 0 {
 			return
@@ -929,15 +1334,27 @@ func (s *DbUtils) GetUserResourceCounts() map[int]UserResourceCounts {
 		entry.TunnelCount++
 		counts[userID] = entry
 	}
+	countHost := func(client *Client, noStore bool) {
+		if noStore {
+			return
+		}
+		userID := s.ownerUserID(client)
+		if userID <= 0 {
+			return
+		}
+		entry := counts[userID]
+		entry.HostCount++
+		counts[userID] = entry
+	}
 	s.JsonDb.Tasks.Range(func(_, value interface{}) bool {
 		tunnel, ok := value.(*Tunnel)
 		if !ok || tunnel == nil {
 			return true
 		}
 		tunnel.RLock()
-		client := tunnel.Client
+		client, noStore := tunnel.Client, tunnel.NoStore
 		tunnel.RUnlock()
-		countTunnel(client)
+		countTunnel(client, noStore)
 		return true
 	})
 	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
@@ -946,9 +1363,9 @@ func (s *DbUtils) GetUserResourceCounts() map[int]UserResourceCounts {
 			return true
 		}
 		host.RLock()
-		client := host.Client
+		client, noStore := host.Client, host.NoStore
 		host.RUnlock()
-		countTunnel(client)
+		countHost(client, noStore)
 		return true
 	})
 	return counts
@@ -1050,6 +1467,27 @@ func (s *DbUtils) IsClientActiveWithExpiry(client *Client, enforceExpiry bool) b
 	return ok && time.Now().Before(expiresAt)
 }
 
+// requireActiveRegisteredClient protects user-owned resource creation. A
+// client pointer that is not present in the store cannot represent a live NPC
+// session; remote creation paths resolve the client through JsonDb before
+// reaching this helper, so only in-process fixtures and imports can arrive
+// unregistered.
+func (s *DbUtils) requireActiveRegisteredClient(client *Client) error {
+	if client == nil {
+		return errors.New("客户端记录无效")
+	}
+	client.RLock()
+	clientID := client.Id
+	client.RUnlock()
+	if _, err := s.GetClient(clientID); err != nil {
+		return nil
+	}
+	if !s.IsClientActive(client) {
+		return errors.New("所属客户端已停用或已到期")
+	}
+	return nil
+}
+
 func (s *DbUtils) GetUserTunnelNum(userId int) int {
 	clientIds := s.UserClientIds(userId)
 	num := 0
@@ -1059,9 +1497,9 @@ func (s *DbUtils) GetUserTunnelNum(userId int) int {
 			return true
 		}
 		t.RLock()
-		client := t.Client
+		client, noStore := t.Client, t.NoStore
 		t.RUnlock()
-		if client != nil {
+		if !noStore && client != nil {
 			client.RLock()
 			clientID := client.Id
 			client.RUnlock()
@@ -1071,21 +1509,112 @@ func (s *DbUtils) GetUserTunnelNum(userId int) int {
 		}
 		return true
 	})
+	return num
+}
+
+// GetClientTunnelNum counts persisted ordinary tunnels owned by one client.
+// The caller may hold quotaMutationMu; the helper therefore only reads the
+// immutable client identity snapshot and the tunnel map.
+func (s *DbUtils) GetClientTunnelNum(clientID int) int {
+	if clientID == 0 {
+		return 0
+	}
+	num := 0
+	s.JsonDb.Tasks.Range(func(_, value interface{}) bool {
+		tunnel, ok := value.(*Tunnel)
+		if !ok || tunnel == nil {
+			return true
+		}
+		tunnel.RLock()
+		client, noStore := tunnel.Client, tunnel.NoStore
+		tunnel.RUnlock()
+		if noStore || client == nil {
+			return true
+		}
+		client.RLock()
+		candidateID := client.Id
+		client.RUnlock()
+		if candidateID == clientID {
+			num++
+		}
+		return true
+	})
+	return num
+}
+
+func (s *DbUtils) GetUserHostNum(userId int) int {
+	clientIds := s.UserClientIds(userId)
+	num := 0
 	s.JsonDb.Hosts.Range(func(key, value interface{}) bool {
 		h, ok := value.(*Host)
 		if !ok || h == nil {
 			return true
 		}
 		h.RLock()
-		client := h.Client
+		client, noStore := h.Client, h.NoStore
 		h.RUnlock()
-		if client != nil {
+		if !noStore && client != nil {
 			client.RLock()
 			clientID := client.Id
 			client.RUnlock()
 			if _, ok := clientIds[clientID]; ok {
 				num++
 			}
+		}
+		return true
+	})
+	return num
+}
+
+// GetUserTunnelNumExcluding counts a user's tunnels while omitting one
+// existing record. Ownership transfers use it to verify the target tenant
+// without double-counting the tunnel being moved.
+func (s *DbUtils) GetUserTunnelNumExcluding(userId, excludedTunnelID int) int {
+	clientIds := s.UserClientIds(userId)
+	num := 0
+	s.JsonDb.Tasks.Range(func(_, value interface{}) bool {
+		tunnel, ok := value.(*Tunnel)
+		if !ok || tunnel == nil {
+			return true
+		}
+		tunnel.RLock()
+		client, noStore, tunnelID := tunnel.Client, tunnel.NoStore, tunnel.Id
+		tunnel.RUnlock()
+		if noStore || client == nil || tunnelID == excludedTunnelID {
+			return true
+		}
+		client.RLock()
+		clientID := client.Id
+		client.RUnlock()
+		if _, owned := clientIds[clientID]; owned {
+			num++
+		}
+		return true
+	})
+	return num
+}
+
+// GetUserHostNumExcluding is the host-rule counterpart used by ownership
+// transfers.
+func (s *DbUtils) GetUserHostNumExcluding(userId, excludedHostID int) int {
+	clientIds := s.UserClientIds(userId)
+	num := 0
+	s.JsonDb.Hosts.Range(func(_, value interface{}) bool {
+		host, ok := value.(*Host)
+		if !ok || host == nil {
+			return true
+		}
+		host.RLock()
+		client, noStore, hostID := host.Client, host.NoStore, host.Id
+		host.RUnlock()
+		if noStore || client == nil || hostID == excludedHostID {
+			return true
+		}
+		client.RLock()
+		clientID := client.Id
+		client.RUnlock()
+		if _, owned := clientIds[clientID]; owned {
+			num++
 		}
 		return true
 	})
@@ -1100,7 +1629,18 @@ func (s *DbUtils) IsUserTunnelLimitReached(userId int) bool {
 	user.RLock()
 	maxTunnelNum := user.MaxTunnelNum
 	user.RUnlock()
-	return maxTunnelNum > 0 && s.GetUserTunnelNum(userId) >= maxTunnelNum
+	return IntQuotaReached(s.GetUserTunnelNum(userId), maxTunnelNum)
+}
+
+func (s *DbUtils) IsUserHostLimitReached(userId int) bool {
+	user, err := s.GetUser(userId)
+	if err != nil || user == nil {
+		return false
+	}
+	user.RLock()
+	maxHostNum := user.MaxHostNum
+	user.RUnlock()
+	return IntQuotaReached(s.GetUserHostNum(userId), maxHostNum)
 }
 
 func (s *DbUtils) GetIdByVerifyKey(vKey string, addr string) (id int, err error) {
@@ -1177,9 +1717,31 @@ func (s *DbUtils) GetClientBySecureKeyID(keyID []byte) (*Client, string, error) 
 	return matched, verifyKey, nil
 }
 
-func (s *DbUtils) NewTask(t *Tunnel) (err error) {
+func (s *DbUtils) NewTask(t *Tunnel) error {
+	return s.newTask(t, false)
+}
+
+// NewTaskAsAdmin creates a tunnel without user-level quota checks. It is used
+// only by administrator-authorized management paths.
+func (s *DbUtils) NewTaskAsAdmin(t *Tunnel) error {
+	return s.newTask(t, true)
+}
+
+func (s *DbUtils) newTask(t *Tunnel, bypassUserQuota bool) (err error) {
 	if t == nil || t.Client == nil || t.Target == nil {
 		return errors.New("隧道记录无效")
+	}
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
+	// Serialize the owner snapshot with client reassignment. Without this, a
+	// concurrent transfer can charge user A while the stored tunnel ends up
+	// owned by user B.
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	if !t.NoStore {
+		if err := s.requireStoredClientReferenceLocked(t.Client); err != nil {
+			return err
+		}
 	}
 	if t.NoStore {
 		// Runtime tunnels use a separate negative namespace. This also repairs
@@ -1189,6 +1751,19 @@ func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 		}
 	} else if t.Id <= 0 {
 		t.Id = int(s.JsonDb.GetTaskId())
+	}
+	if t.Id > int(^uint32(0)>>1) {
+		return errors.New("隧道 ID 超出支持范围")
+	}
+	if _, exists := s.JsonDb.Tasks.Load(t.Id); exists {
+		return fmt.Errorf("隧道 ID %d 已存在", t.Id)
+	}
+	if !t.NoStore {
+		for current := atomic.LoadInt32(&s.JsonDb.TaskIncreaseId); t.Id > int(current); current = atomic.LoadInt32(&s.JsonDb.TaskIncreaseId) {
+			if atomic.CompareAndSwapInt32(&s.JsonDb.TaskIncreaseId, current, int32(t.Id)) {
+				break
+			}
+		}
 	}
 	if err := NormalizeHealth(&t.Health); err != nil {
 		return err
@@ -1217,32 +1792,203 @@ func (s *DbUtils) NewTask(t *Tunnel) (err error) {
 	if err != nil {
 		return
 	}
-	t.Flow = NewFlow()
+	if t.Flow == nil {
+		t.Flow = NewFlow()
+	}
 	t.SetRateLimits(t.UploadLimit, t.DownloadLimit)
+	if !t.NoStore {
+		t.Client.RLock()
+		clientID, maxTunnelNum := t.Client.Id, t.Client.MaxTunnelNum
+		t.Client.RUnlock()
+		if maxTunnelNum > 0 && s.GetClientTunnelNum(clientID) >= maxTunnelNum {
+			return errors.New("客户端隧道数量已达到限制")
+		}
+	}
+	userID := 0
+	if !t.NoStore {
+		userID = s.GetClientOwnerID(t.Client)
+	}
+	if !bypassUserQuota && userID <= 0 {
+		// Unassigned clients act as the administrator's own resources. The
+		// global user quotas do not apply to them.
+		bypassUserQuota = true
+	}
+	if !t.NoStore {
+		if err := s.requireActiveRegisteredClient(t.Client); err != nil {
+			return err
+		}
+	}
+	if !bypassUserQuota {
+		if err := s.ReserveQuota(userID, QuotaTunnel); err != nil {
+			return err
+		}
+	}
 	s.JsonDb.Tasks.Store(t.Id, t)
-	s.JsonDb.StoreTasksToJsonFile()
-	return
+	if err := s.JsonDb.StoreTasksToJsonFileErr(); err != nil {
+		s.JsonDb.Tasks.Delete(t.Id)
+		if !bypassUserQuota {
+			s.ReleaseQuota(userID, QuotaTunnel)
+		}
+		return fmt.Errorf("保存隧道失败: %w", err)
+	}
+	if !bypassUserQuota {
+		s.CommitQuota(userID, QuotaTunnel)
+	}
+	return nil
 }
 
 func (s *DbUtils) UpdateTask(t *Tunnel) error {
+	return s.UpdateTaskWithOwnerChange(t, nil, false)
+}
+
+// UpdateTaskWithOwnerChange persists an edit and atomically admits the target
+// owner's tunnel quota when the client changed. previousClient is the client
+// before the edit. The caller may submit either the live object or a detached
+// replacement; only the editable fields are copied onto the stored object so
+// runtime traffic counters and active rate buckets survive the update.
+func (s *DbUtils) UpdateTaskWithOwnerChange(t *Tunnel, previousClient *Client, bypassUserQuota bool) error {
 	if t == nil || t.Client == nil || t.Target == nil {
 		return errors.New("隧道记录无效")
 	}
-	if err := NormalizeHealth(&t.Health); err != nil {
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	storedValue, ok := s.JsonDb.Tasks.Load(t.Id)
+	stored, valid := storedValue.(*Tunnel)
+	if !ok || !valid || stored == nil {
+		return errors.New("未找到隧道")
+	}
+	if stored == t {
+		// Lifecycle callers (start/stop/health) mutate the live object first
+		// and then persist it. Do not rewrite unrelated fields here: replacing
+		// ACLs or health state would reset an active probe on every status save.
+		if err := NormalizeHealth(&t.Health); err != nil {
+			return err
+		}
+		if err := normalizeTunnelProxyAuth(t); err != nil {
+			return err
+		}
+		t.CompileDestinationACL()
+		if previousClient != nil && t.Client != nil && t.Client.Id != previousClient.Id {
+			if err := s.prepareTunnelOwnerChangeLocked(t, previousClient, bypassUserQuota); err != nil {
+				return err
+			}
+		}
+		t.SetRateLimits(t.UploadLimit, t.DownloadLimit)
+		if err := s.JsonDb.StoreTasksToJsonFileErr(); err != nil {
+			return fmt.Errorf("保存隧道失败: %w", err)
+		}
+		return nil
+	}
+	edit := t
+	if stored != t {
+		edit = snapshotTunnelReplacement(t, stored)
+	}
+	if err := NormalizeHealth(&edit.Health); err != nil {
 		return err
 	}
-	if err := normalizeTunnelProxyAuth(t); err != nil {
+	if err := normalizeTunnelProxyAuth(edit); err != nil {
 		return err
 	}
-	t.CompileDestinationACL()
-	if old, ok := s.JsonDb.Tasks.Load(t.Id); ok {
-		if previous, valid := old.(*Tunnel); valid && previous != nil && previous != t {
-			t.RateLimits.adopt(&previous.RateLimits)
+	edit.CompileDestinationACL()
+	if previousClient != nil && edit.Client.Id != previousClient.Id {
+		if err := s.prepareTunnelOwnerChangeLocked(edit, previousClient, bypassUserQuota); err != nil {
+			return err
 		}
 	}
-	t.SetRateLimits(t.UploadLimit, t.DownloadLimit)
-	s.JsonDb.Tasks.Store(t.Id, t)
-	s.JsonDb.StoreTasksToJsonFile()
+	if edit != t {
+		edit.RateLimits.adopt(&stored.RateLimits)
+	}
+	edit.SetRateLimits(edit.UploadLimit, edit.DownloadLimit)
+	previous := applyTunnelEdit(stored, edit)
+	if err := s.JsonDb.StoreTasksToJsonFileErr(); err != nil {
+		restoreTunnelEdit(stored, previous)
+		return fmt.Errorf("保存隧道失败: %w", err)
+	}
+	return nil
+}
+
+func (s *DbUtils) prepareTunnelOwnerChangeLocked(t *Tunnel, previousClient *Client, bypassUserQuota bool) error {
+	restore := func() {
+		t.Lock()
+		t.Client = previousClient
+		t.Unlock()
+	}
+	target := t.Client
+	if target == nil {
+		restore()
+		return errors.New("隧道所属客户端无效")
+	}
+	targetID := target.Id
+	client, err := s.GetClient(targetID)
+	if err != nil || client == nil {
+		restore()
+		return errors.New("隧道所属客户端不存在")
+	}
+	if !s.IsClientActive(client) {
+		restore()
+		return errors.New("所属客户端已停用或已到期")
+	}
+	userID := s.GetClientOwnerID(client)
+	if bypassUserQuota || userID <= 0 {
+		return nil
+	}
+	user, err := s.GetUser(userID)
+	if err != nil || user == nil {
+		restore()
+		return errors.New("所属用户不存在")
+	}
+	user.RLock()
+	maxTunnelNum := user.MaxTunnelNum
+	user.RUnlock()
+	// The tunnel is not yet owned by the target tenant, so exclude its own ID
+	// defensively and require room for one additional record.
+	used := s.GetUserTunnelNumExcluding(userID, t.Id)
+	if IntQuotaReached(used, maxTunnelNum) {
+		restore()
+		return ErrQuotaExceeded
+	}
+	return nil
+}
+
+func (s *DbUtils) prepareHostOwnerChangeLocked(h *Host, previousClient *Client, bypassUserQuota bool) error {
+	restore := func() {
+		h.Lock()
+		h.Client = previousClient
+		h.Unlock()
+	}
+	target := h.Client
+	if target == nil {
+		restore()
+		return errors.New("域名规则所属客户端无效")
+	}
+	client, err := s.GetClient(target.Id)
+	if err != nil || client == nil {
+		restore()
+		return errors.New("域名规则所属客户端不存在")
+	}
+	if !s.IsClientActive(client) {
+		restore()
+		return errors.New("所属客户端已停用或已到期")
+	}
+	userID := s.GetClientOwnerID(client)
+	if bypassUserQuota || userID <= 0 {
+		return nil
+	}
+	user, err := s.GetUser(userID)
+	if err != nil || user == nil {
+		restore()
+		return errors.New("所属用户不存在")
+	}
+	user.RLock()
+	maxHostNum := user.MaxHostNum
+	user.RUnlock()
+	used := s.GetUserHostNumExcluding(userID, h.Id)
+	if maxHostNum != nil && (*maxHostNum <= 0 || used >= *maxHostNum) {
+		restore()
+		return ErrQuotaExceeded
+	}
 	return nil
 }
 
@@ -1281,9 +2027,12 @@ func (s *DbUtils) SaveGlobal(t *Glob) error {
 
 	// Global platform domains and hosts must change as one logical operation:
 	// a concurrent host creation must never observe an old certificate binding.
+	globalMutationMu.Lock()
+	defer globalMutationMu.Unlock()
 	hostMutationMu.Lock()
 	defer hostMutationMu.Unlock()
-	if err := s.validatePlatformDomainReferences(s.JsonDb.getGlobal(), platformDomains); err != nil {
+	previousGlobal := s.JsonDb.getGlobal()
+	if err := s.validatePlatformDomainReferences(previousGlobal, platformDomains); err != nil {
 		return err
 	}
 	if err := s.validatePlatformWildcardConflicts(platformDomains); err != nil {
@@ -1300,8 +2049,13 @@ func (s *DbUtils) SaveGlobal(t *Glob) error {
 	t.PlatformDomains = platformDomains
 	s.JsonDb.setGlobal(t)
 	SetGlobalMaxConn(t.MaxConn)
-	rate.SetGlobalLimit(int64(t.RateLimit) * 1024)
+	rate.SetGlobalLimit(rate.BytesPerSecondFromBps(t.RateLimit))
 
+	type hostCertificatePaths struct {
+		cert string
+		key  string
+	}
+	previousHostPaths := make(map[int]hostCertificatePaths)
 	platformByID := make(map[string]PlatformDomain, len(platformDomains))
 	for _, domain := range platformDomains {
 		platformByID[domain.ID] = domain
@@ -1315,6 +2069,7 @@ func (s *DbUtils) SaveGlobal(t *Glob) error {
 		host.Lock()
 		if domain, usesPlatformDomain := platformByID[host.PlatformDomainID]; usesPlatformDomain &&
 			(host.CertFilePath != domain.CertFilePath || host.KeyFilePath != domain.KeyFilePath) {
+			previousHostPaths[host.Id] = hostCertificatePaths{cert: host.CertFilePath, key: host.KeyFilePath}
 			host.CertFilePath = domain.CertFilePath
 			host.KeyFilePath = domain.KeyFilePath
 			hostsChanged = true
@@ -1322,19 +2077,67 @@ func (s *DbUtils) SaveGlobal(t *Glob) error {
 		host.Unlock()
 		return true
 	})
-	s.JsonDb.StoreGlobalToJsonFile()
+	kinds := []string{store.KindGlobal}
 	if hostsChanged {
-		s.JsonDb.StoreHostToJsonFile()
+		kinds = append(kinds, store.KindHost)
+	}
+	if err := s.JsonDb.persistKinds(kinds...); err != nil {
+		s.JsonDb.setGlobal(previousGlobal)
+		if previousGlobal == nil {
+			SetGlobalMaxConn(0)
+			rate.SetGlobalLimit(0)
+		} else {
+			SetGlobalMaxConn(previousGlobal.MaxConn)
+			rate.SetGlobalLimit(rate.BytesPerSecondFromBps(previousGlobal.RateLimit))
+		}
+		for id, previous := range previousHostPaths {
+			if value, ok := s.JsonDb.Hosts.Load(id); ok {
+				if host, valid := value.(*Host); valid && host != nil {
+					host.Lock()
+					host.CertFilePath = previous.cert
+					host.KeyFilePath = previous.key
+					host.Unlock()
+				}
+			}
+		}
+		// The legacy JSON backend cannot commit two files atomically. Best-effort
+		// restore both files so a retry starts from the previous coherent state.
+		if s.JsonDb.SQLite() == nil {
+			_ = s.JsonDb.persistKinds(kinds...)
+		}
+		return fmt.Errorf("保存全局参数失败: %w", err)
 	}
 	return nil
 }
 
+// TaskDeleteCommit receives the deleted tunnel after persistence commits and
+// before its ID may be reclaimed. Runtime listeners must be closed through this
+// hook so a replacement tunnel cannot receive the old ID and then be stopped by
+// delayed cleanup.
+type TaskDeleteCommit func(task *Tunnel) error
+
 func (s *DbUtils) DelTask(id int) error {
-	if id > 0 {
-		defer s.JsonDb.reclaimPersistentID(&s.JsonDb.TaskIncreaseId, &s.JsonDb.Tasks)
+	return s.DelTaskWithHook(id, nil)
+}
+
+func (s *DbUtils) DelTaskWithHook(id int, onCommitted TaskDeleteCommit) error {
+	taskMutationMu.Lock()
+	defer taskMutationMu.Unlock()
+	previous, hadPrevious := s.JsonDb.Tasks.LoadAndDelete(id)
+	if err := s.JsonDb.StoreTasksToJsonFileErr(); err != nil {
+		if hadPrevious {
+			s.JsonDb.Tasks.Store(id, previous)
+		}
+		return fmt.Errorf("保存隧道失败: %w", err)
 	}
-	s.JsonDb.Tasks.Delete(id)
-	s.JsonDb.StoreTasksToJsonFile()
+	if onCommitted != nil {
+		task, _ := previous.(*Tunnel)
+		if err := onCommitted(task); err != nil {
+			// The record is already committed as deleted. Keep the counter
+			// monotonic because the old runtime object may still reference it.
+			return fmt.Errorf("隧道 %d 已删除，但运行态清理失败: %w", id, err)
+		}
+	}
 	return nil
 }
 
@@ -1371,11 +2174,13 @@ func (s *DbUtils) GetTask(id int) (t *Tunnel, err error) {
 func (s *DbUtils) DelHost(id int) error {
 	hostMutationMu.Lock()
 	defer hostMutationMu.Unlock()
-	if id > 0 {
-		defer s.JsonDb.reclaimPersistentID(&s.JsonDb.HostIncreaseId, &s.JsonDb.Hosts)
+	previous, hadPrevious := s.JsonDb.Hosts.LoadAndDelete(id)
+	if err := s.JsonDb.StoreHostToJsonFileErr(); err != nil {
+		if hadPrevious {
+			s.JsonDb.Hosts.Store(id, previous)
+		}
+		return fmt.Errorf("保存域名规则失败: %w", err)
 	}
-	s.JsonDb.Hosts.Delete(id)
-	s.JsonDb.StoreHostToJsonFile()
 	return nil
 }
 
@@ -2064,12 +2869,30 @@ func (s *DbUtils) preparePlatformHost(host *Host, previous *Host) error {
 	return nil
 }
 
-func (s *DbUtils) NewHost(t *Host) error {
+func (s *DbUtils) NewHost(h *Host) error {
+	return s.newHost(h, false)
+}
+
+// NewHostAsAdmin creates a host rule without user-level quota checks.
+func (s *DbUtils) NewHostAsAdmin(h *Host) error {
+	return s.newHost(h, true)
+}
+
+func (s *DbUtils) newHost(t *Host, bypassUserQuota bool) error {
 	if err := normalizeHostMutation(t); err != nil {
 		return err
 	}
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
 	hostMutationMu.Lock()
 	defer hostMutationMu.Unlock()
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	if !t.NoStore {
+		if err := s.requireStoredClientReferenceLocked(t.Client); err != nil {
+			return err
+		}
+	}
 	if t.NoStore {
 		// Runtime hosts must never consume the persistent host counter. Older
 		// callers may still arrive with a positive ID, so normalize those too.
@@ -2101,12 +2924,37 @@ func (s *DbUtils) NewHost(t *Host) error {
 	if s.IsHostRouteConflict(t) {
 		return errors.New("host route overlaps another tenant")
 	}
-	t.Flow = NewFlow()
+	if t.Flow == nil {
+		t.Flow = NewFlow()
+	}
 	t.SetRateLimits(t.UploadLimit, t.DownloadLimit)
+	userID := 0
+	if !t.NoStore {
+		userID = s.GetClientOwnerID(t.Client)
+	}
+	if !bypassUserQuota && userID <= 0 {
+		bypassUserQuota = true
+	}
+	if !t.NoStore {
+		if err := s.requireActiveRegisteredClient(t.Client); err != nil {
+			return err
+		}
+	}
+	if !bypassUserQuota {
+		if err := s.ReserveQuota(userID, QuotaHost); err != nil {
+			return err
+		}
+	}
 	s.JsonDb.Hosts.Store(t.Id, t)
 	if err := s.JsonDb.StoreHostToJsonFileErr(); err != nil {
 		s.JsonDb.Hosts.Delete(t.Id)
+		if !bypassUserQuota {
+			s.ReleaseQuota(userID, QuotaHost)
+		}
 		return fmt.Errorf("保存域名规则失败: %w", err)
+	}
+	if !bypassUserQuota {
+		s.CommitQuota(userID, QuotaHost)
 	}
 	return nil
 }
@@ -2115,15 +2963,36 @@ func (s *DbUtils) NewHost(t *Host) error {
 // same mutation lock used by NewHost. Runtime workers can continue using the
 // existing object, while concurrent edits cannot race the conflict check.
 func (s *DbUtils) UpdateHost(t *Host) error {
+	return s.UpdateHostWithOwnerChange(t, nil, false)
+}
+
+// UpdateHostWithOwnerChange persists a host edit and atomically admits the
+// target user's host-rule quota when the owning client changes. It mirrors
+// UpdateTaskWithOwnerChange for the domain-rule dimension.
+func (s *DbUtils) UpdateHostWithOwnerChange(t *Host, previousClient *Client, bypassUserQuota bool) error {
 	if err := normalizeHostMutation(t); err != nil {
 		return err
 	}
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
 	hostMutationMu.Lock()
 	defer hostMutationMu.Unlock()
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
 	storedValue, ok := s.JsonDb.Hosts.Load(t.Id)
 	stored, valid := storedValue.(*Host)
 	if !ok || !valid || stored == nil {
 		return errors.New("未找到主机")
+	}
+	if previousClient != nil {
+		stored.RLock()
+		storedClient := stored.Client
+		stored.RUnlock()
+		if storedClient != nil && t.Client != nil && t.Client.Id != storedClient.Id {
+			if err := s.prepareHostOwnerChangeLocked(t, storedClient, bypassUserQuota); err != nil {
+				return err
+			}
+		}
 	}
 	if err := s.preparePlatformHost(t, stored); err != nil {
 		return err
@@ -2292,6 +3161,139 @@ func (s *DbUtils) DelClient(id int) error {
 	return s.delClientLocked(id)
 }
 
+// DelClientCascade removes a client and every tunnel or host definition that
+// references it in one persistence operation.
+func (s *DbUtils) DelClientCascade(id int) error {
+	return s.delClientCascade(id, nil, nil)
+}
+
+// DelClientCascadeWithHook removes the client and invokes onCommitted only
+// after the persistence transaction succeeds.
+func (s *DbUtils) DelClientCascadeWithHook(id int, onCommitted ClientCascadeCommit) error {
+	return s.delClientCascade(id, nil, onCommitted)
+}
+
+func (s *DbUtils) delClientCascade(id int, requiredOwnerID *int, onCommitted ClientCascadeCommit) error {
+	if id <= 0 {
+		return errors.New("客户端 ID 无效")
+	}
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
+	hostMutationMu.Lock()
+	defer hostMutationMu.Unlock()
+	clientMutationMu.Lock()
+	defer clientMutationMu.Unlock()
+	return s.delClientCascadeLocked(id, requiredOwnerID, onCommitted)
+}
+
+func (s *DbUtils) DelClientCascadeForUser(id, userID int) error {
+	return s.DelClientCascadeForUserWithHook(id, userID, nil)
+}
+
+func (s *DbUtils) DelClientCascadeForUserWithHook(id, userID int, onCommitted ClientCascadeCommit) error {
+	if id <= 0 {
+		return errors.New("客户端 ID 无效")
+	}
+	if userID <= 0 {
+		return errors.New("用户 ID 无效")
+	}
+	return s.delClientCascade(id, &userID, onCommitted)
+}
+
+func (s *DbUtils) delClientCascadeLocked(id int, requiredOwnerID *int, onCommitted ClientCascadeCommit) error {
+	clientValue, ok := s.JsonDb.Clients.Load(id)
+	if !ok {
+		return errors.New("未找到客户端")
+	}
+	client, valid := clientValue.(*Client)
+	if !valid || client == nil {
+		return errors.New("客户端记录无效")
+	}
+	if requiredOwnerID != nil {
+		client.RLock()
+		ownerID := client.UserId
+		client.RUnlock()
+		if ownerID != *requiredOwnerID {
+			return errors.New("无权删除该客户端")
+		}
+	}
+
+	type removedEntity struct {
+		kind  string
+		key   int
+		value interface{}
+	}
+	removed := make([]removedEntity, 0)
+	removedTunnels := make([]*Tunnel, 0)
+	removedHosts := make([]*Host, 0)
+	removeReferences := func(kind string, values *sync.Map) {
+		values.Range(func(key, value interface{}) bool {
+			entityID, ok := key.(int)
+			if !ok {
+				return true
+			}
+			var reference *Client
+			switch obj := value.(type) {
+			case *Tunnel:
+				if obj != nil {
+					reference = obj.Client
+				}
+			case *Host:
+				if obj != nil {
+					reference = obj.Client
+				}
+			}
+			if reference == nil {
+				return true
+			}
+			reference.RLock()
+			referenceID := reference.Id
+			reference.RUnlock()
+			if referenceID != id {
+				return true
+			}
+			if previous, loaded := values.LoadAndDelete(entityID); loaded {
+				removed = append(removed, removedEntity{kind: kind, key: entityID, value: previous})
+				switch entity := previous.(type) {
+				case *Tunnel:
+					removedTunnels = append(removedTunnels, entity)
+				case *Host:
+					removedHosts = append(removedHosts, entity)
+				}
+			}
+			return true
+		})
+	}
+	removeReferences(store.KindTunnel, &s.JsonDb.Tasks)
+	removeReferences(store.KindHost, &s.JsonDb.Hosts)
+	s.JsonDb.Clients.Delete(id)
+
+	if err := s.JsonDb.persistKinds(store.KindClient, store.KindTunnel, store.KindHost); err != nil {
+		s.JsonDb.Clients.Store(id, clientValue)
+		for _, entity := range removed {
+			switch entity.kind {
+			case store.KindTunnel:
+				s.JsonDb.Tasks.Store(entity.key, entity.value)
+			case store.KindHost:
+				s.JsonDb.Hosts.Store(entity.key, entity.value)
+			}
+		}
+		return fmt.Errorf("保存客户端级联删除结果失败: %w", err)
+	}
+
+	s.JsonDb.markDeletedClient(client)
+	if onCommitted != nil {
+		onCommitted([]*Client{client}, removedTunnels, removedHosts)
+	}
+	client.RLock()
+	clientRate := client.Rate
+	client.RUnlock()
+	if clientRate != nil {
+		clientRate.Stop()
+	}
+	return nil
+}
+
 // DelClientForUser removes a client only while holding the same mutation lock
 // used for ownership changes. This keeps a self-service delete from racing an
 // administrator reassigning the client to another user.
@@ -2319,11 +3321,15 @@ func (s *DbUtils) DelClientForUser(id, userID int) error {
 }
 
 func (s *DbUtils) delClientLocked(id int) error {
-	if id > 0 {
-		defer s.JsonDb.reclaimPersistentID(&s.JsonDb.ClientIncreaseId, &s.JsonDb.Clients)
+	previous, hadPrevious := s.JsonDb.Clients.LoadAndDelete(id)
+	if err := s.JsonDb.StoreClientsToJsonFileErr(); err != nil {
+		if hadPrevious {
+			s.JsonDb.Clients.Store(id, previous)
+		}
+		return fmt.Errorf("保存客户端失败: %w", err)
 	}
-	if old, ok := s.JsonDb.Clients.Load(id); ok {
-		if client, valid := old.(*Client); valid && client != nil {
+	if hadPrevious {
+		if client, valid := previous.(*Client); valid && client != nil {
 			client.RLock()
 			clientRate := client.Rate
 			client.RUnlock()
@@ -2332,18 +3338,33 @@ func (s *DbUtils) delClientLocked(id int) error {
 			}
 		}
 	}
-	s.JsonDb.Clients.Delete(id)
-	s.JsonDb.StoreClientsToJsonFile()
 	return nil
 }
 
 func (s *DbUtils) NewClient(c *Client) error {
+	return s.newClient(c, false)
+}
+
+// NewClientAsAdmin creates a client without charging the assigned user's
+// client quota. Administrator-created resources are outside the customer
+// entitlement boundary; ownership, expiry and credential validation still
+// apply so the resulting record remains consistent.
+func (s *DbUtils) NewClientAsAdmin(c *Client) error {
+	return s.newClient(c, true)
+}
+
+func (s *DbUtils) newClient(c *Client, bypassUserQuota bool) error {
 	if c == nil {
 		return errors.New("客户端记录无效")
+	}
+	if err := validateClientLimits(c); err != nil {
+		return err
 	}
 	if c.ConnectionHistory == nil {
 		c.ConnectionHistory = &ConnectionHistory{}
 	}
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()
 
@@ -2351,8 +3372,17 @@ func (s *DbUtils) NewClient(c *Client) error {
 	if err != nil {
 		return err
 	}
-	if err := s.validateClientAssignmentLocked(userID, expireTime, 0); err != nil {
-		return err
+	if bypassUserQuota {
+		if err := s.ValidateClientOwner(userID); err != nil {
+			return err
+		}
+		if err := s.validateClientExpiryForOwnerLocked(userID, expireTime); err != nil {
+			return err
+		}
+	} else {
+		if err := s.validateClientAssignmentLocked(userID, expireTime, 0); err != nil {
+			return err
+		}
 	}
 	var isNotSet bool
 reset:
@@ -2376,17 +3406,32 @@ reset:
 	} else if c.Id == 0 {
 		c.Id = int(s.JsonDb.GetClientId())
 	}
+	if c.Id > int(^uint32(0)>>1) {
+		return errors.New("客户端 ID 超出支持范围")
+	}
+	if _, exists := s.JsonDb.Clients.Load(c.Id); exists {
+		return fmt.Errorf("客户端 ID %d 已存在", c.Id)
+	}
+	if !c.NoStore {
+		for current := atomic.LoadInt32(&s.JsonDb.ClientIncreaseId); c.Id > int(current); current = atomic.LoadInt32(&s.JsonDb.ClientIncreaseId) {
+			if atomic.CompareAndSwapInt32(&s.JsonDb.ClientIncreaseId, current, int32(c.Id)) {
+				break
+			}
+		}
+	}
 	if c.Flow == nil {
 		c.Flow = NewFlow()
 	}
-	if c.RateLimit == 0 {
-		c.Rate = rate.NewRate((2 << 23) * 1024)
-	} else if c.Rate == nil {
-		c.Rate = rate.NewRate(int64(c.RateLimit * 1024))
-	}
+	// Always rebuild the runtime bucket from the persisted bps value. Imported
+	// objects may carry a stale Rate pointer from an earlier unit convention.
+	c.Rate = rate.NewRate(clientRateBytes(c.RateLimit))
 	c.Rate.Start()
 	s.JsonDb.Clients.Store(c.Id, c)
-	s.JsonDb.StoreClientsToJsonFile()
+	if err := s.JsonDb.StoreClientsToJsonFileErr(); err != nil {
+		s.JsonDb.Clients.Delete(c.Id)
+		c.Rate.Stop()
+		return fmt.Errorf("保存客户端失败: %w", err)
+	}
 	return nil
 }
 
@@ -2429,9 +3474,25 @@ func (s *DbUtils) VerifyUserName(username string, id int) (res bool) {
 }
 
 func (s *DbUtils) UpdateClient(t *Client) error {
+	return s.updateClient(t, false)
+}
+
+// UpdateClientAsAdmin updates administrator-managed client metadata without
+// recharging or rejecting the assigned user's client quota. Ownership,
+// credentials, and expiry integrity remain enforced.
+func (s *DbUtils) UpdateClientAsAdmin(t *Client) error {
+	return s.updateClient(t, true)
+}
+
+func (s *DbUtils) updateClient(t *Client, bypassUserQuota bool) error {
 	if t == nil {
 		return errors.New("客户端记录无效")
 	}
+	if err := validateClientLimits(t); err != nil {
+		return err
+	}
+	quotaMutationMu.Lock()
+	defer quotaMutationMu.Unlock()
 	clientMutationMu.Lock()
 	defer clientMutationMu.Unlock()
 
@@ -2439,37 +3500,81 @@ func (s *DbUtils) UpdateClient(t *Client) error {
 	if err != nil {
 		return err
 	}
-	if err := s.validateClientAssignmentLocked(userID, expireTime, t.Id); err != nil {
-		return err
+	if bypassUserQuota {
+		if err := s.ValidateClientOwner(userID); err != nil {
+			return err
+		}
+		if err := s.validateClientExpiryForOwnerLocked(userID, expireTime); err != nil {
+			return err
+		}
+	} else {
+		if err := s.validateClientAssignmentLocked(userID, expireTime, t.Id); err != nil {
+			return err
+		}
 	}
-	// Stop the previous limiter before publishing the replacement. A client may
-	// be updated repeatedly from the management console, so retaining an old
-	// limiter would leak its refill goroutine.
-	if old, ok := s.JsonDb.Clients.Load(t.Id); ok {
-		if oldClient, valid := old.(*Client); valid && oldClient != nil {
-			oldClient.RLock()
-			oldRate := oldClient.Rate
-			oldClient.RUnlock()
-			if oldRate != nil {
-				oldRate.Stop()
-			}
+	previous, hadPrevious := s.JsonDb.Clients.Load(t.Id)
+	var previousRate *rate.Rate
+	if hadPrevious {
+		if previousClient, valid := previous.(*Client); valid && previousClient != nil {
+			previousClient.RLock()
+			previousRate = previousClient.Rate
+			previousClient.RUnlock()
 		}
 	}
 	if t.Flow == nil {
 		t.Flow = NewFlow()
 	}
-	limit := int64((2 << 23) * 1024)
-	if t.RateLimit > 0 {
-		limit = int64(t.RateLimit) * 1024
-	}
-	newRate := rate.NewRate(limit)
+	newRate := rate.NewRate(clientRateBytes(t.RateLimit))
 	t.Lock()
 	t.Rate = newRate
 	t.Unlock()
 	newRate.Start()
 	s.JsonDb.Clients.Store(t.Id, t)
-	s.JsonDb.StoreClientsToJsonFile()
+	if err := s.JsonDb.StoreClientsToJsonFileErr(); err != nil {
+		newRate.Stop()
+		if hadPrevious {
+			s.JsonDb.Clients.Store(t.Id, previous)
+			if previousRate != nil {
+				previousRate.Start()
+			}
+		} else {
+			s.JsonDb.Clients.Delete(t.Id)
+		}
+		return fmt.Errorf("保存客户端失败: %w", err)
+	}
+	// Persistence succeeded; only now can the old limiter be retired safely.
+	if previousRate != nil && previousRate != newRate {
+		previousRate.Stop()
+	}
 	return nil
+}
+
+// validateClientLimits rejects negative resource limits before they can be
+// persisted. Client limits use the historical zero-means-unlimited encoding,
+// so a negative value has no runtime meaning and would otherwise bypass every
+// positive-limit comparison.
+func validateClientLimits(client *Client) error {
+	if client == nil {
+		return errors.New("客户端记录无效")
+	}
+	client.RLock()
+	maxConn, maxTunnelNum, rateLimit := client.MaxConn, client.MaxTunnelNum, client.RateLimit
+	client.RUnlock()
+	if maxConn < 0 || maxTunnelNum < 0 || rateLimit < 0 {
+		return errors.New("客户端配额、连接数和带宽限制不能小于 0")
+	}
+	return nil
+}
+
+// clientRateBytes maps the persisted client-wide bps value to the byte-rate
+// token bucket. Zero keeps the historical default ceiling instead of turning a
+// blank field into an accidental hard stop; the web and API layers only store
+// zero when the administrator explicitly left the field blank.
+func clientRateBytes(rateLimitBps int64) int64 {
+	if rateLimitBps <= 0 {
+		return (2 << 23) * 1024
+	}
+	return rate.BytesPerSecondFromBps(rateLimitBps)
 }
 
 func normalizeClientExpiry(client *Client) (userID int, expireTime string, err error) {
@@ -2491,7 +3596,26 @@ func (s *DbUtils) IsPubClient(id int) bool {
 	client.RLock()
 	noDisplay := client.NoDisplay
 	client.RUnlock()
+	// NoDisplay is the historical lifecycle marker: these records are hidden
+	// service identities and must survive a disconnect without being deleted.
+	// Security decisions that must also reject runtime-only onboarding clients
+	// use IsPublicClient instead.
 	return noDisplay
+}
+
+// IsPublicClient reports whether a client belongs to the public onboarding
+// namespace. Such a client is runtime-only and must never inherit the
+// server-local privileges reserved for internal negative IDs. Unlike
+// IsPubClient, this is a permission predicate, not a resource-lifecycle one.
+func (s *DbUtils) IsPublicClient(id int) bool {
+	client, err := s.GetClient(id)
+	if err != nil || client == nil {
+		return false
+	}
+	client.RLock()
+	noStore, noDisplay := client.NoStore, client.NoDisplay
+	client.RUnlock()
+	return noStore || noDisplay
 }
 
 func (s *DbUtils) GetClient(id int) (c *Client, err error) {

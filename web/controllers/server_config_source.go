@@ -11,6 +11,8 @@ import (
 	"unicode/utf8"
 
 	npsconf "ehang.io/nps/conf"
+	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/settings"
 )
 
 const serverConfigSourceMaxBytes = 1 << 20
@@ -106,7 +108,7 @@ func validateServerConfigSource(content string) error {
 	return nil
 }
 
-func saveServerConfigSource(path, content, expectedRevision string) (bool, string, error) {
+func saveServerConfigSource(path, content, expectedRevision, runPath string) (bool, string, error) {
 	current, err := readServerConfigSource(path)
 	if err != nil {
 		return false, "", err
@@ -115,16 +117,71 @@ func saveServerConfigSource(path, content, expectedRevision string) (bool, strin
 	if strings.TrimSpace(expectedRevision) == "" || expectedRevision != currentRevision {
 		return false, currentRevision, errServerConfigSourceConflict
 	}
-	if content == string(current) {
-		return false, currentRevision, nil
-	}
 	if err := validateServerConfigSource(content); err != nil {
 		return false, currentRevision, err
 	}
-	if err := writeServerConfigAtomically(path, []byte(content)); err != nil {
+	filtered, managedValues := stripManagedSettingsFromSource(content, runPath)
+	values := changedManagedSettings(managedValues)
+	if filtered == string(current) {
+		if len(values) == 0 {
+			return false, currentRevision, nil
+		}
+		if err := settings.Save(values, nil); err != nil {
+			return false, currentRevision, err
+		}
+		return true, currentRevision, nil
+	}
+	if err := writeServerConfigSourceTransaction(path, []byte(filtered), values, filtered != string(current)); err != nil {
 		return false, currentRevision, err
 	}
-	return true, serverConfigSourceRevision([]byte(content)), nil
+	return true, serverConfigSourceRevision([]byte(filtered)), nil
+}
+
+// changedManagedSettings returns only the submitted values that differ from
+// the active settings snapshot. Source-editor saves never delete a key simply
+// because it is absent from the textarea; explicit removal belongs to the
+// visual editor, where the omission has clear intent.
+func changedManagedSettings(submitted map[string]string) map[string]string {
+	before := settings.Snapshot()
+	values := make(map[string]string)
+	for key, value := range submitted {
+		if previous, exists := before[key]; !exists || previous != value {
+			values[key] = value
+		}
+	}
+	return values
+}
+
+// writeServerConfigSourceTransaction keeps the source editor from creating a
+// split truth. The revision is validated by the caller before this function,
+// then SQLite and nps.conf are changed as one logical unit. If the file write
+// fails, the settings rows are restored to their previous values so a failed
+// save does not leave the database ahead of the file.
+func writeServerConfigSourceTransaction(path string, filtered []byte, values map[string]string, writeFile bool) error {
+	before := settings.Snapshot()
+	if err := settings.Save(values, nil); err != nil {
+		return err
+	}
+	if !writeFile {
+		return nil
+	}
+	if err := writeServerConfigAtomically(path, filtered); err != nil {
+		rollbackValues := make(map[string]string)
+		rollbackDeletes := make([]string, 0)
+		for key, value := range before {
+			rollbackValues[key] = value
+		}
+		for key := range values {
+			if _, exists := before[key]; !exists {
+				rollbackDeletes = append(rollbackDeletes, key)
+			}
+		}
+		if rollbackErr := settings.Save(rollbackValues, rollbackDeletes); rollbackErr != nil {
+			return fmt.Errorf("写入 nps.conf 失败: %v；回滚 SQLite 业务配置失败: %w", err, rollbackErr)
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *GlobalController) ConfigSource() {
@@ -170,7 +227,7 @@ func (s *GlobalController) SaveConfigSource() {
 		s.configSourceError(http.StatusInternalServerError, "读取 nps.conf 失败: "+readErr.Error())
 		return
 	}
-	changed, nextRevision, err := saveServerConfigSource(serverConfigPath(), content, revision)
+	changed, nextRevision, err := saveServerConfigSource(serverConfigPath(), content, revision, common.GetRunPath())
 	if err != nil {
 		if errors.Is(err, errServerConfigSourceConflict) {
 			s.configSourceError(http.StatusConflict, err.Error())
@@ -179,12 +236,13 @@ func (s *GlobalController) SaveConfigSource() {
 		s.configSourceError(http.StatusBadRequest, "保存 nps.conf 源码失败: "+err.Error())
 		return
 	}
+	filtered, _ := stripManagedSettingsFromSource(content, common.GetRunPath())
 	s.auditMutation("server_config.source_update", "nps.conf", 0, 0, "", nil, map[string]string{
 		"changed": fmt.Sprintf("%t", changed),
-		"bytes":   fmt.Sprintf("%d", len(content)),
+		"bytes":   fmt.Sprintf("%d", len(filtered)),
 	})
 	if changed {
-		newValues := serverConfigKeyValues(content)
+		newValues := effectiveServerConfigSnapshot(filtered)
 		changedKeys := configChangedKeys(serverConfigKeyValues(string(previousContent)), newValues)
 		hot := applyServerConfigHotReload(newValues, changedKeys)
 		restartRequired := hasRestartOnlyChanges(changedKeys)
@@ -204,8 +262,8 @@ func (s *GlobalController) SaveConfigSource() {
 			"restart_required": restartRequired,
 			"hot_reloaded":     hot,
 			"revision":         nextRevision,
-			"size":             len(content),
-			"lines":            strings.Count(content, "\n") + 1,
+			"size":             len(filtered),
+			"lines":            strings.Count(filtered, "\n") + 1,
 		})
 		s.ServeJSON()
 		return
@@ -221,6 +279,41 @@ func (s *GlobalController) SaveConfigSource() {
 		"lines":            strings.Count(content, "\n") + 1,
 	})
 	s.ServeJSON()
+}
+
+// stripManagedSettingsFromSource removes business keys from the source editor
+// input after validateServerConfigSource has checked the whole document. It
+// returns the filtered file and the values that belong to SQLite, so the
+// caller can commit both halves only after the revision check has passed.
+func stripManagedSettingsFromSource(content, runPath string) (string, map[string]string) {
+	values := make(map[string]string)
+	for key, value := range serverConfigKeyValues(content) {
+		if shouldPersistBusinessSetting(key, runPath) {
+			values[key] = value
+		}
+	}
+	lines := strings.SplitAfter(content, "\n")
+	result := make([]string, 0, len(lines))
+	for _, line := range lines {
+		key, ok := serverConfigKeyFromLine(line)
+		if ok && shouldPersistBusinessSetting(key, runPath) {
+			continue
+		}
+		result = append(result, line)
+	}
+	filtered := strings.Join(result, "")
+	return filtered, values
+}
+
+// shouldPersistBusinessSetting keeps the source editor's migration behavior
+// identical to startup. Without an initialized SQLite settings manager (unit
+// tests and JSON-only tooling), business keys must remain in the file instead
+// of disappearing from both stores.
+func shouldPersistBusinessSetting(key, runPath string) bool {
+	if !settings.IsManagedKey(key) {
+		return false
+	}
+	return settings.Enabled(runPath)
 }
 
 func (s *GlobalController) configSourceError(status int, message string) {

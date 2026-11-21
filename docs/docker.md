@@ -1,6 +1,6 @@
 # Docker 部署
 
-推荐用 Docker Compose 部署 NPS 服务端，并把容器内 `/conf` 挂载到宿主机。这个目录保存配置和 JSON 数据，升级、重建容器都要保留。
+推荐用 Docker Compose 部署 NPS 服务端，并把容器内 `/conf` 挂载到宿主机。从 v1.1.49 起，`nps.db`、WAL、SHM、单进程锁和启动配置都在这个目录，升级、重建容器必须保留整个目录。
 
 ## NPS 服务端
 
@@ -87,11 +87,10 @@ ports:
 容器内 `/conf` 包含：
 
 - `nps.conf`
-- `clients.json`
-- `users.json`
-- `tasks.json`
-- `hosts.json`
-- `global.json`
+- `nps.db`
+- `nps.db-wal` / `nps.db-shm`（运行中）
+- `nps.db.lock`
+- `migration-report.json`
 - TLS 证书等配置文件
 
 升级前建议备份挂载目录：
@@ -100,13 +99,26 @@ ports:
 cp -a /opt/nps/conf /opt/nps/conf.bak.$(date +%Y%m%d%H%M%S)
 ```
 
+运行中的 SQLite 不能只复制 `nps.db`。应停止容器后备份整个目录，或先停止服务再使用 `nps -export-json=<独立目录>`。迁移、WAL 和回滚细节见 [SQLite 数据存储与升级](server/sqlite-storage.md)。
+
 ## 更新镜像
+
+从 1.1.48 及更早的 JSON 数据版本升级到 1.1.49 时，必须先用同一版本的容器镜像执行一次 JSON 网关，否则服务会拒绝启动：
 
 ```bash
 cd /opt/nps
+cp -a conf "conf.before-1.1.49.$(date +%Y%m%d%H%M%S)"
 docker compose pull
+docker compose stop nps
+docker run --rm \
+  -v /opt/nps/conf:/conf \
+  wushuo98/nps:1.1.49 /nps -json-gateway
 docker compose up -d
 ```
+
+不要在容器命令中添加 `-conf_path=/conf`：容器中的运行根目录已经是 `/`，程序会在根目录下读取 `/conf`。首次启动导入成功后检查 `/opt/nps/conf/migration-report.json` 的 `status` 为 `success`。数据库已经是 1.1.49 或更高版本时，日常更新不需要重复执行网关。
+
+程序自动生成的 `conf.backup.*` 位于容器根目录，不在宿主机的 `/conf` 挂载中；升级前务必按上面的命令在宿主机保留 `conf.before-1.1.49.*` 备份。
 
 ## 镜像平台
 
@@ -115,7 +127,7 @@ Docker Hub：
 - 服务端：[wushuo98/nps](https://hub.docker.com/r/wushuo98/nps)
 - 客户端：[wushuo98/npc](https://hub.docker.com/r/wushuo98/npc)
 
-标签约定：普通代码推送只执行 CI，不会更新 Docker 镜像。只有正式 GitHub Release（推送与源码版本一致的 `vX.Y.Z` 标签）才会构建多架构镜像，并同时推送版本号标签（如 `1.1.47`）和 `latest`。因此 `latest` 表示最近一次正式发布，生产环境也可以固定使用版本号。NPC/NPS 的软件内在线更新独立读取 GitHub Releases 的正式版本号和校验文件，不依赖 Docker 标签。
+标签约定：普通代码推送只执行 CI，不会更新 Docker 镜像。只有正式 GitHub Release（推送与源码版本一致的 `vX.Y.Z` 标签）才会构建多架构镜像，并同时推送版本号标签（如 `1.1.49`）和 `latest`。因此 `latest` 表示最近一次正式发布，生产环境也可以固定使用版本号。NPC/NPS 的软件内在线更新独立读取 GitHub Releases 的正式版本号和校验文件，不依赖 Docker 标签。
 
 当前 Docker CI 构建的平台：
 

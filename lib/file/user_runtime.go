@@ -12,11 +12,15 @@ import (
 // token buckets must start clean after a restart, while the configured values
 // remain persisted on User.
 type userRuntimeState struct {
-	maxConn int64
-	nowConn int64
-	rate    *rate.Directional
+	maxConn             int64
+	nowConn             int64
+	connectionsExcluded atomic.Bool
+	bandwidthExcluded   atomic.Bool
+	rate                *rate.Shared
 }
 
+// userRuntimeRegistry only synchronizes ownership of state objects. Fields on
+// each state object provide their own concurrency guarantees.
 var userRuntimeRegistry = struct {
 	sync.RWMutex
 	states map[int]*userRuntimeState
@@ -37,7 +41,7 @@ func userRuntimeFor(userID int, create bool) *userRuntimeState {
 	userRuntimeRegistry.Lock()
 	defer userRuntimeRegistry.Unlock()
 	if state = userRuntimeRegistry.states[userID]; state == nil {
-		state = &userRuntimeState{rate: rate.NewDirectional(0, 0)}
+		state = &userRuntimeState{rate: rate.NewShared(0)}
 		userRuntimeRegistry.states[userID] = state
 	}
 	return state
@@ -47,16 +51,28 @@ func userRuntimeFor(userID int, create bool) *userRuntimeState {
 // object. Existing connections observe bandwidth changes immediately; a
 // lowered connection limit applies to new admissions and does not disconnect
 // connections that were already active.
-func SetUserRuntimeLimits(userID, maxConn, uploadLimit, downloadLimit int) {
+func SetUserRuntimeLimits(userID int, maxConn *int, bandwidthBps *int64) {
 	state := userRuntimeFor(userID, true)
 	if state == nil {
 		return
 	}
-	if maxConn < 0 {
-		maxConn = 0
+	connectionLimit := int64(0)
+	if maxConn != nil && *maxConn > 0 {
+		connectionLimit = int64(*maxConn)
 	}
-	atomic.StoreInt64(&state.maxConn, int64(maxConn))
-	state.rate.SetLimits(limitBytes(uploadLimit), limitBytes(downloadLimit))
+	atomic.StoreInt64(&state.maxConn, connectionLimit)
+	state.connectionsExcluded.Store(maxConn != nil && *maxConn == 0)
+	bandwidthExcluded := bandwidthBps != nil && *bandwidthBps == 0
+	state.bandwidthExcluded.Store(bandwidthExcluded)
+	if bandwidthExcluded {
+		// Runtime quota state has three values, but the token bucket only has
+		// "limit" and "unlimited". A plan that excludes bandwidth must not be
+		// mapped to the unlimited sentinel; admission checks reject the
+		// connection before it ever reaches the bucket.
+		state.rate.SetLimit(0)
+		return
+	}
+	state.rate.SetLimit(rate.BytesPerSecondFromBps(int64Value(bandwidthBps)))
 }
 
 // CleanupUserRuntime forgets runtime counters for a deleted user. Existing
@@ -79,6 +95,9 @@ func acquireUserConnection(userID int) (int, bool, bool) {
 	state := userRuntimeFor(userID, true)
 	if state == nil {
 		return 0, false, true
+	}
+	if state.connectionsExcluded.Load() {
+		return 0, false, false
 	}
 	for {
 		limit := atomic.LoadInt64(&state.maxConn)
@@ -141,10 +160,10 @@ func UserRuntimeSnapshot(userID int) (connections, connectionLimit, uploadRate, 
 	return connections, connectionLimit, uploadRate, downloadRate
 }
 
-// UserRateLimiter returns the shared upload/download buckets for a user.
+// UserRateLimiter returns the shared two-way bucket for a user.
 // Positive user IDs lazily receive an unlimited runtime state so a later
 // settings update always applies to the same bucket object.
-func UserRateLimiter(userID int) *rate.Directional {
+func UserRateLimiter(userID int) *rate.Shared {
 	state := userRuntimeFor(userID, true)
 	if state == nil {
 		return nil
@@ -154,7 +173,7 @@ func UserRateLimiter(userID int) *rate.Directional {
 
 // UserRateLimiterForClient snapshots the current owner before returning the
 // shared limiter, so a console edit cannot race a connection setup.
-func UserRateLimiterForClient(client *Client) *rate.Directional {
+func UserRateLimiterForClient(client *Client) *rate.Shared {
 	if client == nil {
 		return nil
 	}
@@ -162,4 +181,38 @@ func UserRateLimiterForClient(client *Client) *rate.Directional {
 	userID := client.UserId
 	client.RUnlock()
 	return UserRateLimiter(userID)
+}
+
+// UserBandwidthLimitBps returns the configured shared ceiling for display.
+// A nil stored value is unlimited and maps to zero at the runtime boundary.
+func UserBandwidthLimitBps(userID int) int64 {
+	state := userRuntimeFor(userID, false)
+	if state == nil || state.rate == nil {
+		return 0
+	}
+	return rate.BpsFromBytesPerSecond(state.rate.Limit())
+}
+
+// UserQuotaExcluded reports whether the user's plan explicitly excludes the
+// requested resource. Nil is unlimited, not excluded.
+func UserQuotaExcluded(userID int, kind QuotaKind) bool {
+	state := userRuntimeFor(userID, false)
+	if state == nil {
+		return false
+	}
+	switch kind {
+	case QuotaConnection:
+		return state.connectionsExcluded.Load()
+	case QuotaBandwidth:
+		return state.bandwidthExcluded.Load()
+	default:
+		return false
+	}
+}
+
+func int64Value(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }

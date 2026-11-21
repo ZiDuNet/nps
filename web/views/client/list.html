@@ -356,7 +356,7 @@
                 + kv('<span langtag="word-curconnections"></span>', '<span class="live-connections" data-live-client-id="' + Number(row.Id) + '"><span data-live-client-connections>' + text(row.NowConn, 0) + ' / ' + text(Number(row.MaxConn) > 0 ? row.MaxConn : '∞') + '</span></span>')
                 + kv(english ? 'Live bandwidth' : '实时带宽', clientMetricMarkup(row, true))
                 + kv('<span langtag="word-flowlimit"></span>', text(flow.FlowLimit, 0) + ' M')
-                + kv('<span langtag="word-ratelimit"></span>', text(row.RateLimit, 0) + ' KB/s')
+                + kv('<span langtag="word-ratelimit"></span>', text(row.RateLimitMbps, 0) + ' Mbps')
                 + kv('<span langtag="word-maxtunnels"></span>', text(row.MaxTunnelNum, 0))
                 + kv('<span langtag="word-connectbyconfig"></span>', npsBooleanMarkup(!!row.ConfigConnAllow))
                 + '</div></section>'

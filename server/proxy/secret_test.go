@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"io"
 	"net"
 	"sync"
 	"testing"
@@ -159,6 +160,88 @@ func TestSecretServerForwardsFramedUDPStream(t *testing.T) {
 			t.Fatalf("HandleSecret: %v", err)
 		}
 	case <-time.After(3 * time.Second):
+		t.Fatal("HandleSecret did not return")
+	}
+}
+
+func TestSecretServerAccountsClientAndTaskFlow(t *testing.T) {
+	clientFlow := &file.Flow{}
+	client := &file.Client{
+		Id:     8,
+		Status: true,
+		Cnf:    &file.Config{},
+		Flow:   clientFlow,
+	}
+	task := &file.Tunnel{
+		Mode:     "secret",
+		Client:   client,
+		Target:   &file.Target{TargetStr: "10.0.0.1:80"},
+		Flow:     &file.Flow{},
+		Password: "secret-test-password",
+	}
+	bridge := &secretTestBridge{ready: make(chan struct{})}
+	server := NewSecretServer(bridge, task, false, false, false)
+
+	visitor, serverSide := net.Pipe()
+	t.Cleanup(func() {
+		_ = visitor.Close()
+		_ = serverSide.Close()
+	})
+	done := make(chan error, 1)
+	go func() {
+		done <- server.HandleSecret(serverSide)
+	}()
+
+	select {
+	case <-bridge.ready:
+	case <-time.After(2 * time.Second):
+		t.Fatal("bridge was not called")
+	}
+
+	payload := []byte("payload")
+	writeDone := make(chan error, 1)
+	go func() {
+		_, err := visitor.Write(payload)
+		writeDone <- err
+	}()
+	buf := make([]byte, len(payload))
+	_ = bridge.peer.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := io.ReadFull(bridge.peer, buf); err != nil {
+		t.Fatalf("read peer payload: %v", err)
+	}
+	if !bytes.Equal(buf, payload) {
+		t.Fatalf("peer payload = %q, want %q", buf, payload)
+	}
+	select {
+	case err := <-writeDone:
+		if err != nil {
+			t.Fatalf("write visitor payload: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("visitor write did not complete")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if in, _, _ := clientFlow.Snapshot(); in == int64(len(payload)) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if in, out, _ := clientFlow.Snapshot(); in != int64(len(payload)) || out != 0 {
+		t.Fatalf("client flow = (%d, %d), want (%d, 0)", in, out, len(payload))
+	}
+	if in, out, _ := task.Flow.Snapshot(); in != int64(len(payload)) || out != 0 {
+		t.Fatalf("task flow = (%d, %d), want (%d, 0)", in, out, len(payload))
+	}
+	_ = bridge.peer.Close()
+	_ = visitor.Close()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("HandleSecret: %v", err)
+		}
+	case <-time.After(2 * time.Second):
 		t.Fatal("HandleSecret did not return")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/ipreg"
+	"ehang.io/nps/lib/settings"
 	"ehang.io/nps/server"
 	"ehang.io/nps/web/audit"
 	"github.com/astaxie/beego"
@@ -136,6 +138,34 @@ func TestAPIV1AdminSignatureListsClients(t *testing.T) {
 	}
 	if payload["total"] != float64(0) {
 		t.Fatalf("list total = %#v, want 0", payload["total"])
+	}
+}
+
+func TestAPIV1UserGetReadsPathID(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	withAPIV1TestAuthKey(t)
+	db.JsonDb.Users.Store(901, &file.User{
+		Id:       901,
+		UserName: "path-user",
+		Password: "secret",
+		Status:   true,
+	})
+
+	controller, recorder := newAPIV1TestController(t, http.MethodGet, "/api/v1/users/901?"+apiV1SignedQuery().Encode(), nil, "")
+	controller.Ctx.Input.SetParam(":id", "901")
+	controller.Prepare()
+	runClientPermissionAction(t, controller.UserGet)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := readAPIV1JSON(t, recorder)
+	data, ok := payload["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("user payload = %#v, want object in data", payload["data"])
+	}
+	if data["Id"] != float64(901) || data["UserName"] != "path-user" {
+		t.Fatalf("user payload = %#v, want id 901 / path-user", data)
 	}
 }
 
@@ -533,5 +563,185 @@ func TestAPIV1LegacyFailureBecomesErrorEnvelope(t *testing.T) {
 	payload := readAPIV1JSON(t, recorder)
 	if payload["status"] != float64(0) || payload["code"] != "error" || payload["error_code"] != "operation_failed" {
 		t.Fatalf("failure envelope = %#v", payload)
+	}
+}
+
+func TestAPIV1GlobalConfigReadsSQLiteBusinessSettings(t *testing.T) {
+	withAPIV1TestAuthKey(t)
+	withSettingsFixture(t, "web_port=8081\nallow_user_register=false\n")
+	settingsBefore := settings.Snapshot()
+	if err := settings.Save(map[string]string{
+		"allow_user_register":      "true",
+		"register_max_clients":     "3",
+		"register_max_tunnels":     "0",
+		"register_max_hosts":       "",
+		"register_bandwidth_limit": "384",
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		values := make(map[string]string, len(settingsBefore))
+		for key, value := range settingsBefore {
+			values[key] = value
+		}
+		if err := settings.Save(values, nil); err != nil {
+			t.Fatalf("restore settings fixture: %v", err)
+		}
+	})
+
+	controller, recorder := newAPIV1TestController(t, http.MethodGet, "/api/v1/global/config?"+apiV1SignedQuery().Encode(), nil, "")
+	controller.Prepare()
+	runClientPermissionAction(t, controller.GlobalConfig)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := readAPIV1JSON(t, recorder)
+	data, ok := payload["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("config payload = %#v", payload)
+	}
+	values, ok := data["values"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("config values = %#v", data["values"])
+	}
+	for key, want := range map[string]string{
+		"allow_user_register":      "true",
+		"register_max_clients":     "3",
+		"register_max_tunnels":     "0",
+		"register_max_hosts":       "",
+		"register_bandwidth_limit": "384",
+	} {
+		if got, _ := values[key].(string); got != want {
+			t.Fatalf("config[%s] = %q, want %q", key, got, want)
+		}
+	}
+}
+
+func TestAPIV1GlobalConfigSaveOnlyChangesSubmittedBusinessSetting(t *testing.T) {
+	withAPIV1TestAuthKey(t)
+	path := withSettingsFixture(t, "web_port=8081\nflow_limit_type=total\nflow_store_interval=1\n")
+	settingsBefore := settings.Snapshot()
+	t.Cleanup(func() {
+		values := make(map[string]string, len(settingsBefore))
+		for key, value := range settingsBefore {
+			values[key] = value
+		}
+		if err := settings.Save(values, nil); err != nil {
+			t.Fatalf("restore settings fixture: %v", err)
+		}
+	})
+
+	form := url.Values{"flow_limit_type": {"actual"}}
+	controller, recorder := newAPIV1TestController(
+		t,
+		http.MethodPost,
+		"/api/v1/global/config?"+apiV1SignedQuery().Encode(),
+		strings.NewReader(form.Encode()),
+		"application/x-www-form-urlencoded",
+	)
+	controller.Prepare()
+	runClientPermissionAction(t, controller.GlobalConfigSave)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := readAPIV1JSON(t, recorder)
+	if payload["status"] != float64(1) {
+		t.Fatalf("save envelope = %#v", payload)
+	}
+	if got, _ := settings.Get("flow_limit_type"); got != "actual" {
+		t.Fatalf("flow_limit_type = %q, want actual", got)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := settings.Get("flow_store_interval"); got != "1" {
+		t.Fatalf("unsubmitted flow_store_interval was cleared: %q", got)
+	}
+	if !strings.Contains(string(content), "web_port=8081") {
+		t.Fatalf("boot setting was removed: %s", content)
+	}
+}
+
+func TestAPIV1GlobalConfigSaveEnablesSubmittedOptionalSetting(t *testing.T) {
+	withAPIV1TestAuthKey(t)
+	withSettingsFixture(t, "web_port=8081\n")
+	settingsBefore := settings.Snapshot()
+	t.Cleanup(func() {
+		values := make(map[string]string, len(settingsBefore))
+		for key, value := range settingsBefore {
+			values[key] = value
+		}
+		if err := settings.Save(values, nil); err != nil {
+			t.Fatalf("restore settings fixture: %v", err)
+		}
+	})
+
+	form := url.Values{"allow_ports": {"60000-61000,62000-62100"}}
+	controller, recorder := newAPIV1TestController(
+		t,
+		http.MethodPost,
+		"/api/v1/global/config?"+apiV1SignedQuery().Encode(),
+		strings.NewReader(form.Encode()),
+		"application/x-www-form-urlencoded",
+	)
+	controller.Prepare()
+	runClientPermissionAction(t, controller.GlobalConfigSave)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := readAPIV1JSON(t, recorder)
+	if payload["status"] != float64(1) {
+		t.Fatalf("save envelope = %#v", payload)
+	}
+	if got, _ := settings.Get("allow_ports"); got != "60000-61000,62000-62100" {
+		t.Fatalf("allow_ports = %q, want the submitted value", got)
+	}
+}
+
+func TestAPIV1GlobalConfigSaveJSONUpdatesOptionalSetting(t *testing.T) {
+	withAPIV1TestAuthKey(t)
+	path := withSettingsFixture(t, "web_port=8081\nallow_ports=1000-2000\n")
+	settingsBefore := settings.Snapshot()
+	t.Cleanup(func() {
+		values := make(map[string]string, len(settingsBefore))
+		for key, value := range settingsBefore {
+			values[key] = value
+		}
+		if err := settings.Save(values, nil); err != nil {
+			t.Fatalf("restore settings fixture: %v", err)
+		}
+	})
+
+	body := `{"allow_ports":"31000-32000,33000"}`
+	controller, recorder := newAPIV1TestController(
+		t,
+		http.MethodPost,
+		"/api/v1/global/config?"+apiV1SignedQuery().Encode(),
+		strings.NewReader(body),
+		"application/json",
+	)
+	controller.Prepare()
+	runClientPermissionAction(t, controller.GlobalConfigSave)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := readAPIV1JSON(t, recorder)
+	if payload["status"] != float64(1) {
+		t.Fatalf("save envelope = %#v", payload)
+	}
+	if got, _ := settings.Get("allow_ports"); got != "31000-32000,33000" {
+		t.Fatalf("allow_ports = %q, want the JSON-submitted value", got)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "web_port=8081") {
+		t.Fatalf("unsubmitted boot setting was removed: %s", content)
 	}
 }
