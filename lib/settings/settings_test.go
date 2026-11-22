@@ -113,3 +113,32 @@ func TestApplyClearsDeletedManagedKey(t *testing.T) {
 		t.Fatalf("deleted setting remained in SQLite: %#v", values)
 	}
 }
+
+func TestManagedAndRuntimeConfigKeySetsDoNotOverlap(t *testing.T) {
+	managed := ManagedKeySet()
+	runtime := RuntimeConfigKeySet()
+	for key := range managed {
+		if _, exists := runtime[key]; exists {
+			t.Fatalf("configuration key %q is classified as both SQLite and nps.conf", key)
+		}
+		if !IsManagedKey(key) || IsRuntimeConfigKey(key) {
+			t.Fatalf("SQLite key %q has inconsistent classification", key)
+		}
+	}
+	for key := range runtime {
+		if IsManagedKey(key) || !IsRuntimeConfigKey(key) {
+			t.Fatalf("nps.conf key %q has inconsistent classification", key)
+		}
+	}
+}
+
+func TestBridgeListenerIdentityRemainsInStartupConfig(t *testing.T) {
+	for _, key := range []string{"bridge_host", "bridge_select_mode"} {
+		if IsManagedKey(key) {
+			t.Fatalf("%s must not move to SQLite while its consumer is startup-only", key)
+		}
+		if !IsRuntimeConfigKey(key) {
+			t.Fatalf("%s is not classified as an nps.conf startup setting", key)
+		}
+	}
+}

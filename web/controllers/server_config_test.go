@@ -12,11 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	npsconf "ehang.io/nps/conf"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/settings"
 	"ehang.io/nps/lib/store"
+	"github.com/astaxie/beego"
 )
 
 func TestServerConfigTemplateParses(t *testing.T) {
@@ -62,19 +64,25 @@ func TestServerConfigTemplateRendersConfiguredValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serverConfigSections() error = %v", err)
 	}
+	businessSections, _, bootstrapSections, err := serverConfigSectionGroups(content)
+	if err != nil {
+		t.Fatalf("serverConfigSectionGroups() error = %v", err)
+	}
 	tmpl, err := template.ParseFiles("../views/global/config.html")
 	if err != nil {
 		t.Fatalf("parse server config template: %v", err)
 	}
 	var output bytes.Buffer
 	err = tmpl.Execute(&output, map[string]interface{}{
-		"config_path":             "/tmp/nps/conf/nps.conf",
-		"config_sections":         sections,
-		"config_unknown":          unknown,
-		"config_summary":          summarizeServerConfigSections(sections, unknown),
-		"config_error":            "",
-		"config_validation_error": "",
-		"web_base_url":            "",
+		"config_path":               "/tmp/nps/conf/nps.conf",
+		"config_sections":           sections,
+		"config_business_tabs":      serverConfigBusinessTabViews(businessSections),
+		"config_bootstrap_sections": bootstrapSections,
+		"config_unknown":            unknown,
+		"config_summary":            summarizeServerConfigSections(sections, unknown),
+		"config_error":              "",
+		"config_validation_error":   "",
+		"web_base_url":              "",
 	})
 	if err != nil {
 		t.Fatalf("render server config template: %v", err)
@@ -109,19 +117,25 @@ func TestServerConfigTemplateRendersEveryConfiguredField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serverConfigSections() error = %v", err)
 	}
+	businessSections, _, bootstrapSections, err := serverConfigSectionGroups(content)
+	if err != nil {
+		t.Fatalf("serverConfigSectionGroups() error = %v", err)
+	}
 	tmpl, err := template.ParseFiles("../views/global/config.html")
 	if err != nil {
 		t.Fatalf("parse server config template: %v", err)
 	}
 	var output bytes.Buffer
 	err = tmpl.Execute(&output, map[string]interface{}{
-		"config_path":             "/tmp/nps/conf/nps.conf",
-		"config_sections":         sections,
-		"config_unknown":          unknown,
-		"config_summary":          summarizeServerConfigSections(sections, unknown),
-		"config_error":            "",
-		"config_validation_error": "",
-		"web_base_url":            "",
+		"config_path":               "/tmp/nps/conf/nps.conf",
+		"config_sections":           sections,
+		"config_business_tabs":      serverConfigBusinessTabViews(businessSections),
+		"config_bootstrap_sections": bootstrapSections,
+		"config_unknown":            unknown,
+		"config_summary":            summarizeServerConfigSections(sections, unknown),
+		"config_error":              "",
+		"config_validation_error":   "",
+		"web_base_url":              "",
 	})
 	if err != nil {
 		t.Fatalf("render server config template: %v", err)
@@ -174,6 +188,141 @@ func TestServerConfigFieldViewsExposeSourceAndReloadMode(t *testing.T) {
 	}
 	if field := fields["audit_log_path"]; field.Source != "sqlite" || field.Reload != "hot" {
 		t.Fatalf("audit_log_path source/reload = %q/%q", field.Source, field.Reload)
+	}
+}
+
+func TestServerConfigSectionGroupsSeparateBusinessAndStartupFields(t *testing.T) {
+	business, _, startup, err := serverConfigSectionGroups(npsconf.DefaultNpsConf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	businessFields := make(map[string]serverConfigFieldView)
+	for _, section := range business {
+		for _, field := range section.Fields {
+			businessFields[field.Key] = field
+			if field.Source != "sqlite" {
+				t.Fatalf("business field %s has source %q", field.Key, field.Source)
+			}
+			if !settings.IsManagedKey(field.Key) {
+				t.Fatalf("business field %s is not a SQLite managed key", field.Key)
+			}
+		}
+	}
+	startupFields := make(map[string]serverConfigFieldView)
+	for _, section := range startup {
+		for _, field := range section.Fields {
+			startupFields[field.Key] = field
+			if field.Source != "startup" || field.Reload != "restart" {
+				t.Fatalf("startup field %s has source/reload %q/%q", field.Key, field.Source, field.Reload)
+			}
+		}
+	}
+	for _, key := range []string{"allow_user_login", "audit_log_path", "ntp_server"} {
+		if _, ok := businessFields[key]; !ok {
+			t.Fatalf("business key %s is missing from the SQLite group", key)
+		}
+		if _, ok := startupFields[key]; ok {
+			t.Fatalf("business key %s leaked into the startup group", key)
+		}
+	}
+	for _, key := range []string{"web_port", "http_proxy_port", "bridge_host", "bridge_select_mode", "log_path"} {
+		if _, ok := startupFields[key]; !ok {
+			t.Fatalf("startup key %s is missing from the nps.conf group", key)
+		}
+		if _, ok := businessFields[key]; ok {
+			t.Fatalf("startup key %s leaked into a business tab", key)
+		}
+	}
+	for key := range hotReloadServerConfigKeys {
+		if !settings.IsManagedKey(key) {
+			t.Fatalf("hot-reload key %s is not stored in SQLite", key)
+		}
+	}
+}
+
+func TestServerConfigBusinessTabsKeepStartupFieldsOutOfBusinessPanels(t *testing.T) {
+	business, _, startup, err := serverConfigSectionGroups(npsconf.DefaultNpsConf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tabs := serverConfigBusinessTabViews(business)
+	if len(tabs) == 0 {
+		t.Fatal("business tab classification returned no tabs")
+	}
+	tabFieldKeys := make(map[string]string)
+	for _, tab := range tabs {
+		if tab.ID == "" || tab.Name == "" {
+			t.Fatalf("business tab has incomplete identity: %+v", tab)
+		}
+		for _, section := range tab.Sections {
+			for _, field := range section.Fields {
+				if previous, duplicate := tabFieldKeys[field.Key]; duplicate {
+					t.Fatalf("field %s appears in both %s and %s", field.Key, previous, tab.ID)
+				}
+				tabFieldKeys[field.Key] = tab.ID
+			}
+		}
+	}
+	for _, key := range []string{"web_port", "bridge_host", "bridge_select_mode"} {
+		if _, present := tabFieldKeys[key]; present {
+			t.Fatalf("startup field %s appears in business tabs", key)
+		}
+	}
+	for _, field := range startup {
+		for _, configField := range field.Fields {
+			if _, present := tabFieldKeys[configField.Key]; present {
+				t.Fatalf("startup field %s was also assigned to a business tab", configField.Key)
+			}
+		}
+	}
+
+	businessKeys := make(map[string]struct{})
+	for _, section := range business {
+		for _, field := range section.Fields {
+			businessKeys[field.Key] = struct{}{}
+		}
+	}
+	for key := range businessKeys {
+		if _, present := tabFieldKeys[key]; !present {
+			t.Fatalf("business field %s is missing from all business tabs", key)
+		}
+	}
+	startupKeys := make(map[string]struct{})
+	for _, section := range startup {
+		for _, field := range section.Fields {
+			startupKeys[field.Key] = struct{}{}
+		}
+	}
+	for key := range startupKeys {
+		if _, present := tabFieldKeys[key]; present {
+			t.Fatalf("startup field %s leaked into a business tab", key)
+		}
+	}
+}
+
+func TestServerConfigTemplateUsesSingleAccessibleTabLayer(t *testing.T) {
+	content, err := os.ReadFile("../views/global/config.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := string(content)
+	for _, marker := range []string{
+		`id="server-config-business-tabs" role="tablist"`,
+		`role="tabpanel"`,
+		`aria-controls="server-config-panel-`,
+		`aria-selected=`,
+		`data-config-tab="conf"`,
+		`event.key === 'ArrowRight'`,
+		`event.key === 'ArrowLeft'`,
+		`#config-`,
+		`loadSource(false)`,
+	} {
+		if !strings.Contains(template, marker) {
+			t.Fatalf("single-layer configuration tabs are missing %q", marker)
+		}
+	}
+	if strings.Contains(template, "server-config-view-switch") {
+		t.Fatal("legacy outer configuration view switch is still rendered")
 	}
 }
 
@@ -726,6 +875,40 @@ func TestConfigChangedKeysClassifiesHotAndRestartOnlyUpdates(t *testing.T) {
 	}
 	if len(configChangedKeys(after, after)) != 0 {
 		t.Fatal("identical snapshots must not report changes")
+	}
+}
+
+func TestNTPIntervalHotReloadReconfiguresTimeSync(t *testing.T) {
+	previousServer := beego.AppConfig.String("ntp_server")
+	previousInterval := beego.AppConfig.String("ntp_interval")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("ntp_server", previousServer)
+		_ = beego.AppConfig.Set("ntp_interval", previousInterval)
+	})
+
+	previousConfigureTimeSync := configureTimeSyncRuntime
+	t.Cleanup(func() {
+		configureTimeSyncRuntime = previousConfigureTimeSync
+	})
+	var gotServer string
+	var gotInterval time.Duration
+	configureTimeSyncRuntime = func(server string, interval time.Duration) {
+		gotServer = server
+		gotInterval = interval
+	}
+
+	hot := applyServerConfigHotReload(map[string]string{
+		"ntp_server":   "time.example.test",
+		"ntp_interval": "17",
+	}, []string{"ntp_interval"})
+
+	if gotServer != "time.example.test" || gotInterval != 17*time.Minute {
+		t.Fatalf("time sync runtime = %q/%v, want time.example.test/17m", gotServer, gotInterval)
+	}
+	for _, key := range []string{"ntp_server", "ntp_interval"} {
+		if _, ok := hot[key]; !ok {
+			t.Fatalf("hot reload result is missing paired NTP key %q: %#v", key, hot)
+		}
 	}
 }
 

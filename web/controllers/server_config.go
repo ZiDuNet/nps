@@ -12,11 +12,14 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	npsconf "ehang.io/nps/conf"
+	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
 	"ehang.io/nps/lib/connectionlog"
 	filelib "ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/settings"
 	"ehang.io/nps/server"
 	"ehang.io/nps/server/tool"
@@ -40,11 +43,10 @@ type serverConfigMeta struct {
 	Sensitive   bool
 }
 
-// hotReloadServerConfigKeys lists runtime switches that take effect without a
-// process restart. Handlers read them per request, or applyHotReloadKey pushes
-// the new value into the relevant runtime component. Listener endpoints, TLS
-// material, log adapters, P2P transports and the session store stay restart-
-// only because their values are captured once during startup.
+// hotReloadServerConfigKeys lists SQLite business keys whose runtime consumers
+// either read them per request or are refreshed explicitly by
+// applyHotReloadKey. A managed key absent here is still persisted, but the UI
+// reports that a restart is required before every consumer observes it.
 var hotReloadServerConfigKeys = map[string]struct{}{
 	"allow_ports":                  {},
 	"allow_multi_ip":               {},
@@ -101,7 +103,23 @@ var hotReloadServerConfigKeys = map[string]struct{}{
 	"flow_store_interval":          {},
 	"audit_log_path":               {},
 	"connection_log_path":          {},
+	"disconnect_timeout":           {},
+	"ip_limit":                     {},
+	"acl_max_rules":                {},
+	"dns_server":                   {},
+	"ntp_server":                   {},
+	"ntp_interval":                 {},
+	"timezone":                     {},
+	"geoip_path":                   {},
+	"geosite_path":                 {},
 }
+
+var pairedHotReloadServerConfigKeys = map[string][]string{
+	"ntp_server":   {"ntp_interval"},
+	"ntp_interval": {"ntp_server"},
+}
+
+var configureTimeSyncRuntime = common.ConfigureTimeSync
 
 // applyServerConfigHotReload pushes the newly persisted values into the
 // running process. The values map must come from the file that was just
@@ -110,14 +128,25 @@ var hotReloadServerConfigKeys = map[string]struct{}{
 // background workers or log noise.
 func applyServerConfigHotReload(values map[string]string, changedKeys []string) map[string]interface{} {
 	hot := make(map[string]interface{}, len(changedKeys))
+	applied := make(map[string]struct{}, len(changedKeys))
 	for _, key := range changedKeys {
 		if _, supported := hotReloadServerConfigKeys[key]; !supported {
 			continue
 		}
-		value := strings.TrimSpace(values[key])
-		_ = beego.AppConfig.Set(key, value)
-		applyHotReloadKey(key, value)
-		hot[key] = reloadEcho(key, value)
+		keys := []string{key}
+		if paired, ok := pairedHotReloadServerConfigKeys[key]; ok {
+			keys = append(keys, paired...)
+		}
+		for _, pairedKey := range keys {
+			if _, alreadyApplied := applied[pairedKey]; alreadyApplied {
+				continue
+			}
+			pairedValue := strings.TrimSpace(values[pairedKey])
+			_ = beego.AppConfig.Set(pairedKey, pairedValue)
+			applied[pairedKey] = struct{}{}
+			hot[pairedKey] = reloadEcho(pairedKey, pairedValue)
+		}
+		applyHotReloadKey(key, strings.TrimSpace(values[key]))
 	}
 	if len(hot) == 0 {
 		return nil
@@ -150,7 +179,66 @@ func applyHotReloadKey(key, value string) {
 		audit.Configure(value)
 	case "connection_log_path":
 		connectionlog.Configure(value)
+	case "disconnect_timeout", "ip_limit":
+		configureBridgeRuntime()
+	case "acl_max_rules":
+		acl.SetMaxRules(parseNonNegativeInt(value, acl.DefaultMaxRules))
+	case "dns_server":
+		if err := common.SetCustomDNS(value); err != nil {
+			logs.Warn("应用 DNS 服务器设置失败: %v", err)
+		}
+	case "ntp_server", "ntp_interval":
+		interval := parseNonNegativeInt(
+			beego.AppConfig.DefaultString("ntp_interval", "5"),
+			5,
+		)
+		server := strings.TrimSpace(beego.AppConfig.String("ntp_server"))
+		configureTimeSyncRuntime(server, time.Duration(interval)*time.Minute)
+	case "timezone":
+		if err := common.SetTimezone(value); err != nil {
+			logs.Warn("应用服务时区失败: %v", err)
+		}
+	case "geoip_path", "geosite_path":
+		ipPath, sitePath := configuredGeoPaths()
+		install.SetGeoDataPaths(ipPath, sitePath)
+		acl.SetGeoData(ipPath, sitePath)
+		filelib.GetDb().RefreshAccessLists()
 	}
+}
+
+func parseNonNegativeInt(value string, fallback int) int {
+	n, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || n < 0 {
+		return fallback
+	}
+	return n
+}
+
+func configureBridgeRuntime() {
+	if server.Bridge == nil {
+		return
+	}
+	server.Bridge.ConfigureRuntime(
+		common.GetBoolByStr(beego.AppConfig.String("ip_limit")),
+		beego.AppConfig.DefaultInt("disconnect_timeout", 60),
+	)
+}
+
+func configuredGeoPaths() (string, string) {
+	runPath := common.GetRunPath()
+	ipPath := strings.TrimSpace(beego.AppConfig.String("geoip_path"))
+	sitePath := strings.TrimSpace(beego.AppConfig.String("geosite_path"))
+	if ipPath == "" {
+		ipPath = filepath.Join(runPath, "conf", "geoip.dat")
+	} else if !filepath.IsAbs(ipPath) {
+		ipPath = filepath.Join(runPath, ipPath)
+	}
+	if sitePath == "" {
+		sitePath = filepath.Join(runPath, "conf", "geosite.dat")
+	} else if !filepath.IsAbs(sitePath) {
+		sitePath = filepath.Join(runPath, sitePath)
+	}
+	return ipPath, sitePath
 }
 
 // configChangedKeys returns the sorted union of keys whose effective values
@@ -210,6 +298,14 @@ type serverConfigSectionView struct {
 	Name        string
 	Description string
 	Fields      []serverConfigFieldView
+}
+
+type serverConfigTabView struct {
+	ID          string
+	Name        string
+	Description string
+	Icon        string
+	Sections    []serverConfigSectionView
 }
 
 type serverConfigUnknownView struct {
@@ -299,10 +395,10 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"bridge_key_file":           {Label: "Bridge 私钥", Category: "Bridge 与传输", Description: "Bridge 全协议共用 TLS 私钥路径；路径会正常回显，私钥内容不会读取，修改后需要重启。", Optional: true},
 	"client_history_limit":      {Label: "客户端连接历史条数", Category: "Bridge 与传输", Description: "每个客户端保留的最近连接历史数量，0 表示关闭。"},
 
-	"public_vkey":           {Label: "公共验证密钥", Category: "客户端认证与 IP 登记", Description: "允许使用公共密钥连接的客户端；留空表示关闭。", Optional: true, Sensitive: true},
 	"auth_time_window":      {Label: "握手时间窗口", Category: "客户端认证与 IP 登记", Description: "新版 NPC 握手允许的最大时间偏差，单位秒。"},
 	"ip_limit":              {Label: "客户端来源 IP 限制", Category: "客户端认证与 IP 登记", Description: "按客户端来源地址限制 Bridge 连接；兼容旧部署。", Type: "bool", Optional: true},
 	"public_register_key":   {Label: "公共 IP 登记密钥", Category: "客户端认证与 IP 登记", Description: "填写后启用 /ip/register 公共登记入口；留空关闭。", Optional: true, Sensitive: true},
+	"public_vkey":           {Label: "公共验证密钥", Category: "客户端认证与 IP 登记", Description: "兼容旧部署的公共 VKEY；保存到 SQLite，启动时用于恢复公共客户端，变更后需要重启。", Optional: true, Sensitive: true},
 	"ip_register_max_hours": {Label: "IP 登记最长时长", Category: "客户端认证与 IP 登记", Description: "公共 IP 登记的默认最长有效期，单位小时。"},
 	"ip_register_ip":        {Label: "独立登记监听地址", Category: "客户端认证与 IP 登记", Description: "独立 IP 登记监听的本机地址；端口为 0 时可以关闭该项。", Optional: true},
 	"ip_register_port":      {Label: "独立登记监听端口", Category: "客户端认证与 IP 登记", Description: "端口为 0 时仅使用管理面板的 /ip/register。", Optional: true},
@@ -569,6 +665,40 @@ var serverConfigCategoryDescriptions = map[string]string{
 	"兼容/自定义":       "历史版本或自定义部署中的只读配置，会在保存时原样保留。",
 }
 
+var serverConfigBusinessTabs = []struct {
+	ID          string
+	Name        string
+	Description string
+	Icon        string
+	Categories  []string
+}{
+	{
+		ID: "entry", Name: "入口与转发", Icon: "fa-random",
+		Description: "HTTP(S) 域名入口、反向代理请求头、超时、连接复用与响应缓存。",
+		Categories:  []string{"HTTP(S) 入口", "HTTP 转发与缓存"},
+	},
+	{
+		ID: "bridge", Name: "Bridge 与客户端", Icon: "fa-exchange",
+		Description: "NPC 接入、连接策略、客户端认证、IP 登记和 P2P 调试选项。",
+		Categories:  []string{"Bridge 与传输", "客户端认证与 IP 登记", "P2P 与调试"},
+	},
+	{
+		ID: "logs", Name: "日志与监控", Icon: "fa-area-chart",
+		Description: "运行日志、操作审计、连接日志、流量持久化与用量历史。",
+		Categories:  []string{"日志与审计"},
+	},
+	{
+		ID: "access", Name: "账号与接入", Icon: "fa-key",
+		Description: "管理面板、Web API、MCP、普通用户权限与客户端命令展示。",
+		Categories:  []string{"Web 管理面板", "Web API 认证", "用户与资源权限", "注册配置"},
+	},
+	{
+		ID: "runtime", Name: "运行与安全", Icon: "fa-shield-alt",
+		Description: "登录保护、来源信任、校时、DNS、Geo 数据和端口权限。",
+		Categories:  []string{"运行与安全"},
+	},
+}
+
 var serverConfigKeyPriority = map[string]int{
 	"http_proxy_ip": 10, "http_proxy_port": 20, "https_proxy_port": 30,
 	"show_http_proxy_port": 40, "http_proxy_access_port": 50, "https_proxy_access_port": 60,
@@ -809,11 +939,18 @@ func isThreeStateServerConfigKey(key string) bool {
 }
 
 func serverConfigCatalogKeys() []string {
-	keys := make([]string, 0, len(serverConfigMetaByKey)+len(serverConfigExtraKeys))
+	runtimeKeys := settings.RuntimeConfigKeySet()
+	keys := make([]string, 0, len(serverConfigMetaByKey)+len(runtimeKeys)+len(serverConfigExtraKeys))
 	seen := make(map[string]struct{})
 	for key := range serverConfigMetaByKey {
 		seen[key] = struct{}{}
 		keys = append(keys, key)
+	}
+	for key := range runtimeKeys {
+		if _, ok := seen[key]; !ok {
+			seen[key] = struct{}{}
+			keys = append(keys, key)
+		}
 	}
 	for key := range serverConfigKeyValues(npsconf.ServerConfigDefaults) {
 		if _, ok := seen[key]; !ok {
@@ -831,11 +968,26 @@ func serverConfigCatalogKeys() []string {
 }
 
 func serverConfigSections(content string) ([]serverConfigSectionView, []serverConfigUnknownView, error) {
+	businessSections, unknown, bootstrapSections, err := serverConfigSectionGroups(content)
+	if err != nil {
+		return nil, nil, err
+	}
+	return mergeServerConfigSectionGroups(businessSections, bootstrapSections), unknown, nil
+}
+
+// serverConfigSectionGroups splits the field catalog by effective source.
+// Business settings can be changed safely from the visual editor and are
+// persisted in SQLite. Bootstrap values live in nps.conf and are shown in the
+// dedicated startup tab, where the operator is explicitly told that a restart
+// is required. Compatibility/custom fields stay in that tab as read-only rows.
+func serverConfigSectionGroups(content string) ([]serverConfigSectionView, []serverConfigUnknownView, []serverConfigSectionView, error) {
 	values := effectiveServerConfigSnapshot(content)
 	templateValues := serverConfigKeyValues(npsconf.ServerConfigDefaults)
 	keys := serverConfigCatalogKeys()
 	seen := make(map[string]struct{}, len(keys))
-	sections := make(map[string][]serverConfigFieldView)
+	ntpHotReloadReady := settings.IsManagedKey("ntp_server") && settings.IsManagedKey("ntp_interval")
+	businessSections := make(map[string][]serverConfigFieldView)
+	bootstrapSections := make(map[string][]serverConfigFieldView)
 	for _, key := range keys {
 		seen[key] = struct{}{}
 		meta := serverConfigMetaFor(key, templateValues[key])
@@ -858,7 +1010,7 @@ func serverConfigSections(content string) ([]serverConfigSectionView, []serverCo
 		if settings.IsManagedKey(key) {
 			field.Source = "sqlite"
 		}
-		if isHotReloadServerConfigKey(key) {
+		if isHotReloadServerConfigKey(key) && (key != "ntp_server" && key != "ntp_interval" || ntpHotReloadReady) {
 			field.Reload = "hot"
 		}
 		field.DisplayValue = value
@@ -878,7 +1030,11 @@ func serverConfigSections(content string) ([]serverConfigSectionView, []serverCo
 			}
 			field.Value = ""
 		}
-		sections[meta.Category] = append(sections[meta.Category], field)
+		if settings.IsManagedKey(key) {
+			businessSections[meta.Category] = append(businessSections[meta.Category], field)
+		} else {
+			bootstrapSections[meta.Category] = append(bootstrapSections[meta.Category], field)
+		}
 	}
 
 	unknown := make([]serverConfigUnknownView, 0)
@@ -897,6 +1053,12 @@ func serverConfigSections(content string) ([]serverConfigSectionView, []serverCo
 	}
 	sort.Slice(unknown, func(i, j int) bool { return unknown[i].Key < unknown[j].Key })
 
+	businessResult := serverConfigSectionsFromMap(businessSections)
+	bootstrapResult := serverConfigSectionsFromMap(bootstrapSections)
+	return businessResult, unknown, bootstrapResult, nil
+}
+
+func serverConfigSectionsFromMap(sections map[string][]serverConfigFieldView) []serverConfigSectionView {
 	result := make([]serverConfigSectionView, 0, len(sections))
 	for _, category := range serverConfigCategoryOrder {
 		fields := sections[category]
@@ -923,7 +1085,101 @@ func serverConfigSections(content string) ([]serverConfigSectionView, []serverCo
 		}
 		result = append(result, serverConfigSectionView{Name: category, Description: description, Fields: fields})
 	}
-	return result, unknown, nil
+	return result
+}
+
+func mergeServerConfigSectionGroups(groups ...[]serverConfigSectionView) []serverConfigSectionView {
+	byCategory := make(map[string]serverConfigSectionView)
+	for _, sections := range groups {
+		for _, section := range sections {
+			existing := byCategory[section.Name]
+			if existing.Name == "" {
+				existing = section
+			} else {
+				existing.Fields = append(existing.Fields, section.Fields...)
+			}
+			byCategory[section.Name] = existing
+		}
+	}
+	merged := make([]serverConfigSectionView, 0, len(byCategory))
+	for _, category := range serverConfigCategoryOrder {
+		section, ok := byCategory[category]
+		if !ok {
+			continue
+		}
+		delete(byCategory, category)
+		merged = append(merged, section)
+	}
+	extraCategories := make([]string, 0, len(byCategory))
+	for category := range byCategory {
+		extraCategories = append(extraCategories, category)
+	}
+	sort.Strings(extraCategories)
+	for _, category := range extraCategories {
+		merged = append(merged, byCategory[category])
+	}
+	for index := range merged {
+		sort.SliceStable(merged[index].Fields, func(i, j int) bool {
+			left := serverConfigKeyPriority[merged[index].Fields[i].Key]
+			right := serverConfigKeyPriority[merged[index].Fields[j].Key]
+			if left == 0 {
+				left = 10000
+			}
+			if right == 0 {
+				right = 10000
+			}
+			if left != right {
+				return left < right
+			}
+			return merged[index].Fields[i].Key < merged[index].Fields[j].Key
+		})
+	}
+	return merged
+}
+
+// serverConfigBusinessTabViews collapses the fine-grained catalog categories
+// into stable business tabs. Empty categories are omitted, and an unexpected
+// managed category still reaches the UI in a trailing "其他业务设置" tab rather
+// than disappearing from the save path.
+func serverConfigBusinessTabViews(sections []serverConfigSectionView) []serverConfigTabView {
+	byCategory := make(map[string]serverConfigSectionView, len(sections))
+	for _, section := range sections {
+		byCategory[section.Name] = section
+	}
+	result := make([]serverConfigTabView, 0, len(serverConfigBusinessTabs)+1)
+	used := make(map[string]struct{}, len(sections))
+	for _, tab := range serverConfigBusinessTabs {
+		tabSections := make([]serverConfigSectionView, 0, len(tab.Categories))
+		for _, category := range tab.Categories {
+			section, ok := byCategory[category]
+			if !ok || len(section.Fields) == 0 {
+				continue
+			}
+			used[category] = struct{}{}
+			tabSections = append(tabSections, section)
+		}
+		if len(tabSections) == 0 {
+			continue
+		}
+		result = append(result, serverConfigTabView{
+			ID: tab.ID, Name: tab.Name, Description: tab.Description,
+			Icon: tab.Icon, Sections: tabSections,
+		})
+	}
+	remaining := make([]serverConfigSectionView, 0)
+	for _, section := range sections {
+		if _, ok := used[section.Name]; !ok {
+			remaining = append(remaining, section)
+		}
+	}
+	if len(remaining) > 0 {
+		result = append(result, serverConfigTabView{
+			ID: "other", Name: "其他业务设置", Icon: "fa-list",
+			Description: "尚未归入固定分类的 SQLite 业务配置。",
+			Sections:    remaining,
+		})
+	}
+	return result
 }
 
 func filterServerConfigSections(sections []serverConfigSectionView, excluded map[string]struct{}) []serverConfigSectionView {
@@ -1074,11 +1330,15 @@ func (s *GlobalController) Config() {
 	if err != nil {
 		s.Data["config_error"] = err.Error()
 	} else {
-		sections, unknown, _ := serverConfigSections(string(content))
+		sections, unknown, bootstrapSections, _ := serverConfigSectionGroups(string(content))
 		sections = filterServerConfigSections(sections, generalServerConfigExcludedKeys())
+		bootstrapSections = filterServerConfigSections(bootstrapSections, generalServerConfigExcludedKeys())
 		s.Data["config_sections"] = sections
+		s.Data["config_business_tabs"] = serverConfigBusinessTabViews(sections)
+		s.Data["config_bootstrap_sections"] = bootstrapSections
 		s.Data["config_unknown"] = unknown
-		s.Data["config_summary"] = summarizeServerConfigSections(sections, unknown)
+		summarySections := append(append([]serverConfigSectionView(nil), sections...), bootstrapSections...)
+		s.Data["config_summary"] = summarizeServerConfigSections(summarySections, unknown)
 		if err := validateServerConfigSource(string(content)); err != nil {
 			s.Data["config_validation_error"] = err.Error()
 		}
@@ -1195,6 +1455,16 @@ func parseServerConfigUpdatesWithValues(request *http.Request, current map[strin
 	if err != nil {
 		return nil, err
 	}
+	// Values consumed together must be validated and persisted as one update.
+	// A form that changes only the NTP port/interval would otherwise apply the
+	// new pair to the runtime while leaving the other value stale in SQLite.
+	for key := range dirtyKeys {
+		for _, pairedKey := range pairedHotReloadServerConfigKeys[key] {
+			if _, allowed := serverConfigAllowedKey(keys, pairedKey); allowed {
+				dirtyKeys[pairedKey] = struct{}{}
+			}
+		}
+	}
 	defaults := serverConfigKeyValues(npsconf.ServerConfigDefaults)
 	updates := make([]serverConfigUpdate, 0)
 	for _, key := range keys {
@@ -1291,6 +1561,15 @@ func requestedServerConfigDirtyKeys(request *http.Request, allowed []string) (ma
 		return nil, errServerConfigFormNeedsRefresh
 	}
 	return dirty, nil
+}
+
+func serverConfigAllowedKey(allowed []string, key string) (string, bool) {
+	for _, candidate := range allowed {
+		if candidate == key {
+			return candidate, true
+		}
+	}
+	return "", false
 }
 
 func effectiveServerConfigValues(current map[string]string, updates []serverConfigUpdate) map[string]string {

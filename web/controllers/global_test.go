@@ -48,6 +48,30 @@ func TestGlobalIndexKeepsCertificateSettingsOnDedicatedTab(t *testing.T) {
 			t.Fatalf("global index must not render certificate editor marker %q", marker)
 		}
 	}
+	for _, marker := range []string{
+		`id="global-settings-inner-tabs" role="tablist"`,
+		`data-global-settings-tab="basic"`,
+		`data-global-settings-tab="access"`,
+		`data-global-settings-tab="guide"`,
+		`data-global-settings-tab="geo"`,
+		`data-global-settings-panel="basic"`,
+		`data-global-settings-panel="access"`,
+		`data-global-settings-panel="guide"`,
+		`data-global-settings-panel="geo"`,
+		`.global-settings-inner-tabs { display: flex`,
+		`event.key === 'ArrowRight'`,
+		`event.key === 'ArrowLeft'`,
+		`#usage-guide-settings`,
+	} {
+		if !strings.Contains(page, marker) {
+			t.Fatalf("global index is missing tab marker %q", marker)
+		}
+	}
+	for _, marker := range []string{"name=\"serverUrl\"", "name=\"globalMaxConn\"", "name=\"globalBlackIpList\"", "name=\"guide_source\""} {
+		if !strings.Contains(page, marker) {
+			t.Fatalf("global index is missing editable field %q", marker)
+		}
+	}
 }
 
 func TestCertificateSettingsTemplateRendersCertificateEditorsAndScopedConfig(t *testing.T) {

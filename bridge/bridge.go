@@ -768,9 +768,33 @@ type Bridge struct {
 	CloseTask      chan *file.Tunnel
 	CloseClient    chan int
 	SecretChan     chan *conn.Secret
-	ipVerify       bool
+	ipVerify       atomic.Bool
 	runList        *sync.Map //map[int]interface{}
-	disconnectTime int
+	disconnectTime atomic.Int64
+}
+
+// ConfigureRuntime updates reconnect and source-address validation values that
+// were historically fixed when the Bridge was created. Both values are read by
+// long-lived listener goroutines, so use atomics instead of racing ordinary
+// fields when the administrator saves the setting.
+func (s *Bridge) ConfigureRuntime(ipLimit bool, disconnectTime int) {
+	if s == nil {
+		return
+	}
+	s.ipVerify.Store(ipLimit)
+	s.disconnectTime.Store(int64(disconnectTime))
+}
+
+func (s *Bridge) disconnectTimeout() int {
+	value := int(s.disconnectTime.Load())
+	if value <= 0 {
+		return 60
+	}
+	return value
+}
+
+func (s *Bridge) sourceIPVerificationEnabled() bool {
+	return s != nil && s.ipVerify.Load()
 }
 
 func clientTunnelQuotaError(client *file.Client) error {
@@ -787,17 +811,17 @@ func clientTunnelQuotaError(client *file.Client) error {
 }
 
 func NewTunnel(tunnelPort int, tunnelType string, ipVerify bool, runList *sync.Map, disconnectTime int) *Bridge {
-	return &Bridge{
-		TunnelPort:     tunnelPort,
-		tunnelType:     tunnelType,
-		OpenTask:       make(chan *file.Tunnel, 128),
-		CloseTask:      make(chan *file.Tunnel, 128),
-		CloseClient:    make(chan int, 128),
-		SecretChan:     make(chan *conn.Secret, 128),
-		ipVerify:       ipVerify,
-		runList:        runList,
-		disconnectTime: disconnectTime,
+	bridge := &Bridge{
+		TunnelPort:  tunnelPort,
+		tunnelType:  tunnelType,
+		OpenTask:    make(chan *file.Tunnel, 128),
+		CloseTask:   make(chan *file.Tunnel, 128),
+		CloseClient: make(chan int, 128),
+		SecretChan:  make(chan *conn.Secret, 128),
+		runList:     runList,
 	}
+	bridge.ConfigureRuntime(ipVerify, disconnectTime)
+	return bridge
 }
 
 func (s *Bridge) StartTunnel() error {
@@ -2132,7 +2156,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 		go s.GetHealthFromClient(id, c)
 		logs.Info("[连接] clientId %d 已连接，来源：%s", id, c.Conn.RemoteAddr())
 	case common.WORK_CHAN:
-		muxConn := nps_mux.NewMux(c.Conn, transportType, s.disconnectTime)
+		muxConn := nps_mux.NewMux(c.Conn, transportType, s.disconnectTimeout())
 		var oldTunnel *nps_mux.Mux
 		s.clientsMu.Lock()
 		if v, ok := s.Client.Load(id); ok {
@@ -2217,7 +2241,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 				_ = c.Close()
 				return
 			}
-			muxConn := nps_mux.NewMux(c.Conn, transportType, s.disconnectTime)
+			muxConn := nps_mux.NewMux(c.Conn, transportType, s.disconnectTimeout())
 			var oldFile *nps_mux.Mux
 			s.clientsMu.Lock()
 			if v, ok := s.Client.Load(id); ok {
@@ -2254,7 +2278,7 @@ func (s *Bridge) typeDeal(typeVal string, c *conn.Conn, id int, vs string, trans
 				common.WORK_FILE, "channel_ready", "")
 			return
 		}
-		muxConn := nps_mux.NewMux(c.Conn, transportType, s.disconnectTime)
+		muxConn := nps_mux.NewMux(c.Conn, transportType, s.disconnectTimeout())
 		var oldFile *nps_mux.Mux
 		s.clientsMu.Lock()
 		if v, ok := s.Client.Load(id); ok {
@@ -2441,7 +2465,7 @@ func (s *Bridge) SendLinkInfo(clientId int, link *conn.Link, t *file.Tunnel) (ta
 		if registeredIPRequired(clientRecord, t) && !ipreg.RegisteredString(clientId, link.RemoteAddr) {
 			return nil, fmt.Errorf("访问 IP %s 尚未完成登记", common.GetIpByAddr(link.RemoteAddr))
 		}
-		if s.ipVerify {
+		if s.sourceIPVerificationEnabled() {
 			ip := common.GetIpByAddr(link.RemoteAddr)
 			registered, ok := s.Register.Load(ip)
 			expiresAt, valid := registered.(time.Time)
@@ -2535,7 +2559,7 @@ func (s *Bridge) SendLinkInfo(clientId int, link *conn.Link, t *file.Tunnel) (ta
 			return nil, fmt.Errorf("访问 IP %s 尚未完成登记", common.GetIpByAddr(link.RemoteAddr))
 		}
 		//If ip is restricted to do ip verification
-		if s.ipVerify {
+		if s.sourceIPVerificationEnabled() {
 			ip := common.GetIpByAddr(link.RemoteAddr)
 			registered, ok := s.Register.Load(ip)
 			if !ok {

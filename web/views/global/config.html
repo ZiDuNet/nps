@@ -1,3 +1,55 @@
+{{define "serverConfigField"}}
+<article class="server-config-field{{if not .Enabled}} is-disabled{{end}}{{if not .Editable}} is-readonly{{end}}" data-config-field data-search="{{.Label}} {{.Key}} {{.Description}}">
+    <div class="server-config-field__head">
+        <div class="server-config-field__label">
+            <label for="server-config-{{.Key}}">{{.Label}} <code>{{.Key}}</code></label>
+            <p>{{.Description}}</p>
+            <div class="server-config-field__badges">
+                {{if eq .Source "sqlite"}}<span class="server-config-badge is-source-sqlite" data-i18n-zh="SQLite 业务配置" data-i18n-en="SQLite business setting">SQLite 业务配置</span>{{else}}<span class="server-config-badge is-source-startup" data-i18n-zh="nps.conf 启动配置" data-i18n-en="nps.conf startup setting">nps.conf 启动配置</span>{{end}}
+                {{if eq .Reload "hot"}}<span class="server-config-badge is-reload-hot" data-i18n-zh="立即生效" data-i18n-en="Applies immediately">立即生效</span>{{else}}<span class="server-config-badge is-reload-restart" data-i18n-zh="需重启" data-i18n-en="Restart required">需重启</span>{{end}}
+                {{if not .Editable}}<span class="server-config-badge" data-i18n-zh="只读" data-i18n-en="Read-only">只读</span>{{end}}
+                {{if and .Optional .Enabled}}<span class="server-config-badge is-enabled" data-i18n-zh="已启用" data-i18n-en="Enabled">已启用</span>{{end}}
+                {{if .Sensitive}}<span class="server-config-badge is-secret" data-i18n-zh="敏感值" data-i18n-en="Secret">敏感值</span>{{end}}
+                {{if and (not .Present) (not .Optional)}}<span class="server-config-badge is-missing" data-i18n-zh="文件中缺失" data-i18n-en="Missing in file">文件中缺失</span>{{end}}
+                {{if and (not .Present) .Optional}}<span class="server-config-badge" data-i18n-zh="未写入，使用默认值" data-i18n-en="Not set; default shown">未写入，使用默认值</span>{{end}}
+            </div>
+        </div>
+    </div>
+    <div class="server-config-field__control">
+        {{if .Editable}}
+            {{if .Optional}}<label class="server-config-optional"><input type="checkbox" name="config_enabled_{{.Key}}" value="1" data-config-enabled="{{.Key}}" data-config-enabled-value="{{if .Enabled}}1{{else}}0{{end}}"{{if .Enabled}} checked{{end}}><span data-i18n-zh="启用并写入此项" data-i18n-en="Enable and write this setting">启用并写入此项</span></label>{{end}}
+            {{if eq .Type "bool"}}
+                <select id="server-config-{{.Key}}" class="form-control" name="config_{{.Key}}" data-config-input="{{.Key}}" data-config-value="{{.Value}}"><option value="true"{{if eq .Value "true"}} selected{{end}}>true / 启用</option><option value="false"{{if eq .Value "false"}} selected{{end}}>false / 关闭</option></select>
+            {{else if eq .Type "select"}}
+                <select id="server-config-{{.Key}}" class="form-control" name="config_{{.Key}}" data-config-input="{{.Key}}" data-config-value="{{.Value}}">{{range $option := .Options}}<option value="{{$option}}"{{if eq $.Value $option}} selected{{end}}>{{$option}}</option>{{end}}</select>
+            {{else if eq .Type "secret"}}
+                <div class="input-group"><input id="server-config-{{.Key}}" class="form-control" type="password" name="config_{{.Key}}" data-config-input="{{.Key}}" placeholder="{{if .Present}}已配置，留空保持{{else}}未配置{{end}}" autocomplete="new-password"><button type="button" class="btn btn-outline server-config-reveal server-config-secret-reveal" data-target="server-config-{{.Key}}" aria-label="显示或隐藏值" title="显示或隐藏值"><i class="fa fa-eye" aria-hidden="true"></i></button></div>
+                <span class="server-config-secret-note" data-i18n-zh="敏感值不会回显；留空保持当前值。" data-i18n-en="Secret values are never echoed; leave blank to keep the current value.">敏感值不会回显；留空保持当前值。</span>
+            {{else}}
+                <input id="server-config-{{.Key}}" class="form-control" type="{{if eq .Type "int"}}number{{else}}text{{end}}" name="config_{{.Key}}" value="{{.Value}}" data-config-value="{{.Value}}" data-config-input="{{.Key}}"{{if eq .Type "int"}} min="0" step="1"{{end}}>
+            {{end}}
+        {{else}}
+            <div class="server-config-readonly" aria-readonly="true">{{.DisplayValue}}</div>
+        {{end}}
+    </div>
+</article>
+{{end}}
+
+{{define "serverConfigSection"}}
+<section class="panel ibox float-e-margins nps-panel server-config-section is-collapsed" data-config-section data-section-name="{{.Name}}">
+    <header class="server-config-section__header" data-config-section-toggle>
+        <div class="server-config-section__heading">
+            <div class="server-config-section__title-row"><h2>{{.Name}}</h2><span class="server-config-section__count">{{len .Fields}} <span data-i18n-zh="项" data-i18n-en="fields">项</span></span></div>
+            <p>{{.Description}}</p>
+        </div>
+        <button class="server-config-section__toggle" type="button" aria-expanded="false" data-config-section-button><span data-config-section-toggle-label data-i18n-zh="展开配置" data-i18n-en="Expand">展开配置</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
+    </header>
+    <div class="server-config-section__body">
+        {{range .Fields}}{{template "serverConfigField" .}}{{end}}
+    </div>
+</section>
+{{end}}
+
 <style>
     .server-config-page { max-width: 1680px; margin: 0 auto; }
     .server-config-header { align-items: flex-end; margin-bottom: 18px; }
@@ -20,9 +72,18 @@
     .server-config-stat.is-warning { background: color-mix(in srgb, var(--nps-warning) 7%, var(--nps-surface)); border-color: color-mix(in srgb, var(--nps-warning) 25%, var(--nps-line)); }
     .server-config-stat.is-warning strong { color: var(--nps-warning); }
     .server-config-commandbar { position: sticky; top: 10px; z-index: 8; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px; background: color-mix(in srgb, var(--nps-surface) 94%, transparent); border: 1px solid color-mix(in srgb, var(--nps-primary) 13%, var(--nps-line)); border-radius: 12px; box-shadow: 0 10px 28px rgba(15,23,42,.11); backdrop-filter: blur(14px); }
-    .server-config-view-switch { display: inline-flex; gap: 3px; padding: 3px; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 9px; }
-    .server-config-view-switch button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 11px; color: var(--nps-muted); background: transparent; border: 0; border-radius: 7px; font-size: 11px; font-weight: 680; cursor: pointer; }
-    .server-config-view-switch button.is-active { color: var(--nps-primary); background: var(--nps-surface); box-shadow: 0 2px 8px rgba(15,23,42,.1); }
+    .server-config-inner-tabs { display: flex; gap: 5px; margin-bottom: 12px; padding: 5px; overflow-x: auto; background: var(--nps-surface-subtle); border: 1px solid var(--nps-line); border-radius: 12px; scrollbar-width: thin; }
+    .server-config-inner-tab { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; min-height: 38px; padding: 0 12px; color: var(--nps-muted); background: transparent; border: 1px solid transparent; border-radius: 8px; font-size: 11px; font-weight: 680; white-space: nowrap; cursor: pointer; }
+    .server-config-inner-tab:hover { color: var(--nps-ink); background: color-mix(in srgb, var(--nps-surface) 72%, transparent); border-color: color-mix(in srgb, var(--nps-primary) 17%, var(--nps-line)); }
+    .server-config-inner-tab:focus-visible { outline: 2px solid color-mix(in srgb, var(--nps-primary) 70%, transparent); outline-offset: 1px; }
+    .server-config-inner-tab.is-active { color: var(--nps-primary); background: var(--nps-surface); border-color: color-mix(in srgb, var(--nps-primary) 29%, var(--nps-line)); box-shadow: 0 2px 9px rgba(15,23,42,.09); }
+    .server-config-inner-tab__icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; color: var(--nps-primary); background: color-mix(in srgb, var(--nps-primary) 9%, var(--nps-surface)); border: 1px solid color-mix(in srgb, var(--nps-primary) 19%, var(--nps-line)); border-radius: 6px; font-size: 10px; }
+    .server-config-inner-tab.is-source { margin-left: auto; color: var(--nps-warning); border-color: color-mix(in srgb, var(--nps-warning) 20%, var(--nps-line)); }
+    .server-config-inner-tab.is-source .server-config-inner-tab__icon { color: var(--nps-warning); background: color-mix(in srgb, var(--nps-warning) 9%, var(--nps-surface)); border-color: color-mix(in srgb, var(--nps-warning) 22%, var(--nps-line)); }
+    .server-config-inner-tab.is-source.is-active { color: var(--nps-warning); background: var(--nps-surface); border-color: color-mix(in srgb, var(--nps-warning) 34%, var(--nps-line)); }
+    .server-config-tab-panel[hidden] { display: none !important; }
+    .server-config-tab-intro { margin-bottom: 10px; padding: 9px 12px; color: var(--nps-muted); background: color-mix(in srgb, var(--nps-surface) 70%, var(--nps-surface-subtle)); border: 1px dashed var(--nps-line-strong); border-radius: 9px; font-size: 10.5px; line-height: 1.55; }
+    .server-config-tab-intro strong { color: var(--nps-ink); }
     .server-config-search { position: relative; flex: 1 1 260px; min-width: 210px; }
     .server-config-search i { position: absolute; top: 50%; left: 11px; color: var(--nps-faint); transform: translateY(-50%); pointer-events: none; }
     .server-config-search input { width: 100%; min-height: 36px; padding: 0 34px 0 32px; color: var(--nps-ink); background: var(--nps-surface); border: 1px solid var(--nps-line); border-radius: 8px; font-size: 11.5px; }
@@ -86,9 +147,7 @@
     .server-config-empty { display: none; padding: 26px; color: var(--nps-muted); text-align: center; background: var(--nps-surface); border: 1px dashed var(--nps-line-strong); border-radius: 11px; }
     .server-config-unknown-table { margin: 0; }
     .server-config-unknown-table td, .server-config-unknown-table th { vertical-align: top !important; overflow-wrap: anywhere; }
-    .server-config-ui-shell, .server-config-source-shell { display: none; }
-    .server-config-source-shell.is-active, .server-config-ui-shell.is-active { display: block; }
-    .server-config-source-head { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 11px 13px; background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 4%, var(--nps-surface)), var(--nps-surface)); border: 1px solid var(--nps-line); border-bottom: 0; border-radius: 12px 12px 0 0; }
+    .server-config-source-head { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 9px; padding: 11px 13px; background: linear-gradient(135deg, color-mix(in srgb, var(--nps-primary) 4%, var(--nps-surface)), var(--nps-surface)); border: 1px solid var(--nps-line); border-bottom: 0; border-radius: 12px 12px 0 0; }
     .server-config-source-head__copy { min-width: 240px; margin-right: auto; }
     .server-config-source-head__copy strong { display: block; color: var(--nps-ink); font-size: 12px; }
     .server-config-source-head__copy span { display: block; margin-top: 2px; color: var(--nps-muted); font-size: 9.5px; line-height: 1.4; }
@@ -114,8 +173,9 @@
     }
     @media (max-width: 760px) {
         .server-config-commandbar { position: static; align-items: stretch; }
-        .server-config-view-switch { width: 100%; }
-        .server-config-view-switch button { flex: 1 1 50%; justify-content: center; }
+        .server-config-inner-tabs { margin-right: -2px; margin-left: -2px; }
+        .server-config-inner-tab { min-height: 42px; padding: 0 10px; }
+        .server-config-inner-tab.is-source { margin-left: 0; }
         .server-config-search { flex-basis: 100%; }
         .server-config-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .server-config-section__header { align-items: flex-start; padding: 11px; }
@@ -135,7 +195,7 @@
         <div class="form-page-heading">
             <div class="dashboard-page-kicker" data-i18n-zh="系统配置" data-i18n-en="System settings">系统配置</div>
             <h1 id="server-config-title" data-i18n-zh="服务端配置" data-i18n-en="Server configuration">服务端配置</h1>
-            <p data-i18n-zh="可视化表单维护 SQLite 业务配置和 nps.conf 启动配置；每项均标明来源及是否需要重启。源码视图仅编辑 nps.conf，并会把其中提交的业务键写入 SQLite。证书、私钥和 ACME 配置已集中在“证书设置”；密码和 Token 不会在表单中回显。" data-i18n-en="The visual editor manages SQLite business settings and nps.conf startup settings; every field shows its source and restart requirement. Source view edits nps.conf only and moves submitted business keys into SQLite. Certificates, private keys and ACME settings live under Certificate settings; passwords and tokens are never echoed in the form.">可视化表单维护 SQLite 业务配置和 nps.conf 启动配置；每项均标明来源及是否需要重启。源码视图仅编辑 nps.conf，并会把其中提交的业务键写入 SQLite。证书、私钥和 ACME 配置已集中在“证书设置”；密码和 Token 不会在表单中回显。</p>
+            <p data-i18n-zh="业务设置按用途分类保存到 SQLite，可热更新的项目保存后立即生效；监听地址、端口、TLS、日志适配器和会话等启动参数统一放在 nps.conf 分类，修改后需要重启。证书与私钥在“证书设置”维护，密码和 Token 不会在表单中回显。" data-i18n-en="Business settings are grouped by purpose and stored in SQLite; hot-reloadable values apply immediately. Listener addresses, ports, TLS, log adapters and sessions live under the dedicated nps.conf tab and require a restart. Certificates and private keys live under Certificate settings; passwords and tokens are never echoed.">业务设置按用途分类保存到 SQLite，可热更新的项目保存后立即生效；监听地址、端口、TLS、日志适配器和会话等启动参数统一放在 nps.conf 分类，修改后需要重启。证书与私钥在“证书设置”维护，密码和 Token 不会在表单中回显。</p>
             <div class="server-config-path"><i class="fa fa-code" aria-hidden="true"></i><span>{{.config_path}}</span></div>
         </div>
     </header>
@@ -179,8 +239,8 @@
         <div class="server-config-notice" role="status">
             <i class="fa fa-shield" aria-hidden="true"></i>
             <div>
-                <strong data-i18n-zh="保存后需要重启 NPS" data-i18n-en="Restart NPS after saving">保存后需要重启 NPS</strong>
-                <p data-i18n-zh="业务配置保存到 SQLite，启动配置写回 nps.conf；关闭可选功能会删除对应键。密码、Token 和 API 密钥不会在表单中回显，留空表示保持原值。证书与私钥路径在“证书设置”中核对。源码视图仅展示 nps.conf，请仅在可信环境使用。" data-i18n-en="Business settings are stored in SQLite and startup settings in nps.conf; disabling an optional feature removes its key. Passwords, tokens and API keys are never echoed in the form; leave them blank to keep the current value. Certificate and key paths are reviewed under Certificate settings. Source view shows nps.conf only and must only be used in a trusted environment.">业务配置保存到 SQLite，启动配置写回 nps.conf；关闭可选功能会删除对应键。密码、Token 和 API 密钥不会在表单中回显，留空表示保持原值。证书与私钥路径在“证书设置”中核对。源码视图仅展示 nps.conf，请仅在可信环境使用。</p>
+                <strong data-i18n-zh="按字段提示判断何时生效" data-i18n-en="Check each field's apply mode">按字段提示判断何时生效</strong>
+                <p data-i18n-zh="业务配置保存到 SQLite，可热更新的字段立即生效；nps.conf 启动项和完整源码修改后需要重启。关闭可选功能会删除对应键。密码、Token 和 API 密钥不会在表单中回显，留空表示保持原值。" data-i18n-en="Business settings are stored in SQLite; hot-reloadable fields apply immediately. nps.conf startup settings and full-source edits require a restart. Disabling an optional feature removes its key. Passwords, tokens and API keys are never echoed; leave them blank to keep the current value.">业务配置保存到 SQLite，可热更新的字段立即生效；nps.conf 启动项和完整源码修改后需要重启。关闭可选功能会删除对应键。密码、Token 和 API 密钥不会在表单中回显，留空表示保持原值。</p>
             </div>
         </div>
         <div class="server-config-summary" aria-label="配置摘要">
@@ -192,10 +252,6 @@
     </div>
 
     <div class="server-config-commandbar">
-        <div class="server-config-view-switch" id="server-config-view-switch" role="tablist" aria-label="配置视图">
-            <button type="button" class="is-active" role="tab" aria-selected="true" data-config-view="ui"><i class="fa fa-sliders" aria-hidden="true"></i> <span data-i18n-zh="可视化配置" data-i18n-en="Visual editor">可视化配置</span></button>
-            <button type="button" role="tab" aria-selected="false" data-config-view="source"><i class="fa fa-code" aria-hidden="true"></i> <span data-i18n-zh="源码视图" data-i18n-en="Source view">源码视图</span></button>
-        </div>
         <div class="server-config-search" id="server-config-search-wrap">
             <i class="fa fa-search" aria-hidden="true"></i>
             <input id="server-config-search" type="search" autocomplete="off" placeholder="搜索字段名称、配置键或说明" data-placeholder-zh="搜索字段名称、配置键或说明" data-placeholder-en="Search label, key or description">
@@ -206,72 +262,57 @@
         <span class="server-config-filter-count" id="server-config-filter-count"></span>
     </div>
 
-    <div class="server-config-ui-shell is-active" id="server-config-ui-shell">
+    <div class="server-config-ui-shell" id="server-config-ui-shell">
+        <div class="server-config-inner-tabs" id="server-config-business-tabs" role="tablist" aria-label="服务端配置分类">
+            {{range $index, $tab := .config_business_tabs}}
+            <button type="button" class="server-config-inner-tab{{if eq $index 0}} is-active{{end}}" role="tab" id="server-config-tab-{{$tab.ID}}" aria-controls="server-config-panel-{{$tab.ID}}" aria-selected="{{if eq $index 0}}true{{else}}false{{end}}" tabindex="{{if eq $index 0}}0{{else}}-1{{end}}" data-config-tab="{{$tab.ID}}"><span class="server-config-inner-tab__icon"><i class="fa {{$tab.Icon}}" aria-hidden="true"></i></span><span>{{$tab.Name}}</span></button>
+            {{end}}
+            <button type="button" class="server-config-inner-tab is-source" role="tab" id="server-config-tab-conf" aria-controls="server-config-panel-conf" aria-selected="false" tabindex="-1" data-config-tab="conf"><span class="server-config-inner-tab__icon"><i class="fa fa-file-code" aria-hidden="true"></i></span><span data-i18n-zh="nps.conf 启动项" data-i18n-en="nps.conf startup">nps.conf 启动项</span></button>
+        </div>
         <form id="server-config-form" class="server-config-stack" autocomplete="off">
-            {{range $sectionIndex, $section := .config_sections}}
-            <section class="panel ibox float-e-margins nps-panel server-config-section is-collapsed" data-config-section data-section-name="{{$section.Name}}">
-                <header class="server-config-section__header" data-config-section-toggle>
-                    <div class="server-config-section__heading">
-                        <div class="server-config-section__title-row"><h2>{{$section.Name}}</h2><span class="server-config-section__count">{{len $section.Fields}} <span data-i18n-zh="项" data-i18n-en="fields">项</span></span></div>
-                        <p>{{$section.Description}}</p>
-                    </div>
-                    <button class="server-config-section__toggle" type="button" aria-expanded="false" data-config-section-button><span data-config-section-toggle-label data-i18n-zh="展开配置" data-i18n-en="Expand">展开配置</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
-                </header>
-                <div class="server-config-section__body">
-                    {{range $field := $section.Fields}}
-                    <article class="server-config-field{{if not $field.Enabled}} is-disabled{{end}}{{if not $field.Editable}} is-readonly{{end}}" data-config-field data-search="{{$field.Label}} {{$field.Key}} {{$field.Description}}">
-                        <div class="server-config-field__head">
-                            <div class="server-config-field__label">
-                                <label for="server-config-{{$field.Key}}">{{$field.Label}} <code>{{$field.Key}}</code></label>
-                                <p>{{$field.Description}}</p>
-                                <div class="server-config-field__badges">
-                                    {{if eq $field.Source "sqlite"}}<span class="server-config-badge is-source-sqlite" data-i18n-zh="SQLite 业务配置" data-i18n-en="SQLite business setting">SQLite 业务配置</span>{{else}}<span class="server-config-badge is-source-startup" data-i18n-zh="nps.conf 启动配置" data-i18n-en="nps.conf startup setting">nps.conf 启动配置</span>{{end}}
-                                    {{if eq $field.Reload "hot"}}<span class="server-config-badge is-reload-hot" data-i18n-zh="立即生效" data-i18n-en="Applies immediately">立即生效</span>{{else}}<span class="server-config-badge is-reload-restart" data-i18n-zh="需重启" data-i18n-en="Restart required">需重启</span>{{end}}
-                                    {{if not $field.Editable}}<span class="server-config-badge" data-i18n-zh="只读" data-i18n-en="Read-only">只读</span>{{end}}
-                                    {{if and $field.Optional $field.Enabled}}<span class="server-config-badge is-enabled" data-i18n-zh="已启用" data-i18n-en="Enabled">已启用</span>{{end}}
-                                    {{if $field.Sensitive}}<span class="server-config-badge is-secret" data-i18n-zh="敏感值" data-i18n-en="Secret">敏感值</span>{{end}}
-                                    {{if and (not $field.Present) (not $field.Optional)}}<span class="server-config-badge is-missing" data-i18n-zh="文件中缺失" data-i18n-en="Missing in file">文件中缺失</span>{{end}}
-                                    {{if and (not $field.Present) $field.Optional}}<span class="server-config-badge" data-i18n-zh="未写入，使用默认值" data-i18n-en="Not set; default shown">未写入，使用默认值</span>{{end}}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="server-config-field__control">
-                            {{if $field.Editable}}
-                                {{if $field.Optional}}<label class="server-config-optional"><input type="checkbox" name="config_enabled_{{$field.Key}}" value="1" data-config-enabled="{{$field.Key}}" data-config-enabled-value="{{if $field.Enabled}}1{{else}}0{{end}}"{{if $field.Enabled}} checked{{end}}><span data-i18n-zh="启用并写入此项" data-i18n-en="Enable and write this setting">启用并写入此项</span></label>{{end}}
-                                {{if eq $field.Type "bool"}}
-                                    <select id="server-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}" data-config-value="{{$field.Value}}"><option value="true"{{if eq $field.Value "true"}} selected{{end}}>true / 启用</option><option value="false"{{if eq $field.Value "false"}} selected{{end}}>false / 关闭</option></select>
-                                {{else if eq $field.Type "select"}}
-                                    <select id="server-config-{{$field.Key}}" class="form-control" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}" data-config-value="{{$field.Value}}">{{range $option := $field.Options}}<option value="{{$option}}"{{if eq $field.Value $option}} selected{{end}}>{{$option}}</option>{{end}}</select>
-                                {{else if eq $field.Type "secret"}}
-                                    <div class="input-group"><input id="server-config-{{$field.Key}}" class="form-control" type="password" name="config_{{$field.Key}}" data-config-input="{{$field.Key}}" placeholder="{{if $field.Present}}已配置，留空保持{{else}}未配置{{end}}" autocomplete="new-password"><button type="button" class="btn btn-outline server-config-reveal server-config-secret-reveal" data-target="server-config-{{$field.Key}}" aria-label="显示或隐藏值" title="显示或隐藏值"><i class="fa fa-eye" aria-hidden="true"></i></button></div>
-                                    <span class="server-config-secret-note" data-i18n-zh="敏感值不会回显；留空保持当前值。" data-i18n-en="Secret values are never echoed; leave blank to keep the current value.">敏感值不会回显；留空保持当前值。</span>
-                                {{else}}
-                                    <input id="server-config-{{$field.Key}}" class="form-control" type="{{if eq $field.Type "int"}}number{{else}}text{{end}}" name="config_{{$field.Key}}" value="{{$field.Value}}" data-config-value="{{$field.Value}}" data-config-input="{{$field.Key}}"{{if eq $field.Type "int"}} min="0" step="1"{{end}}>
-                                {{end}}
-                            {{else}}
-                                <div class="server-config-readonly" aria-readonly="true">{{$field.DisplayValue}}</div>
-                            {{end}}
-                        </div>
-                    </article>
-                    {{end}}
-                </div>
-            </section>
+            {{range $index, $tab := .config_business_tabs}}
+            <div class="server-config-tab-panel" id="server-config-panel-{{$tab.ID}}" role="tabpanel" aria-labelledby="server-config-tab-{{$tab.ID}}" data-config-panel="{{$tab.ID}}"{{if ne $index 0}} hidden{{end}}>
+                <div class="server-config-tab-intro"><strong>{{$tab.Name}}</strong> · {{$tab.Description}}</div>
+                {{range $tab.Sections}}{{template "serverConfigSection" .}}{{end}}
+            </div>
             {{end}}
 
-            {{if .config_unknown}}
-            <section class="panel ibox float-e-margins nps-panel server-config-section server-config-unknown is-collapsed" data-config-section data-section-name="兼容与自定义字段">
-                <header class="server-config-section__header" data-config-section-toggle>
-                    <div class="server-config-section__heading">
-                        <div class="server-config-section__title-row"><h2 data-i18n-zh="兼容与自定义字段" data-i18n-en="Compatibility and custom fields">兼容与自定义字段</h2><span class="server-config-section__count">{{len .config_unknown}} <span data-i18n-zh="项" data-i18n-en="fields">项</span></span></div>
-                        <p data-i18n-zh="这些键来自历史版本或自定义部署，当前版本不会在线修改，但会在保存时原样保留。" data-i18n-en="These keys come from older releases or custom deployments. They are read-only here and are preserved verbatim when saving.">这些键来自历史版本或自定义部署，当前版本不会在线修改，但会在保存时原样保留。</p>
+            <div class="server-config-tab-panel" id="server-config-panel-conf" role="tabpanel" aria-labelledby="server-config-tab-conf" data-config-panel="conf" hidden>
+                <div class="server-config-tab-intro"><strong data-i18n-zh="nps.conf 启动项" data-i18n-en="nps.conf startup settings">nps.conf 启动项</strong> · <span data-i18n-zh="监听地址、端口、TLS、日志适配器、会话与兼容字段在这里维护。保存后需要重启 NPS；需要保留注释或编辑未知字段时使用下方完整源码。" data-i18n-en="Listener addresses, ports, TLS, log adapters, sessions and compatibility fields live here. Restart NPS after saving; use the complete source editor below to preserve comments or edit unknown keys.">监听地址、端口、TLS、日志适配器、会话与兼容字段在这里维护。保存后需要重启 NPS；需要保留注释或编辑未知字段时使用下方完整源码。</span></div>
+                {{range .config_bootstrap_sections}}{{template "serverConfigSection" .}}{{end}}
+                {{if .config_unknown}}
+                <section class="panel ibox float-e-margins nps-panel server-config-section server-config-unknown is-collapsed" data-config-section data-section-name="兼容与自定义字段">
+                    <header class="server-config-section__header" data-config-section-toggle>
+                        <div class="server-config-section__heading">
+                            <div class="server-config-section__title-row"><h2 data-i18n-zh="兼容与自定义字段" data-i18n-en="Compatibility and custom fields">兼容与自定义字段</h2><span class="server-config-section__count">{{len .config_unknown}} <span data-i18n-zh="项" data-i18n-en="fields">项</span></span></div>
+                            <p data-i18n-zh="这些键来自历史版本或自定义部署，当前版本不会在线修改，但会在保存时原样保留。" data-i18n-en="These keys come from older releases or custom deployments. They are read-only here and are preserved verbatim when saving.">这些键来自历史版本或自定义部署，当前版本不会在线修改，但会在保存时原样保留。</p>
+                        </div>
+                        <button class="server-config-section__toggle" type="button" aria-expanded="false" data-config-section-button><span data-config-section-toggle-label data-i18n-zh="展开配置" data-i18n-en="Expand">展开配置</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
+                    </header>
+                    <div class="server-config-section__body server-config-section__body--table">
+                        <div class="table-responsive"><table class="table table-striped server-config-unknown-table"><thead><tr><th data-i18n-zh="配置键" data-i18n-en="Key">配置键</th><th data-i18n-zh="当前值" data-i18n-en="Current value">当前值</th><th data-i18n-zh="状态" data-i18n-en="Status">状态</th></tr></thead><tbody>{{range .config_unknown}}<tr><td><code>{{.Key}}</code></td><td><code>{{.DisplayValue}}</code></td><td><span class="label label-default" data-i18n-zh="只读并保留" data-i18n-en="Read-only and preserved">只读并保留</span></td></tr>{{end}}</tbody></table></div>
                     </div>
-                    <button class="server-config-section__toggle" type="button" aria-expanded="false" data-config-section-button><span data-config-section-toggle-label data-i18n-zh="展开配置" data-i18n-en="Expand">展开配置</span><i class="fa fa-chevron-down" aria-hidden="true"></i></button>
-                </header>
-                <div class="server-config-section__body server-config-section__body--table">
-                    <div class="table-responsive"><table class="table table-striped server-config-unknown-table"><thead><tr><th data-i18n-zh="配置键" data-i18n-en="Key">配置键</th><th data-i18n-zh="当前值" data-i18n-en="Current value">当前值</th><th data-i18n-zh="状态" data-i18n-en="Status">状态</th></tr></thead><tbody>{{range .config_unknown}}<tr><td><code>{{.Key}}</code></td><td><code>{{.DisplayValue}}</code></td><td><span class="label label-default" data-i18n-zh="只读并保留" data-i18n-en="Read-only and preserved">只读并保留</span></td></tr>{{end}}</tbody></table></div>
+                </section>
+                {{end}}
+                <div class="server-config-source-shell" id="server-config-source-shell" aria-label="nps.conf 源码视图">
+                    <div class="server-config-source-head">
+                        <div class="server-config-source-head__copy"><strong data-i18n-zh="nps.conf 完整源码" data-i18n-en="Complete nps.conf source">nps.conf 完整源码</strong><span data-i18n-zh="这里只编辑 nps.conf；保留注释、空行、字段顺序和自定义内容，提交的业务键会转存 SQLite。保存前会检查语法与关键配置关系。" data-i18n-en="This editor changes nps.conf only. Comments, blank lines, field order and custom entries are preserved; submitted business keys move to SQLite. Syntax and key relationships are checked before saving.">这里只编辑 nps.conf；保留注释、空行、字段顺序和自定义内容，提交的业务键会转存 SQLite。保存前会检查语法与关键配置关系。</span></div>
+                        <span class="server-config-source-security"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="包含明文敏感项" data-i18n-en="May contain plaintext secrets">包含明文敏感项</span></span>
+                        <span class="server-config-source-status" id="server-config-source-status"><i class="fa fa-circle-o" aria-hidden="true"></i><span>尚未加载</span></span>
+                        <button class="btn btn-outline" type="button" id="server-config-source-reload"><i class="fa fa-sync-alt" aria-hidden="true"></i><span data-i18n-zh="重新加载" data-i18n-en="Reload">重新加载</span></button>
+                    </div>
+                    <div class="server-config-source-loading" id="server-config-source-loading"><i class="fa fa-spinner fa-spin" aria-hidden="true"></i> <span data-i18n-zh="正在读取配置源码…" data-i18n-en="Loading source…">正在读取配置源码…</span></div>
+                    <div class="server-config-source-editor" id="server-config-source-editor" hidden>
+                        <pre class="server-config-source-lines" id="server-config-source-lines" aria-hidden="true">1</pre>
+                        <textarea class="server-config-source-text" id="server-config-source-text" spellcheck="false" wrap="off" autocomplete="off" aria-label="nps.conf 源码"></textarea>
+                    </div>
+                    <div class="server-config-source-actions">
+                        <button class="btn btn-primary" type="button" id="server-config-source-save" disabled><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="校验并保存源码" data-i18n-en="Validate and save source">校验并保存源码</span></button>
+                        <span class="server-config-restart-note" id="server-config-source-restart-note" hidden data-i18n-zh="配置源码已保存，重启后才会生效。" data-i18n-en="Source saved; restart NPS to apply it.">配置源码已保存，重启后才会生效。</span>
+                        <span class="server-config-filter-count" id="server-config-source-metrics"></span>
+                    </div>
                 </div>
-            </section>
-            {{end}}
+            </div>
 
             <div class="server-config-empty" id="server-config-empty"><i class="fa fa-search" aria-hidden="true"></i><div data-i18n-zh="没有匹配的配置项" data-i18n-en="No matching settings">没有匹配的配置项</div></div>
             <div class="server-config-savebar">
@@ -281,25 +322,6 @@
             </div>
         </form>
     </div>
-
-    <section class="server-config-source-shell" id="server-config-source-shell" aria-label="nps.conf 源码视图">
-        <div class="server-config-source-head">
-            <div class="server-config-source-head__copy"><strong data-i18n-zh="nps.conf 完整源码" data-i18n-en="Complete nps.conf source">nps.conf 完整源码</strong><span data-i18n-zh="这里只编辑 nps.conf；保留注释、空行、字段顺序和自定义内容，提交的业务键会转存 SQLite。保存前会检查语法与关键配置关系。" data-i18n-en="This editor changes nps.conf only. Comments, blank lines, field order and custom entries are preserved; submitted business keys move to SQLite. Syntax and key relationships are checked before saving.">这里只编辑 nps.conf；保留注释、空行、字段顺序和自定义内容，提交的业务键会转存 SQLite。保存前会检查语法与关键配置关系。</span></div>
-            <span class="server-config-source-security"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="包含明文敏感项" data-i18n-en="May contain plaintext secrets">包含明文敏感项</span></span>
-            <span class="server-config-source-status" id="server-config-source-status"><i class="fa fa-circle-o" aria-hidden="true"></i><span>尚未加载</span></span>
-            <button class="btn btn-outline" type="button" id="server-config-source-reload"><i class="fa fa-sync-alt" aria-hidden="true"></i><span data-i18n-zh="重新加载" data-i18n-en="Reload">重新加载</span></button>
-        </div>
-        <div class="server-config-source-loading" id="server-config-source-loading"><i class="fa fa-spinner fa-spin" aria-hidden="true"></i> <span data-i18n-zh="正在读取配置源码…" data-i18n-en="Loading source…">正在读取配置源码…</span></div>
-        <div class="server-config-source-editor" id="server-config-source-editor" hidden>
-            <pre class="server-config-source-lines" id="server-config-source-lines" aria-hidden="true">1</pre>
-            <textarea class="server-config-source-text" id="server-config-source-text" spellcheck="false" wrap="off" autocomplete="off" aria-label="nps.conf 源码"></textarea>
-        </div>
-        <div class="server-config-source-actions">
-            <button class="btn btn-primary" type="button" id="server-config-source-save" disabled><i class="fa fa-save" aria-hidden="true"></i><span data-i18n-zh="校验并保存源码" data-i18n-en="Validate and save source">校验并保存源码</span></button>
-            <span class="server-config-restart-note" id="server-config-source-restart-note" hidden data-i18n-zh="配置源码已保存，重启后才会生效。" data-i18n-en="Source saved; restart NPS to apply it.">配置源码已保存，重启后才会生效。</span>
-            <span class="server-config-filter-count" id="server-config-source-metrics"></span>
-        </div>
-    </section>
 
     <div class="server-config-actions">
         <button class="btn btn-outline btn-warning" type="button" id="server-config-restart" hidden><i class="fa fa-sync-alt" aria-hidden="true"></i><span data-i18n-zh="重启 NPS" data-i18n-en="Restart NPS">重启 NPS</span></button>
@@ -311,9 +333,7 @@
 $(function () {
     var form = $('#server-config-form');
     if (!form.length) return;
-    var viewSwitch = $('#server-config-view-switch');
-    var uiShell = $('#server-config-ui-shell');
-    var sourceShell = $('#server-config-source-shell');
+    var businessTabs = $('#server-config-business-tabs');
     var searchInput = $('#server-config-search');
     var sourceText = $('#server-config-source-text');
     var sourceLines = $('#server-config-source-lines');
@@ -323,9 +343,10 @@ $(function () {
     var sourceRevision = '';
     var sourceBaseline = '';
     var sourceNeedsPageReload = false;
-    var currentView = 'ui';
+    var currentTab = '';
     var configValuesTouched = false;
     var configDirtyKeys = {};
+    var businessTabsInitialized = false;
 
     function localText(zh, en) { return npsIsEnglish() ? en : zh; }
     function hydrateInitialValues() {
@@ -449,9 +470,86 @@ $(function () {
     $('#server-config-collapse-all').on('click', function () {
         form.find('[data-config-section]').each(function () { setSectionOpen($(this), false); });
     });
+    function discardSourceChanges() {
+        sourceText.val(sourceBaseline);
+        markSourceClean();
+    }
+    function selectConfigTab(tabID, focusTab, updateLocation) {
+        if (tabID === currentTab) {
+            if (focusTab) businessTabs.find('[data-config-tab="' + tabID + '"]').trigger('focus');
+            return;
+        }
+        var leavingConf = currentTab === 'conf';
+        var switchTab = function () {
+            advanceConfigTab(tabID, focusTab, updateLocation);
+        };
+        if (leavingConf && sourceDirty) {
+            npsConfirmDialog(localText('源码有未保存修改，切换分类会丢失这些修改。继续吗？', 'The source has unsaved changes. Switch categories and discard them?'), {danger: true, confirmLabel: localText('放弃修改', 'Discard')}).then(function (confirmed) {
+                if (confirmed) {
+                    discardSourceChanges();
+                    switchTab();
+                }
+            });
+            return;
+        }
+        switchTab();
+    }
+    function advanceConfigTab(tabID, focusTab, updateLocation) {
+        var tab = businessTabs.find('[data-config-tab="' + tabID + '"]');
+        if (!tab.length) tabID = businessTabs.find('[data-config-tab]').first().attr('data-config-tab') || '';
+        if (!tabID) return;
+        currentTab = tabID;
+        businessTabs.find('[data-config-tab]').each(function () {
+            var selected = $(this).attr('data-config-tab') === tabID;
+            $(this).toggleClass('is-active', selected).attr('aria-selected', selected ? 'true' : 'false').attr('tabindex', selected ? '0' : '-1');
+        });
+        form.find('[data-config-panel]').each(function () {
+            $(this).prop('hidden', $(this).attr('data-config-panel') !== tabID);
+        });
+        if (focusTab) tab.trigger('focus');
+        if (updateLocation !== false) {
+            var nextHash = 'config-' + tabID;
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState(null, '', window.location.pathname + window.location.search + '#' + nextHash);
+            } else {
+                window.location.hash = nextHash;
+            }
+        }
+        if (tabID === 'conf') {
+            $('#server-config-search-wrap, #server-config-expand-all, #server-config-collapse-all, #server-config-filter-count').prop('hidden', true);
+            loadSource(false);
+        } else {
+            $('#server-config-search-wrap, #server-config-expand-all, #server-config-collapse-all, #server-config-filter-count').prop('hidden', false);
+            applyFilter();
+        }
+    }
+    businessTabs.on('click', '[data-config-tab]', function () {
+        selectConfigTab($(this).attr('data-config-tab'), false, true);
+    }).on('keydown', '[data-config-tab]', function (event) {
+        var tabs = businessTabs.find('[data-config-tab]');
+        var index = tabs.index(this);
+        var next = null;
+        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+        if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = tabs.length - 1;
+        if (next === null) return;
+        event.preventDefault();
+        var target = tabs.eq(next);
+        selectConfigTab(target.attr('data-config-tab'), true, true);
+    });
+    var initialTab = /^#config-([a-z0-9-]+)$/i.exec(window.location.hash || '');
+    if (initialTab) {
+        selectConfigTab(initialTab[1].toLowerCase(), false, false);
+    } else {
+        selectConfigTab(businessTabs.find('[data-config-tab]').first().attr('data-config-tab'), false, false);
+    }
+    businessTabsInitialized = true;
+
     function applyFilter() {
         var query = String(searchInput.val() || '').trim().toLowerCase();
         var visible = 0;
+        var firstMatchPanel = '';
         form.find('[data-config-section]').each(function () {
             var section = $(this);
             var fields = section.find('[data-config-field]');
@@ -469,8 +567,15 @@ $(function () {
             section.prop('hidden', query !== '' && matched === 0);
             if (query && matched > 0) {
                 setSectionOpen(section, true);
+                var panel = section.closest('[data-config-panel]');
+                if (panel.length && !firstMatchPanel) {
+                    firstMatchPanel = panel.attr('data-config-panel');
+                }
             }
         });
+        if (businessTabsInitialized && query && firstMatchPanel && firstMatchPanel !== currentTab) {
+            selectConfigTab(firstMatchPanel, false, false);
+        }
         $('#server-config-empty').toggle(query !== '' && visible === 0);
         var total = form.find('[data-config-field]').length;
         $('#server-config-filter-count').text(query ? localText('显示 ' + visible + ' / ' + total + ' 项', 'Showing ' + visible + ' / ' + total) : localText('共 ' + total + ' 项', total + ' fields'));
@@ -546,6 +651,13 @@ $(function () {
         $('#server-config-source-status').removeClass('is-dirty').html('<i class="fa fa-check-circle" aria-hidden="true"></i><span>' + localText('已同步', 'Up to date') + '</span>');
         updateSourceLines();
     }
+    function refreshVisualFormAfterSourceSave() {
+        if (!sourceNeedsPageReload) return;
+        npsConfirmDialog(localText('源码已保存，可视化表单需要刷新后才能显示最新值。现在刷新页面吗？', 'Source was saved. Reload the page to refresh the visual form?'), {confirmLabel: localText('刷新页面', 'Reload')}).then(function (confirmed) {
+            if (confirmed) window.location.reload();
+            else sourceNeedsPageReload = false;
+        });
+    }
     function loadSource(force) {
         if (sourceLoaded && !force) return $.Deferred().resolve().promise();
         $('#server-config-source-loading, #server-config-source-editor').prop('hidden', true);
@@ -568,47 +680,6 @@ $(function () {
             npsNotify('error', (xhr.responseJSON && xhr.responseJSON.msg) || npsRequestErrorMessage());
         });
     }
-    function showView(target) {
-        if (target === currentView) return;
-        var scrollPosition = window.scrollY || document.documentElement.scrollTop || 0;
-        if (target === 'ui' && sourceNeedsPageReload) {
-            npsConfirmDialog(localText('源码已保存，可视化表单需要刷新后才能显示最新值。现在刷新页面吗？', 'Source was saved. Reload the page to refresh the visual form?'), {confirmLabel: localText('刷新页面', 'Reload')}).then(function (confirmed) {
-                if (confirmed) window.location.reload();
-            });
-            return;
-        }
-        var switchView = function () {
-            currentView = target;
-            viewSwitch.find('[data-config-view]').removeClass('is-active').attr('aria-selected', 'false');
-            viewSwitch.find('[data-config-view="' + target + '"]').addClass('is-active').attr('aria-selected', 'true');
-            uiShell.toggleClass('is-active', target === 'ui');
-            sourceShell.toggleClass('is-active', target === 'source');
-            $('#server-config-search-wrap, #server-config-expand-all, #server-config-collapse-all, #server-config-filter-count').prop('hidden', target !== 'ui');
-            var restoreScroll = function () { window.scrollTo(0, scrollPosition); };
-            restoreScroll();
-            window.requestAnimationFrame(function () { window.requestAnimationFrame(restoreScroll); });
-            if (target === 'source') {
-                loadSource(false).always(function () {
-                    window.requestAnimationFrame(restoreScroll);
-                });
-            }
-        };
-        if (currentView === 'source' && sourceDirty) {
-            npsConfirmDialog(localText('源码有未保存修改，切换视图会丢失这些修改。继续吗？', 'The source has unsaved changes. Switch views and discard them?'), {danger: true, confirmLabel: localText('放弃修改', 'Discard')}).then(function (confirmed) {
-                if (confirmed) {
-                    sourceText.val(sourceBaseline);
-                    markSourceClean();
-                    switchView();
-                }
-            });
-            return;
-        }
-        switchView();
-    }
-    viewSwitch.on('click', '[data-config-view]', function () {
-        this.blur();
-        showView($(this).attr('data-config-view'));
-    });
     sourceText.on('input', markSourceDirty).on('scroll', function () {
         if (sourceLinesNode) sourceLinesNode.scrollTop = this.scrollTop;
     }).on('keydown', function (event) {
@@ -650,6 +721,7 @@ $(function () {
             markSourceClean();
             npsNotify('success', response.msg || localText('源码已保存', 'Source saved'));
             setRestartRequired(!!response.restart_required, true);
+            refreshVisualFormAfterSourceSave();
         }).fail(function (xhr) {
             var message = (xhr.responseJSON && xhr.responseJSON.msg) || npsRequestErrorMessage();
             npsNotify('error', message);

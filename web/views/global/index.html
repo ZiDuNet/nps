@@ -31,7 +31,15 @@
         </a>
     </nav>
 
+    <div class="global-settings-inner-tabs" id="global-settings-inner-tabs" role="tablist" aria-label="全局参数分类">
+        <button type="button" class="global-settings-inner-tab is-active" id="global-settings-tab-basic" role="tab" aria-controls="global-settings-panel-basic" aria-selected="true" tabindex="0" data-global-settings-tab="basic"><i class="fa fa-server" aria-hidden="true"></i><span data-i18n-zh="基础与容量" data-i18n-en="Basics and capacity">基础与容量</span></button>
+        <button type="button" class="global-settings-inner-tab" id="global-settings-tab-access" role="tab" aria-controls="global-settings-panel-access" aria-selected="false" tabindex="-1" data-global-settings-tab="access"><i class="fa fa-shield-alt" aria-hidden="true"></i><span data-i18n-zh="访问控制" data-i18n-en="Access control">访问控制</span></button>
+        <button type="button" class="global-settings-inner-tab" id="global-settings-tab-guide" role="tab" aria-controls="global-settings-panel-guide" aria-selected="false" tabindex="-1" data-global-settings-tab="guide"><i class="fa fa-book-open" aria-hidden="true"></i><span data-i18n-zh="使用说明" data-i18n-en="Usage guide">使用说明</span></button>
+        <button type="button" class="global-settings-inner-tab" id="global-settings-tab-geo" role="tab" aria-controls="global-settings-panel-geo" aria-selected="false" tabindex="-1" data-global-settings-tab="geo"><i class="fa fa-globe" aria-hidden="true"></i><span data-i18n-zh="Geo 数据" data-i18n-en="Geo data">Geo 数据</span></button>
+    </div>
+
     <form id="global-form" class="form form-horz global-settings-form nps-form" autocomplete="off">
+        <div class="global-settings-tab-panel is-active" id="global-settings-panel-basic" role="tabpanel" aria-labelledby="global-settings-tab-basic" data-global-settings-panel="basic">
         <div class="global-settings-grid">
             <section class="global-settings-card global-settings-card--server" aria-labelledby="global-server-section">
                 <header class="global-settings-card__header">
@@ -61,7 +69,11 @@
                 </div>
             </section>
 
-            <section class="global-settings-card global-settings-card--access" aria-labelledby="global-access-section">
+        </div>
+        </div>
+        <div class="global-settings-tab-panel" id="global-settings-panel-access" role="tabpanel" aria-labelledby="global-settings-tab-access" data-global-settings-panel="access" hidden>
+        <div class="global-settings-grid">
+            <section class="global-settings-card global-settings-card--access global-settings-card--wide" aria-labelledby="global-access-section">
                 <header class="global-settings-card__header">
                     <span class="global-settings-card__icon"><i class="fa fa-shield-alt" aria-hidden="true"></i></span>
                     <div>
@@ -92,7 +104,11 @@
                 </div>
             </section>
 
-            <section class="global-settings-card global-settings-card--guide" id="usage-guide-settings" aria-labelledby="global-guide-section">
+        </div>
+        </div>
+        <div class="global-settings-tab-panel" id="global-settings-panel-guide" role="tabpanel" aria-labelledby="global-settings-tab-guide" data-global-settings-panel="guide" hidden>
+        <div class="global-settings-grid">
+            <section class="global-settings-card global-settings-card--guide global-settings-card--wide" id="usage-guide-settings" aria-labelledby="global-guide-section">
                 <header class="global-settings-card__header">
                     <span class="global-settings-card__icon"><i class="fa fa-book-open" aria-hidden="true"></i></span>
                     <div>
@@ -115,7 +131,11 @@
                 </div>
             </section>
 
-            <section class="global-settings-card global-settings-card--geo" aria-labelledby="global-geo-section">
+        </div>
+        </div>
+        <div class="global-settings-tab-panel" id="global-settings-panel-geo" role="tabpanel" aria-labelledby="global-settings-tab-geo" data-global-settings-panel="geo" hidden>
+        <div class="global-settings-grid">
+            <section class="global-settings-card global-settings-card--geo global-settings-card--wide" aria-labelledby="global-geo-section">
                 <header class="global-settings-card__header">
                     <span class="global-settings-card__icon"><i class="fa fa-globe" aria-hidden="true"></i></span>
                     <div>
@@ -152,6 +172,7 @@
                 </div>
             </section>
         </div>
+        </div>
 
         <div class="global-settings-savebar">
             <div>
@@ -165,6 +186,14 @@
 
 <style>
     .global-settings-page { max-width: 1680px; margin: 0 auto; }
+    .global-settings-page .system-settings-tabs { margin-bottom: 12px; }
+    .global-settings-inner-tabs { display: flex; gap: 5px; margin-bottom: 12px; padding: 5px; overflow-x: auto; background: var(--nps-surface-subtle, #f7f9fc); border: 1px solid var(--nps-line, #dfe5ee); border-radius: 12px; scrollbar-width: thin; }
+    .global-settings-inner-tab { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; min-height: 38px; padding: 0 13px; color: var(--nps-muted, #64748b); background: transparent; border: 1px solid transparent; border-radius: 8px; font-size: 11px; font-weight: 680; white-space: nowrap; cursor: pointer; }
+    .global-settings-inner-tab i { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; color: var(--nps-primary, #1769e0); background: color-mix(in srgb, var(--nps-primary, #1769e0) 9%, var(--nps-surface, #fff)); border: 1px solid color-mix(in srgb, var(--nps-primary, #1769e0) 19%, var(--nps-line, #dfe5ee)); border-radius: 6px; font-size: 10px; }
+    .global-settings-inner-tab:hover { color: var(--nps-ink, #1f2937); background: color-mix(in srgb, var(--nps-surface, #fff) 72%, transparent); border-color: color-mix(in srgb, var(--nps-primary, #1769e0) 17%, var(--nps-line, #dfe5ee)); }
+    .global-settings-inner-tab:focus-visible { outline: 2px solid color-mix(in srgb, var(--nps-primary, #1769e0) 70%, transparent); outline-offset: 1px; }
+    .global-settings-inner-tab.is-active { color: var(--nps-primary, #1769e0); background: var(--nps-surface, #fff); border-color: color-mix(in srgb, var(--nps-primary, #1769e0) 29%, var(--nps-line, #dfe5ee)); box-shadow: 0 2px 9px rgba(15,23,42,.08); }
+    .global-settings-tab-panel[hidden] { display: none !important; }
     .global-settings-form { display: block; }
     .global-settings-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); align-items: start; gap: 14px; }
     .global-settings-card { grid-column: span 6; min-width: 0; overflow: hidden; background: var(--nps-surface, #fff); border: 1px solid color-mix(in srgb, var(--nps-line, #dfe5ee) 88%, transparent); border-radius: 14px; box-shadow: 0 10px 30px rgba(15, 23, 42, .055); }
@@ -226,6 +255,8 @@
         .global-settings-card--guide, .global-settings-card--geo { align-self: auto; }
     }
     @media (max-width: 720px) {
+        .global-settings-inner-tabs { margin-right: -2px; margin-left: -2px; }
+        .global-settings-inner-tab { min-height: 42px; padding: 0 10px; }
         .global-settings-fields { grid-template-columns: minmax(0, 1fr); }
         .global-field--wide { grid-column: auto; }
         .global-settings-savebar { position: static; align-items: stretch; flex-direction: column; }
@@ -238,6 +269,49 @@
 <script>
 $(function () {
     var form = $('#global-form');
+    var innerTabs = $('#global-settings-inner-tabs');
+
+    function selectGlobalTab(tabID, focusTab, updateLocation) {
+        var tab = innerTabs.find('[data-global-settings-tab="' + tabID + '"]');
+        if (!tab.length) tabID = innerTabs.find('[data-global-settings-tab]').first().attr('data-global-settings-tab') || '';
+        if (!tabID) return;
+        innerTabs.find('[data-global-settings-tab]').each(function () {
+            var selected = $(this).attr('data-global-settings-tab') === tabID;
+            $(this).toggleClass('is-active', selected).attr('aria-selected', selected ? 'true' : 'false').attr('tabindex', selected ? '0' : '-1');
+        });
+        $('[data-global-settings-panel]').each(function () {
+            var selected = $(this).attr('data-global-settings-panel') === tabID;
+            $(this).prop('hidden', !selected).toggleClass('is-active', selected);
+        });
+        if (focusTab) tab.trigger('focus');
+        if (updateLocation && window.history && window.history.replaceState) {
+            var hash = tabID === 'guide' ? '#usage-guide-settings' : '#global-' + tabID;
+            window.history.replaceState(null, '', window.location.pathname + window.location.search + hash);
+        }
+    }
+    innerTabs.on('click', '[data-global-settings-tab]', function () {
+        selectGlobalTab($(this).attr('data-global-settings-tab'), false, true);
+    }).on('keydown', '[data-global-settings-tab]', function (event) {
+        var tabs = innerTabs.find('[data-global-settings-tab]');
+        var index = tabs.index(this);
+        var next = null;
+        if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+        if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = tabs.length - 1;
+        if (next === null) return;
+        event.preventDefault();
+        selectGlobalTab(tabs.eq(next).attr('data-global-settings-tab'), true, true);
+    });
+    function globalTabFromHash(hash) {
+        if (hash === '#usage-guide-settings') return 'guide';
+        var match = /^#global-([a-z0-9-]+)$/i.exec(hash || '');
+        return match ? match[1].toLowerCase() : 'basic';
+    }
+    selectGlobalTab(globalTabFromHash(window.location.hash), false, false);
+    window.addEventListener('hashchange', function () {
+        selectGlobalTab(globalTabFromHash(window.location.hash), false, false);
+    });
 
     var guideEditor = document.getElementById('usage-guide-source'), guideDetection = document.getElementById('usage-guide-detection');
     function detectGuide() {

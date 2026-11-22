@@ -149,6 +149,116 @@ var managedKeys = map[string]struct{}{
 	"x_nps_http_only":                      {},
 }
 
+// runtimeConfigKeys are process bootstrap values that may still be edited from
+// the nps.conf tab. They are intentionally separate from managedKeys: changing
+// them cannot be made safe through the settings table alone because listeners,
+// TLS material, rotating log adapters or port multiplexing have already been
+// constructed.
+var runtimeConfigKeys = map[string]struct{}{
+	"appname":                   {},
+	"auth_crypt_key":            {},
+	"auth_key":                  {},
+	"bridge_addr":               {},
+	"bridge_cert_file":          {},
+	"bridge_host":               {},
+	"bridge_http3":              {},
+	"bridge_ip":                 {},
+	"bridge_kcp_show":           {},
+	"bridge_kcp_show_ip":        {},
+	"bridge_kcp_show_port":      {},
+	"bridge_kcp_ip":             {},
+	"bridge_kcp_port":           {},
+	"bridge_key_file":           {},
+	"bridge_path":               {},
+	"bridge_port":               {},
+	"bridge_quic_show":          {},
+	"bridge_quic_show_alpn":     {},
+	"bridge_quic_show_ip":       {},
+	"bridge_quic_show_port":     {},
+	"bridge_quic_ip":            {},
+	"bridge_quic_port":          {},
+	"bridge_real_ip_header":     {},
+	"bridge_show_path":          {},
+	"bridge_tcp_show":           {},
+	"bridge_tcp_show_ip":        {},
+	"bridge_tcp_show_port":      {},
+	"bridge_tcp_ip":             {},
+	"bridge_tcp_port":           {},
+	"bridge_tls_show":           {},
+	"bridge_tls_show_ip":        {},
+	"bridge_tls_show_port":      {},
+	"bridge_tls_port":           {},
+	"bridge_type":               {},
+	"bridge_select_mode":        {},
+	"bridge_trusted_ips":        {},
+	"bridge_ws_show":            {},
+	"bridge_ws_show_ip":         {},
+	"bridge_ws_show_port":       {},
+	"bridge_ws_port":            {},
+	"bridge_wss_show":           {},
+	"bridge_wss_show_ip":        {},
+	"bridge_wss_show_port":      {},
+	"bridge_wss_port":           {},
+	"force_auto_ssl":            {},
+	"hostport":                  {},
+	"http3_proxy_port":          {},
+	"http_proxy_ip":             {},
+	"http_proxy_port":           {},
+	"https_default_cert_file":   {},
+	"https_default_key_file":    {},
+	"https_just_proxy":          {},
+	"https_proxy_port":          {},
+	"instance_key_file":         {},
+	"ip_register_cert_file":     {},
+	"ip_register_ip":            {},
+	"ip_register_key_file":      {},
+	"ip_register_port":          {},
+	"log_compress":              {},
+	"log_level":                 {},
+	"log_max_days":              {},
+	"log_max_files":             {},
+	"log_max_size":              {},
+	"log_path":                  {},
+	"log_rotate_daily":          {},
+	"p2p_enable_natpmp_portmap": {},
+	"p2p_enable_pcp_portmap":    {},
+	"p2p_enable_upnp_portmap":   {},
+	"p2p_handshake_timeout_ms":  {},
+	"p2p_ip":                    {},
+	"p2p_port":                  {},
+	"p2p_portmap_lease_seconds": {},
+	"p2p_probe_timeout_ms":      {},
+	"p2p_stun_servers":          {},
+	"p2p_transport_timeout_ms":  {},
+	"pprof_ip":                  {},
+	"pprof_port":                {},
+	"quic_alpn":                 {},
+	"quic_keep_alive_period":    {},
+	"quic_max_idle_timeout":     {},
+	"quic_max_incoming_streams": {},
+	"runmode":                   {},
+	"sessionconfig":             {},
+	"ssl_ca":                    {},
+	"ssl_cache_idle":            {},
+	"ssl_cache_max":             {},
+	"ssl_cache_reload":          {},
+	"ssl_email":                 {},
+	"ssl_path":                  {},
+	"ssl_zerossl_api":           {},
+	"tls_bridge_port":           {},
+	"tls_enable":                {},
+	"web_base_url":              {},
+	"web_cert_file":             {},
+	"web_close_on_not_found":    {},
+	"web_host":                  {},
+	"web_ip":                    {},
+	"web_key_file":              {},
+	"web_open_ssl":              {},
+	"web_password":              {},
+	"web_port":                  {},
+	"web_username":              {},
+}
+
 // legacyRemovedKeys are feature gates from the old client-level quota model.
 // Their limits are now always enforced, so keeping any value would be a
 // misleading switch. They are deleted from nps.conf during the same migration
@@ -166,6 +276,31 @@ var legacyRemovedKeys = map[string]struct{}{
 func IsManagedKey(key string) bool {
 	_, ok := managedKeys[strings.ToLower(strings.TrimSpace(key))]
 	return ok
+}
+
+// IsRuntimeConfigKey reports whether a key belongs to the process bootstrap
+// configuration in nps.conf. Unknown custom keys deliberately return false so
+// deployments can keep third-party entries without moving them automatically.
+func IsRuntimeConfigKey(key string) bool {
+	key = strings.ToLower(strings.TrimSpace(key))
+	if _, managed := managedKeys[key]; managed {
+		return false
+	}
+	_, ok := runtimeConfigKeys[key]
+	return ok
+}
+
+// RuntimeConfigKeySet returns a defensive copy for source-editor filtering and
+// tests.
+func RuntimeConfigKeySet() map[string]struct{} {
+	keys := make(map[string]struct{}, len(runtimeConfigKeys))
+	for key := range runtimeConfigKeys {
+		if _, managed := managedKeys[key]; managed {
+			continue
+		}
+		keys[key] = struct{}{}
+	}
+	return keys
 }
 
 // IsLegacyRemovedKey reports whether a configuration key is obsolete and must
