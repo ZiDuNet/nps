@@ -252,6 +252,32 @@ func RunJSONGateway(runPath string) (JSONGatewayResult, error) {
 	return result, nil
 }
 
+// normalizeStartupJSON runs the existing compatibility pass only in staging.
+// v1.1.49/v1.1.50 rollback exports carried a canonical marker despite being
+// written in old units. The adjacent export report identifies that format.
+func normalizeStartupJSON(runPath, staging string) error {
+	if content, err := os.ReadFile(filepath.Join(runPath, "migration-report.json")); err == nil {
+		var report migrationReport
+		if json.Unmarshal(content, &report) == nil && report.Schema == "nps-sqlite-export-v1" &&
+			report.Direction == "sqlite_to_json" && report.Status == "success" {
+			marker, err := validateJSONGatewayMarker(staging)
+			if err == nil && gatewayMarkerComplete(staging, marker) && marker.Version == report.Version &&
+				(marker.Version == "1.1.49" || marker.Version == "1.1.50") {
+				// A manual gateway run on already exported rows leaves that
+				// marker alone. Per-record stamps, if present, still take
+				// precedence and protect partially normalized snapshots.
+				if err := os.Remove(JSONGatewayMarkerPath(staging)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if _, err := RunJSONGateway(staging); err != nil {
+		return fmt.Errorf("在暂存目录整形旧 JSON: %w", err)
+	}
+	return nil
+}
+
 func existingJSONDataFileNames(runPath string) []string {
 	names := make([]string, 0, len(jsonDataFiles(runPath)))
 	for _, path := range jsonDataFiles(runPath) {

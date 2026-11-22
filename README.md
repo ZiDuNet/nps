@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.51</sub>
+﻿# NPS <sub>v1.1.52</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -61,7 +61,7 @@ docker run -d --name nps \
 
 New installations bind the panel to loopback. For the Docker example above, open `http://127.0.0.1:8081` on the host or put an HTTPS reverse proxy in front of the loopback port. The username is `admin`, and a random password is printed in the terminal on first launch. Known `CHANGE_ME` and historical weak template values are rotated automatically; explicit custom or empty values are preserved (except the historical shared `public_vkey=123`, which is disabled).
 
-Starting with v1.1.49, `conf/nps.db` is the authoritative business-data store. Upgrade from legacy JSON by running the v1.1.49 JSON gateway first and taking a complete `conf` backup; never copy only the live database file.
+`conf/nps.db` is the authoritative business-data store. A fresh install with v1.1.52 initializes SQLite and a slim `nps.conf`; it does not run a migration or write a migration archive. To upgrade a legacy JSON deployment, stop NPS, back up the full `conf` directory, then start v1.1.52 normally. It creates and verifies an archive in `conf/backups/` before importing. The published v1.1.49, v1.1.50 and v1.1.51 releases still require the manual gateway for a first JSON import. See [SQLite storage and upgrade](docs/server/sqlite-storage.md).
 
 <details>
 <summary>📋 Port Reference</summary>
@@ -205,6 +205,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.52** (2026-11-22) - Legacy 1.1.47/1.1.48 JSON now migrates to SQLite automatically with a verified `conf/backups/` archive, while fresh installs and existing SQLite deployments avoid needless migration. Management/lifecycle commands no longer take the database lock before the service command runs. Menu updates replace the executable registered by the service. See the [upgrade notes](docs/upgrade-1.1.52.md).
 - **v1.1.51** (2026-11-22) - Hardened `/api/v1` administrator authentication with HMAC-SHA256 request headers, timestamps, nonces and body signing; legacy MD5 query signing is disabled by default and has a narrow temporary migration allowlist. `npsctl` adds offset pagination, readable tables/selected TSV fields, JSON output, custom CA and timeout options. MCP/Skill access guidance now separates user-scoped credentials from global administrator credentials. See the [upgrade notes](docs/upgrade-1.1.51.md).
 - **v1.1.50** (2026-11-21) - Restored release packaging after the `v1.1.49` build failed on Linux MIPS. SQLite registration is now server-only, so MIPS NPC clients remain available while unsupported MIPS servers leave the formal matrix. CI now verifies every published target before tagging. See the [upgrade notes](docs/upgrade-1.1.50.md).
 - **v1.1.49** (2026-11-21) - Promoted SQLite to the authoritative business-data store with WAL, a single-process lock, transactional cascade deletes, runtime settings, guarded JSON migration, migration reports, and lossless `-export-json` rollback. Legacy JSON must first be normalized by the v1.1.49 gateway; invalid or unmarked data fails closed without creating a database. See the [SQLite upgrade notes](docs/upgrade-1.1.49.md).

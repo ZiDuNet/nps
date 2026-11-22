@@ -192,6 +192,14 @@ func (s *UdpModeServer) snapshotTask() (udpTaskSnapshot, error) {
 
 // Start 启动 UDP 监听，主循环只负责快速收包并分发，不做任何耗时操作。
 func (s *UdpModeServer) Start() error {
+	return s.start(false)
+}
+
+func (s *UdpModeServer) StartListening() error {
+	return s.start(true)
+}
+
+func (s *UdpModeServer) start(background bool) error {
 	snapshot, err := s.snapshotTask()
 	if err != nil {
 		return err
@@ -215,6 +223,15 @@ func (s *UdpModeServer) Start() error {
 	s.listener = listener
 	s.listenerMu.Unlock()
 	go s.sweeper()
+	if background {
+		go s.serve(listener, snapshot)
+	} else {
+		s.serve(listener, snapshot)
+	}
+	return nil
+}
+
+func (s *UdpModeServer) serve(listener *net.UDPConn, snapshot udpTaskSnapshot) {
 	for {
 		buf := common.BufPoolUdp.Get().([]byte)
 		n, addr, err := listener.ReadFromUDP(buf)
@@ -241,7 +258,6 @@ func (s *UdpModeServer) Start() error {
 
 		go s.process(addr, buf, n)
 	}
-	return nil
 }
 
 // process 处理单个 UDP 包。函数持有 buf 的所有权，所有路径必须归还。

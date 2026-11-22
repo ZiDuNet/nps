@@ -71,8 +71,8 @@
                     <div class="form-group form-group--client-select tunnel-mode-field" id="client_id" data-tunnel-field="client_id">
                         <label class="form-label font-bold" for="tunnel-client" data-i18n-zh="所属客户端" data-i18n-en="Client">所属客户端</label>
                         <div class="form-group-wrapper">
-                            <select id="tunnel-client" class="form-control" name="client_id" required data-nps-client-select><option value="{{.t.Client.Id}}" data-client-name="{{.t.Client.Remark}}" data-client-owner="{{.t.Client.UserName}}" data-client-online="{{.t.Client.IsConnect}}" selected>{{.t.Client.Id}} · {{if .t.Client.Remark}}{{.t.Client.Remark}}{{else}}未命名客户端{{end}}</option></select>
-                            <span class="help-block" data-i18n-zh="更换客户端会把这条隧道迁移到所选客户端，并立即重载转发配置。" data-i18n-en="Changing the client moves this tunnel and immediately reloads its forwarding configuration.">更换客户端会把这条隧道迁移到所选客户端，并立即重载转发配置。</span>
+                            <select id="tunnel-client" class="form-control" name="client_id" required data-nps-client-select aria-describedby="tunnel-client-help"><option value="{{.t.Client.Id}}" data-client-name="{{.t.Client.Remark}}" data-client-owner="{{.t.Client.UserName}}" data-client-online="{{.t.Client.IsConnect}}" selected>{{.t.Client.Id}} · {{if .t.Client.Remark}}{{.t.Client.Remark}}{{else}}未命名客户端{{end}}</option></select>
+                            <span id="tunnel-client-help" class="help-block" data-i18n-zh="更换客户端后，新连接走所选客户端；已有 TCP 转发连接不会迁移。停用的隧道仍需手动启动。" data-i18n-en="Changing the client moves this tunnel's new connections to the selected client. Existing TCP forwarding connections stay where they are. Stopped tunnels must be started manually.">更换客户端后，新连接走所选客户端；已有 TCP 转发连接不会迁移。停用的隧道仍需手动启动。</span>
                         </div>
                     </div>
                     <div class="form-group" id="remark_group">

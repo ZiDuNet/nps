@@ -42,15 +42,13 @@ http://127.0.0.1:8081
 /data/nps/conf/nps.conf
 ```
 
-从 v1.1.49 起，业务数据库位于同一目录的 `nps.db`。运行中的一致备份必须包含 WAL/SHM；最稳妥的方式是先停止服务，再复制整个 `conf`。
+从 v1.1.49 起，业务数据库位于同一目录的 `nps.db`。先停服再复制整个 `conf`，不要只复制运行中的数据库文件。
 
-### JSON 网关与回滚导出
+### 旧 JSON 迁移与回滚导出
 
-旧 JSON 升级到 SQLite 前，先运行一次性 JSON 网关：
+v1.1.52 及后续版本正常启动时会导入旧 JSON。请先停旧服务、备份原 `conf`，再按上面的命令启动；它会将原目录归档到 `conf/backups/pre-sqlite-*.tar.gz` 并校验。全新安装不走迁移，已有 SQLite 不重复导入。
 
-```bash
-./nps -conf_path=/data/nps -json-gateway
-```
+`-json-gateway` 仅为维护命令，新版正常升级不需要它。已发布的 v1.1.49、v1.1.50、v1.1.51 首次从 JSON 建库仍按[对应说明](upgrade-sqlite.md#版本选择)执行手工网关。
 
 需要回到 JSON 版本时，停止 NPS 后导出当前 SQLite 数据：
 
@@ -58,11 +56,11 @@ http://127.0.0.1:8081
 ./nps -conf_path=/data/nps -export-json=/var/backups/nps-json
 ```
 
-导出目录包含 JSON、`.json-gateway`、合并了 SQLite 业务配置的 `nps.conf` 和 `migration-report.json`。详细说明见 [SQLite 数据存储与升级](server/sqlite-storage.md)。
+新版导出目录包含旧单位 JSON、合并了 SQLite 业务配置的 `nps.conf` 和 `migration-report.json`，不生成 `.json-gateway`。详细说明见 [SQLite 数据存储与升级](server/sqlite-storage.md)。
 
 ### 系统服务
 
-安装命令仍然可以使用。`install`、`start`、`stop`、`restart`、`uninstall` 是非交互命令，适合脚本、CI 或运维手册直接执行。
+`install`、`start`、`stop`、`restart`、`uninstall` 为非交互命令。管理命令本身不迁移数据；实际启动的 NPS 服务进程才会按配置目录状态选择初始化、迁移或打开数据库。查看状态可以使用交互菜单的第 4 项。
 
 Linux/macOS：
 

@@ -162,6 +162,36 @@ func TestSecondOpenIsRejectedByFileLock(t *testing.T) {
 	}
 }
 
+func TestProbeLockDoesNotCreateDatabaseLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "nps.db")
+	locked, err := ProbeLock(path)
+	if err != nil || locked {
+		t.Fatalf("ProbeLock() = %v, %v; want false, nil", locked, err)
+	}
+	if _, err := os.Stat(path + ".lock"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ProbeLock created a lock file: %v", err)
+	}
+}
+
+func TestProbeLockReportsHeldAndReleasedDatabaseLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nps.db")
+	database, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked, err := ProbeLock(path)
+	if err != nil || !locked {
+		t.Fatalf("ProbeLock while held = %v, %v; want true, nil", locked, err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	locked, err = ProbeLock(path)
+	if err != nil || locked {
+		t.Fatalf("ProbeLock after close = %v, %v; want false, nil", locked, err)
+	}
+}
+
 func TestValidateMigratedAcceptsCompletedMigrationWithDeletedEntities(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nps.db")
 	database, err := Open(path)

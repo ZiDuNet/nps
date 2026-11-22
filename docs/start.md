@@ -56,7 +56,7 @@ nps.exe install
 nps.exe start
 ```
 
-首次启动会自动生成 `conf/nps.conf`，并在日志或终端中打印随机管理员密码。
+全新安装会自动初始化 `conf/nps.conf` 和 `conf/nps.db`，并在日志或终端中打印随机管理员密码。不需要迁移，也不会生成迁移备份。沿用旧版 `conf` 部署时，先看 [SQLite 数据存储与升级](server/sqlite-storage.md)。
 
 ## 2. 登录 Web 管理面板
 

@@ -56,7 +56,7 @@ func validateServerConfigSource(content string) error {
 		return errors.New("配置文件不能包含 NUL 字符")
 	}
 
-	defaults := serverConfigKeyValues(npsconf.DefaultNpsConf)
+	defaults := serverConfigKeyValues(npsconf.ServerConfigDefaults)
 	values := make(map[string]string)
 	seen := make(map[string]struct{})
 	section := "default"

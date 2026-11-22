@@ -925,7 +925,8 @@ func TestAPIV1LegacyFailureBecomesErrorEnvelope(t *testing.T) {
 
 func TestAPIV1GlobalConfigReadsSQLiteBusinessSettings(t *testing.T) {
 	withAPIV1TestAuthKey(t)
-	withSettingsFixture(t, "web_port=8081\nallow_user_register=false\n")
+	withSettingsFixture(t, "web_port=8081\nallow_user_register=false\n"+
+		"api_hmac_enabled=true\napi_hmac_time_window=60\napi_legacy_md5_enabled=true\n")
 	settingsBefore := settings.Snapshot()
 	if err := settings.Save(map[string]string{
 		"allow_user_register":      "true",
@@ -977,7 +978,8 @@ func TestAPIV1GlobalConfigReadsSQLiteBusinessSettings(t *testing.T) {
 
 func TestAPIV1GlobalConfigSaveOnlyChangesSubmittedBusinessSetting(t *testing.T) {
 	withAPIV1TestAuthKey(t)
-	path := withSettingsFixture(t, "web_port=8081\nflow_limit_type=total\nflow_store_interval=1\n")
+	path := withSettingsFixture(t, "web_port=8081\nflow_limit_type=total\nflow_store_interval=1\n"+
+		"api_hmac_enabled=true\napi_hmac_time_window=60\napi_legacy_md5_enabled=true\n")
 	settingsBefore := settings.Snapshot()
 	t.Cleanup(func() {
 		values := make(map[string]string, len(settingsBefore))
@@ -1024,7 +1026,7 @@ func TestAPIV1GlobalConfigSaveOnlyChangesSubmittedBusinessSetting(t *testing.T) 
 
 func TestAPIV1GlobalConfigSaveEnablesSubmittedOptionalSetting(t *testing.T) {
 	withAPIV1TestAuthKey(t)
-	withSettingsFixture(t, "web_port=8081\n")
+	withSettingsFixture(t, "web_port=8081\napi_hmac_enabled=true\napi_hmac_time_window=60\napi_legacy_md5_enabled=true\n")
 	settingsBefore := settings.Snapshot()
 	t.Cleanup(func() {
 		values := make(map[string]string, len(settingsBefore))
@@ -1061,7 +1063,8 @@ func TestAPIV1GlobalConfigSaveEnablesSubmittedOptionalSetting(t *testing.T) {
 
 func TestAPIV1GlobalConfigSaveJSONUpdatesOptionalSetting(t *testing.T) {
 	withAPIV1TestAuthKey(t)
-	path := withSettingsFixture(t, "web_port=8081\nallow_ports=1000-2000\n")
+	path := withSettingsFixture(t, "web_port=8081\nallow_ports=1000-2000\n"+
+		"api_hmac_enabled=true\napi_hmac_time_window=60\napi_legacy_md5_enabled=true\n")
 	settingsBefore := settings.Snapshot()
 	t.Cleanup(func() {
 		values := make(map[string]string, len(settingsBefore))

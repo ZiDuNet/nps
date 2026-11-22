@@ -81,7 +81,9 @@ func InitAllowPort() {
 	portsMu.Unlock()
 }
 
-func TestServerPort(p int, m string) (b bool) {
+// ServerPortAllowed checks policy without probing a socket. An existing
+// listener can therefore be reconfigured without colliding with its own port.
+func ServerPortAllowed(p int, m string) bool {
 	if m == "p2p" || m == "secret" {
 		return true
 	}
@@ -91,17 +93,20 @@ func TestServerPort(p int, m string) (b bool) {
 	portsMu.RLock()
 	allowList := ports
 	portsMu.RUnlock()
-	if len(allowList) != 0 {
-		if !common.InIntArr(allowList, p) {
-			return false
-		}
+	return len(allowList) == 0 || common.InIntArr(allowList, p)
+}
+
+func TestServerPort(p int, m string) bool {
+	if m == "p2p" || m == "secret" {
+		return true
+	}
+	if !ServerPortAllowed(p, m) {
+		return false
 	}
 	if m == "udp" {
-		b = common.TestUdpPort(p)
-	} else {
-		b = common.TestTcpPort(p)
+		return common.TestUdpPort(p)
 	}
-	return
+	return common.TestTcpPort(p)
 }
 
 func GenerateServerPort(m string) int {

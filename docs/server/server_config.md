@@ -3,11 +3,11 @@
 配置文件路径：`<nps 可执行文件目录>/conf/nps.conf`
 
 
-> 首次启动时若 `conf/nps.conf` 不存在会**自动生成默认配置**。用户名默认为 `admin`，`web_password`、`auth_key`、`auth_crypt_key` 会随机生成并打印到终端。升级时会把新版模板中缺失的必需配置项追加到已有 `nps.conf`，不改已有值（包括显式空值）、注释和自定义项；通过 Web 面板关闭并移除的可选监听、证书、日志和调试配置不会在下次启动时被重新添加。仅已知的不安全占位密钥会按原有安全策略轮换。历史 Bridge 字段会按所选 `bridge_type` 迁移：明确使用 TCP 时只从 `bridge_tcp_port` / `bridge_tcp_ip` 获取主监听值；明确使用 KCP 时优先使用 `bridge_kcp_port` / `bridge_kcp_ip`；未指定类型时根据现有字段判断。旧字段保留不删除。修改通过同目录临时文件替换，并保留原文件权限。升级前仍建议备份配置。
+> 全新安装会自动初始化精简的 `conf/nps.conf` 和 `conf/nps.db`，不执行旧数据迁移。用户名默认为 `admin`，`web_password`、`auth_key`、`auth_crypt_key` 会随机生成并打印到终端。升级时保留有效的启动配置（包括显式空值）、自定义项和文件权限，只补充缺失的必需启动键；通过 Web 面板关闭并移除的可选监听、证书、日志和调试配置不会在下次启动时被重新添加。历史 Bridge 主监听字段会按所选 `bridge_type` 读取：明确使用 TCP 时读 `bridge_tcp_port` / `bridge_tcp_ip`，明确使用 KCP 时优先读 `bridge_kcp_port` / `bridge_kcp_ip`，否则根据现有字段判断。升级前仍应停服备份整个 `conf`。
 
 发布包中的已知占位值会在启动时自动轮换；显式填写的自定义值和空值不会被覆盖。生产环境建议将 Web 面板限制在管理网段、启用 HTTPS，并按最小权限开放端口。
 
-从 v1.1.49 起，端口、监听、TLS、日志等进程启动参数仍保存在 `nps.conf`；注册策略、默认配额、SMTP、HTTP 超时、审计路径、PoW/TOTP 和 MCP 开关等运行期业务配置保存在 `conf/nps.db` 的 `settings` 表。从旧版首次迁移时会自动备份并从 `nps.conf` 移除已迁移键。不要手工把数据库中的业务配置复制回 `nps.conf`；回滚应使用 `-export-json`。完整边界见 [SQLite 数据存储与升级](sqlite-storage.md)。
+从 v1.1.49 起，端口、监听、TLS、`log_path` 等进程启动参数保存在 `nps.conf`；注册策略、默认配额、SMTP、HTTP 超时、审计与连接日志路径、PoW/TOTP 和 MCP 开关等业务配置保存在 `conf/nps.db` 的 `settings` 表。支持自动迁移的新版会备份原始 `nps.conf`，仅在确认入库后移除相应业务键和明确废弃的键；不会删除 `nps.conf` 本身。不要手工把数据库中的业务配置复制回 `nps.conf`；回滚应使用 `-export-json`。完整边界见 [SQLite 数据存储与升级](sqlite-storage.md)。
 
 ## Web 面板维护 nps.conf
 
@@ -221,7 +221,7 @@ HTTP 正向代理和 SOCKS5 现在在 Web 面板中统一显示为“HTTP / SOCK
 
 已绑定邮箱的独立用户可以使用邮箱和密码登录，无需关闭用户名登录。开放注册后可通过 `/login/recover` 找回密码；该页面复用 SMTP，不依赖 `register_email_verify`。找回验证码独立使用固定 10 分钟有效期、60 秒发送间隔、最多 5 次错误尝试，不受注册验证码有效期和冷却配置放宽。重置成功会撤销该用户旧网页会话及免登凭证，不更改 API Token 或客户端 VKey。详见[用户体系](../user.md#找回密码)。
 
-升级不会覆盖已有 `nps.conf` 中的显式注册值。只补齐缺失的 `register_max_conn`、`register_upload_limit`、`register_download_limit`；如果旧配置仍写着 `register_expire_days=7`，管理员需要在「系统 → 全局参数」的「用户注册」Tab 中主动改为 `0` 才能得到默认永久有效。
+首次导入时保留原 `nps.conf` 中的显式注册设置；旧版配额中的 `0`（不限）会转换为当前版本的留空（不限）。如果旧配置仍写着 `register_expire_days=7`，管理员需要在「系统 → 全局参数」的「用户注册」Tab 中主动改为 `0` 才能设为永久有效。
 
 ## 客户端认证与公共密钥
 

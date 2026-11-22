@@ -2,6 +2,7 @@ package file
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,11 +67,17 @@ func TestJSONDataExistsIgnoresBundledSamplesAndEmptySkeletons(t *testing.T) {
 func TestInitializeStorageIgnoresBundledSamples(t *testing.T) {
 	runPath := t.TempDir()
 	copyBundledGatewaySamples(t, runPath)
+	trackStorageFixture(t)
 	if err := initializeStorage(runPath); err != nil {
 		t.Fatalf("first SQLite startup with repository samples failed: %v", err)
 	}
 	if !common.FileExists(filepath.Join(runPath, "conf", "nps.db")) {
 		t.Fatal("clean startup did not create the SQLite database")
+	}
+	for _, name := range []string{"backups", "migration-report.json", ".json-gateway"} {
+		if _, err := os.Stat(filepath.Join(runPath, "conf", name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("clean install created migration artifact %s: %v", name, err)
+		}
 	}
 }
 
@@ -98,23 +105,20 @@ func TestJSONDataExistsStillMigratesRealLegacyData(t *testing.T) {
 	}
 }
 
-func TestJSONDataExistsRejectsPartiallyModifiedSamples(t *testing.T) {
+func TestStartupMigratesRealDataButNotBundledSamples(t *testing.T) {
 	runPath := t.TempDir()
+	trackStorageFixture(t)
 	copyBundledGatewaySamples(t, runPath)
 	writeGatewayTestRecords(t, filepath.Join(runPath, "conf", gatewayFileUsers),
 		`{"Id":1,"UserName":"real-user","Status":true}`)
 	if !JSONDataExists(runPath) {
 		t.Fatal("a real data file alongside repository samples must trigger migration")
 	}
-	err := initializeStorage(runPath)
-	if err == nil {
-		t.Fatal("startup must not ignore real data mixed with repository samples")
+	if err := initializeStorage(runPath); err != nil {
+		t.Fatalf("startup must migrate real data mixed with repository samples: %v", err)
 	}
-	if !strings.Contains(err.Error(), "JSON 网关迁移标记") {
-		t.Fatalf("unexpected startup error: %v", err)
-	}
-	if common.FileExists(filepath.Join(runPath, "conf", "nps.db")) {
-		t.Fatal("gateway rejection must happen before SQLite is created")
+	if syncMapSize(&Db.JsonDb.Users) != 1 || syncMapSize(&Db.JsonDb.Clients) != 0 || syncMapSize(&Db.JsonDb.Tasks) != 0 || syncMapSize(&Db.JsonDb.Hosts) != 0 {
+		t.Fatal("bundled sample records must not be imported into SQLite")
 	}
 }
 

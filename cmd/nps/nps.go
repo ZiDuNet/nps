@@ -3,14 +3,16 @@ package main
 import (
 	"bufio"
 	"context"
-	"ehang.io/nps/bridge"
-	"ehang.io/nps/lib/daemon"
-	"ehang.io/nps/server"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
-	"github.com/fatih/color"
+	"io"
 	"log"
+	"maps"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,13 +23,18 @@ import (
 	"sync"
 	"time"
 
+	"ehang.io/nps/bridge"
 	npsconf "ehang.io/nps/conf"
 	"ehang.io/nps/lib/connectionlog"
+	"ehang.io/nps/lib/crypt"
+	"ehang.io/nps/lib/daemon"
 	"ehang.io/nps/lib/file"
 	"ehang.io/nps/lib/install"
 	"ehang.io/nps/lib/settings"
+	"ehang.io/nps/lib/store"
 	_ "ehang.io/nps/lib/store/sqlitedriver"
 	"ehang.io/nps/lib/version"
+	"ehang.io/nps/server"
 	"ehang.io/nps/server/connection"
 	"ehang.io/nps/server/tool"
 	"ehang.io/nps/server/usage"
@@ -37,11 +44,10 @@ import (
 
 	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
-	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/web"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
-
+	"github.com/fatih/color"
 	"github.com/kardianos/service"
 )
 
@@ -64,7 +70,17 @@ func main() {
 
 	debug.SetMaxThreads(1000000)
 
-	flag.Parse()
+	args := os.Args[1:]
+	command := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		command, args = args[0], args[1:]
+	}
+	_ = flag.CommandLine.Parse(args)
+	if command == "" && flag.NArg() == 1 {
+		command = flag.Arg(0)
+	} else if flag.NArg() != 0 {
+		log.Fatalln("unexpected NPS arguments")
+	}
 	// init log
 	if *ver {
 		common.PrintVersion()
@@ -78,28 +94,16 @@ func main() {
 		}
 		fmt.Println("TOTP secret:", secret)
 		fmt.Println("Authenticator URI:", crypt.BuildTOTPURI("NPS", "admin", secret))
-		fmt.Println("Add this line to conf/nps.conf and restart NPS:")
-		fmt.Println("totp_secret=" + secret)
+		fmt.Println("This command only generates a secret. To enable TOTP, use Access and security in the Web panel.")
 		return
 	}
 
-	var logPath string
-	// *confPath why get null value ?
-	for _, v := range os.Args[1:] {
-		switch v {
-		case "install", "start", "stop", "uninstall", "restart":
-			continue
-		}
-		if strings.Contains(v, "-conf_path=") {
-			common.ConfPath = strings.Replace(v, "-conf_path=", "", -1)
-		}
-
-		if strings.Contains(v, "-log_path=") {
-			logPath = strings.Replace(v, "-log_path=", "", -1)
-		}
-	}
 	if strings.TrimSpace(*confPath) != "" {
-		common.ConfPath = strings.TrimSpace(*confPath)
+		absolute, err := filepath.Abs(strings.TrimSpace(*confPath))
+		if err != nil {
+			log.Fatalln("resolve configuration directory:", err)
+		}
+		common.ConfPath = absolute
 	}
 	// Data maintenance commands must observe -conf_path before they touch the
 	// filesystem. Keeping these after the argument scan also covers the
@@ -128,22 +132,39 @@ func main() {
 	// operating on the default directory.
 	if *serverCmd {
 		printSlogan()
-		inputCmd()
+		inputCmd(os.Stdin)
 		return
 	}
 
-	// auto-generate default config files if not exist
-	initConfig(filepath.Join(common.GetRunPath(), "conf"))
+	if command != "" && command != "service" {
+		if err := manageNpsCommand(command); err != nil {
+			log.Fatalln("NPS service:", err)
+		}
+		return
+	}
+	if err := configureNpsStartup(common.GetRunPath(), command == "service"); err != nil {
+		log.Fatalln("NPS startup failed:", err)
+	}
+	prg := &nps{exit: make(chan struct{})}
+	s, err := service.New(prg, newNpsServiceConfig())
+	if err != nil {
+		logs.Error(err, "service function disabled")
+		if runErr := run(); runErr != nil {
+			log.Fatalln("NPS startup failed:", runErr)
+		}
+		<-prg.exit
+		return
+	}
+	if err := s.Run(); err != nil {
+		log.Fatalln("NPS service failed:", err)
+	}
+}
 
-	if err := beego.LoadAppConfig("ini", filepath.Join(common.GetRunPath(), "conf", "nps.conf")); err != nil {
-		log.Fatalln("load config file error", err.Error())
+func configureNpsStartup(runPath string, serviceMode bool) error {
+	if err := file.InitStorage(runPath, npsStartupConfig(runPath)); err != nil {
+		return fmt.Errorf("initialize data storage: %w", err)
 	}
-	if err := file.InitStorage(common.GetRunPath()); err != nil {
-		log.Fatalln("initialize data storage failed:", err)
-	}
-	if err := settings.Init(common.GetRunPath(), file.GetDb().JsonDb.SQLite()); err != nil {
-		log.Fatalln("initialize business settings failed:", err)
-	}
+	web.ExtractWebFiles(runPath)
 	file.SetConnectionHistoryLimit(beego.AppConfig.DefaultInt("client_history_limit", 5))
 	file.SetFlowLimitType(beego.AppConfig.String("flow_limit_type"))
 	audit.Configure(beego.AppConfig.String("audit_log_path"))
@@ -194,6 +215,7 @@ func main() {
 	logs.EnableFuncCallDepth(true)
 	logs.SetLogFuncCallDepth(3)
 
+	logPath := strings.TrimSpace(*npsLogPath)
 	if logPath == "" {
 		logPath = beego.AppConfig.String("log_path")
 		if logPath == "" {
@@ -201,27 +223,9 @@ func main() {
 		}
 	}
 
-	// init service
-	options := make(service.KeyValue)
-	svcConfig := &service.Config{
-		Name:        "Nps",
-		DisplayName: "nps内网穿透代理服务器",
-		Description: "一款轻量级、功能强大的内网穿透代理服务器。支持tcp、udp流量转发，支持内网http代理、内网socks5代理，同时支持snappy压缩、站点保护、加密传输、多路复用、header修改等。支持web图形化管理，集成多用户模式。",
-		Option:      options,
-	}
-
 	bridge.ServerTlsEnable = beego.AppConfig.DefaultBool("tls_enable", false)
 
-	for _, v := range os.Args[1:] {
-		switch v {
-		case "install", "start", "stop", "uninstall", "restart":
-			continue
-		}
-		svcConfig.Arguments = append(svcConfig.Arguments, v)
-	}
-
-	svcConfig.Arguments = append(svcConfig.Arguments, "service")
-	if len(os.Args) > 1 && os.Args[1] == "service" {
+	if serviceMode {
 		if err := setRotatingFileLogger(logPath, level); err != nil {
 			fmt.Fprintln(os.Stderr, "configure rotating NPS log failed:", err)
 			_ = logs.SetLogger(logs.AdapterConsole, `{"level":7,"color":false}`)
@@ -230,6 +234,40 @@ func main() {
 	} else {
 		_ = logs.SetLogger(logs.AdapterConsole, `{"level":`+level+`,"color":true}`)
 	}
+	return nil
+}
+
+func npsStartupConfig(runPath string) file.StartupConfig {
+	return file.StartupConfig{
+		Defaults:        defaultNpsConf,
+		InitialSettings: initialNpsSettings,
+		Apply: func(original settings.StartupINI, values map[string]string, _ bool) error {
+			return prepareStartupConfig(runPath, original, values)
+		},
+	}
+}
+
+func initialNpsSettings(ini settings.StartupINI) (map[string]string, error) {
+	if !npsconf.IsBootstrapConfig(ini.Content) {
+		return ini.Values, nil
+	}
+	// The compact starter (embedded or copied from config-examples) omits
+	// business settings. Seed them once, without overriding explicit values.
+	defaults, err := settings.ParseStartupConfig(npsconf.ServerConfigDefaults)
+	if err != nil {
+		return nil, err
+	}
+	maps.Copy(defaults.Values, ini.Values)
+	return defaults.Values, nil
+}
+
+func newNpsServiceConfig() *service.Config {
+	svcConfig := &service.Config{
+		Name:        "Nps",
+		DisplayName: "nps内网穿透代理服务器",
+		Description: "一款轻量级、功能强大的内网穿透代理服务器。支持tcp、udp流量转发，支持内网http代理、内网socks5代理，同时支持snappy压缩、站点保护、加密传输、多路复用、header修改等。支持web图形化管理，集成多用户模式。",
+		Option:      make(service.KeyValue),
+	}
 	if !common.IsWindows() {
 		svcConfig.Dependencies = []string{
 			"Requires=network.target",
@@ -237,93 +275,294 @@ func main() {
 		svcConfig.Option["SystemdScript"] = install.SystemdScript
 		svcConfig.Option["SysvScript"] = install.SysvScript
 	}
-	prg := &nps{}
-	prg.exit = make(chan struct{})
+	return svcConfig
+}
+
+func manageNpsCommand(command string) error {
+	if command == "reload" {
+		daemon.InitDaemon("nps", common.GetRunPath(), common.GetTmpPath())
+		return nil
+	}
+	prg := &nps{exit: make(chan struct{})}
+	svcConfig := newNpsServiceConfig()
 	s, err := service.New(prg, svcConfig)
 	if err != nil {
-		logs.Error(err, "service function disabled")
-		if runErr := run(); runErr != nil {
-			logs.Error("NPS startup failed: ", runErr)
-			return
+		return err
+	}
+
+	switch command {
+	case "install":
+		_ = service.Control(s, "stop")
+		_ = service.Control(s, "uninstall")
+		svcConfig.Executable = install.InstallNps()
+		svcConfig.Arguments = serviceArguments(common.GetInstallPath(), *npsLogPath)
+		s, err = service.New(prg, svcConfig)
+		if err != nil {
+			return err
 		}
-		// run without service
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		wg.Wait()
-		return
+		if err := service.Control(s, "install"); err != nil {
+			return err
+		}
+		if service.Platform() == "unix-systemv" {
+			path := "/etc/init.d/" + svcConfig.Name
+			_ = os.Symlink(path, "/etc/rc.d/S90"+svcConfig.Name)
+			_ = os.Symlink(path, "/etc/rc.d/K02"+svcConfig.Name)
+		}
+	case "start", "restart", "stop":
+		if service.Platform() == "unix-systemv" {
+			return exec.Command("/etc/init.d/"+svcConfig.Name, command).Run()
+		}
+		return service.Control(s, command)
+	case "uninstall":
+		if err := service.Control(s, command); err != nil {
+			return err
+		}
+		if service.Platform() == "unix-systemv" {
+			_ = os.Remove("/etc/rc.d/S90" + svcConfig.Name)
+			_ = os.Remove("/etc/rc.d/K02" + svcConfig.Name)
+		}
+	case "update":
+		updated, err := updateInstalledNps(s, common.GetRunPath())
+		if err != nil {
+			return fmt.Errorf("更新失败: %w", err)
+		}
+		if updated {
+			fmt.Println("NPS 更新完成并通过健康检查")
+		}
+	case "status":
+		printServiceStatus(s)
+	default:
+		return fmt.Errorf("unsupported NPS command: %s", command)
 	}
+	return nil
+}
 
-	if len(os.Args) > 1 && os.Args[1] != "service" {
-		switch os.Args[1] {
-		case "reload":
-			daemon.InitDaemon("nps", common.GetRunPath(), common.GetTmpPath())
-			return
-		case "install":
-			// uninstall before
-			_ = service.Control(s, "stop")
-			_ = service.Control(s, "uninstall")
+func serviceArguments(runPath, logPath string) []string {
+	args := []string{"service", "-conf_path=" + runPath}
+	if logPath != "" {
+		args = append(args, "-log_path="+logPath)
+	}
+	return args
+}
 
-			binPath := install.InstallNps()
-			svcConfig.Executable = binPath
-			s, err := service.New(prg, svcConfig)
-			if err != nil {
-				logs.Error(err)
-				return
+func printServiceStatus(s service.Service) {
+	status, err := s.Status()
+	if err == nil && status == service.StatusRunning {
+		fmt.Println("NPS服务状态：运行中")
+	} else {
+		fmt.Println("NPS服务状态：未运行")
+	}
+}
+
+// updateInstalledNps resolves the service registration before touching the
+// database or replacing any file. The menu is often launched from ~, while
+// the running service can use a completely different binary and conf path.
+func updateInstalledNps(s service.Service, runPath string) (bool, error) {
+	if s == nil {
+		return false, errors.New("未检测到已安装的 NPS 服务")
+	}
+	if _, err := s.Status(); err != nil {
+		return false, errors.New("未检测到已安装的 NPS 服务，请先安装服务")
+	}
+	svcConfig := newNpsServiceConfig()
+	target, err := install.RegisteredNpsUpdateTarget(svcConfig.Name)
+	if err != nil {
+		return false, err
+	}
+	command, err := install.RegisteredServiceCommand(svcConfig.Name)
+	if err != nil {
+		return false, fmt.Errorf("读取 NPS 服务运行参数: %w", err)
+	}
+	if strings.TrimSpace(command.ConfigPath) != "" {
+		runPath, err = filepath.Abs(strings.TrimSpace(command.ConfigPath))
+		if err != nil {
+			return false, fmt.Errorf("解析 NPS 服务配置目录: %w", err)
+		}
+	} else {
+		// The menu executable may live in a download or temporary directory.
+		// Without an explicit -conf_path, the service resolves conf next to its
+		// registered executable, so that is the runtime path health must read.
+		runPath = filepath.Dir(target)
+	}
+	staged, err := install.StageNpsUpdate(target)
+	if err != nil {
+		return false, err
+	}
+	if !staged.Downloaded {
+		fmt.Println("当前已是最新版本，无需更新")
+		return false, nil
+	}
+	health := func(runPath string, timeout time.Duration) error {
+		return verifyUpdatedNpsHealth(runPath, command.Environment, timeout)
+	}
+	return true, installNpsUpdateAndVerifyWith(s, runPath, staged, health)
+}
+
+type npsServiceController interface {
+	Status() (service.Status, error)
+	Stop() error
+	Start() error
+}
+
+type updateHealthChecker func(runPath string, timeout time.Duration) error
+
+func installNpsUpdateAndVerify(s npsServiceController, runPath string, staged *install.StagedNpsUpdate) error {
+	return installNpsUpdateAndVerifyWith(s, runPath, staged, func(runPath string, timeout time.Duration) error {
+		return verifyUpdatedNpsHealth(runPath, nil, timeout)
+	})
+}
+
+func installNpsUpdateAndVerifyWith(s npsServiceController, runPath string, staged *install.StagedNpsUpdate, check updateHealthChecker) error {
+	if s == nil || staged == nil || !staged.Downloaded {
+		return errors.New("更新状态无效")
+	}
+	if err := s.Stop(); err != nil {
+		staged.DiscardDownload()
+		return fmt.Errorf("停止旧 NPS 服务: %w", err)
+	}
+	if err := staged.Install(); err != nil {
+		startErr := s.Start()
+		staged.DiscardDownload()
+		if startErr != nil {
+			return fmt.Errorf("替换新程序失败: %v；恢复旧服务失败: %w", err, startErr)
+		}
+		return fmt.Errorf("替换新程序失败，已恢复旧服务: %w", err)
+	}
+	startErr := s.Start()
+	if startErr == nil {
+		startErr = check(runPath, 30*time.Second)
+	}
+	if startErr == nil {
+		staged.Commit()
+		return nil
+	}
+	stopErr := s.Stop()
+	rollbackErr := staged.Rollback()
+	restartErr := s.Start()
+	if rollbackErr == nil {
+		staged.Commit()
+	}
+	return errors.Join(
+		fmt.Errorf("新版本启动或健康检查失败: %w", startErr),
+		wrapIfErr("停止失败的新服务", stopErr),
+		wrapIfErr("恢复旧程序", rollbackErr),
+		wrapIfErr("启动旧服务", restartErr),
+	)
+}
+
+func wrapIfErr(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", operation, err)
+}
+
+// verifyUpdatedNpsHealth proves that the newly started service owns its
+// configured SQLite lock and answers the public version endpoint. ProbeLock
+// is non-mutating and detects a process that exited before acquiring the lock.
+func verifyUpdatedNpsHealth(runPath string, serviceEnvironment []string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		locked, err := store.ProbeLock(filepath.Join(runPath, "conf", "nps.db"))
+		if err == nil && locked {
+			if err := verifyNpsPanelHealth(runPath, serviceEnvironment); err == nil {
+				return nil
+			} else {
+				lastErr = err
 			}
-			err = service.Control(s, os.Args[1])
-			if err != nil {
-				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
-			}
-			if service.Platform() == "unix-systemv" {
-				logs.Info("unix-systemv service")
-				confPath := "/etc/init.d/" + svcConfig.Name
-				os.Symlink(confPath, "/etc/rc.d/S90"+svcConfig.Name)
-				os.Symlink(confPath, "/etc/rc.d/K02"+svcConfig.Name)
-			}
-			return
-		case "start", "restart", "stop":
-			if service.Platform() == "unix-systemv" {
-				logs.Info("unix-systemv service")
-				cmd := exec.Command("/etc/init.d/"+svcConfig.Name, os.Args[1])
-				err := cmd.Run()
-				if err != nil {
-					logs.Error(err)
-				}
-				return
-			}
-			err := service.Control(s, os.Args[1])
-			if err != nil {
-				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
-			}
-			return
-		case "uninstall":
-			err := service.Control(s, os.Args[1])
-			if err != nil {
-				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
-			}
-			if service.Platform() == "unix-systemv" {
-				logs.Info("unix-systemv service")
-				os.Remove("/etc/rc.d/S90" + svcConfig.Name)
-				os.Remove("/etc/rc.d/K02" + svcConfig.Name)
-			}
-			return
-		case "update":
-			if updated, err := install.UpdateNpsResult(); err != nil {
-				logs.Error("更新失败：", err)
-			} else if updated {
-				restartNpsService(s)
-			}
-			return
-			//default:
-			//	logs.Error("command is not support")
-			//	return
+		} else if err != nil {
+			lastErr = err
+		} else {
+			lastErr = errors.New("新服务尚未取得 SQLite 数据库锁")
+		}
+		time.Sleep(time.Second)
+	}
+	if lastErr == nil {
+		lastErr = errors.New("等待新服务启动超时")
+	}
+	return lastErr
+}
+
+var npsPanelHealthRequest = func(scheme, address, basePath string) (*http.Response, error) {
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // local self-signed panel certificate
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	return client.Get(scheme + "://" + address + basePath + "/api/v1/")
+}
+
+func verifyNpsPanelHealth(runPath string, serviceEnvironment []string) error {
+	ini, err := settings.ReadStartupConfig(filepath.Join(runPath, "conf", "nps.conf"), defaultNpsConf)
+	if err != nil {
+		return fmt.Errorf("读取新服务启动配置: %w", err)
+	}
+	values := ini.Values
+	port := strings.TrimSpace(values["web_port"])
+	if port == "" || port == "0" {
+		return nil
+	}
+	ip := strings.TrimSpace(serviceEnvironmentValue(serviceEnvironment, "NPS_WEB_IP"))
+	if ip == "" {
+		ip = strings.TrimSpace(values["web_ip"])
+	}
+	switch ip {
+	case "", "0.0.0.0":
+		ip = "127.0.0.1"
+	case "::", "[::]":
+		ip = "::1"
+	}
+	if ip == "" {
+		ip = "127.0.0.1"
+	}
+	scheme := "http"
+	if strings.EqualFold(strings.TrimSpace(values["web_open_ssl"]), "true") {
+		scheme = "https"
+	}
+	// NPS_WEB_BASE_URL is not read by the server runtime; only the panel
+	// config controls route and static-asset mounting. Keeping the same source
+	// here prevents a stale service override from making a healthy panel look
+	// unhealthy.
+	basePath := strings.TrimSpace(values["web_base_url"])
+	if basePath != "" && !strings.HasPrefix(basePath, "/") {
+		basePath = "/" + basePath
+	}
+	basePath = strings.TrimRight(basePath, "/")
+	response, err := npsPanelHealthRequest(scheme, net.JoinHostPort(ip, port), basePath)
+	if err != nil {
+		return fmt.Errorf("请求新服务健康端点: %w", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("新服务健康端点返回 HTTP %d", response.StatusCode)
+	}
+	var payload struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return fmt.Errorf("解析新服务健康响应: %w", err)
+	}
+	if payload.Version != version.VERSION {
+		return fmt.Errorf("新服务版本为 %q，期望 %q", payload.Version, version.VERSION)
+	}
+	return nil
+}
+
+func serviceEnvironmentValue(environment []string, key string) string {
+	prefix := key + "="
+	for index := len(environment) - 1; index >= 0; index-- {
+		if strings.HasPrefix(environment[index], prefix) {
+			return strings.TrimPrefix(environment[index], prefix)
 		}
 	}
-
-	if err := s.Run(); err != nil {
-		logs.Error("NPS service failed: ", err)
-		os.Exit(1)
-	}
+	return ""
 }
 
 func printSlogan() {
@@ -346,33 +585,28 @@ func printSlogan() {
 	fmt.Println()
 }
 
-func inputCmd() {
+func inputCmd(inputReader io.Reader) {
+	stdin := bufio.NewScanner(inputReader)
 	for {
-		var input string
 		fmt.Printf("请输入[0-7]：")
+		if !stdin.Scan() {
+			if err := stdin.Err(); err != nil {
+				fmt.Fprintln(os.Stderr, "读取菜单输入失败：", err)
+			}
+			return
+		}
+		input := strings.TrimSpace(stdin.Text())
+		if input == "0" {
+			return
+		}
 
-		stdin := bufio.NewReader(os.Stdin)
-		_, err := fmt.Fscanln(stdin, &input)
+		prg := &nps{exit: make(chan struct{})}
+		svcConfig := newNpsServiceConfig()
+		s, err := service.New(prg, svcConfig)
 		if err != nil {
-			fmt.Println("输入有误，请重新输入")
+			fmt.Fprintln(os.Stderr, "无法使用系统服务：", err)
 			continue
 		}
-
-		if input == "0" {
-			os.Exit(0)
-		}
-
-		prg := &nps{
-			exit: make(chan struct{}),
-		}
-		options := make(service.KeyValue)
-		svcConfig := &service.Config{
-			Name:        "Nps",
-			DisplayName: "nps内网穿透代理服务器",
-			Description: "一款轻量级、功能强大的内网穿透代理服务器。支持tcp、udp流量转发，支持内网http代理、内网socks5代理，同时支持snappy压缩、站点保护、加密传输、多路复用、header修改等。支持web图形化管理，集成多用户模式。",
-			Option:      options,
-		}
-		s, _ := service.New(prg, svcConfig)
 
 		switch input {
 		case "1":
@@ -380,40 +614,36 @@ func inputCmd() {
 			_ = service.Control(s, "uninstall")
 			binPath := install.InstallNpsToCurrentDir()
 
-			beego.LoadAppConfig("ini", filepath.Join(common.GetAppPath(), "conf", "nps.conf"))
-
-			logPath := filepath.Join(common.GetAppPath(), "nps.log")
-			if common.IsWindows() {
-				logPath = strings.Replace(logPath, "\\", "\\\\", -1)
+			runPath := common.GetRunPath()
+			logPath := strings.TrimSpace(*npsLogPath)
+			if logPath == "" {
+				logPath = filepath.Join(runPath, "nps.log")
 			}
-			svcConfig.Arguments = append(svcConfig.Arguments, "service")
-			svcConfig.Arguments = append(svcConfig.Arguments, "-conf_path="+common.GetAppPath())
-			svcConfig.Arguments = append(svcConfig.Arguments, "-log_path="+logPath)
+			svcConfig.Arguments = serviceArguments(runPath, logPath)
 
 			fmt.Println("日志文件路径为：", logPath)
 
 			svcConfig.Executable = binPath
 			s, err := service.New(prg, svcConfig)
-
-			if service.Platform() == "unix-systemv" {
-				logs.Info("unix-systemv service")
-				confPath := "/etc/init.d/" + svcConfig.Name
-				os.Symlink(confPath, "/etc/rc.d/S90"+svcConfig.Name)
-				os.Symlink(confPath, "/etc/rc.d/K02"+svcConfig.Name)
+			if err != nil {
+				fmt.Println("创建 NPS 服务失败：", err)
+				continue
 			}
 
-			err = service.Control(s, "install")
-			if err != nil {
+			if err := service.Control(s, "install"); err != nil {
 				logs.Error("Valid actions: %q\n%s", service.ControlAction, err.Error())
-			} else {
-				fmt.Println("NPS服务安装成功")
+				continue
 			}
-
-			err = service.Control(s, "start")
-			if err != nil {
+			fmt.Println("NPS服务安装成功")
+			if service.Platform() == "unix-systemv" {
+				path := "/etc/init.d/" + svcConfig.Name
+				_ = os.Symlink(path, "/etc/rc.d/S90"+svcConfig.Name)
+				_ = os.Symlink(path, "/etc/rc.d/K02"+svcConfig.Name)
+			}
+			if err := service.Control(s, "start"); err != nil {
 				fmt.Println("启动NPS服务失败", err)
 			} else {
-				fmt.Println("NPS服务已启动，管理面板访问地址：127.0.0.1:" + beego.AppConfig.String("web_port"))
+				fmt.Println("NPS 服务启动请求已提交，请查看日志确认管理面板地址和启动结果")
 			}
 
 		case "2":
@@ -439,32 +669,20 @@ func inputCmd() {
 			}
 
 		case "3":
-			if updated, err := install.UpdateNpsResult(); err != nil {
+			if updated, err := updateInstalledNps(s, common.GetRunPath()); err != nil {
 				fmt.Println("更新失败：", err)
 			} else if updated {
-				restartNpsService(s)
+				fmt.Println("NPS 更新完成并通过健康检查")
 			}
-			break
 		case "4":
-			var statusMsg = ""
-			status, err := s.Status()
-			if err != nil {
-				statusMsg = "未运行"
-			} else {
-				if status == 1 {
-					statusMsg = "运行中"
-				} else {
-					statusMsg = "未运行"
-				}
-			}
-			fmt.Println("NPS服务状态：" + statusMsg)
+			printServiceStatus(s)
 
 		case "5":
 			err := service.Control(s, "start")
 			if err != nil {
 				fmt.Println("NPS服务启动失败", err)
 			} else {
-				fmt.Println("NPS服务启动成功")
+				fmt.Println("NPS 服务启动请求已提交，请查看日志确认启动结果")
 			}
 
 		case "6":
@@ -482,6 +700,8 @@ func inputCmd() {
 			} else {
 				fmt.Println("NPS服务重启成功")
 			}
+		default:
+			fmt.Println("输入有误，请重新输入")
 		}
 	}
 }
@@ -726,45 +946,46 @@ func parseConfiguredLogLevel(configured string) (int, bool) {
 	return level, true
 }
 
-func initConfig(confDir string) {
-	if !common.FileExists(confDir) {
-		if err := os.MkdirAll(confDir, 0750); err != nil {
-			logs.Error("create config directory failed:", err)
-			return
-		}
-	}
+// prepareStartupConfig runs after SQLite has been verified. On a fresh
+// install the full template never needs to exist on disk.
+func prepareStartupConfig(runPath string, ini settings.StartupINI, values map[string]string) error {
+	confDir := filepath.Join(runPath, "conf")
 	confPath := filepath.Join(confDir, "nps.conf")
-	if !common.FileExists(confPath) {
-		content, secrets := rotateInsecureConfig(defaultNpsConf)
-		f, err := os.OpenFile(confPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-		if err != nil {
-			logs.Error("create config file failed:", err)
-			return
-		}
-		if _, err := f.WriteString(content); err != nil {
-			_ = f.Close()
-			logs.Error("write config file failed:", err)
-			return
-		}
-		_ = f.Close()
-		_ = os.Chmod(confPath, 0600)
-		logs.Info("Auto-generated default config file:", confPath)
-		logGeneratedSecrets(secrets)
-	} else if changed, added, secrets, err := migrateConfigFile(confPath, defaultNpsConf); err != nil {
-		logs.Error("migrate config file failed:", err)
-	} else if changed {
-		if len(added) > 0 {
-			logs.Info("Added missing settings to config file:", strings.Join(added, ", "))
-		}
-		if len(secrets) > 0 {
-			logs.Warn("rotated known default config secrets in:", confPath)
-			logGeneratedSecrets(secrets)
-		}
-	} else {
-		// The file was already current.  Keep startup quiet rather than
-		// rewriting it on every restart.
+	onDisk, err := os.ReadFile(confPath)
+	missing := errors.Is(err, os.ErrNotExist)
+	if err != nil && !missing {
+		return fmt.Errorf("读取启动配置: %w", err)
 	}
-	web.ExtractWebFiles(common.GetRunPath())
+	if !missing && string(onDisk) != ini.Content {
+		return errors.New("nps.conf 在初始化时被修改，请重新启动")
+	}
+	content := ini.Content
+	// Use effective settings (including includes) for defaults and aliases,
+	// and put new top-level keys before any explicit sections.
+	content, compatibilityAdded := migrateConfigCompatibilityWithValues(content, ini.Values)
+	existing := make(map[string]struct{}, len(ini.Values)+len(compatibilityAdded))
+	for key := range ini.Values {
+		existing[key] = struct{}{}
+	}
+	for _, key := range compatibilityAdded {
+		existing[key] = struct{}{}
+	}
+	content, _ = mergeMissingConfigFieldsWithKeys(content, defaultNpsConf, existing)
+	content, secrets := rotateInsecureConfig(content)
+	content, _ = settings.SlimStartupConfig(content, values, ini.RunMode)
+	if missing || content != ini.Content {
+		if err := writeConfigAtomically(confPath, []byte(content)); err != nil {
+			return fmt.Errorf("保存精简启动配置: %w", err)
+		}
+		if missing {
+			logs.Info("Auto-generated default config file:", confPath)
+		}
+		logGeneratedSecrets(secrets)
+	}
+	if err := beego.LoadAppConfig("ini", confPath); err != nil {
+		return errors.New("无法加载精简后的 nps.conf，请检查配置格式和权限")
+	}
+	return nil
 }
 
 // rotateInsecureConfig replaces only values that are known release-template

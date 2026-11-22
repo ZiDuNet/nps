@@ -811,7 +811,7 @@ function submitform(action, url, postdata) {
 			url: url,
 			data: postdata,
 			success: function (res) {
-				npsNotify(res.status ? 'success' : 'error', langreply(res.msg));
+				npsNotify(res.status ? 'success' : 'error', npsIsEnglish() && res.msg_en ? res.msg_en : langreply(res.msg));
 				if (!res.status) { releaseGuard(); return; }
 				if (isMutation) {
 					// List pages refresh in place instead of reloading the whole

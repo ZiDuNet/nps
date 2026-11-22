@@ -23,7 +23,7 @@
 
 ## 端口准备
 
-源码默认配置以 `conf/nps.conf` 为唯一来源；服务端会将它嵌入可执行文件，并在首次启动时释放到配置目录：
+服务端会在首次启动时初始化启动配置。以下是常用默认监听：
 
 | 端口 | 配置项 | 默认值 | 用途 |
 |------|--------|--------|------|
@@ -65,7 +65,7 @@ docker compose up -d
 docker logs nps --tail=50
 ```
 
-首次启动如果 `/opt/nps/conf/nps.conf` 不存在，程序会自动生成配置，并在日志中打印：
+全新安装会初始化精简的 `nps.conf` 和 SQLite，不生成迁移备份或报告。如果 `/opt/nps/conf/nps.conf` 不存在，程序会自动生成配置，并在日志中打印：
 
 - Web 管理员账号：默认 `admin`
 - Web 管理员密码：随机生成
@@ -99,7 +99,7 @@ chmod +x nps
 ./nps
 ```
 
-直接运行时，配置目录是当前程序目录下的 `conf`。首次启动会自动生成 `conf/nps.conf`，并打印随机管理员密码。
+直接运行时，配置目录是当前程序目录下的 `conf`。全新安装会初始化 `conf/nps.conf` 和 `conf/nps.db`，并打印随机管理员密码；不用执行旧数据迁移或网关命令。
 
 ## NPS 服务端：Linux 系统服务
 
@@ -307,14 +307,15 @@ GUI 配置和日志保存在当前用户目录：
 
 ## 升级和备份
 
-升级前先备份配置和 JSON 数据。新版本 NPS 启动时会将发布包内 `conf/nps.conf` 模板中缺少的有效配置项追加到现有服务端配置；原有值（包括显式空值）、注释和自定义项会保留，已知的不安全占位密钥仍按安全策略轮换。此迁移只维护服务端 `nps.conf`，不会自动改写 NPC 配置，也不会删除旧版或未知配置项。建议先备份，升级后检查启动日志中的配置迁移提示，并核对新增选项的默认值是否适合当前部署。
+升级前先停服并备份整个 `conf`。支持自动迁移的新版正常启动时会先备份并校验旧 JSON，再将业务数据和设置导入 SQLite。核对成功后才清理已备份的旧文件并精简 `nps.conf`，保留有效的启动配置、自定义项、证书、密钥、用量历史和日志。已有 SQLite 不会再次导入。此流程不改 NPC 配置；若目标版本是已发布的 v1.1.49、v1.1.50 或 v1.1.51，首次从 JSON 建库仍需先执行手工网关。启动前请按实际版本阅读 [SQLite 数据存储与升级](server/sqlite-storage.md)。
 
 Docker：
 
 ```bash
-cp -a /opt/nps/conf /opt/nps/conf.bak.$(date +%Y%m%d%H%M%S)
 cd /opt/nps
 docker compose pull
+docker compose stop nps
+cp -a /opt/nps/conf "/opt/nps/conf.bak.$(date +%Y%m%d%H%M%S)"
 docker compose up -d
 ```
 

@@ -112,6 +112,65 @@ func TestProcessTunnelForwardsBufferedBytesWhenAuthProbeFails(t *testing.T) {
 	}
 }
 
+func TestProcessTunnelForwardsWithLegacyClientConfig(t *testing.T) {
+	setupProxyTestConf(t)
+
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+
+	targetClient, targetServer := net.Pipe()
+	defer targetClient.Close()
+	defer targetServer.Close()
+
+	client := &file.Client{
+		Id:        1,
+		VerifyKey: "legacy-client",
+		Status:    true,
+		Cnf:       &file.Config{},
+		Flow:      file.NewFlow(),
+	}
+	task := &file.Tunnel{
+		Id:     1,
+		Mode:   "tcp",
+		Client: client,
+		Target: &file.Target{TargetStr: "127.0.0.1:22"},
+	}
+	server := NewTunnelModeServer(ProcessTunnel, &tunnelTestBridge{target: targetServer}, task)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- ProcessTunnel(conn.NewConn(serverConn), server)
+	}()
+
+	payload := []byte("legacy-cnf-ok")
+	if _, err := clientConn.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := targetClient.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	got := make([]byte, len(payload))
+	if _, err := io.ReadFull(targetClient, got); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatalf("forwarded payload = %q, want %q", got, payload)
+	}
+
+	clientConn.Close()
+	targetClient.Close()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ProcessTunnel did not exit after connections closed")
+	}
+}
+
 func TestTunnelModeServerDialVirtualUsesNormalProcessAndVisitorAddress(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

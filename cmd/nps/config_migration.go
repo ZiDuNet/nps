@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"ehang.io/nps/lib/durablefile"
 	"ehang.io/nps/lib/settings"
 )
 
@@ -52,9 +54,12 @@ var configCompatibilityAliases = []configCompatibilityRule{
 // configMigrationOptionalKeys are feature switches, listener endpoints, and
 // optional paths that the Web configuration panel can remove from nps.conf.
 // Do not re-add them on every startup when an operator deliberately disabled
-// them. A fresh installation still receives the complete checked-in template;
+// them. A fresh installation still receives the compact bootstrap template;
 // this list only affects upgrades of an existing file.
 var configMigrationOptionalKeys = map[string]struct{}{
+	// Adding the template's mode to an existing file can switch off the
+	// section that Beego previously used (for example [prod]).
+	"runmode":         {},
 	"http_proxy_port": {}, "https_proxy_port": {},
 	"http_proxy_access_port": {}, "https_proxy_access_port": {},
 	"bridge_kcp_port": {}, "bridge_ws_port": {}, "bridge_wss_port": {},
@@ -102,7 +107,10 @@ var configMigrationOptionalKeys = map[string]struct{}{
 // always win, including explicit empty values.  The function is deliberately
 // independent from Beego so it can be tested before the config is loaded.
 func migrateConfigCompatibility(content string) (string, []string) {
-	values := configValues(content)
+	return migrateConfigCompatibilityWithValues(content, configValues(content))
+}
+
+func migrateConfigCompatibilityWithValues(content string, values map[string]string) (string, []string) {
 	newline := "\n"
 	if strings.Contains(content, "\r\n") {
 		newline = "\r\n"
@@ -126,7 +134,6 @@ func migrateConfigCompatibility(content string) (string, []string) {
 				"# Added automatically to keep the Bridge listener configuration compatible (alias: "+alias+")."+newline+
 					rule.canonical+"="+value,
 			)
-			values[rule.canonical] = value
 			added = append(added, rule.canonical)
 			break
 		}
@@ -203,6 +210,27 @@ func configValues(content string) map[string]string {
 }
 
 func appendConfigBlocks(content string, blocks []string, newline string) string {
+	// In INI, a section persists to EOF. Defaults must never be appended
+	// inside an unrelated final section, nor change its original content.
+	bom := ""
+	if strings.HasPrefix(content, "\ufeff") {
+		bom, content = "\ufeff", strings.TrimPrefix(content, "\ufeff")
+	}
+	var offset, commentStart int
+	for _, line := range strings.SplitAfter(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			return bom + joinConfigBlocks(content[:commentStart], blocks, newline) + newline + content[commentStart:]
+		}
+		offset += len(line)
+		if !strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, ";") {
+			commentStart = offset
+		}
+	}
+	return bom + joinConfigBlocks(content, blocks, newline)
+}
+
+func joinConfigBlocks(content string, blocks []string, newline string) string {
 	merged := content
 	if merged != "" {
 		if !strings.HasSuffix(merged, "\n") && !strings.HasSuffix(merged, "\r") {
@@ -218,7 +246,10 @@ func appendConfigBlocks(content string, blocks []string, newline string) string 
 // release template but absent from an existing config. Existing assignments,
 // including explicit empty values, and all existing comments are left intact.
 func mergeMissingConfigFields(content, template string) (string, []string) {
-	existing := configKeys(content)
+	return mergeMissingConfigFieldsWithKeys(content, template, configKeys(content))
+}
+
+func mergeMissingConfigFieldsWithKeys(content, template string, existing map[string]struct{}) (string, []string) {
 	newline := "\n"
 	if strings.Contains(content, "\r\n") {
 		newline = "\r\n"
@@ -302,22 +333,26 @@ func configEntryKey(line string) (string, bool) {
 func writeConfigAtomically(path string, data []byte) error {
 	target := path
 	linkInfo, err := os.Lstat(path)
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if linkInfo.Mode()&os.ModeSymlink != 0 {
+	if linkInfo != nil && linkInfo.Mode()&os.ModeSymlink != 0 {
 		target, err = filepath.EvalSymlinks(path)
 		if err != nil {
 			return fmt.Errorf("resolve config symlink: %w", err)
 		}
 	}
 
-	info, err := os.Stat(target)
-	if err != nil {
-		return err
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("config target is not a regular file: %s", target)
+	mode := os.FileMode(0o600)
+	if linkInfo != nil {
+		info, err := os.Stat(target)
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("config target is not a regular file: %s", target)
+		}
+		mode = info.Mode().Perm()
 	}
 
 	dir := filepath.Dir(target)
@@ -328,7 +363,7 @@ func writeConfigAtomically(path string, data []byte) error {
 	tmpPath := tmp.Name()
 	defer func() { _ = os.Remove(tmpPath) }()
 
-	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+	if err := tmp.Chmod(mode); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("set temporary config permissions: %w", err)
 	}
@@ -343,7 +378,7 @@ func writeConfigAtomically(path string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close temporary config: %w", err)
 	}
-	if err := os.Rename(tmpPath, target); err != nil {
+	if err := durablefile.Rename(tmpPath, target); err != nil {
 		return fmt.Errorf("replace config: %w", err)
 	}
 	return nil

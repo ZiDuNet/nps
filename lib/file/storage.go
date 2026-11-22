@@ -1,10 +1,12 @@
 package file
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,6 +18,7 @@ import (
 
 	"ehang.io/nps/lib/acl"
 	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/durablefile"
 	"ehang.io/nps/lib/rate"
 	"ehang.io/nps/lib/settings"
 	"ehang.io/nps/lib/store"
@@ -33,9 +36,9 @@ var (
 // InitStorage initializes the authoritative data store exactly once. Callers
 // that can report a startup error should invoke it before any controller or
 // proxy begins serving requests.
-func InitStorage(runPath string) error {
+func InitStorage(runPath string, config StartupConfig) error {
 	storageOnce.Do(func() {
-		storageErr = initializeStorage(runPath)
+		storageErr = initializeStorageWithConfig(runPath, config)
 	})
 	return storageErr
 }
@@ -47,112 +50,246 @@ func SetDbForTest(db *DbUtils) {
 }
 
 func initializeStorage(runPath string) error {
+	return initializeStorageWithConfig(runPath, StartupConfig{})
+}
+
+// StartupConfig keeps server-only template handling outside the storage
+// layer. The callback runs under the database lock, after SQLite is durable.
+type StartupConfig struct {
+	Defaults        string // compact boot template, used when nps.conf is absent
+	InitialSettings func(original settings.StartupINI) (map[string]string, error)
+	Apply           func(original settings.StartupINI, values map[string]string, archived bool) error
+}
+
+const (
+	metaMigrationArchive = "migration_archive"
+	metaMigrationDigest  = "migration_archive_sha256"
+	metaMigrationDone    = "migration_cleanup_completed"
+)
+
+func initializeStorageWithConfig(runPath string, config StartupConfig) error {
 	confPath := filepath.Join(runPath, "conf")
-	if err := os.MkdirAll(confPath, 0o750); err != nil {
-		return fmt.Errorf("创建配置目录: %w", err)
+	confFile := filepath.Join(confPath, "nps.conf")
+	var created bool
+	var archive migrationArchive
+	sqlite, err := store.OpenInitialized(filepath.Join(confPath, "nps.db"), func(dir string, staged *store.Store) error {
+		created = true
+		if JSONDataExists(runPath) {
+			if err := os.Mkdir(filepath.Join(dir, "conf"), 0o700); err != nil {
+				return err
+			}
+			var err error
+			archive, err = createMigrationArchive(runPath, dir)
+			if err != nil {
+				return fmt.Errorf("打包并校验旧配置目录: %w", err)
+			}
+			logs.Info("旧配置备份已校验: %s", archive.path(runPath))
+			if err := normalizeStartupJSON(runPath, dir); err != nil {
+				return err
+			}
+			snapshot, err := loadJSONImportSnapshot(dir)
+			if err != nil {
+				return fmt.Errorf("读取旧版 JSON: %w", err)
+			}
+			defer stopSnapshotRates(snapshot)
+			if err := validateJSONImport(snapshot); err != nil {
+				return fmt.Errorf("JSON 数据校验失败: %w", err)
+			}
+			meta := map[string]string{metaMigrationArchive: archive.name, metaMigrationDigest: archive.digest}
+			if err := importSQLiteFromMemory(snapshot, staged, meta); err != nil {
+				return err
+			}
+		}
+		if config.Apply != nil || archive.name != "" {
+			ini, err := settings.ReadStartupConfig(confFile, config.Defaults)
+			if err != nil {
+				return err
+			}
+			if expected := archive.files["conf/nps.conf"]; expected != "" && expected != fmt.Sprintf("%x", sha256.Sum256([]byte(ini.Content))) {
+				return errors.New("nps.conf 在备份后发生变化，请停止旧服务或配置写入后重试")
+			}
+			fileValues := ini.Values
+			// A migration must import what the old deployment actually used,
+			// not seed settings that were absent from its configuration.
+			if archive.name == "" && config.InitialSettings != nil {
+				fileValues, err = config.InitialSettings(ini)
+				if err != nil {
+					return err
+				}
+			}
+			if _, err := settings.ImportStartupConfig(staged, fileValues); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		if created && archive.name != "" {
+			logMigrationReport(runPath, nil, nil, archive, err)
+		}
+		return err
 	}
-	databasePath := filepath.Join(confPath, "nps.db")
-	databaseExists := common.FileExists(databasePath)
-	if !databaseExists && JSONDataExists(runPath) {
-		// Validate the gateway before opening SQLite. A rejected legacy import
-		// must not leave an empty database or lock file as a half-migrated install.
-		if err := EnsureGatewayForSQLite(runPath); err != nil {
+	ok := false
+	defer func() {
+		if !ok {
+			_ = sqlite.Close()
+		}
+	}()
+	if err := sqlite.ValidateMigrated(); err != nil {
+		return err
+	}
+	meta, err := sqlite.LoadMeta()
+	if err != nil {
+		return err
+	}
+	hasLegacyData := !created && JSONDataExists(runPath)
+	if hasLegacyData {
+		if err := rejectInterruptedLegacyDatabase(sqlite, meta); err != nil {
 			return err
 		}
 	}
-	sqlite, createdByThisOpen, err := store.OpenWithStatus(databasePath)
-	if err != nil {
+	db := &DbUtils{JsonDb: NewJsonDb(runPath)}
+	db.JsonDb.SetSQLite(sqlite)
+	if err := loadStorageFromSQLite(db, sqlite); err != nil {
+		stopSnapshotRates(db)
 		return err
 	}
-	importCommitted := false
-	// Once the exclusive process lock is held, OpenWithStatus is authoritative:
-	// an existing file can only be considered present after that acquisition.
-	databaseExists = !createdByThisOpen
-	fail := func(err error) error {
-		if !importCommitted && createdByThisOpen {
-			_ = sqlite.DiscardIncompleteFiles()
-		} else {
-			_ = sqlite.Close()
+	defer func() {
+		if !ok {
+			stopSnapshotRates(db)
 		}
-		return err
-	}
-	if databaseExists {
-		hasEntities, err := sqlite.HasEntities()
+	}()
+	pending := meta[metaMigrationArchive] != "" && meta[metaMigrationDone] != "1"
+	if pending && !created {
+		name := meta[metaMigrationArchive]
+		if name != filepath.Base(name) || !strings.HasPrefix(name, "pre-sqlite-") || !strings.HasSuffix(name, ".tar.gz") || len(meta[metaMigrationDigest]) != 64 {
+			return errors.New("SQLite 迁移归档元数据无效，拒绝清理原始文件")
+		}
+		archive, err = readMigrationArchive(filepath.Join(confPath, migrationBackupFolder, name), meta[metaMigrationDigest], "")
 		if err != nil {
-			return fail(fmt.Errorf("检查 SQLite 数据: %w", err))
+			return fmt.Errorf("复核迁移备份 %s 失败，已保留旧文件: %w", name, err)
 		}
-		if !hasEntities {
-			if err := sqlite.ValidateMigrated(); err != nil {
-				return fail(err)
+	}
+	if pending {
+		// Recheck persistence on retry too: a previous rename could have
+		// succeeded but failed to sync its directory entry.
+		if err := archive.sync(runPath); err != nil {
+			return fmt.Errorf("确认迁移备份已落盘: %w", err)
+		}
+	}
+	var values map[string]string
+	if config.Apply != nil {
+		ini, err := settings.ReadStartupConfig(confFile, config.Defaults)
+		if err != nil {
+			return err
+		}
+		if pending {
+			// These settings were already written and verified before the DB
+			// was published. Never import an edited source during cleanup.
+			values, err = sqlite.LoadSettings()
+			if err == nil {
+				err = archive.checkConfigForCleanup(runPath, ini, values)
+			}
+		} else if settings.StartupConfigImported(meta) {
+			values, err = sqlite.LoadSettings()
+		} else {
+			// Adopt an existing v1.1.49/v1.1.50 database after an
+			// interrupted INI import, but do not revive include-only
+			// settings those releases never migrated.
+			var fileValues map[string]string
+			fileValues, err = ini.MainFileValues()
+			if err == nil {
+				values, err = settings.ImportStartupConfig(sqlite, fileValues)
 			}
 		}
-		if hasEntities {
-			logResidualJSONAfterMigration(runPath)
-			jsonDb := NewJsonDb(runPath)
-			jsonDb.SetSQLite(sqlite)
-			db := &DbUtils{JsonDb: jsonDb}
-			if err := loadStorageFromSQLite(db, sqlite); err != nil {
-				return fail(err)
+		if err == nil {
+			_, slim := settings.SlimStartupConfig(ini.Content, values, ini.RunMode)
+			if pending || slim || !settings.StartupConfigImported(meta) {
+				err = sqlite.Sync()
 			}
-			setActiveDb(db)
+			if err == nil {
+				err = config.Apply(ini, values, pending)
+			}
+		}
+		if err != nil {
+			if pending {
+				logMigrationReport(runPath, sqlite, db, archive, err)
+			}
+			return err
+		}
+	}
+	if pending {
+		if config.Apply == nil {
+			if err := sqlite.Sync(); err != nil {
+				return fmt.Errorf("确认导入的 SQLite 已落盘: %w", err)
+			}
+		}
+		if err := archive.cleanup(runPath); err != nil {
+			logMigrationReport(runPath, sqlite, db, archive, err)
+			return fmt.Errorf("SQLite 已导入；清理旧文件失败，已保留数据库与备份 %s，修复后可重试: %w", archive.path(runPath), err)
+		}
+		if err := writeMigrationReportWithArchive(runPath, sqlite, db, "", archive, nil); err != nil {
+			return fmt.Errorf("SQLite 已导入，但写迁移报告失败: %w", err)
+		}
+		if err := durablefile.SyncDir(confPath); err != nil {
+			return fmt.Errorf("同步迁移报告和目录清理: %w", err)
+		}
+		if err := sqlite.SetMeta(metaMigrationDone, "1"); err != nil {
+			return fmt.Errorf("记录迁移收尾状态: %w", err)
+		}
+		if err := sqlite.Sync(); err != nil {
+			return fmt.Errorf("同步迁移收尾状态: %w", err)
+		}
+		logs.Info("旧 JSON 自动迁移完成: clients=%d users=%d tunnels=%d hosts=%d, backup=%s",
+			syncMapSize(&db.JsonDb.Clients), syncMapSize(&db.JsonDb.Users), syncMapSize(&db.JsonDb.Tasks), syncMapSize(&db.JsonDb.Hosts), archive.path(runPath))
+	} else if hasLegacyData {
+		logResidualJSONAfterMigration(runPath)
+	}
+	if config.Apply != nil {
+		settings.Activate(runPath, sqlite, values)
+	}
+	setActiveDb(db)
+	ok = true
+	return nil
+}
+
+// Old releases could leave an initialized schema with no imported rows after
+// a crash. Never start an empty panel or attempt to merge uncertain old data.
+func rejectInterruptedLegacyDatabase(sqlite *store.Store, meta map[string]string) error {
+	if meta["migration_completed"] == "1" || settings.StartupConfigImported(meta) {
+		return nil
+	}
+	for _, key := range []string{metaClientIDHighWater, metaUserIDHighWater, metaTaskIDHighWater, metaHostIDHighWater} {
+		if n, err := strconv.Atoi(meta[key]); err == nil && n > 0 {
 			return nil
 		}
 	}
-	if !JSONDataExists(runPath) {
-		jsonDb := NewJsonDb(runPath)
-		jsonDb.SetSQLite(sqlite)
-		db := &DbUtils{JsonDb: jsonDb}
-		if err := loadStorageFromSQLite(db, sqlite); err != nil {
-			return fail(fmt.Errorf("加载空 SQLite 元数据: %w", err))
-		}
-		setActiveDb(db)
+	if hasEntities, err := sqlite.HasEntities(); err != nil {
+		return fmt.Errorf("检查现有 SQLite 实体: %w", err)
+	} else if hasEntities {
 		return nil
 	}
-	if err := EnsureGatewayForSQLite(runPath); err != nil {
-		return fail(err)
-	}
-	backupDir, err := backupConfDirectory(runPath)
+	values, err := sqlite.LoadSettings()
 	if err != nil {
-		return fail(fmt.Errorf("备份 conf 目录: %w", err))
+		return fmt.Errorf("检查现有 SQLite 设置: %w", err)
 	}
-	db, err := loadJSONImportSnapshot(runPath)
-	if err != nil {
-		_ = writeMigrationReport(runPath, sqlite, nil, backupDir, fmt.Errorf("JSON 网关用户归属修复失败: %w", err))
-		return fail(fmt.Errorf("JSON 网关用户归属修复失败: %w", err))
+	if len(values) != 0 {
+		return nil
 	}
-	jsonDb := db.JsonDb
-	if err := validateJSONImport(db); err != nil {
-		_ = writeMigrationReport(runPath, sqlite, db, backupDir, fmt.Errorf("JSON 数据校验失败: %w", err))
-		return fail(fmt.Errorf("JSON 数据校验失败: %w", err))
-	}
-	if err := importSQLiteFromMemory(db, sqlite); err != nil {
-		_ = writeMigrationReport(runPath, sqlite, db, backupDir, err)
-		return fail(err)
-	}
-	importCommitted = true
-	jsonDb.SetSQLite(sqlite)
-	if err := archiveJSONDataFiles(runPath); err != nil {
-		_ = writeMigrationReport(runPath, sqlite, db, backupDir, fmt.Errorf("SQLite 导入成功，但归档 JSON 数据失败: %w", err))
-		// The database is complete at this point. Keep it so an operator can
-		// start from SQLite after fixing the archive problem; deleting it while
-		// some JSON files may already be renamed would leave no authoritative
-		// copy of the data.
-		_ = sqlite.Close()
-		return fmt.Errorf("SQLite 导入成功，但归档 JSON 数据失败: %w；已保留 nps.db，请检查 conf 目录后重试启动", err)
-	}
-	if err := archiveJSONGatewayMarker(runPath); err != nil {
-		_ = writeMigrationReport(runPath, sqlite, db, backupDir, fmt.Errorf("SQLite 导入成功，但归档 JSON 网关标记失败: %w", err))
-		_ = sqlite.Close()
-		return fmt.Errorf("SQLite 导入成功，但归档 JSON 网关标记失败: %w；已保留 nps.db，请检查 conf 目录后重试启动", err)
-	}
-	if err := writeMigrationReport(runPath, sqlite, db, backupDir, nil); err != nil {
-		// The database is already consistent and the source files are archived.
-		// A report failure must not turn a successful import into a refused
-		// startup, but the operator still needs the diagnostic in the log.
-		logs.Warn("write SQLite migration report failed: %v", err)
-	}
-	setActiveDb(db)
-	return nil
+	return errors.New("检测到空 nps.db 和尚未导入的旧 JSON，可能是旧版迁移中断；已保留两份数据，请先停服备份整个 conf，在独立目录验证旧 JSON 恢复后再升级")
+}
+
+func (archive migrationArchive) path(runPath string) string {
+	return filepath.Join(runPath, "conf", migrationBackupFolder, archive.name)
+}
+
+func stopSnapshotRates(db *DbUtils) {
+	db.JsonDb.Clients.Range(func(_, value any) bool {
+		if client, ok := value.(*Client); ok && client.Rate != nil {
+			client.Rate.Stop()
+		}
+		return true
+	})
 }
 
 func setActiveDb(db *DbUtils) {
@@ -207,7 +344,8 @@ func ImportSQLiteFromJSON(runPath string) error {
 		_ = writeMigrationReport(runPath, nil, db, backupDir, importErr)
 		return importErr
 	}
-	if err := importSQLiteFromMemory(db, sqlite); err != nil {
+	defer stopSnapshotRates(db)
+	if err := importSQLiteFromMemory(db, sqlite, nil); err != nil {
 		_ = writeMigrationReport(runPath, sqlite, db, backupDir, err)
 		return err
 	}
@@ -250,6 +388,8 @@ type migrationReport struct {
 	MigratedAt      string                `json:"migrated_at"`
 	GatewayVersion  string                `json:"gateway_version,omitempty"`
 	BackupDirectory string                `json:"backup_directory,omitempty"`
+	BackupArchive   string                `json:"backup_archive,omitempty"`
+	BackupSHA256    string                `json:"backup_sha256,omitempty"`
 	Counts          migrationReportCounts `json:"counts"`
 	HostConflicts   int                   `json:"host_conflicts"`
 	Warnings        []string              `json:"warnings,omitempty"`
@@ -269,12 +409,25 @@ type migrationReportCounts struct {
 // to a stable path so an operator can inspect the result after an unattended
 // upgrade. Sensitive values (passwords, VKeys, tokens) are never included.
 func writeMigrationReport(runPath string, sqlite *store.Store, db *DbUtils, backupDir string, importErr error) error {
+	return writeMigrationReportWithArchive(runPath, sqlite, db, backupDir, migrationArchive{}, importErr)
+}
+
+func logMigrationReport(runPath string, sqlite *store.Store, db *DbUtils, archive migrationArchive, importErr error) {
+	if err := writeMigrationReportWithArchive(runPath, sqlite, db, "", archive, importErr); err != nil {
+		logs.Warn("write SQLite migration report failed: %v", err)
+	}
+}
+
+func writeMigrationReportWithArchive(runPath string, sqlite *store.Store, db *DbUtils, backupDir string, archive migrationArchive, importErr error) error {
 	report := migrationReport{
 		Schema:          "nps-sqlite-migration-v1",
 		Status:          "success",
 		Version:         version.VERSION,
 		MigratedAt:      time.Now().Format(time.RFC3339),
 		BackupDirectory: backupDir,
+	}
+	if archive.name != "" {
+		report.BackupArchive, report.BackupSHA256 = archive.path(runPath), archive.digest
 	}
 	if importErr != nil {
 		report.Status = "failed"
@@ -294,9 +447,12 @@ func writeMigrationReport(runPath string, sqlite *store.Store, db *DbUtils, back
 			Tunnels: syncMapSize(&db.JsonDb.Tasks),
 			Hosts:   syncMapSize(&db.JsonDb.Hosts),
 		}
-		report.Warnings = migrationWarnings(db, report.Counts, backupDir)
+		report.Warnings = migrationWarnings(db, report.Counts, backupDir, archive.files["conf/"+gatewayFileUsers] != "")
 	}
 	if sqlite != nil {
+		if version, err := sqlite.Meta("json_gateway_version"); err == nil {
+			report.GatewayVersion = version
+		}
 		if entities, err := sqlite.LoadEntities(); err == nil {
 			report.HostConflicts = countHostConflicts(entities[store.KindHost])
 		}
@@ -311,7 +467,7 @@ func writeMigrationReport(runPath string, sqlite *store.Store, db *DbUtils, back
 	return writeFileAtomically(filepath.Join(runPath, "conf", "migration-report.json"), data)
 }
 
-func migrationWarnings(db *DbUtils, counts migrationReportCounts, backupDir string) []string {
+func migrationWarnings(db *DbUtils, counts migrationReportCounts, backupDir string, archivedUsers bool) []string {
 	warnings := make([]string, 0)
 	if counts.Hosts == 0 && common.FileExists(db.JsonDb.HostFilePath) {
 		// A source file with records but zero loaded hosts was already rejected
@@ -319,7 +475,7 @@ func migrationWarnings(db *DbUtils, counts migrationReportCounts, backupDir stri
 		// dataset.
 		warnings = append(warnings, "hosts.json 未包含可导入的域名规则")
 	}
-	if !jsonImportHadUsersFile(db.JsonDb.UserFilePath, backupDir) {
+	if !archivedUsers && !jsonImportHadUsersFile(db.JsonDb.UserFilePath, backupDir) {
 		warnings = append(warnings, "未找到 users.json；客户端归属由兼容迁移补全，无法恢复的客户端保持未分配")
 	}
 	db.JsonDb.Tasks.Range(func(_, value interface{}) bool {
@@ -385,27 +541,32 @@ func countHostConflicts(rows map[int]json.RawMessage) int {
 	return conflicts
 }
 
-func importSQLiteFromMemory(db *DbUtils, sqlite *store.Store) error {
+func importSQLiteFromMemory(db *DbUtils, sqlite *store.Store, extraMeta map[string]string) error {
 	entities := make(map[string]map[int]json.RawMessage)
-	addSyncMap := func(kind string, m *sync.Map) {
+	addSyncMap := func(kind string, m *sync.Map) error {
 		rows := make(map[int]json.RawMessage)
+		var snapshotErr error
 		m.Range(func(key, value interface{}) bool {
 			id, ok := key.(int)
-			if !ok || id < 0 {
-				return true
+			data, keep, err := marshalStoredEntityWithError(value)
+			if !ok || id <= 0 || !keep || err != nil {
+				snapshotErr = fmt.Errorf("无法保存导入记录 %s/%d", kind, id)
+				return false
 			}
-			data, keep := marshalStoredEntity(value)
-			if keep {
-				rows[id] = data
-			}
+			rows[id] = data
 			return true
 		})
 		entities[kind] = rows
+		return snapshotErr
 	}
-	addSyncMap(store.KindClient, &db.JsonDb.Clients)
-	addSyncMap(store.KindUser, &db.JsonDb.Users)
-	addSyncMap(store.KindTunnel, &db.JsonDb.Tasks)
-	addSyncMap(store.KindHost, &db.JsonDb.Hosts)
+	for kind, table := range map[string]*sync.Map{
+		store.KindClient: &db.JsonDb.Clients, store.KindUser: &db.JsonDb.Users,
+		store.KindTunnel: &db.JsonDb.Tasks, store.KindHost: &db.JsonDb.Hosts,
+	} {
+		if err := addSyncMap(kind, table); err != nil {
+			return err
+		}
+	}
 	if global := db.JsonDb.getGlobal(); global != nil {
 		data, err := json.Marshal(global)
 		if err != nil {
@@ -426,8 +587,18 @@ func importSQLiteFromMemory(db *DbUtils, sqlite *store.Store) error {
 	if marker, err := ReadJSONGatewayMarker(db.JsonDb.RunPath); err == nil {
 		meta["json_gateway_version"] = marker.Version
 	}
+	maps.Copy(meta, extraMeta)
 	if err := sqlite.ReplaceEntitiesWithMeta(entities, meta); err != nil {
 		return fmt.Errorf("导入 SQLite: %w", err)
+	}
+	stored, err := sqlite.LoadEntities()
+	if err != nil {
+		return fmt.Errorf("核对已导入的 SQLite 数据: %w", err)
+	}
+	for kind, rows := range entities {
+		if !maps.EqualFunc(rows, stored[kind], func(a, b json.RawMessage) bool { return string(a) == string(b) }) {
+			return fmt.Errorf("SQLite %s 记录写入后校验不一致", kind)
+		}
 	}
 	return nil
 }
@@ -467,6 +638,22 @@ func validateJSONImport(db *DbUtils) error {
 	// enforce equality when users.json is actually present.
 	if usersFileExists && users != sourceUsers {
 		return fmt.Errorf("用户记录不一致：文件 %d 条，加载 %d 条", sourceUsers, users)
+	}
+	if usersFileExists {
+		if err := validateLoadedIDs(db.JsonDb.UserFilePath, &db.JsonDb.Users); err != nil {
+			return fmt.Errorf("用户 ID 不一致: %w", err)
+		}
+	}
+	if content, err := os.ReadFile(db.JsonDb.GlobalFilePath); err == nil && !isPlaceholderJSONData(gatewayFileGlobal, content) {
+		var source Glob
+		if json.Unmarshal(content, &source) != nil || db.JsonDb.getGlobal() == nil {
+			return errors.New("全局配置不是有效 JSON，无法迁移")
+		}
+		if _, err := normalizePlatformDomains(source.PlatformDomains); err != nil {
+			return errors.New("全局平台域名配置无效，修正后再迁移")
+		}
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	if err := validateLoadedIDs(db.JsonDb.ClientFilePath, &db.JsonDb.Clients); err != nil {
 		return fmt.Errorf("客户端 ID 不一致: %w", err)
@@ -723,6 +910,14 @@ func loadClientsFromEntities(jsonDb *JsonDb, rows map[int]json.RawMessage) error
 			return fmt.Errorf("SQLite 客户端 %d 是运行期临时记录，权威存储中不允许 NoStore", id)
 		}
 		client.Id = id
+		// Cnf existed throughout the JSON releases, but malformed legacy
+		// records or third-party migrations may persist it as null. Proxy
+		// paths require the object even when encryption and compression are
+		// both disabled, so repair the shape while loading the authoritative
+		// store instead of rejecting every proxied connection at runtime.
+		if client.Cnf == nil {
+			client.Cnf = new(Config)
+		}
 		if client.RateLimit > 0 {
 			client.Rate = rate.NewRate(rate.BytesPerSecondFromBps(client.RateLimit))
 		} else {
@@ -1013,8 +1208,8 @@ func residualJSONFiles(runPath string) []string {
 
 // ExportSQLiteToJSON writes a rollback-compatible JSON snapshot. It converts
 // bps/three-state fields back to the historical integer and KB/s layout used
-// by the JSON version. The exported tree is marked as already normalized, so
-// the old JSON release can start it directly without a second KB/s conversion.
+// by the JSON version. No canonical gateway marker is emitted: a later SQLite
+// upgrade must normalize those old units again.
 func ExportSQLiteToJSON(runPath, outputDir string) error {
 	if strings.TrimSpace(outputDir) == "" {
 		return errors.New("JSON 导出目录不能为空")
@@ -1144,9 +1339,6 @@ func exportSQLiteToJSONStaging(runPath, outputDir string) error {
 			return finishJSONExportReport(outputDir, report, err)
 		}
 	}
-	if err := writeJSONGatewayMarker(filepath.Join(confOut, jsonGatewayFile), existingJSONDataFileNames(outputDir)); err != nil {
-		return finishJSONExportReport(outputDir, report, err)
-	}
 	if err := finishJSONExportReport(outputDir, report, nil); err != nil {
 		return err
 	}
@@ -1272,6 +1464,7 @@ func exportEntityRecord(kind string, raw json.RawMessage) ([]byte, error) {
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, err
 	}
+	delete(fields, jsonGatewayRecordVersionKey)
 	switch kind {
 	case store.KindUser:
 		exportUserQuantities(fields)

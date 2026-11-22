@@ -199,21 +199,85 @@ func newTunnelFormView(tunnel *file.Tunnel) *tunnelFormView {
 }
 
 type hostFormView struct {
-	*file.Host
-	UploadLimitMbps   string
-	DownloadLimitMbps string
+	Id                   int
+	Host                 string
+	PlatformDomainID     string
+	Remark               string
+	Location             string
+	Scheme               string
+	HeaderChange         string
+	ResponseHeaderChange string
+	HostChange           string
+	PathRewrite          string
+	RedirectURL          string
+	CertFilePath         string
+	KeyFilePath          string
+	BasicAuthSet         bool
+	AutoHttps            bool
+	AutoCORS             bool
+	CompatMode           bool
+	TargetIsHTTPS        bool
+	HTTPSJustProxy       bool
+	AutoSSL              bool
+	TLSOffload           bool
+	RegisteredOnly       bool
+	IpListPriority       int
+	UploadLimitMbps      string
+	DownloadLimitMbps    string
+	Client               hostListClient
+	Target               hostListTarget
+	file.Health
 }
 
 func newHostFormView(host *file.Host) *hostFormView {
 	if host == nil {
 		return nil
 	}
-	upload, download := host.RateLimitSnapshot()
-	return &hostFormView{
-		Host:              host,
-		UploadLimitMbps:   rate.FormatMbps(upload),
-		DownloadLimitMbps: rate.FormatMbps(download),
+	// Project the editable fields explicitly: embedding *file.Host shadows
+	// the domain string with the entire model in the template's .h.Host.
+	host.RLock()
+	client, target := host.Client, host.Target
+	view := &hostFormView{
+		Id:                   host.Id,
+		Host:                 host.Host,
+		PlatformDomainID:     host.PlatformDomainID,
+		Remark:               host.Remark,
+		Location:             host.Location,
+		Scheme:               host.Scheme,
+		HeaderChange:         host.HeaderChange,
+		ResponseHeaderChange: host.ResponseHeaderChange,
+		HostChange:           host.HostChange,
+		PathRewrite:          host.PathRewrite,
+		RedirectURL:          host.RedirectURL,
+		BasicAuthSet:         strings.TrimSpace(host.Auth) != "",
+		AutoHttps:            host.AutoHttps,
+		AutoCORS:             host.AutoCORS,
+		CompatMode:           host.CompatMode,
+		TargetIsHTTPS:        host.TargetIsHTTPS,
+		HTTPSJustProxy:       host.HTTPSJustProxy,
+		AutoSSL:              host.AutoSSL,
+		TLSOffload:           host.TLSOffload,
+		RegisteredOnly:       host.RegisteredOnly,
 	}
+	if host.PlatformDomainID == "" {
+		view.CertFilePath, view.KeyFilePath = host.CertFilePath, host.KeyFilePath
+	}
+	host.RUnlock()
+	if client != nil {
+		client.RLock()
+		view.Client = hostListClient{Id: client.Id, Remark: client.Remark, UserName: client.UserName, IsConnect: client.IsConnect}
+		client.RUnlock()
+	}
+	if target != nil {
+		target.RLock()
+		view.Target = hostListTarget{TargetStr: target.TargetStr, LocalProxy: target.LocalProxy, ProxyProtocol: target.ProxyProtocol}
+		target.RUnlock()
+	}
+	view.IpListPriority, _, _ = host.AccessListSnapshot()
+	view.Health = file.HealthConfigSnapshot(&host.Health)
+	upload, download := host.RateLimitSnapshot()
+	view.UploadLimitMbps, view.DownloadLimitMbps = rate.FormatMbps(upload), rate.FormatMbps(download)
+	return view
 }
 
 // MarshalJSON keeps write-only mixed-proxy credentials out of every list and
@@ -1741,7 +1805,7 @@ func (s *IndexController) Edit() {
 			if desiredPort <= 0 {
 				desiredPort = tool.GenerateServerPort(desiredMode)
 			}
-			if desiredPort != currentPort || desiredMode != currentMode {
+			if desiredPort != currentPort {
 				if !tool.TestServerPort(desiredPort, desiredMode) {
 					s.AjaxErr("The port cannot be opened because it may has been occupied or is no longer allowed.")
 					return
@@ -1777,7 +1841,6 @@ func (s *IndexController) Edit() {
 			resetExport := int64(s.GetIntNoErr("reset_export_flow"))
 			t.RLock()
 			currentMaxConn := t.MaxConn
-			currentStatus, currentRunError := t.Status, t.RunError
 			currentHTTPProxy, currentSocks5Proxy := t.HttpProxy, t.Socks5Proxy
 			var currentFlowLimitMB int64
 			if t.Flow != nil {
@@ -1836,8 +1899,6 @@ func (s *IndexController) Edit() {
 				Port:           desiredPort,
 				ServerIp:       s.getEscapeString("server_ip"),
 				Mode:           desiredMode,
-				Status:         currentStatus,
-				RunError:       currentRunError,
 				Client:         desiredClient,
 				Target:         desiredTarget,
 				Password:       s.getEscapeString("password"),
@@ -1879,20 +1940,9 @@ func (s *IndexController) Edit() {
 			if aclSubmitted {
 				replacement.SetSourceLists(aclPriority, aclBlack, aclWhite, acl.ScopeUser, "tunnel")
 			}
-			if err := file.GetDb().UpdateTaskWithOwnerChange(replacement, currentClient, s.IsAdmin()); err != nil {
-				s.AjaxErr("modified error")
-				return
-			}
-			if err := server.StopServer(t.Id); err != nil {
-				// A stopped task has no runtime entry and can be started directly;
-				// surface real close failures instead of claiming a successful edit.
-				if _, running := server.RunList.Load(t.Id); running {
-					s.AjaxErr("stop error")
-					return
-				}
-			}
-			if err := server.StartTask(t.Id); err != nil {
-				s.AjaxErr("start error")
+			saved, reloadErr := server.EditTask(t, replacement, currentClient, s.IsAdmin())
+			if !saved {
+				s.AjaxErr(reloadErr.Error())
 				return
 			}
 			refreshHealthConfig(currentClientID, desiredClientID)
@@ -1904,7 +1954,20 @@ func (s *IndexController) Edit() {
 				t.Client.RUnlock()
 			}
 			t.RUnlock()
-			s.auditMutation("tunnel.update", "tunnel", id, ownerID, "", nil, map[string]string{"mode": mode, "remark": remark})
+			metadata := map[string]string{"mode": mode, "remark": remark}
+			if reloadErr != nil {
+				metadata["listener_error"] = reloadErr.Error()
+			}
+			s.auditMutation("tunnel.update", "tunnel", id, ownerID, "", nil, metadata)
+			if reloadErr != nil {
+				message := "隧道配置已保存，但监听重载失败。请检查监听地址和端口后手动启动。"
+				payload := ajax(message+" 原因："+reloadErr.Error(), 0)
+				payload["msg_en"] = "Tunnel settings were saved, but the listener did not reload. Check the listen address and port, then start the tunnel manually."
+				s.Data["json"] = s.withRequestMeta(payload)
+				s.ServeJSON()
+				s.StopRun()
+				return
+			}
 		}
 		s.AjaxOk("modified success")
 	}
@@ -2309,12 +2372,12 @@ func (s *IndexController) EditHost() {
 			s.error()
 			return
 		} else {
-			s.Data["h"] = newHostFormView(h)
-			h.RLock()
-			s.Data["BlackIpList"] = strings.Join(h.BlackIpList, "\r\n")
-			s.Data["WhiteIpList"] = strings.Join(h.WhiteIpList, "\r\n")
-			platformDomainID, hostName := h.PlatformDomainID, h.Host
-			h.RUnlock()
+			view := newHostFormView(h)
+			s.Data["h"] = view
+			_, black, white := h.AccessListSnapshot()
+			s.Data["BlackIpList"] = strings.Join(black, "\r\n")
+			s.Data["WhiteIpList"] = strings.Join(white, "\r\n")
+			platformDomainID, hostName := view.PlatformDomainID, view.Host
 			s.Data["hostIsPlatform"] = platformDomainID != ""
 			if domain, domainErr := file.GetDb().GetPlatformDomain(platformDomainID); domainErr == nil {
 				s.Data["platformPrefix"] = strings.TrimSuffix(hostName, "."+strings.TrimPrefix(domain.Wildcard, "*."))

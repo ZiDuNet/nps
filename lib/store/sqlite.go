@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ehang.io/nps/lib/durablefile"
 )
 
 const SchemaVersion = 1
@@ -56,10 +58,48 @@ func Open(path string) (*Store, error) {
 	return database, err
 }
 
+// ProbeLock reports whether another process currently owns the database
+// lock. It only opens the reusable lock file and never creates a database,
+// modifies data, or changes the lock file when one does not exist yet.
+func ProbeLock(path string) (bool, error) {
+	if path == "" {
+		return false, errors.New("数据库路径不能为空")
+	}
+	lockPath := path + ".lock"
+	lock, err := os.OpenFile(lockPath, os.O_RDWR, 0)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("打开数据库锁文件: %w", err)
+	}
+	defer lock.Close()
+	if err := lockDatabaseFile(lock); err != nil {
+		if errors.Is(err, ErrDatabaseLocked) {
+			return true, nil
+		}
+		return false, err
+	}
+	return false, nil
+}
+
 // OpenWithStatus opens the database and reports whether this call created it
 // after acquiring the process lock. Callers use created=false on every error
 // path to avoid deleting a database that belongs to another process.
 func OpenWithStatus(path string) (*Store, bool, error) {
+	return openWithInitializer(path, nil)
+}
+
+// OpenInitialized builds a new store off to the side and only publishes it
+// after initialization and verification have succeeded. The normal database
+// lock covers both steps. A process interrupted before publication leaves no
+// nps.db for the next startup to mistake for an initialized installation.
+func OpenInitialized(path string, initialize func(dir string, database *Store) error) (*Store, error) {
+	database, _, err := openWithInitializer(path, initialize)
+	return database, err
+}
+
+func openWithInitializer(path string, initialize func(string, *Store) error) (*Store, bool, error) {
 	if path == "" {
 		return nil, false, errors.New("数据库路径不能为空")
 	}
@@ -78,11 +118,20 @@ func OpenWithStatus(path string) (*Store, bool, error) {
 		}
 		return nil, false, err
 	}
-	_, statErr := os.Stat(path)
+	_, statErr := os.Lstat(path)
 	created := errors.Is(statErr, os.ErrNotExist)
 	if statErr != nil && !created {
 		_ = lock.Close()
 		return nil, false, fmt.Errorf("检查数据库文件: %w", statErr)
+	}
+	if created && initialize != nil {
+		if err := initializeNewDatabase(path, initialize); err != nil {
+			_ = lock.Close()
+			return nil, false, err
+		}
+		// A completed, published database must be kept even if reopening it
+		// fails. No later error may discard these committed data files.
+		created = false
 	}
 	dsn := (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String() +
 		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)"
@@ -115,6 +164,63 @@ func OpenWithStatus(path string) (*Store, bool, error) {
 		}
 	}
 	return store, created, nil
+}
+
+func initializeNewDatabase(path string, initialize func(string, *Store) error) error {
+	dir, err := os.MkdirTemp(filepath.Dir(path), ".sqlite-init-")
+	if err != nil {
+		return fmt.Errorf("创建 SQLite 初始化暂存目录: %w", err)
+	}
+	defer os.RemoveAll(dir) // exclusively owned staging directory
+	stagedPath := filepath.Join(dir, filepath.Base(path))
+	staged, err := Open(stagedPath)
+	if err != nil {
+		return err
+	}
+	defer staged.Close()
+	if err := initialize(dir, staged); err != nil {
+		return err
+	}
+	var result string
+	if err := staged.db.QueryRow(`PRAGMA quick_check`).Scan(&result); err != nil || result != "ok" {
+		return errors.New("SQLite 初始化完整性校验失败")
+	}
+	if err := staged.Sync(); err != nil {
+		return fmt.Errorf("同步暂存数据库: %w", err)
+	}
+	if err := staged.Close(); err != nil {
+		return fmt.Errorf("关闭暂存数据库: %w", err)
+	}
+	// Never attach WAL files that did not belong to the staged database.
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if _, err := os.Lstat(path + suffix); !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("数据库文件缺失，但 %s 存在或无法检查；请从备份恢复", filepath.Base(path)+suffix)
+		}
+	}
+	if err := durablefile.Rename(stagedPath, path); err != nil {
+		return fmt.Errorf("发布初始化完成的 SQLite 数据库: %w", err)
+	}
+	return nil
+}
+
+// Sync checkpoints SQLite before the caller retires an older data source.
+// The normal runtime uses WAL with synchronous=NORMAL to avoid an fsync for
+// every snapshot; a one-time startup migration needs a stronger boundary.
+func (s *Store) Sync() error {
+	s.write.Lock()
+	defer s.write.Unlock()
+	var busy, logPages, checkpointed int
+	if err := s.db.QueryRow(`PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&busy, &logPages, &checkpointed); err != nil {
+		return fmt.Errorf("SQLite WAL 合并失败: %w", err)
+	}
+	if busy != 0 {
+		return errors.New("SQLite WAL 正在占用，无法完成合并")
+	}
+	f, err := os.OpenFile(s.path, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	return errors.Join(f.Sync(), f.Close())
 }
 
 func closeAfterOpenFailure(database *Store, created bool) {

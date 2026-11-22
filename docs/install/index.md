@@ -10,7 +10,7 @@ NPS 分为服务端 `nps`、命令行客户端 `npc` 和桌面 GUI 客户端。�
 
 ### 服务端
 
-首次启动 `nps` 时，程序会在配置目录自动生成 `conf/nps.conf`，并生成 `web_password`、`auth_key` 和 `auth_crypt_key`。请从启动日志或配置文件中保存 Web 管理密码。
+全新安装首次启动 `nps` 时，程序会初始化 `conf/nps.conf` 和 `conf/nps.db`，并生成 `web_password`、`auth_key` 和 `auth_crypt_key`。没有旧业务数据时不需要迁移，也不会生成迁移备份。请从启动日志或配置文件中保存 Web 管理密码；旧版升级见 [SQLite 数据存储与升级](../server/sqlite-storage.md)。
 
 ```shell
 ./nps
@@ -44,7 +44,7 @@ NPS 分为服务端 `nps`、命令行客户端 `npc` 和桌面 GUI 客户端。�
 
 ## Docker 安装
 
-服务端容器必须持久化 `/conf`，它保存 `nps.conf`、客户端、隧道、域名和用户数据。以下示例使用当前项目镜像：
+服务端容器必须持久化整个 `/conf`。启动参数保存在 `nps.conf`，客户端、隧道、域名、用户等业务数据保存在 `nps.db`。以下示例使用当前项目镜像：
 
 ```shell
 docker pull wushuo98/nps:latest

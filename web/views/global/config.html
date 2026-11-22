@@ -59,6 +59,10 @@
     .server-config-badge.is-enabled { color: var(--nps-success); border-color: color-mix(in srgb, var(--nps-success) 30%, var(--nps-line)); }
     .server-config-badge.is-secret { color: var(--nps-warning); border-color: color-mix(in srgb, var(--nps-warning) 30%, var(--nps-line)); }
     .server-config-badge.is-missing { color: var(--nps-danger); border-color: color-mix(in srgb, var(--nps-danger) 30%, var(--nps-line)); }
+    .server-config-badge.is-source-sqlite { color: var(--nps-info); background: color-mix(in srgb, var(--nps-info) 8%, var(--nps-surface)); border-color: color-mix(in srgb, var(--nps-info) 28%, var(--nps-line)); }
+    .server-config-badge.is-source-startup { color: var(--nps-muted); border-color: var(--nps-line-strong); }
+    .server-config-badge.is-reload-hot { color: var(--nps-success); border-color: color-mix(in srgb, var(--nps-success) 30%, var(--nps-line)); }
+    .server-config-badge.is-reload-restart { color: var(--nps-warning); border-color: color-mix(in srgb, var(--nps-warning) 30%, var(--nps-line)); }
     .server-config-field__control { min-width: 0; margin: 0; padding: 0; }
     .server-config-field.is-disabled .server-config-field__control { opacity: .68; }
     .server-config-field__control .form-control { width: 100%; min-width: 0; min-height: 34px; font-size: 11px; }
@@ -131,7 +135,7 @@
         <div class="form-page-heading">
             <div class="dashboard-page-kicker" data-i18n-zh="系统配置" data-i18n-en="System settings">系统配置</div>
             <h1 id="server-config-title" data-i18n-zh="服务端配置" data-i18n-en="Server configuration">服务端配置</h1>
-            <p data-i18n-zh="通过可视化表单或完整源码维护 nps.conf。证书、私钥和 ACME 配置已集中在“证书设置”；可视化表单不会回显密码和 Token，源码视图仅管理员可访问并显示完整原文。" data-i18n-en="Maintain nps.conf through visual fields or the complete source. Certificates, private keys and ACME settings now live under Certificate settings. The visual form never echoes passwords or tokens; source view is administrator-only and shows the complete file.">通过可视化表单或完整源码维护 nps.conf。证书、私钥和 ACME 配置已集中在“证书设置”；可视化表单不会回显密码和 Token，源码视图仅管理员可访问并显示完整原文。</p>
+            <p data-i18n-zh="可视化表单维护 SQLite 业务配置和 nps.conf 启动配置；每项均标明来源及是否需要重启。源码视图仅编辑 nps.conf，并会把其中提交的业务键写入 SQLite。证书、私钥和 ACME 配置已集中在“证书设置”；密码和 Token 不会在表单中回显。" data-i18n-en="The visual editor manages SQLite business settings and nps.conf startup settings; every field shows its source and restart requirement. Source view edits nps.conf only and moves submitted business keys into SQLite. Certificates, private keys and ACME settings live under Certificate settings; passwords and tokens are never echoed in the form.">可视化表单维护 SQLite 业务配置和 nps.conf 启动配置；每项均标明来源及是否需要重启。源码视图仅编辑 nps.conf，并会把其中提交的业务键写入 SQLite。证书、私钥和 ACME 配置已集中在“证书设置”；密码和 Token 不会在表单中回显。</p>
             <div class="server-config-path"><i class="fa fa-code" aria-hidden="true"></i><span>{{.config_path}}</span></div>
         </div>
     </header>
@@ -176,7 +180,7 @@
             <i class="fa fa-shield" aria-hidden="true"></i>
             <div>
                 <strong data-i18n-zh="保存后需要重启 NPS" data-i18n-en="Restart NPS after saving">保存后需要重启 NPS</strong>
-                <p data-i18n-zh="关闭可选功能会从 nps.conf 移除对应键；密码、Token 和 API 密钥不会在可视化表单中回显，留空表示保持原值。证书与私钥路径在“证书设置”中核对，NPS 不读取或展示私钥内容。源码视图会展示完整原文，请仅在可信环境使用。" data-i18n-en="Disabling an optional feature removes its key. Passwords, tokens and API keys are never echoed in the visual form; leave them blank to keep the current value. Certificate and key paths are reviewed under Certificate settings, while key contents are never read or displayed. Source view shows the complete file and must only be used in a trusted environment.">关闭可选功能会从 nps.conf 移除对应键；密码、Token 和 API 密钥不会在可视化表单中回显，留空表示保持原值。证书与私钥路径在“证书设置”中核对，NPS 不读取或展示私钥内容。源码视图会展示完整原文，请仅在可信环境使用。</p>
+                <p data-i18n-zh="业务配置保存到 SQLite，启动配置写回 nps.conf；关闭可选功能会删除对应键。密码、Token 和 API 密钥不会在表单中回显，留空表示保持原值。证书与私钥路径在“证书设置”中核对。源码视图仅展示 nps.conf，请仅在可信环境使用。" data-i18n-en="Business settings are stored in SQLite and startup settings in nps.conf; disabling an optional feature removes its key. Passwords, tokens and API keys are never echoed in the form; leave them blank to keep the current value. Certificate and key paths are reviewed under Certificate settings. Source view shows nps.conf only and must only be used in a trusted environment.">业务配置保存到 SQLite，启动配置写回 nps.conf；关闭可选功能会删除对应键。密码、Token 和 API 密钥不会在表单中回显，留空表示保持原值。证书与私钥路径在“证书设置”中核对。源码视图仅展示 nps.conf，请仅在可信环境使用。</p>
             </div>
         </div>
         <div class="server-config-summary" aria-label="配置摘要">
@@ -221,6 +225,8 @@
                                 <label for="server-config-{{$field.Key}}">{{$field.Label}} <code>{{$field.Key}}</code></label>
                                 <p>{{$field.Description}}</p>
                                 <div class="server-config-field__badges">
+                                    {{if eq $field.Source "sqlite"}}<span class="server-config-badge is-source-sqlite" data-i18n-zh="SQLite 业务配置" data-i18n-en="SQLite business setting">SQLite 业务配置</span>{{else}}<span class="server-config-badge is-source-startup" data-i18n-zh="nps.conf 启动配置" data-i18n-en="nps.conf startup setting">nps.conf 启动配置</span>{{end}}
+                                    {{if eq $field.Reload "hot"}}<span class="server-config-badge is-reload-hot" data-i18n-zh="立即生效" data-i18n-en="Applies immediately">立即生效</span>{{else}}<span class="server-config-badge is-reload-restart" data-i18n-zh="需重启" data-i18n-en="Restart required">需重启</span>{{end}}
                                     {{if not $field.Editable}}<span class="server-config-badge" data-i18n-zh="只读" data-i18n-en="Read-only">只读</span>{{end}}
                                     {{if and $field.Optional $field.Enabled}}<span class="server-config-badge is-enabled" data-i18n-zh="已启用" data-i18n-en="Enabled">已启用</span>{{end}}
                                     {{if $field.Sensitive}}<span class="server-config-badge is-secret" data-i18n-zh="敏感值" data-i18n-en="Secret">敏感值</span>{{end}}
@@ -278,7 +284,7 @@
 
     <section class="server-config-source-shell" id="server-config-source-shell" aria-label="nps.conf 源码视图">
         <div class="server-config-source-head">
-            <div class="server-config-source-head__copy"><strong data-i18n-zh="nps.conf 完整源码" data-i18n-en="Complete nps.conf source">nps.conf 完整源码</strong><span data-i18n-zh="保留注释、空行、字段顺序和自定义内容；保存前会检查语法与关键配置关系。" data-i18n-en="Comments, blank lines, field order and custom entries are preserved. Syntax and key relationships are checked before saving.">保留注释、空行、字段顺序和自定义内容；保存前会检查语法与关键配置关系。</span></div>
+            <div class="server-config-source-head__copy"><strong data-i18n-zh="nps.conf 完整源码" data-i18n-en="Complete nps.conf source">nps.conf 完整源码</strong><span data-i18n-zh="这里只编辑 nps.conf；保留注释、空行、字段顺序和自定义内容，提交的业务键会转存 SQLite。保存前会检查语法与关键配置关系。" data-i18n-en="This editor changes nps.conf only. Comments, blank lines, field order and custom entries are preserved; submitted business keys move to SQLite. Syntax and key relationships are checked before saving.">这里只编辑 nps.conf；保留注释、空行、字段顺序和自定义内容，提交的业务键会转存 SQLite。保存前会检查语法与关键配置关系。</span></div>
             <span class="server-config-source-security"><i class="fa fa-lock" aria-hidden="true"></i><span data-i18n-zh="包含明文敏感项" data-i18n-en="May contain plaintext secrets">包含明文敏感项</span></span>
             <span class="server-config-source-status" id="server-config-source-status"><i class="fa fa-circle-o" aria-hidden="true"></i><span>尚未加载</span></span>
             <button class="btn btn-outline" type="button" id="server-config-source-reload"><i class="fa fa-sync-alt" aria-hidden="true"></i><span data-i18n-zh="重新加载" data-i18n-en="Reload">重新加载</span></button>

@@ -73,16 +73,10 @@ var httpProxyHandshakeTimeout = 10 * time.Second
 // response is identified as an SSE stream; finite responses keep this bound.
 var hostRequestReadTimeout = httpReadHeaderTimeout
 
-// waitHTTPResponse bounds the hand-off wait used by keep-alive Host changes.
-// A client that stops reading can otherwise leave CopyBuffer blocked in c.Write
-// forever even after the upstream stream is closed. Closing the client socket
-// on timeout makes the response goroutine observable and lets the handler exit.
-func waitHTTPResponse(wg *sync.WaitGroup, c *conn.Conn) bool {
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
+const httpUpstreamCloseGrace = 250 * time.Millisecond
+
+// waitHTTPResponse bounds the wait for the upstream response copier to exit.
+func waitHTTPResponse(done <-chan struct{}) bool {
 	timer := time.NewTimer(httpResponseWaitTimeout)
 	defer timer.Stop()
 	select {
@@ -90,9 +84,102 @@ func waitHTTPResponse(wg *sync.WaitGroup, c *conn.Conn) bool {
 		return true
 	case <-timer.C:
 		logs.Warn("timeout waiting for HTTP upstream response; closing client connection")
-		_ = c.Close()
 		return false
 	}
+}
+
+// rawHTTPResponses marks a safe hand-off point after the responses for all
+// forwarded requests have been written. Reading a full response is not enough:
+// the copy loop can still be writing those bytes to the visitor.
+type rawHTTPResponses struct {
+	*responseInspector
+	mu       sync.Mutex
+	pending  bool
+	overflow bool
+	drained  chan struct{}
+	terminal atomic.Bool
+}
+
+func (r *rawHTTPResponses) addRequest(event traffic.Event) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.pending = true
+	select {
+	case r.requests.ch <- event:
+	default:
+		// Inspection remains non-blocking even for deep pipelines. Once
+		// metadata is lost we can no longer prove a safe hand-off point.
+		r.overflow = true
+	}
+}
+
+func (r *rawHTTPResponses) Read(b []byte) (int, error) {
+	// CopyBuffer calls Read again only after its previous write succeeded.
+	// An informational response leaves started set until its final response;
+	// a close-delimited or unfinished streaming body is not a boundary.
+	if r.state == responseHeaders && !r.started && len(r.buffer) == 0 {
+		r.mu.Lock()
+		if !r.overflow && len(r.requests.ch) == 0 {
+			r.pending = false
+			if r.drained != nil {
+				close(r.drained)
+				r.drained = nil
+			}
+		}
+		r.mu.Unlock()
+	}
+	return r.responseInspector.Read(b)
+}
+
+func (r *rawHTTPResponses) waitForDrain(done <-chan struct{}) bool {
+	r.mu.Lock()
+	if !r.pending {
+		r.mu.Unlock()
+		return !r.terminal.Load()
+	}
+	if r.drained == nil {
+		r.drained = make(chan struct{})
+	}
+	drained := r.drained
+	r.mu.Unlock()
+	timer := time.NewTimer(httpResponseWaitTimeout)
+	defer timer.Stop()
+	select {
+	case <-drained:
+		return !r.terminal.Load()
+	case <-done:
+		select {
+		case <-drained:
+			return !r.terminal.Load()
+		default:
+			return false
+		}
+	case <-timer.C:
+		logs.Warn("timeout draining HTTP upstream before changing routes; closing client connection")
+		return false
+	}
+}
+
+// rawHTTPReadError exposes bytes and a simultaneous read error separately.
+// Otherwise CopyBuffer would exit on (n > 0, EOF) without the next Read that
+// marks those final bytes as delivered.
+type rawHTTPReadError struct {
+	io.Reader
+	pending error
+}
+
+func (r *rawHTTPReadError) Read(b []byte) (int, error) {
+	if r.pending != nil {
+		err := r.pending
+		r.pending = nil
+		return 0, err
+	}
+	n, err := r.Reader.Read(b)
+	if n > 0 && err != nil {
+		r.pending = err
+		err = nil
+	}
+	return n, err
 }
 
 func NewHttp(bridge *bridge.Bridge, c *file.Tunnel, httpPort, httpsPort int, useCache bool, cacheLen int, addOrigin bool, http3Ports ...int) *httpServer {
@@ -342,8 +429,6 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		lk              *conn.Link
 		targetAddr      string
 		lenConn         *conn.LenConn
-		isReset         atomic.Bool
-		wg              sync.WaitGroup
 		remoteAddr      string
 		accountedClient *file.Client
 		hostClient      *file.Client
@@ -360,12 +445,12 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		registeredOnly  bool
 		failureContent  = s.errorContent
 	)
-	responseStarted := false
+	var responseDone <-chan struct{}
 	responseWaitOnExit := false
 	waitForResponse := func() bool {
-		if responseStarted {
-			completed := waitHTTPResponse(&wg, c)
-			responseStarted = false
+		if responseDone != nil {
+			completed := waitHTTPResponse(responseDone)
+			responseDone = nil
 			responseWaitOnExit = false
 			return completed
 		}
@@ -387,7 +472,10 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		}
 		releaseClientConn()
 		if connClient != nil {
-			connClient.Close()
+			// Abort the upstream before closing a wrapper that may itself need
+			// to write a protocol shutdown record (for example, TLS).
+			_ = target.Close()
+			_ = connClient.Close()
 		} else {
 			s.writeConnFailContent(c.Conn, failureContent)
 		}
@@ -398,12 +486,11 @@ func (s *httpServer) handleHttp(c *conn.Conn, r *http.Request, br *bufio.Reader)
 		policy = loadHTTPProxyPolicy()
 	}
 	firstReq := true
-	var responseDone chan struct{}
-	var responseStreaming chan struct{}
 reset:
-	responseDone = make(chan struct{})
-	responseStreaming = make(chan struct{})
-	requestQueue := newRequestQueue()
+	if r.RemoteAddr == "" {
+		// http.ReadRequest does not fill this on a hijacked connection.
+		r.RemoteAddr = c.RemoteAddr().String()
+	}
 	remoteAddr = effectiveHTTPRemoteAddr(r)
 	if strings.TrimSpace(remoteAddr) == "" {
 		remoteAddr = c.RemoteAddr().String()
@@ -472,8 +559,8 @@ reset:
 		return
 	}
 	// Hold exactly one connection slot for the host currently serving this
-	// keep-alive stream. The slot is released when the host changes or when the
-	// stream exits; this avoids accounting against the newly selected host.
+	// keep-alive stream. Release it on hand-off or exit so each upstream is
+	// accounted against the client that actually served it.
 	accountedClient = hostClient
 	if err = s.authHostRequest(r, c, host, clientConfig.U, clientConfig.P); err != nil {
 		logs.Warn("auth error", err, r.RemoteAddr)
@@ -497,6 +584,7 @@ reset:
 		logs.Warn("bridge returned nil HTTP target for %s", lk.Host)
 		return
 	}
+	requestQueue := newRequestQueue()
 	backendTimeout := newBackendTimeoutConn(target, policy)
 	backendTimeout.SetWritePolicy(policy.backendUploadStall, 0)
 	backendTimeout.SetReadPolicy(policy.backendResponseHeader, 0)
@@ -517,50 +605,47 @@ reset:
 		}
 		connClient = tlsConn
 	}
-	currentHost := host
-
 	// Read response bytes from the client-side target connection.
-	isReset.Store(false)
-	wg.Add(1)
-	responseStarted = true
+	done := make(chan struct{})
+	responseDone = done
+	responseStreaming := make(chan struct{})
 	responseWaitOnExit = r.Close || strings.EqualFold(strings.TrimSpace(r.Header.Get("Connection")), "close")
 	clientResponseTimeout := newTimeoutConn(c, policy)
-	go func(targetConn io.ReadWriteCloser, requestHost *file.Host, streaming, done chan struct{}) {
-		defer targetConn.Close()
-		defer func() {
-			if !isReset.Load() {
-				c.Close()
+	responses := new(rawHTTPResponses)
+	responses.responseInspector = newResponseInspector(
+		newResponseHeaderTransform(&rawHTTPReadError{Reader: connClient}, host),
+		traffic.Resource{Kind: "host", ID: host.Id},
+		requestQueue,
+		responseStreaming,
+		func(response *http.Response) {
+			if response == nil {
+				return
 			}
-			wg.Done()
+			// Do not append another response after a connection close or
+			// protocol upgrade that is visible to the visitor.
+			if response.StatusCode == http.StatusSwitchingProtocols || (response.Close && response.StatusCode >= 200) {
+				responses.terminal.Store(true)
+			}
+			contentType := strings.ToLower(strings.TrimSpace(response.Header.Get("Content-Type")))
+			if response.StatusCode == http.StatusSwitchingProtocols ||
+				strings.HasPrefix(contentType, "text/event-stream") ||
+				strings.HasPrefix(contentType, "application/grpc") ||
+				strings.HasPrefix(contentType, "multipart/x-mixed-replace") {
+				backendTimeout.ExemptReadTimeout()
+				clientResponseTimeout.SetWritePolicy(policy.clientResponseStall, 0)
+				return
+			}
+			backendTimeout.SetReadPolicy(policy.backendReadStall, policy.backendResponseBodyTotal)
+			clientResponseTimeout.SetWritePolicy(policy.clientResponseStall, policy.clientResponseTotal)
+		},
+	)
+	go func(targetConn io.ReadWriteCloser, requestHost *file.Host, upstreamFlow, ownerFlow *file.Flow) {
+		defer func() {
+			_ = targetConn.Close()
 			close(done)
 		}()
-
-		probe := newResponseInspector(
-			newResponseHeaderTransform(targetConn, requestHost),
-			traffic.Resource{Kind: "host", ID: currentHost.Id},
-			requestQueue,
-			streaming,
-			func(response *http.Response) {
-				if response == nil {
-					return
-				}
-				contentType := strings.ToLower(strings.TrimSpace(response.Header.Get("Content-Type")))
-				if response.StatusCode == http.StatusSwitchingProtocols ||
-					strings.HasPrefix(contentType, "text/event-stream") ||
-					strings.HasPrefix(contentType, "application/grpc") ||
-					strings.HasPrefix(contentType, "multipart/x-mixed-replace") {
-					backendTimeout.ExemptReadTimeout()
-					clientResponseTimeout.SetWritePolicy(policy.clientResponseStall, 0)
-					return
-				}
-				backendTimeout.SetReadPolicy(policy.backendReadStall, policy.backendResponseBodyTotal)
-				clientResponseTimeout.SetWritePolicy(policy.clientResponseStall, policy.clientResponseTotal)
-			},
-		)
-		if _, err1 := goroutine.CopyBufferWithFlowsDirection(clientResponseTimeout, probe, hostFlow, []*file.Flow{clientFlow}, nil, requestHost, "", goroutine.FlowOutbound); err1 != nil {
-			return
-		}
-	}(connClient, currentHost, responseStreaming, responseDone)
+		_, _ = goroutine.CopyBufferWithFlowsDirection(clientResponseTimeout, responses, upstreamFlow, []*file.Flow{ownerFlow}, nil, requestHost, "", goroutine.FlowOutbound)
+	}(connClient, host, hostFlow, clientFlow)
 
 	for {
 		var (
@@ -620,7 +705,8 @@ reset:
 			requestEvent.BodySkipped = !requestBody.Active() && r.ContentLength != 0
 		}
 		traffic.Publish(requestEvent)
-		requestQueue.add(requestEvent)
+		responses.addRequest(requestEvent)
+		responseWaitOnExit = r.Close || strings.EqualFold(strings.TrimSpace(r.Header.Get("Connection")), "close")
 
 		//write
 		lenConn = conn.NewLenConn(connClient)
@@ -669,11 +755,51 @@ reset:
 		})
 
 	readReq:
-		//read req from connection
+		// Read requests separately so an upstream EOF can wake this loop while
+		// still allowing an already-arriving request to complete route selection.
 		if err := c.SetReadDeadline(time.Now().Add(hostRequestReadTimeout)); err != nil {
 			return
 		}
-		r, err = http.ReadRequest(br)
+		type requestReadResult struct {
+			request *http.Request
+			err     error
+		}
+		requestRead := make(chan requestReadResult, 1)
+		go func() {
+			request, readErr := http.ReadRequest(br)
+			requestRead <- requestReadResult{request: request, err: readErr}
+		}()
+		streaming := responseStreaming
+		upstreamDone := responseDone
+		for {
+			select {
+			case result := <-requestRead:
+				r, err = result.request, result.err
+				goto requestReadComplete
+			case <-streaming:
+				streaming = nil
+				if err := c.SetReadDeadline(time.Time{}); err != nil {
+					return
+				}
+			case <-upstreamDone:
+				// The response copy is complete, but the visitor may already be
+				// sending a keep-alive request that should use an updated route.
+				// Give that request a short hand-off window, then close an idle
+				// connection whose backend has already gone away.
+				upstreamDone = nil
+				timer := time.NewTimer(httpUpstreamCloseGrace)
+				select {
+				case result := <-requestRead:
+					timer.Stop()
+					r, err = result.request, result.err
+					goto requestReadComplete
+				case <-timer.C:
+					responseWaitOnExit = false
+					return
+				}
+			}
+		}
+	requestReadComplete:
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				// Prefer a completed upstream response when both channels become
@@ -710,18 +836,38 @@ reset:
 			}
 		}
 		r.URL.Scheme = scheme
-		if hostTmp, err := file.GetDb().GetInfoByHost(r.Host, r); err != nil {
+		nextHost, err := file.GetDb().GetInfoByHost(r.Host, r)
+		if err != nil {
 			logs.Notice("the url %s %s %s can't be parsed!", r.URL.Scheme, r.Host, r.RequestURI)
 			break
-		} else if host != hostTmp {
-			isReset.Store(true)
-			connClient.Close()
+		}
+		nextHost.RLock()
+		routeChanged := host != nextHost || hostClient != nextHost.Client || hostTarget != nextHost.Target
+		nextHost.RUnlock()
+		if routeChanged {
+			// Host edits retain the object address. Compare its forwarding
+			// binding too, and never submit a new request to a retired route.
+			if !responses.waitForDrain(responseDone) {
+				responseWaitOnExit = false
+				return
+			}
+			_ = target.Close()
 			if !waitForResponse() {
 				return
 			}
+			connClient = nil
 			releaseClientConn()
-			host = hostTmp
+			_ = c.SetWriteDeadline(time.Time{})
 			goto reset
+		}
+		// The upstream may close after a complete response while the visitor
+		// keeps its HTTP connection open. Do not send another request to that
+		// dead upstream. A route change above is allowed to hand off first.
+		select {
+		case <-responseDone:
+			responseWaitOnExit = false
+			return
+		default:
 		}
 	}
 	waitForResponse()

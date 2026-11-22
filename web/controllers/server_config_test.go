@@ -150,6 +150,33 @@ func TestServerConfigTemplateRendersEveryConfiguredField(t *testing.T) {
 	}
 }
 
+func TestServerConfigFieldViewsExposeSourceAndReloadMode(t *testing.T) {
+	content := strings.Join([]string{
+		"web_port=8081",
+		"allow_user_login=true",
+		"audit_log_path=audit.log",
+	}, "\n")
+	sections, _, err := serverConfigSections(content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := make(map[string]serverConfigFieldView)
+	for _, section := range sections {
+		for _, field := range section.Fields {
+			fields[field.Key] = field
+		}
+	}
+	if field := fields["web_port"]; field.Source != "startup" || field.Reload != "restart" {
+		t.Fatalf("web_port source/reload = %q/%q", field.Source, field.Reload)
+	}
+	if field := fields["allow_user_login"]; field.Source != "sqlite" || field.Reload != "hot" {
+		t.Fatalf("allow_user_login source/reload = %q/%q", field.Source, field.Reload)
+	}
+	if field := fields["audit_log_path"]; field.Source != "sqlite" || field.Reload != "hot" {
+		t.Fatalf("audit_log_path source/reload = %q/%q", field.Source, field.Reload)
+	}
+}
+
 func TestSystemSettingsPagesExposeSharedContentTabs(t *testing.T) {
 	for _, path := range []string{
 		"../views/global/index.html",
@@ -703,7 +730,7 @@ func TestConfigChangedKeysClassifiesHotAndRestartOnlyUpdates(t *testing.T) {
 }
 
 func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
-	defaults := serverConfigKeyValues(npsconf.DefaultNpsConf)
+	defaults := serverConfigKeyValues(npsconf.ServerConfigDefaults)
 	form := url.Values{}
 	for key, meta := range serverConfigMetaByKey {
 		if meta.Optional {
@@ -721,7 +748,7 @@ func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
 	}
 	request := httptest.NewRequest("POST", "/global/config/save", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	updates, err := parseServerConfigUpdates(request, npsconf.DefaultNpsConf)
+	updates, err := parseServerConfigUpdates(request, npsconf.ServerConfigDefaults)
 	if err != nil {
 		t.Fatalf("parseServerConfigUpdates() error = %v", err)
 	}
@@ -739,7 +766,7 @@ func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
 	form.Set("config_http_proxy_port", "8080")
 	request = httptest.NewRequest("POST", "/global/config/save", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	updates, err = parseServerConfigUpdates(request, npsconf.DefaultNpsConf)
+	updates, err = parseServerConfigUpdates(request, npsconf.ServerConfigDefaults)
 	if err != nil {
 		t.Fatalf("parseServerConfigUpdates(disabled=0) error = %v", err)
 	}
@@ -753,7 +780,7 @@ func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
 	form.Set("config_http_proxy_port", "80")
 	request = httptest.NewRequest("POST", "/global/config/save", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	updates, err = parseServerConfigUpdates(request, npsconf.DefaultNpsConf)
+	updates, err = parseServerConfigUpdates(request, npsconf.ServerConfigDefaults)
 	if err != nil {
 		t.Fatalf("parseServerConfigUpdates(enabled) error = %v", err)
 	}
@@ -766,7 +793,7 @@ func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
 	form.Set("config_bridge_tcp_show", "false")
 	request = httptest.NewRequest("POST", "/global/config/save", strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	updates, err = parseServerConfigUpdates(request, npsconf.DefaultNpsConf)
+	updates, err = parseServerConfigUpdates(request, npsconf.ServerConfigDefaults)
 	if err != nil {
 		t.Fatalf("parseServerConfigUpdates(display=false) error = %v", err)
 	}
@@ -786,7 +813,7 @@ func TestParseServerConfigUpdatesCanOmitOptionalSetting(t *testing.T) {
 }
 
 func TestParseGeneralServerConfigUpdatesIgnoresDedicatedPageSettingsAndRelationships(t *testing.T) {
-	defaults := serverConfigKeyValues(npsconf.DefaultNpsConf)
+	defaults := serverConfigKeyValues(npsconf.ServerConfigDefaults)
 	form := url.Values{}
 	excluded := generalServerConfigExcludedKeys()
 	for _, key := range generalServerConfigKeys() {

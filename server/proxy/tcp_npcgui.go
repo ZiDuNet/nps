@@ -28,6 +28,10 @@ func (s *TunnelModeServer) Start() error {
 	return errors.New("tunnel mode server is not available in GUI build")
 }
 
+func (s *TunnelModeServer) StartListening() error {
+	return s.Start()
+}
+
 func (s *TunnelModeServer) Close() error {
 	return nil
 }

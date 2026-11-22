@@ -1,6 +1,7 @@
 package install
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,6 +91,15 @@ func TestReplaceBinFromPackageUsesExplicitTarget(t *testing.T) {
 	}
 	if string(content) != "new-binary" {
 		t.Fatalf("target content = %q, want new-binary", content)
+	}
+}
+
+func TestRegisteredNpsUpdateTargetRejectsMissingPath(t *testing.T) {
+	if common.IsWindows() {
+		t.Skip("registered service lookup differs on Windows")
+	}
+	if _, err := RegisteredNpsUpdateTarget("NpsDefinitelyMissingV152"); err == nil {
+		t.Fatal("missing NPS service path was accepted")
 	}
 }
 
@@ -244,5 +254,144 @@ func TestReplaceExecutableDoesNotCreateUnixBackup(t *testing.T) {
 	}
 	if content, err := os.ReadFile(src); err != nil || string(content) != "new-binary" {
 		t.Fatalf("source executable was removed or changed: content=%q err=%v", content, err)
+	}
+}
+
+func TestStagedNpsUpdateInstallAndRollback(t *testing.T) {
+	root := t.TempDir()
+	packageDir := filepath.Join(root, "package")
+	target := filepath.Join(root, "nps")
+	sourceName := "nps"
+	if common.IsWindows() {
+		sourceName += ".exe"
+		target += ".exe"
+	}
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, sourceName), []byte("new-binary"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("old-binary"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	staged := &StagedNpsUpdate{
+		TargetPath:     target,
+		PackagePath:    packageDir,
+		PreviousBinary: target + ".pre-update",
+		PreviousMode:   0o700,
+		Downloaded:     true,
+	}
+	if err := staged.Install(); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if content, err := os.ReadFile(target); err != nil || string(content) != "new-binary" {
+		t.Fatalf("installed target = %q, %v", content, err)
+	}
+	if content, err := os.ReadFile(staged.PreviousBinary); err != nil || string(content) != "old-binary" {
+		t.Fatalf("retained rollback binary = %q, %v", content, err)
+	}
+	if err := staged.Rollback(); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if content, err := os.ReadFile(target); err != nil || string(content) != "old-binary" {
+		t.Fatalf("rolled back target = %q, %v", content, err)
+	}
+}
+
+func TestStagedNpsUpdateRestoresOldBinaryWhenDirectorySyncFails(t *testing.T) {
+	root, staged := stagedUpdateFixture(t)
+	syncErr := errors.New("injected directory fsync failure")
+	calls := 0
+	staged.syncDir = func(string) error {
+		calls++
+		if calls == 1 {
+			return syncErr
+		}
+		return nil
+	}
+	err := staged.Install()
+	if !errors.Is(err, syncErr) {
+		t.Fatalf("Install error = %v, want %v", err, syncErr)
+	}
+	if content, readErr := os.ReadFile(staged.TargetPath); readErr != nil || string(content) != "old-binary" {
+		t.Fatalf("target after failed directory sync = %q, %v", content, readErr)
+	}
+	if _, statErr := os.Stat(staged.PreviousBinary); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("verified rollback backup should be removed: %v", statErr)
+	}
+	if calls != 2 {
+		t.Fatalf("directory sync calls = %d, want 2", calls)
+	}
+	_ = root
+}
+
+func TestStagedNpsUpdateRetainsBackupWhenRestoreSyncFails(t *testing.T) {
+	_, staged := stagedUpdateFixture(t)
+	calls := 0
+	staged.syncDir = func(string) error {
+		calls++
+		return errors.New("injected directory fsync failure")
+	}
+	if err := staged.Install(); err == nil {
+		t.Fatal("Install succeeded despite directory sync failures")
+	}
+	if content, readErr := os.ReadFile(staged.TargetPath); readErr != nil || string(content) != "old-binary" {
+		t.Fatalf("target after restore = %q, %v", content, readErr)
+	}
+	if content, readErr := os.ReadFile(staged.PreviousBinary); readErr != nil || string(content) != "old-binary" {
+		t.Fatalf("rollback backup must be retained: %q, %v", content, readErr)
+	}
+	if calls != 2 {
+		t.Fatalf("directory sync calls = %d, want 2", calls)
+	}
+}
+
+func TestStagedNpsUpdateRetainsBackupWhenRestoreFails(t *testing.T) {
+	if common.IsWindows() {
+		t.Skip("replacing a file with a missing source fails on all platforms; Unix construction is sufficient")
+	}
+	_, staged := stagedUpdateFixture(t)
+	removeSucceeded := false
+	staged.syncDir = func(string) error {
+		if !removeSucceeded {
+			removeSucceeded = true
+			if err := os.Remove(staged.PreviousBinary); err != nil {
+				t.Fatalf("remove rollback fixture: %v", err)
+			}
+		}
+		return errors.New("injected directory fsync failure")
+	}
+	err := staged.Install()
+	if err == nil || !strings.Contains(err.Error(), "恢复旧程序失败") {
+		t.Fatalf("Install error = %v, want restore failure", err)
+	}
+}
+
+func stagedUpdateFixture(t *testing.T) (string, *StagedNpsUpdate) {
+	t.Helper()
+	root := t.TempDir()
+	packageDir := filepath.Join(root, "package")
+	target := filepath.Join(root, "nps")
+	sourceName := "nps"
+	if common.IsWindows() {
+		sourceName += ".exe"
+		target += ".exe"
+	}
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, sourceName), []byte("new-binary"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("old-binary"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return root, &StagedNpsUpdate{
+		TargetPath:     target,
+		PackagePath:    packageDir,
+		PreviousBinary: target + ".pre-update",
+		PreviousMode:   0o700,
+		Downloaded:     true,
 	}
 }

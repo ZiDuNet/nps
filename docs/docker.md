@@ -37,7 +37,7 @@ docker compose up -d
 docker logs nps --tail=50
 ```
 
-首次启动会在日志中输出管理员账号 `admin` 和随机管理员密码。容器内面板通过 `NPS_WEB_IP` 绑定，宿主机仅回环发布；请在宿主机本地访问或通过 HTTPS 反向代理转发：
+全新安装会创建 `/conf/nps.conf` 和 `/conf/nps.db`，不需要执行旧数据迁移，也不会生成迁移备份。首次启动会在日志中输出管理员账号 `admin` 和随机管理员密码。容器内面板通过 `NPS_WEB_IP` 绑定，宿主机仅回环发布；请在宿主机本地访问或通过 HTTPS 反向代理转发：
 
 ```text
 http://127.0.0.1:8081
@@ -90,35 +90,27 @@ ports:
 - `nps.db`
 - `nps.db-wal` / `nps.db-shm`（运行中）
 - `nps.db.lock`
-- `migration-report.json`
+- `backups/pre-sqlite-*.tar.gz` 和 `migration-report.json`（仅支持自动迁移的新版首次导入旧 JSON 时生成）
 - TLS 证书等配置文件
 
-升级前建议备份挂载目录：
-
-```bash
-cp -a /opt/nps/conf /opt/nps/conf.bak.$(date +%Y%m%d%H%M%S)
-```
-
-运行中的 SQLite 不能只复制 `nps.db`。应停止容器后备份整个目录，或先停止服务再使用 `nps -export-json=<独立目录>`。迁移、WAL 和回滚细节见 [SQLite 数据存储与升级](server/sqlite-storage.md)。
+升级前先停止容器，再备份整个挂载目录，示例见下节。不要只复制运行中的 `nps.db`，因为 WAL 可能仍含未合并的数据。停服执行 `nps -export-json=<独立目录>` 可另存 JSON 回滚数据，但它不替代包含证书、密钥等文件的完整备份。详见 [SQLite 数据存储与升级](server/sqlite-storage.md)。
 
 ## 更新镜像
 
-从 1.1.48 及更早的 JSON 数据版本升级到 1.1.49 时，必须先用同一版本的容器镜像执行一次 JSON 网关，否则服务会拒绝启动：
+`v1.1.52` 及后续版本包含 JSON → SQLite 自动迁移。停掉旧容器后正常启动即可导入旧 JSON。若固定使用已发布的 `1.1.49`、`1.1.50` 或 `1.1.51` 镜像，首次从旧 JSON 建库应按[对应版本的升级说明](upgrade-sqlite.md#版本选择)先执行 JSON 网关，而不是直接套用下列流程；已经迁移到 SQLite 的卷可直接升级。
 
 ```bash
 cd /opt/nps
-cp -a conf "conf.before-1.1.49.$(date +%Y%m%d%H%M%S)"
 docker compose pull
 docker compose stop nps
-docker run --rm \
-  -v /opt/nps/conf:/conf \
-  wushuo98/nps:1.1.49 /nps -json-gateway
+cp -a conf "conf.before-upgrade.$(date +%Y%m%d%H%M%S)"
 docker compose up -d
+docker compose logs --tail=100 nps
 ```
 
-不要在容器命令中添加 `-conf_path=/conf`：容器中的运行根目录已经是 `/`，程序会在根目录下读取 `/conf`。首次启动导入成功后检查 `/opt/nps/conf/migration-report.json` 的 `status` 为 `success`。数据库已经是 1.1.49 或更高版本时，日常更新不需要重复执行网关。
+自动迁移会先在 `/conf/backups/` 生成并验证 `pre-sqlite-*.tar.gz`。用上面的绑定挂载时，归档在宿主机 `/opt/nps/conf/backups/`，不会随容器重建而消失。归档含密码、密钥和原始配置，请限制访问。导入后检查 `/opt/nps/conf/migration-report.json` 的 `status` 为 `success`，并核对实体数量。全新安装、已有数据库的正常更新不需要这项迁移检查。
 
-程序自动生成的 `conf.backup.*` 位于容器根目录，不在宿主机的 `/conf` 挂载中；升级前务必按上面的命令在宿主机保留 `conf.before-1.1.49.*` 备份。
+不要给容器附加 `-conf_path=/conf`：镜像内的运行根目录是 `/`，默认已读取 `/conf`。升级失败时保留现有文件和归档，先检查[迁移说明](server/sqlite-storage.md#启动迁移)，不要删除数据库再强行导入。
 
 ## 镜像平台
 

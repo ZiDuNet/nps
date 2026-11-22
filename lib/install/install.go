@@ -2,13 +2,10 @@ package install
 
 import (
 	"crypto/sha256"
-	"ehang.io/nps/lib/common"
-	"ehang.io/nps/lib/version"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/c4milo/unpackit"
 	"io"
 	"log"
 	"net/http"
@@ -18,6 +15,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ehang.io/nps/lib/common"
+	"ehang.io/nps/lib/durablefile"
+	"ehang.io/nps/lib/version"
+	"github.com/c4milo/unpackit"
 )
 
 // Keep it in sync with the template from service_sysv_linux.go file
@@ -626,6 +628,173 @@ func copyStaticFileReplaceNps(srcPath, descPath string) error {
 	return replaceBinFromPackage(srcPath, descPath, "nps", "")
 }
 
+// UpdateNpsResultAt replaces an explicitly selected server executable. Menu
+// and CLI updates use the path registered by the real service so updating
+// from a portable copy cannot leave the service running an older binary.
+func UpdateNpsResultAt(targetPath string) (bool, error) {
+	targetPath = strings.TrimSpace(targetPath)
+	if targetPath == "" {
+		return false, errors.New("NPS 更新目标不能为空")
+	}
+	if !filepath.IsAbs(targetPath) {
+		return false, errors.New("NPS 更新目标必须是绝对路径")
+	}
+	return updateNpsAt(targetPath)
+}
+
+// StagedNpsUpdate downloads and verifies a newer server artifact without
+// replacing the executable that is currently registered with the service.
+// The caller can stop the service, call InstallStagedNpsUpdate, restart it and
+// restore the retained old binary if the new process fails its health check.
+type StagedNpsUpdate struct {
+	TargetPath     string
+	PackagePath    string
+	PreviousBinary string
+	PreviousMode   os.FileMode
+	Downloaded     bool
+	// syncDir is injectable so update tests can prove the directory-durability
+	// failure path restores the old binary before the service is restarted.
+	syncDir func(string) error
+}
+
+func StageNpsUpdate(targetPath string) (*StagedNpsUpdate, error) {
+	targetPath = stableExecutablePath(strings.TrimSpace(targetPath))
+	if targetPath == "" {
+		return nil, errors.New("NPS 更新目标不能为空")
+	}
+	if !filepath.IsAbs(targetPath) {
+		return nil, errors.New("NPS 更新目标必须是绝对路径")
+	}
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("检查当前 NPS 服务程序: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("NPS 服务程序不是普通文件")
+	}
+	release, err := fetchLatestRelease()
+	if err != nil {
+		return nil, fmt.Errorf("获取最新版本失败: %w", err)
+	}
+	available, err := updateAvailable(release.TagName)
+	if err != nil {
+		return nil, fmt.Errorf("检查版本失败: %w", err)
+	}
+	if !available {
+		return &StagedNpsUpdate{TargetPath: targetPath, PreviousMode: info.Mode().Perm()}, nil
+	}
+	tempDir := filepath.Join(common.GetAppPath(), "temp")
+	packagePath, err := downloadAndUnpackRelease(release, "server", tempDir)
+	if err != nil {
+		return nil, fmt.Errorf("下载更新失败: %w", err)
+	}
+	return &StagedNpsUpdate{
+		TargetPath:     targetPath,
+		PackagePath:    packagePath,
+		PreviousBinary: targetPath + ".pre-update",
+		PreviousMode:   info.Mode().Perm(),
+		Downloaded:     true,
+	}, nil
+}
+
+func (staged *StagedNpsUpdate) Install() error {
+	if staged == nil || !staged.Downloaded {
+		return nil
+	}
+	source, err := packageBinaryPath(staged.PackagePath, "nps", common.IsWindows())
+	if err != nil {
+		return err
+	}
+	if sourceInfo, err := os.Stat(source); err != nil {
+		return err
+	} else if targetInfo, statErr := os.Stat(staged.TargetPath); statErr == nil && os.SameFile(sourceInfo, targetInfo) {
+		return errors.New("更新包中的程序与当前目标相同，拒绝执行无法回滚的替换")
+	}
+	if err := copyFileAtomicConfigured(staged.TargetPath, staged.PreviousBinary, func(file *os.File) error {
+		return file.Chmod(staged.PreviousMode)
+	}); err != nil {
+		return fmt.Errorf("保留当前 NPS 程序用于回滚: %w", err)
+	}
+	if err := replaceExecutable(source, staged.TargetPath); err != nil {
+		_ = os.Remove(staged.PreviousBinary)
+		return fmt.Errorf("替换服务端文件失败: %w", err)
+	}
+	if err := staged.syncDirectory(); err != nil {
+		restoreErr := replaceExecutable(staged.PreviousBinary, staged.TargetPath)
+		if restoreErr == nil {
+			if syncErr := staged.syncDirectory(); syncErr != nil {
+				return fmt.Errorf("同步服务端目录失败，已尝试恢复旧程序但无法确认其落盘，回滚备份保留在 %s: %v: %w", staged.PreviousBinary, syncErr, err)
+			}
+			if removeErr := os.Remove(staged.PreviousBinary); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				return fmt.Errorf("同步服务端目录失败，已恢复旧程序，但无法删除回滚备份 %s: %v: %w", staged.PreviousBinary, removeErr, err)
+			}
+			return fmt.Errorf("同步服务端目录失败，已恢复旧程序: %w", err)
+		}
+		return fmt.Errorf("同步服务端目录失败，且恢复旧程序失败；回滚备份保留在 %s: %v: %w", staged.PreviousBinary, restoreErr, err)
+	}
+	return nil
+}
+
+func (staged *StagedNpsUpdate) syncDirectory() error {
+	sync := staged.syncDir
+	if sync == nil {
+		sync = durablefile.SyncDir
+	}
+	return sync(filepath.Dir(staged.TargetPath))
+}
+
+func (staged *StagedNpsUpdate) Rollback() error {
+	if staged == nil || !staged.Downloaded {
+		return nil
+	}
+	if _, err := os.Stat(staged.PreviousBinary); err != nil {
+		return fmt.Errorf("回滚程序不存在: %w", err)
+	}
+	if err := replaceExecutable(staged.PreviousBinary, staged.TargetPath); err != nil {
+		return fmt.Errorf("恢复旧版 NPS 程序失败: %w", err)
+	}
+	return durablefile.SyncDir(filepath.Dir(staged.TargetPath))
+}
+
+func (staged *StagedNpsUpdate) Commit() {
+	if staged == nil {
+		return
+	}
+	staged.DiscardDownload()
+	if staged.PreviousBinary != "" {
+		_ = os.Remove(staged.PreviousBinary)
+	}
+}
+
+// DiscardDownload removes only the downloaded package. A failed install uses
+// this instead of Commit so an uncertain rollback keeps .pre-update for manual
+// recovery.
+func (staged *StagedNpsUpdate) DiscardDownload() {
+	if staged != nil && staged.PackagePath != "" {
+		_ = os.RemoveAll(staged.PackagePath)
+	}
+}
+
+// RegisteredNpsUpdateTarget returns the executable registered by the NPS
+// service. The caller should use this before downloading or stopping anything
+// so a failed service inspection leaves the current process untouched.
+func RegisteredNpsUpdateTarget(serviceName string) (string, error) {
+	target, err := RegisteredServiceExecutable(serviceName)
+	if err != nil {
+		return "", fmt.Errorf("读取 NPS 服务程序路径失败：%w", err)
+	}
+	target = stableExecutablePath(strings.TrimSpace(target))
+	if !filepath.IsAbs(target) {
+		return "", errors.New("NPS 服务程序路径不是绝对路径")
+	}
+	if info, err := os.Stat(target); err != nil {
+		return "", fmt.Errorf("NPS 服务程序不存在：%w", err)
+	} else if !info.Mode().IsRegular() {
+		return "", errors.New("NPS 服务程序不是普通文件")
+	}
+	return target, nil
+}
+
 func copyStaticFileReplaceNpc(srcPath, descPath string) error {
 	return copyStaticFileReplaceNpcAt(srcPath, descPath, "")
 }
@@ -677,6 +846,24 @@ func replaceBinFromPackage(srcPath, descPath, bin, targetPath string) error {
 	// Clean temp package; keep parent temp dir if still in use
 	_ = os.RemoveAll(srcPath)
 	return nil
+}
+
+func updateNpsAt(targetPath string) (bool, error) {
+	staged, err := StageNpsUpdate(targetPath)
+	if err != nil {
+		return false, err
+	}
+	if !staged.Downloaded {
+		fmt.Println("当前已是最新版本，无需更新")
+		return false, nil
+	}
+	defer staged.Commit()
+	if err := staged.Install(); err != nil {
+		log.Println("替换服务端文件失败：", err)
+		return false, err
+	}
+	fmt.Println("更新成功，已替换服务程序：", targetPath)
+	return true, nil
 }
 
 func copyStaticFileReplaceNpcTargets(srcPath string, targetPaths []string) ([]string, error) {
@@ -964,12 +1151,8 @@ func InstallNpc() {
 func InstallNps() string {
 	path := common.GetInstallPath()
 	log.Println("install path:" + path)
-	if !common.FileExists(path) {
-		MkidrDirAll(path, "conf")
-		// not copy config if the config file is exist
-		if err := CopyDir(filepath.Join(common.GetAppPath(), "conf"), filepath.Join(path, "conf")); err != nil {
-			log.Fatalln(err)
-		}
+	if err := prepareNpsInstallConfig(common.GetAppPath(), path); err != nil {
+		log.Fatalln(err)
 	}
 	chMod(filepath.Join(path, "conf"), 0700)
 	binPath, err := copyStaticFile(common.GetAppPath(), "nps")
@@ -978,7 +1161,7 @@ func InstallNps() string {
 	}
 	log.Println("install ok!")
 	log.Println("Web UI is embedded in the nps binary; no web/ directory is required")
-	log.Println("The new configuration file is located in", path, "you can edit them")
+	log.Println("The service uses", filepath.Join(path, "conf", "nps.conf"), "(created on first startup if missing)")
 	if !common.IsWindows() {
 		log.Println(`You can start with:
 nps start|stop|restart|uninstall|update
@@ -990,6 +1173,27 @@ now!`)
 	}
 	chMod(common.GetLogPath(), 0640)
 	return binPath
+}
+
+func prepareNpsInstallConfig(source, destination string) error {
+	// Binary-only releases have no conf to copy. The installed service
+	// initializes its own directory when it actually starts.
+	if _, err := os.Stat(destination); !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	sourceConf := filepath.Join(source, "conf")
+	_, err := os.Stat(sourceConf)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	destinationConf := filepath.Join(destination, "conf")
+	if mkdirErr := os.MkdirAll(destinationConf, 0o700); mkdirErr != nil {
+		return mkdirErr
+	}
+	if err == nil {
+		return CopyDir(sourceConf, destinationConf)
+	}
+	return nil
 }
 
 func InstallNpsToCurrentDir() string {

@@ -43,7 +43,8 @@ SQLite 是业务数据的权威存储，默认位于 `conf/nps.db`；`nps.conf` 
 | `nps.db` | 客户端、用户、隧道、Host、全局参数和运行期业务配置 |
 | `nps.db-wal` / `nps.db-shm` | SQLite WAL 及其共享内存索引 |
 | `nps.db.lock` | 单进程数据库实例锁 |
-| `migration-report.json` | 最近一次 JSON/SQLite 导入或导出报告 |
+| `backups/pre-sqlite-*.tar.gz` | 本次从旧 JSON 启动迁移时，验证过的原始 `conf` 备份 |
+| `migration-report.json` | 旧 JSON 导入和收尾报告；全新安装不生成 |
 
 Web 面板修改按实体差异提交；用户或客户端级联删除、全局平台域名与关联 Host 证书更新使用单事务。升级前必须停止服务并备份整个 `conf/`，因为仅复制运行中的 `nps.db` 可能遗漏 WAL。完整迁移、导出、权限和回滚步骤见 [SQLite 数据存储与升级](server/sqlite-storage.md)。
 

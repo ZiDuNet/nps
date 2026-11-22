@@ -27,8 +27,8 @@ import (
 
 // serverConfigMeta describes the small amount of presentation and validation
 // information that cannot be inferred safely from an INI value alone. The
-// actual list of fields comes from the shipped nps.conf template, so newly
-// added template keys automatically appear in the panel as well.
+// field catalog also includes the embedded advanced options, which need not
+// appear in the deployed nps.conf.
 type serverConfigMeta struct {
 	Label       string
 	Category    string
@@ -193,6 +193,8 @@ type serverConfigFieldView struct {
 	Label        string
 	Category     string
 	Description  string
+	Source       string
+	Reload       string
 	Type         string
 	Value        string
 	DisplayValue string
@@ -813,7 +815,7 @@ func serverConfigCatalogKeys() []string {
 		seen[key] = struct{}{}
 		keys = append(keys, key)
 	}
-	for key := range serverConfigKeyValues(npsconf.DefaultNpsConf) {
+	for key := range serverConfigKeyValues(npsconf.ServerConfigDefaults) {
 		if _, ok := seen[key]; !ok {
 			seen[key] = struct{}{}
 			keys = append(keys, key)
@@ -830,7 +832,7 @@ func serverConfigCatalogKeys() []string {
 
 func serverConfigSections(content string) ([]serverConfigSectionView, []serverConfigUnknownView, error) {
 	values := effectiveServerConfigSnapshot(content)
-	templateValues := serverConfigKeyValues(npsconf.DefaultNpsConf)
+	templateValues := serverConfigKeyValues(npsconf.ServerConfigDefaults)
 	keys := serverConfigCatalogKeys()
 	seen := make(map[string]struct{}, len(keys))
 	sections := make(map[string][]serverConfigFieldView)
@@ -851,6 +853,13 @@ func serverConfigSections(content string) ([]serverConfigSectionView, []serverCo
 			Key: key, Label: meta.Label, Category: meta.Category, Description: meta.Description,
 			Type: meta.Type, Value: value, Options: meta.Options, Editable: meta.Editable,
 			Optional: meta.Optional, Sensitive: meta.Sensitive, Present: present,
+			Source: "startup", Reload: "restart",
+		}
+		if settings.IsManagedKey(key) {
+			field.Source = "sqlite"
+		}
+		if isHotReloadServerConfigKey(key) {
+			field.Reload = "hot"
 		}
 		field.DisplayValue = value
 		if strings.TrimSpace(field.DisplayValue) == "" {
@@ -1186,7 +1195,7 @@ func parseServerConfigUpdatesWithValues(request *http.Request, current map[strin
 	if err != nil {
 		return nil, err
 	}
-	defaults := serverConfigKeyValues(npsconf.DefaultNpsConf)
+	defaults := serverConfigKeyValues(npsconf.ServerConfigDefaults)
 	updates := make([]serverConfigUpdate, 0)
 	for _, key := range keys {
 		if _, dirty := dirtyKeys[key]; !dirty {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"net/netip"
 	"sort"
 	"strconv"
@@ -203,7 +204,7 @@ func InitFromCsv() {
 		task.RUnlock()
 		if status {
 			if err := AddTask(task); err != nil {
-				logs.Warn("restore task failed: %v", err)
+				logs.Warn("restore task %d failed: %v", task.Id, err)
 			}
 		}
 	})
@@ -393,7 +394,10 @@ func NewMode(Bridge *bridge.Bridge, c *file.Tunnel) proxy.Service {
 		return nil
 	}
 	var service proxy.Service
-	switch c.Mode {
+	c.RLock()
+	mode := c.Mode
+	c.RUnlock()
+	switch mode {
 	case "tcp", "file":
 		service = proxy.NewTunnelModeServer(proxy.ProcessTunnel, Bridge, c)
 	case "mixProxy":
@@ -518,56 +522,104 @@ func addTask(t *file.Tunnel) error {
 	if _, running := RunList.Load(t.Id); running {
 		return errors.New("task is already running")
 	}
-	if t.Mode == "secret" || t.Mode == "p2p" {
-		logs.Info("secret task %s start ", t.Remark)
-		//RunList[t.Id] = nil
-		RunList.Store(t.Id, nil)
+	t.RLock()
+	taskID, port, mode, remark, client := t.Id, t.Port, t.Mode, t.Remark, t.Client
+	t.RUnlock()
+	if mode == "secret" || mode == "p2p" {
+		logs.Info("secret task %s start ", remark)
+		RunList.Store(taskID, nil)
 		return nil
 	}
-	if b := tool.TestServerPort(t.Port, t.Mode); !b && t.Mode != "httpHostServer" {
-		logs.Error("taskId %d start error port %d open failed", t.Id, t.Port)
-		return errors.New("the port open error")
+	if !tool.ServerPortAllowed(port, mode) {
+		return errors.New("The port cannot be opened because it may has been occupied or is no longer allowed.")
 	}
-	if svr := NewMode(Bridge, t); svr != nil {
-		logs.Info("tunnel task %s start mode：%s port %d", t.Remark, t.Mode, t.Port)
-		//RunList[t.Id] = svr
-		RunList.Store(t.Id, svr)
-		t.RLock()
-		clientID := 0
-		if t.Client != nil {
-			clientID = t.Client.Id
-		}
-		taskID := t.Id
-		t.RUnlock()
-		refreshClientHealthConfig(clientID)
-		go func() {
-			if err := svr.Start(); err != nil {
-				logs.Error("clientId %d taskId %d start error %s", clientID, taskID, err)
-				taskLifecycleMu.Lock()
-				defer taskLifecycleMu.Unlock()
-				// A delete or replacement can happen while Start is binding. Never
-				// restore the failed, stale task into persistent storage.
-				current, exists := file.GetDb().JsonDb.Tasks.Load(taskID)
-				if !exists || current != t {
-					RunList.CompareAndDelete(taskID, svr)
-					return
-				}
-				if RunList.CompareAndDelete(taskID, svr) {
-					t.Lock()
-					t.Status = false
-					t.RunError = err.Error()
-					t.Unlock()
-					if updateErr := file.GetDb().UpdateTask(t); updateErr != nil {
-						logs.Warn("persist failed task start state for task %d: %v", taskID, updateErr)
-					}
-				}
-				return
-			}
-		}()
-	} else {
+	listener, ok := NewMode(Bridge, t).(proxy.ListeningService)
+	if !ok {
 		return errors.New("the mode is not correct")
 	}
+	if err := listener.StartListening(); err != nil {
+		return fmt.Errorf("启动隧道监听失败: %w", err)
+	}
+	t.Lock()
+	t.RunError = ""
+	t.Unlock()
+	RunList.Store(taskID, listener)
+	logs.Info("tunnel task %s start mode：%s port %d", remark, mode, port)
+	clientID, _ := clientSnapshot(client)
+	refreshClientHealthConfig(clientID)
 	return nil
+}
+
+// EditTask keeps the enabled state while applying a Web/API configuration edit.
+// saved distinguishes a rejected edit from a committed edit whose listener
+// could not be reloaded. Do not kick existing TCP sessions when changing owner.
+func EditTask(current, replacement *file.Tunnel, previousClient *file.Client, bypassUserQuota bool) (saved bool, err error) {
+	if current == nil || replacement == nil || current == replacement || current.Id != replacement.Id {
+		return false, errors.New("无效的隧道编辑")
+	}
+	taskLifecycleMu.Lock()
+	defer taskLifecycleMu.Unlock()
+	db := file.GetDb()
+	stored, err := db.GetTask(current.Id)
+	if err != nil || stored != current {
+		return false, errors.New("隧道已被删除或替换，请刷新后重试")
+	}
+	current.RLock()
+	oldClient, enabled, runError := current.Client, current.Status, current.RunError
+	sameListener := current.Mode == replacement.Mode && current.Port == replacement.Port && current.ServerIp == replacement.ServerIp
+	current.RUnlock()
+	if oldClient != previousClient {
+		return false, errors.New("隧道所属客户端已变更，请刷新后重试")
+	}
+	if !sameListener && !tool.ServerPortAllowed(replacement.Port, replacement.Mode) {
+		return false, errors.New("The port cannot be opened because it may has been occupied or is no longer allowed.")
+	}
+	replacement.Status, replacement.RunError = enabled, runError
+	if err := db.UpdateTaskWithOwnerChange(replacement, previousClient, bypassUserQuota); err != nil {
+		return false, err
+	}
+	if value, running := RunList.Load(current.Id); running {
+		// These handlers read the live task for each new connection; neither
+		// its listener nor any already-forwarding TCP stream needs to restart.
+		if enabled && sameListener && taskUsesLiveRoute(replacement.Mode) {
+			return true, nil
+		}
+		if listener, ok := value.(proxy.Service); ok {
+			if err := listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+				return true, recordTaskStartFailure(current, fmt.Errorf("关闭原隧道监听失败: %w", err))
+			}
+		}
+		RunList.Delete(current.Id)
+	}
+	if enabled {
+		if err := addTask(current); err != nil {
+			return true, recordTaskStartFailure(current, err)
+		}
+	}
+	return true, nil
+}
+
+func taskUsesLiveRoute(mode string) bool {
+	switch mode {
+	case "tcp", "file", "tcpTrans", "httpProxy", "mixProxy", "secret", "p2p":
+		return true
+	default:
+		// UDP and the legacy SOCKS listener have listener-scoped sessions.
+		return false
+	}
+}
+
+func recordTaskStartFailure(t *file.Tunnel, err error) error {
+	t.Lock()
+	t.Status = false
+	t.RunError = err.Error()
+	t.Unlock()
+	logs.Error("task id %d start error: %v", t.Id, err)
+	if updateErr := file.GetDb().UpdateTask(t); updateErr != nil {
+		logs.Warn("persist failed task start state for task %d: %v", t.Id, updateErr)
+		return errors.Join(err, fmt.Errorf("无法保存监听失败状态: %w", updateErr))
+	}
+	return err
 }
 
 // start task
@@ -583,23 +635,21 @@ func StartTask(id int) error {
 		if _, running := RunList.Load(id); running {
 			return errors.New("task is already running")
 		}
-		// Publish the desired state before launching the asynchronous listener.
-		// Start may fail immediately (for example, a bind error); setting this
-		// first prevents that goroutine from racing a later status update.
+		// Preserve the desired state before binding. If binding fails, mark
+		// the task stopped and return the actual listener error to the caller.
 		t.Lock()
+		previousStatus, previousError := t.Status, t.RunError
 		t.Status = true
 		t.RunError = ""
 		t.Unlock()
 		if err := file.GetDb().UpdateTask(t); err != nil {
+			t.Lock()
+			t.Status, t.RunError = previousStatus, previousError
+			t.Unlock()
 			return err
 		}
 		if err := addTask(t); err != nil {
-			t.Lock()
-			t.Status = false
-			t.RunError = err.Error()
-			t.Unlock()
-			_ = file.GetDb().UpdateTask(t)
-			return err
+			return recordTaskStartFailure(t, err)
 		}
 	}
 	return nil

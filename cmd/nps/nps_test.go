@@ -1,12 +1,309 @@
 package main
 
 import (
+	"errors"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"ehang.io/nps/lib/file"
+	"ehang.io/nps/lib/install"
+	"ehang.io/nps/lib/settings"
+	"ehang.io/nps/lib/version"
+	"github.com/astaxie/beego"
+	"github.com/kardianos/service"
 )
+
+func TestFreshStartupWritesSlimConfigWithoutMigrationArtifacts(t *testing.T) {
+	previousConfig := beego.AppConfig
+	previousBeegoConfig := *beego.BConfig
+	settings.ResetForTest()
+	t.Cleanup(func() {
+		settings.ResetForTest()
+		beego.AppConfig = previousConfig
+		*beego.BConfig = previousBeegoConfig
+	})
+	runPath := t.TempDir()
+	if err := file.InitStorage(runPath, npsStartupConfig(runPath)); err != nil {
+		t.Fatal(err)
+	}
+	db := file.GetDb().JsonDb.SQLite()
+	t.Cleanup(func() { _ = db.Close(); file.SetDbForTest(nil) })
+	confDir := filepath.Join(runPath, "conf")
+	entries, err := os.ReadDir(confDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		switch entry.Name() {
+		case "nps.conf", "nps.db", "nps.db.lock", "nps.db-wal", "nps.db-shm":
+		default:
+			t.Fatalf("unexpected first-run artifact: %s", entry.Name())
+		}
+	}
+	boot, err := os.ReadFile(filepath.Join(confDir, "nps.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := configValues(string(boot))
+	for key := range values {
+		if settings.IsManagedKey(key) || settings.IsLegacyRemovedKey(key) {
+			t.Fatalf("business key %s remains in boot config", key)
+		}
+	}
+	if values["bridge_port"] != "8024" || values["web_ip"] != "127.0.0.1" || values["log_path"] != "nps.log" || values["web_open_ssl"] != "false" ||
+		values["web_password"] == "CHANGE_ME" || len(values["web_password"]) != 8 {
+		t.Fatal("first-run listener, log, TLS or credential defaults were lost")
+	}
+	business, err := db.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{
+		"allow_user_login": "true", "allow_user_register": "false", "register_max_conn": "",
+		"register_max_clients": "", "register_max_tunnels": "", "register_max_hosts": "", "register_bandwidth_limit": "",
+		"audit_log_path": "audit.log", "connection_log_path": "connection.log", "usage_history_enabled": "true",
+		"http_add_origin_header": "true", "mcp_enabled": "true",
+	} {
+		if got, ok := business[key]; !ok || got != want || beego.AppConfig.String(key) != want {
+			t.Fatalf("default business setting %s = %q, want %q", key, got, want)
+		}
+	}
+	if keys := len(values); keys > 24 {
+		t.Fatalf("startup configuration is still not compact: %d keys", keys)
+	}
+	if _, err := os.Stat(filepath.Join(confDir, "migration-report.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("first run wrote a migration report: %v", err)
+	}
+}
+
+func TestInitialNpsSettingsSeedsOnlyTheShippedStarter(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+		want    map[string]string
+	}{
+		{
+			name:    "operator edited starter",
+			content: "\ufeff" + strings.ReplaceAll(defaultNpsConf+"web_port=16080\naudit_log_path=\nallow_user_register=true\n", "\n", "\r\n"),
+			want:    map[string]string{"web_port": "16080", "audit_log_path": "", "allow_user_register": "true", "connection_log_path": "connection.log"},
+		},
+		{
+			name:    "existing custom configuration",
+			content: "web_port=16080\nallow_user_register=true\n",
+			want:    map[string]string{"web_port": "16080", "allow_user_register": "true"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ini, err := settings.ParseStartupConfig(tc.content)
+			if err != nil {
+				t.Fatal(err)
+			}
+			values, err := initialNpsSettings(ini)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for key, want := range tc.want {
+				if got, ok := values[key]; !ok || got != want {
+					t.Fatalf("initial %s = %q, want %q", key, got, want)
+				}
+			}
+			if _, fresh := tc.want["audit_log_path"]; !fresh && len(values) != len(tc.want) {
+				t.Fatal("default settings were added to a custom configuration")
+			}
+		})
+	}
+}
+
+func TestPrepareStartupConfigKeepsInactiveSectionAndIncludedBootValues(t *testing.T) {
+	t.Setenv("BEEGO_RUNMODE", "")
+	previousConfig := beego.AppConfig
+	previousBeegoConfig := *beego.BConfig
+	t.Cleanup(func() {
+		beego.AppConfig = previousConfig
+		*beego.BConfig = previousBeegoConfig
+	})
+	beego.BConfig.RunMode = beego.PROD
+	const inactive = "[staging]\nrunmode=staging\nallow_user_login=false\nweb_port=18090\n"
+	const included = "runmode=prod\nweb_port=18080\nbridge_tcp_port=18024\n"
+	original := "include \"boot.conf\"\n\n[prod]\nallow_user_login=true\n\n" + inactive
+	runPath := t.TempDir()
+	confDir := filepath.Join(runPath, "conf")
+	if err := os.Mkdir(confDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string]string{"boot.conf": included, "nps.conf": original} {
+		if err := os.WriteFile(filepath.Join(confDir, name), []byte(data), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	confPath := filepath.Join(confDir, "nps.conf")
+	ini, err := settings.ReadStartupConfig(confPath, defaultNpsConf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ini.RunMode != "prod" || ini.Values["allow_user_login"] != "true" {
+		t.Fatal("migration selected the wrong INI section")
+	}
+	if err := prepareStartupConfig(runPath, ini, map[string]string{"allow_user_login": "true"}); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := os.ReadFile(confPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(updated), "include \"boot.conf\"") || !strings.HasSuffix(string(updated), inactive) || strings.Contains(string(updated), "allow_user_login=true") {
+		t.Fatal("migration did not preserve includes and the inactive section while removing the imported setting")
+	}
+	if beego.BConfig.RunMode != "prod" || beego.AppConfig.String("web_port") != "18080" || beego.AppConfig.String("bridge_port") != "18024" {
+		t.Fatal("migration changed effective boot values defined by an include")
+	}
+}
+
+func TestNpsMenuExitsOnEndOfInput(t *testing.T) {
+	inputCmd(strings.NewReader(""))
+	inputCmd(strings.NewReader("0\n"))
+}
+
+func TestNpsPanelHealthUsesLoopbackBasePathAndVersion(t *testing.T) {
+	runPath := t.TempDir()
+	confDir := filepath.Join(runPath, "conf")
+	if err := os.MkdirAll(confDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := strings.Join([]string{
+		"web_ip=0.0.0.0",
+		"web_port=18081",
+		"web_base_url=/nps",
+		"web_open_ssl=false",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(confDir, "nps.conf"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous := npsPanelHealthRequest
+	t.Cleanup(func() { npsPanelHealthRequest = previous })
+	npsPanelHealthRequest = func(scheme, address, basePath string) (*http.Response, error) {
+		host, requestPort, splitErr := net.SplitHostPort(address)
+		if splitErr != nil {
+			t.Fatalf("address = %q: %v", address, splitErr)
+		}
+		if scheme != "http" || host != "127.0.0.1" {
+			t.Fatalf("scheme/host = %q/%q", scheme, host)
+		}
+		if basePath != "/nps" || requestPort != "18081" {
+			t.Fatalf("basePath/port = %q/%q", basePath, requestPort)
+		}
+		body := `{"version":"` + version.VERSION + `"}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
+	}
+	if err := verifyNpsPanelHealth(runPath, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNpsPanelHealthUsesServiceWebIPOverride(t *testing.T) {
+	runPath := t.TempDir()
+	confDir := filepath.Join(runPath, "conf")
+	if err := os.MkdirAll(confDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := "web_ip=127.0.0.1\nweb_port=18082\nweb_base_url=/from-config\nweb_open_ssl=true\n"
+	if err := os.WriteFile(filepath.Join(confDir, "nps.conf"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous := npsPanelHealthRequest
+	t.Cleanup(func() { npsPanelHealthRequest = previous })
+	npsPanelHealthRequest = func(scheme, address, basePath string) (*http.Response, error) {
+		host, _, splitErr := net.SplitHostPort(address)
+		if splitErr != nil {
+			t.Fatalf("address = %q: %v", address, splitErr)
+		}
+		if scheme != "https" || host != "::1" || basePath != "/from-config" {
+			t.Fatalf("scheme/host/base = %q/%q/%q", scheme, host, basePath)
+		}
+		body := `{"version":"` + version.VERSION + `"}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
+	}
+	if err := verifyNpsPanelHealth(runPath, []string{
+		"NPS_WEB_IP=[::]",
+		"NPS_WEB_BASE_URL=/ignored-environment-value",
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInstallNpsUpdateKeepsRollbackBinaryWhenInstallUncertain(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "nps")
+	packageDir := filepath.Join(root, "package")
+	if err := os.MkdirAll(packageDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("old-binary"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, "nps"), []byte("new-binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	previousBinary := target + ".pre-update"
+	if err := os.WriteFile(previousBinary, []byte("verified-old-binary"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	staged := &install.StagedNpsUpdate{
+		TargetPath:     target,
+		PackagePath:    packageDir,
+		PreviousBinary: previousBinary,
+		PreviousMode:   0o700,
+		Downloaded:     true,
+	}
+	// Turning the rollback path into a directory makes the pre-install backup
+	// fail before the target is touched. This test is about transaction
+	// cleanup, not filesystem rollback.
+	if err := os.Remove(previousBinary); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(previousBinary, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	controller := &recordingServiceController{}
+	if err := installNpsUpdateAndVerifyWith(controller, root, staged, func(string, time.Duration) error { return nil }); err == nil {
+		t.Fatal("expected staged install failure")
+	}
+	if _, err := os.Stat(packageDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed install should discard its downloaded package: %v", err)
+	}
+	if _, err := os.Stat(previousBinary); err != nil {
+		t.Fatalf("failed install must not remove an existing recovery path: %v", err)
+	}
+	if !slices.Equal(controller.calls, []string{"stop", "start"}) {
+		t.Fatalf("service calls = %v", controller.calls)
+	}
+}
+
+type recordingServiceController struct {
+	calls []string
+}
+
+func (controller *recordingServiceController) Status() (service.Status, error) {
+	return service.StatusRunning, nil
+}
+
+func (controller *recordingServiceController) Stop() error {
+	controller.calls = append(controller.calls, "stop")
+	return nil
+}
+
+func (controller *recordingServiceController) Start() error {
+	controller.calls = append(controller.calls, "start")
+	return nil
+}
 
 func TestRotateInsecureConfig(t *testing.T) {
 	input := "web_password=123\nauth_key=CHANGE_ME\nauth_crypt_key =213\npublic_vkey=123\n"

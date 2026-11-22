@@ -317,7 +317,7 @@ func TestTunnelEditProxyAuthIsWriteOnly(t *testing.T) {
 func TestTunnelEditTemplateAllowsClientMigration(t *testing.T) {
 	content := readTemplateForTest(t, "../views/index/edit.html")
 	for _, marker := range []string{
-		`<select id="tunnel-client" class="form-control" name="client_id" required data-nps-client-select>`,
+		`<select id="tunnel-client" class="form-control" name="client_id" required data-nps-client-select aria-describedby="tunnel-client-help">`,
 		`/client/list`,
 		`Changing the client moves this tunnel`,
 	} {

@@ -719,6 +719,14 @@ func (s *Sock5ModeServer) authWithSnapshot(c net.Conn, taskSnapshot socksTaskSna
 
 // start
 func (s *Sock5ModeServer) Start() error {
+	return s.start(false)
+}
+
+func (s *Sock5ModeServer) StartListening() error {
+	return s.start(true)
+}
+
+func (s *Sock5ModeServer) start(background bool) error {
 	taskSnapshot, err := s.snapshotTask()
 	if err != nil {
 		return err
@@ -767,8 +775,17 @@ func (s *Sock5ModeServer) Start() error {
 	}
 	s.listener = listener
 	s.udpRegistry = registry
-	s.listenerMu.Unlock()
 	registry.start()
+	s.listenerMu.Unlock()
+	if background {
+		go s.serve(listener)
+	} else {
+		s.serve(listener)
+	}
+	return nil
+}
+
+func (s *Sock5ModeServer) serve(listener net.Listener) {
 	conn.Accept(listener, func(c net.Conn) {
 		// SOCKS consumes a slot when a CONNECT/UDP ASSOCIATE request is accepted,
 		// not when a TCP handshake arrives. Reserving it here as well would count
@@ -785,7 +802,6 @@ func (s *Sock5ModeServer) Start() error {
 		logs.Trace("New socks5 connection,client %d,remote address %s", clientID, c.RemoteAddr())
 		s.handleConn(c)
 	})
-	return nil
 }
 
 // new

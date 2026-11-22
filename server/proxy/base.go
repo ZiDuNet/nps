@@ -23,6 +23,13 @@ type Service interface {
 	Close() error
 }
 
+// ListeningService binds its sockets before returning and serves them in the
+// background. Start retains its blocking behavior for callers that own the loop.
+type ListeningService interface {
+	Service
+	StartListening() error
+}
+
 type NetBridge interface {
 	SendLinkInfo(clientId int, link *conn.Link, t *file.Tunnel) (target net.Conn, err error)
 }

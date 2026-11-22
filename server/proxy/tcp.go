@@ -52,6 +52,14 @@ func NewTunnelModeServer(process process, bridge NetBridge, task *file.Tunnel) *
 
 // 开始
 func (s *TunnelModeServer) Start() error {
+	return s.start(false)
+}
+
+func (s *TunnelModeServer) StartListening() error {
+	return s.start(true)
+}
+
+func (s *TunnelModeServer) start(background bool) error {
 	if s == nil || s.task == nil {
 		return errors.New("tunnel server is not configured")
 	}
@@ -76,12 +84,18 @@ func (s *TunnelModeServer) Start() error {
 	}
 	s.listener = listener
 	s.listenerMu.Unlock()
-	conn.Accept(listener, func(c net.Conn) {
-		// Protocol handlers take their own task snapshot and reserve the slot on
-		// that exact client. Reserving here would allow an edit between this
-		// callback and ProcessTunnel/ProcessHttp to charge different clients.
-		s.process(conn.NewConn(c), s)
-	})
+	serve := func() {
+		conn.Accept(listener, func(c net.Conn) {
+			// Protocol handlers snapshot the owner and reserve capacity on
+			// that same client, even while a task is being edited.
+			s.process(conn.NewConn(c), s)
+		})
+	}
+	if background {
+		go serve()
+	} else {
+		serve()
+	}
 	return nil
 }
 

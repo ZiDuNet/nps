@@ -13,6 +13,7 @@ import (
 	"ehang.io/nps/lib/store"
 	"ehang.io/nps/lib/version"
 	"github.com/astaxie/beego"
+	"github.com/astaxie/beego/config"
 	"github.com/astaxie/beego/logs"
 )
 
@@ -31,6 +32,14 @@ var (
 	activeMu sync.RWMutex
 	active   *Manager
 )
+
+const startupConfigImportedKey = "startup_settings_imported"
+
+// StartupConfigImported distinguishes settings that have already moved to
+// SQLite from an old store that has not yet initialised its settings.
+func StartupConfigImported(meta map[string]string) bool {
+	return meta[startupConfigImportedKey] == "1"
+}
 
 // managedKeys are the business keys stored in SQLite. Keep this list explicit:
 // treating every unknown key as managed would silently move third-party
@@ -116,6 +125,9 @@ var managedKeys = map[string]struct{}{
 	"http_proxy_access_port":               {},
 	"https_proxy_access_port":              {},
 	"mcp_enabled":                          {},
+	"api_hmac_enabled":                     {},
+	"api_hmac_time_window":                 {},
+	"api_legacy_md5_enabled":               {},
 	"allow_ports":                          {},
 	"flow_store_interval":                  {},
 	"audit_log_path":                       {},
@@ -172,34 +184,48 @@ func ManagedKeySet() map[string]struct{} {
 	return keys
 }
 
-// Init loads the settings table, imports any business keys still present in
-// nps.conf, injects the effective values into Beego and removes the migrated
-// keys from the file. It is safe to call repeatedly; a partial migration is
-// resumed by the next startup.
+// Init initializes settings for callers that manage their own storage.
+// Production startup uses ImportStartupConfig before publishing its database.
 func Init(runPath string, sqlite *store.Store) error {
-	if sqlite == nil {
-		return errors.New("settings store is unavailable")
-	}
-	// settings.Init is also called by tests on a process whose storage may be
-	// a JSON-only fixture. Never claim to be active without a settings table.
-	if err := sqlite.CheckSettingsTable(); err != nil {
-		return fmt.Errorf("检查 SQLite 业务配置表: %w", err)
-	}
 	confPath := filepath.Join(runPath, "conf", "nps.conf")
-	values, err := sqlite.LoadSettings()
-	if err != nil {
-		return fmt.Errorf("读取 SQLite 业务配置: %w", err)
-	}
-	fileValues, content, err := readConfigValues(confPath)
+	ini, err := ReadStartupConfig(confPath, "")
 	if err != nil {
 		return err
+	}
+	values, err := ImportStartupConfig(sqlite, ini.Values)
+	if err != nil {
+		return err
+	}
+	manager := &Manager{store: sqlite, confPath: confPath, runPath: runPath, values: values}
+	if err := manager.removeManagedKeysFromFile(ini); err != nil {
+		return err
+	}
+	setActive(manager)
+	manager.Apply()
+	return nil
+}
+
+// ImportStartupConfig writes absent business settings once and reads them back.
+// On first startup the caller uses an unpublished database, so a failure
+// cannot leave an empty or partially migrated nps.db in the live directory.
+func ImportStartupConfig(sqlite *store.Store, fileValues map[string]string) (map[string]string, error) {
+	if sqlite == nil {
+		return nil, errors.New("settings store is unavailable")
+	}
+	meta, err := sqlite.LoadMeta()
+	if err != nil {
+		return nil, fmt.Errorf("读取 SQLite 业务配置迁移状态: %w", err)
+	}
+	values, err := sqlite.LoadSettings()
+	if err != nil {
+		return nil, fmt.Errorf("读取 SQLite 业务配置: %w", err)
+	}
+	if StartupConfigImported(meta) {
+		return values, nil
 	}
 
 	imported := make(map[string]string)
 	for key, value := range fileValues {
-		if IsLegacyRemovedKey(key) {
-			continue
-		}
 		if !IsManagedKey(key) {
 			continue
 		}
@@ -213,39 +239,39 @@ func Init(runPath string, sqlite *store.Store) error {
 		if isLegacyUnlimitedRegistrationQuota(key, value) {
 			value = ""
 		}
+		// Historically the packaged default public VKey was shared across
+		// installations. Preserve startup's existing disable-on-import rule.
+		if key == "public_vkey" && value == "123" {
+			value = ""
+		}
 		imported[key] = value
-		values[key] = value
 	}
 	if len(imported) > 0 {
 		if err := sqlite.UpsertSettings(imported); err != nil {
-			return fmt.Errorf("迁移 nps.conf 业务配置到 SQLite: %w", err)
+			return nil, fmt.Errorf("迁移 nps.conf 业务配置到 SQLite: %w", err)
+		}
+		values, err = sqlite.LoadSettings()
+		if err != nil {
+			return nil, fmt.Errorf("核对已写入的业务配置: %w", err)
+		}
+		for key, expected := range imported {
+			if actual, ok := values[key]; !ok || actual != expected {
+				return nil, fmt.Errorf("SQLite 业务配置 %s 写入后校验不一致", key)
+			}
 		}
 	}
-
-	manager := &Manager{
-		store:    sqlite,
-		confPath: confPath,
-		runPath:  runPath,
-		values:   values,
+	if err := sqlite.SetMeta(startupConfigImportedKey, "1"); err != nil {
+		return nil, fmt.Errorf("记录 SQLite 业务配置已导入: %w", err)
 	}
-	if err := manager.removeManagedKeysFromFile(content); err != nil {
-		return err
-	}
-	setActive(manager)
-	manager.Apply()
-	if len(imported) > 0 {
-		logs.Info("migrated %d business settings from nps.conf to SQLite", len(imported))
-	}
-	return nil
+	return values, nil
 }
 
-// firstFileToSQLiteImport reports whether this is the moment a business
-// setting is first copied out of the legacy configuration file. Existing rows
-// in the settings table always win, so the normalization cannot rewrite a
-// value that an administrator explicitly saved after upgrading.
-func firstFileToSQLiteImport(key, value string, stored map[string]string) bool {
-	_, exists := stored[key]
-	return !exists && value != ""
+// Activate applies the settings after Beego has loaded the retained boot
+// configuration. It does not read or rewrite nps.conf.
+func Activate(runPath string, sqlite *store.Store, values map[string]string) {
+	manager := &Manager{store: sqlite, runPath: runPath, values: values}
+	setActive(manager)
+	manager.Apply()
 }
 
 func isLegacyUnlimitedRegistrationQuota(key, value string) bool {
@@ -393,16 +419,13 @@ func (m *Manager) Apply() {
 	}
 }
 
-func (m *Manager) removeManagedKeysFromFile(content string) error {
-	if strings.TrimSpace(content) == "" {
-		return nil
-	}
-	filtered, changed := stripManagedKeyLines(content)
+func (m *Manager) removeManagedKeysFromFile(ini StartupINI) error {
+	filtered, changed := SlimStartupConfig(ini.Content, m.values, ini.RunMode)
 	if !changed {
 		return nil
 	}
 	backup := m.confPath + ".pre-settings.bak." + version.VERSION + "." + time.Now().Format("20060102-150405")
-	if err := os.WriteFile(backup, []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(backup, []byte(ini.Content), 0o600); err != nil {
 		return fmt.Errorf("备份 nps.conf 失败: %w", err)
 	}
 	if err := writeFileAtomically(m.confPath, []byte(filtered)); err != nil {
@@ -432,56 +455,153 @@ func ResetForTest() {
 	activeMu.Unlock()
 }
 
-func readConfigValues(path string) (map[string]string, string, error) {
-	content, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return map[string]string{}, "", nil
-	}
-	if err != nil {
-		return nil, "", fmt.Errorf("读取 nps.conf: %w", err)
-	}
-	values := make(map[string]string)
-	for _, raw := range strings.Split(string(content), "\n") {
-		line := strings.TrimSpace(strings.TrimSuffix(raw, "\r"))
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.ToLower(strings.TrimSpace(parts[0]))
-		if key == "" || strings.ContainsAny(key, " \t[]") {
-			continue
-		}
-		values[key] = strings.TrimSpace(parts[1])
-	}
-	return values, string(content), nil
+// StartupINI contains the main file and its parsed, effective configuration.
+// RunMode is passed to the rewriter so it never removes inactive sections
+// based on a second, different interpretation of the original text.
+type StartupINI struct {
+	Content string
+	RunMode string
+	Values  map[string]string
 }
 
-func stripManagedKeyLines(content string) (string, bool) {
+// ReadStartupConfig uses the same INI parser and run-mode precedence as Beego,
+// including quoted values, includes and the distinction between absent and
+// explicitly empty settings. The default text is used only for a missing file.
+func ReadStartupConfig(path, defaults string) (StartupINI, error) {
+	info, statErr := os.Stat(path)
+	if statErr == nil && !info.Mode().IsRegular() {
+		return StartupINI{}, errors.New("nps.conf 必须是可读取的普通文件")
+	}
+	content, err := os.ReadFile(path)
+	var parsed config.Configer
+	switch {
+	case err == nil:
+		parsed, err = config.NewConfig("ini", path)
+	case errors.Is(err, os.ErrNotExist):
+		if _, linkErr := os.Lstat(path); !errors.Is(linkErr, os.ErrNotExist) {
+			return StartupINI{}, fmt.Errorf("无法读取 nps.conf 的链接目标: %w", err)
+		}
+		if defaults == "" {
+			return StartupINI{}, nil
+		}
+		return ParseStartupConfig(defaults)
+	}
+	if err != nil {
+		// The upstream parser can include the entire offending line in its
+		// error. Do not copy it into startup logs or migration reports.
+		return StartupINI{}, errors.New("无法读取或解析 nps.conf，请检查 INI 格式、权限及 include 文件")
+	}
+	return resolveStartupConfig(string(content), parsed), nil
+}
+
+// ParseStartupConfig parses a standalone embedded template. Real files are
+// read by ReadStartupConfig so relative include paths resolve correctly.
+func ParseStartupConfig(content string) (StartupINI, error) {
+	parsed, err := config.NewConfigData("ini", []byte(content))
+	if err != nil {
+		return StartupINI{}, errors.New("无法解析内置 NPS 配置")
+	}
+	return resolveStartupConfig(content, parsed), nil
+}
+
+func resolveStartupConfig(content string, parsed config.Configer) StartupINI {
+	mode := startupRunMode(parsed)
+	return StartupINI{Content: content, RunMode: mode, Values: effectiveINIValues(parsed, mode)}
+}
+
+func startupRunMode(parsed config.Configer) string {
+	if mode := os.Getenv("BEEGO_RUNMODE"); mode != "" {
+		return strings.ToLower(mode)
+	}
+	mode := beego.BConfig.RunMode
+	// LoadAppConfig reads RunMode during struct assignment and then again
+	// before accessing the rest of the configuration.
+	for range 2 {
+		mode = parsed.DefaultString(mode+"::runmode", parsed.DefaultString("runmode", mode))
+	}
+	return strings.ToLower(mode)
+}
+
+func effectiveINIValues(parsed config.Configer, mode string) map[string]string {
+	values := make(map[string]string)
+	base, _ := parsed.GetSection("default")
+	for key, value := range base {
+		values[key] = value
+	}
+	overrides, _ := parsed.GetSection(mode)
+	for key, value := range overrides {
+		if _, exists := base[key]; value != "" || !exists {
+			values[key] = value
+		}
+	}
+	return values
+}
+
+// MainFileValues is used when adopting a pre-existing SQLite installation.
+// Earlier versions copied business settings from the main file only, so a
+// newly parsed include must not enable settings that were never in use.
+func (ini StartupINI) MainFileValues() (map[string]string, error) {
+	var content strings.Builder
+	hasIncludes := false
+	for _, line := range strings.SplitAfter(ini.Content, "\n") {
+		trimmed := strings.TrimSpace(strings.TrimPrefix(line, "\ufeff"))
+		fields := strings.Fields(trimmed)
+		if len(fields) == 2 && strings.EqualFold(fields[0], "include") && !strings.Contains(trimmed, "=") {
+			hasIncludes = true
+			continue
+		}
+		content.WriteString(line)
+	}
+	if !hasIncludes {
+		return ini.Values, nil
+	}
+	parsed, err := config.NewConfigData("ini", []byte(content.String()))
+	if err != nil {
+		return nil, errors.New("无法解析 nps.conf 的独立设置")
+	}
+	return effectiveINIValues(parsed, ini.RunMode), nil
+}
+
+// SlimStartupConfig removes migrated keys and their preceding descriptions.
+// Preserve unrelated comments, unknown keys, includes and inactive sections.
+func SlimStartupConfig(content string, stored map[string]string, mode string) (string, bool) {
+	remove := func(key string) bool {
+		_, present := stored[key]
+		return IsLegacyRemovedKey(key) || IsManagedKey(key) && present
+	}
+	bom := ""
+	if strings.HasPrefix(content, "\ufeff") {
+		bom, content = "\ufeff", strings.TrimPrefix(content, "\ufeff")
+	}
 	lines := strings.SplitAfter(content, "\n")
 	result := make([]string, 0, len(lines))
+	section := "default"
+	commentStart := 0
 	changed := false
 	for _, line := range lines {
-		trimmed := strings.TrimSpace(strings.TrimSuffix(line, "\r\n"))
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
 			result = append(result, line)
+			commentStart = len(result)
 			continue
 		}
-		parts := strings.SplitN(trimmed, "=", 2)
-		if len(parts) != 2 {
-			result = append(result, line)
-			continue
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			section = strings.ToLower(trimmed[1 : len(trimmed)-1])
 		}
-		key := strings.ToLower(strings.TrimSpace(parts[0]))
-		if IsManagedKey(key) || IsLegacyRemovedKey(key) {
+		key, _, assignment := strings.Cut(strings.TrimSpace(strings.TrimLeft(trimmed, "#;")), "=")
+		key = strings.ToLower(strings.TrimSpace(key))
+		comment := strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";")
+		if assignment && (section == "default" || section == mode) && remove(key) {
 			changed = true
+			result = result[:commentStart]
 			continue
 		}
 		result = append(result, line)
+		if !comment {
+			commentStart = len(result)
+		}
 	}
-	return strings.Join(result, ""), changed
+	return bom + strings.Join(result, ""), changed
 }
 
 func writeFileAtomically(path string, content []byte) error {

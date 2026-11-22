@@ -47,6 +47,23 @@ func seedGatewayRunPath(t *testing.T) string {
 	return runPath
 }
 
+func trackStorageFixture(t *testing.T) {
+	t.Helper()
+	dbMu.RLock()
+	previous := Db
+	dbMu.RUnlock()
+	t.Cleanup(func() {
+		dbMu.Lock()
+		current := Db
+		Db = previous
+		dbMu.Unlock()
+		if current != nil && current != previous && current.JsonDb != nil && current.JsonDb.SQLite() != nil {
+			stopSnapshotRates(current)
+			_ = current.JsonDb.SQLite().Close()
+		}
+	})
+}
+
 func TestValidateJSONImportRejectsDanglingOwner(t *testing.T) {
 	runPath := t.TempDir()
 	conf := filepath.Join(runPath, "conf")
@@ -140,19 +157,22 @@ func TestImportSQLiteFromJSONLeavesOriginalFilesOnValidationFailure(t *testing.T
 	}
 }
 
-func TestRejectedLegacyStartupDoesNotCreateDatabaseOrLock(t *testing.T) {
+func TestInvalidLegacyMarkerDoesNotPublishDatabase(t *testing.T) {
 	runPath := seedGatewayRunPath(t)
 	conf := filepath.Join(runPath, "conf")
-	if err := os.Remove(filepath.Join(conf, ".json-gateway")); err != nil {
+	if err := os.WriteFile(JSONGatewayMarkerPath(runPath), []byte(`{"schema":"nps-json-gateway-v1","version":"1.1.48"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := initializeStorage(runPath); err == nil {
-		t.Fatal("legacy JSON without a gateway marker must be rejected")
+		t.Fatal("ambiguous data with an old gateway marker must be rejected")
 	}
-	for _, name := range []string{"nps.db", "nps.db.lock", "migration-report.json"} {
+	for _, name := range []string{"nps.db", "nps.db-wal", "nps.db-shm"} {
 		if _, err := os.Stat(filepath.Join(conf, name)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("rejected startup left %s behind (err=%v)", name, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(conf, "clients.json")); err != nil {
+		t.Fatalf("rejected migration removed original client data: %v", err)
 	}
 }
 
@@ -266,25 +286,23 @@ func TestInitializeStorageRestoresHighWaterFromEmptyDatabase(t *testing.T) {
 	if err := database.Close(); err != nil {
 		t.Fatal(err)
 	}
+	// Stray historical JSON must not resurrect a deleted client even when
+	// the existing authoritative SQLite database has no entities.
+	writeGatewayTestRecords(t, filepath.Join(runPath, "conf", "clients.json"), `{"Id":7,"VerifyKey":"old-client"}`)
 
-	dbMu.RLock()
-	previous := Db
-	dbMu.RUnlock()
-	t.Cleanup(func() {
-		dbMu.Lock()
-		active := Db
-		Db = previous
-		dbMu.Unlock()
-		if active != nil && active != previous && active.JsonDb != nil && active.JsonDb.SQLite() != nil {
-			_ = active.JsonDb.SQLite().Close()
-		}
-	})
+	trackStorageFixture(t)
 	if err := initializeStorage(runPath); err != nil {
 		t.Fatal(err)
 	}
 	dbMu.RLock()
 	active := Db
 	dbMu.RUnlock()
+	if _, err := active.GetClient(7); err == nil {
+		t.Fatal("existing empty SQLite database imported a residual client")
+	}
+	if _, err := os.Stat(filepath.Join(runPath, "conf", "clients.json")); err != nil {
+		t.Fatalf("existing SQLite startup touched residual JSON: %v", err)
+	}
 	if got := active.JsonDb.ClientIncreaseId; got != 23 {
 		t.Fatalf("client high-water through initializeStorage = %d, want 23", got)
 	}
@@ -489,6 +507,16 @@ func TestExportSQLiteToJSONRoundTripsPositiveTinyLimit(t *testing.T) {
 	if exported.RateLimit != 1 {
 		t.Fatalf("exported RateLimit = %d KB/s, want 1", exported.RateLimit)
 	}
+	if _, err := os.Stat(JSONGatewayMarkerPath(out)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy-unit export must not carry a canonical gateway marker: %v", err)
+	}
+	trackStorageFixture(t)
+	if err := initializeStorage(out); err != nil {
+		t.Fatalf("legacy-unit export should re-import automatically: %v", err)
+	}
+	if client, err := Db.GetClient(1); err != nil || client.RateLimit != 8192 {
+		t.Fatalf("re-imported rate must be restored to bps: client=%v error=%v", client != nil, err)
+	}
 	data, err := os.ReadFile(filepath.Join(out, "migration-report.json"))
 	if err != nil {
 		t.Fatalf("successful export must leave a report: %v", err)
@@ -639,4 +667,27 @@ func TestLoadSQLiteRejectsCorruptAuthoritativeEntities(t *testing.T) {
 			t.Fatal("non-zero global entity key must fail closed")
 		}
 	})
+}
+
+func TestLoadSQLiteRepairsMissingLegacyClientConfig(t *testing.T) {
+	db := NewJsonDb(t.TempDir())
+	client, _ := json.Marshal(map[string]any{
+		"Id":        1,
+		"VerifyKey": "legacy-null-config",
+		"Status":    true,
+		"Cnf":       nil,
+	})
+	if err := loadClientsFromEntities(db, map[int]json.RawMessage{1: client}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := db.GetClient(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Cnf == nil {
+		t.Fatal("legacy client without Cnf was not repaired")
+	}
+	if loaded.Cnf.Crypt || loaded.Cnf.Compress {
+		t.Fatalf("default repaired config unexpectedly enabled wire transforms: %#v", loaded.Cnf)
+	}
 }

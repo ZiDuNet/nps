@@ -6,8 +6,8 @@
 ## 版本号规则
 
 - 版本号唯一来源：`lib/version/version.go` 的 `VERSION`。
-- 正式 tag 必须等于 `v{VERSION}`，例如源码为 `1.1.51` 时 tag 只能是
-  `v1.1.51`。
+- 正式 tag 必须等于 `v{VERSION}`，例如源码为 `1.1.52` 时 tag 只能是
+  `v1.1.52`。
 - tag 必须指向当前 `origin/master` 的提交；`release.yml` 的
   `validate_release` 会强制校验这两点。
 - 补丁版本只递增最后一位；不要复用或移动已发布 tag，回滚请发新补丁版本。
@@ -57,14 +57,32 @@ go build ./...
 bash scripts/check-release-targets.sh
 go test ./...
 go test -race ./bridge ./client ./cmd/npc ./cmd/nps \
-  ./lib/config ./lib/conn ./lib/file ./lib/fnos ./lib/install \
+  ./lib/config ./lib/conn ./lib/durablefile ./lib/file ./lib/fnos ./lib/install \
   ./lib/connectionlog ./lib/jsonlog ./server ./server/connection \
-  ./server/proxy ./server/tool ./server/usage ./web/...
+  ./lib/settings ./lib/store ./server/proxy ./server/tool ./server/usage ./web/...
 node --test web/tests/*.test.cjs
 ```
 
 涉及脚本时额外执行 `bash -n scripts/*.sh web/skills/nps/scripts/*.sh`；
 有 `shellcheck` 时一并运行。涉及文档站点时执行 `docs` 目录下的构建命令。
+
+## 数据迁移升级矩阵
+
+修改 SQLite、JSON 网关、配置精简、迁移归档、菜单升级或 Docker 入口时，以下场景
+必须全部验证，不能用单元测试代替真实启动烟测：
+
+- 全新目录启动：只创建精简 `nps.conf`、`nps.db` 和可重建的 `nps.db.lock`，不生成
+  `.json-gateway`、迁移报告或迁移归档；二次启动幂等，业务数据库摘要不变。
+- `1.1.47`、`1.1.48` 旧 JSON 副本直接升级：正常启动完成归档、校验、迁移和清理；
+  核对客户端、用户、隧道、Host、设置数量及引用完整性，再启动一次确认不重复迁移。
+- `1.1.49`、`1.1.50`、`1.1.51` SQLite 副本升级：执行 schema 检查和设置兼容，不重复
+  导入残留 JSON，不误删历史备份；核对旧账号、规则、证书和配额仍可用。
+- 菜单升级：先识别真实服务程序和配置目录，停旧服务、备份、替换、启动并检查
+  `/api/v1/` 版本；人为制造启动失败，确认旧程序与旧服务恢复。
+- Docker/scratch：挂载完整 `/conf`，分别验证全新卷、旧 JSON 卷、已有 SQLite 卷和容器
+  重启幂等；确认备份位于持久卷，日志能通过容器标准输出查看。
+- 兼容性：至少使用发布历史中的一个旧 NPC（当前基线为 `1.1.48`）验证 Bridge 登录、
+  MAIN/CHAN 数据通道和一条真实 TCP 转发；不把真实 VKey、Token、密码或私钥写入日志。
 
 CLI 冒烟至少覆盖：
 

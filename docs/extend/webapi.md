@@ -203,7 +203,7 @@ POST /client/del/
 
 ## User 用户管理
 
-用户列表、创建、编辑和删除等管理接口仅供管理员调用。普通用户账号存储于 SQLite 的 `conf/nps.db`（旧版 JSON 升级时从 `users.json` 导入），与客户端的历史 Web 登录字段不同；Token 自助接口允许普通用户只操作自己的凭据。
+用户列表、创建、编辑和删除等管理接口仅供管理员调用。普通用户账号存储于 SQLite 的 `conf/nps.db`（旧版 JSON 在 v1.1.52 升级时从 `users.json` 自动导入），与客户端的历史 Web 登录字段不同；Token 自助接口允许普通用户只操作自己的凭据。
 
 ### 生成普通用户 API Token
 
@@ -423,6 +423,8 @@ POST /index/edit/
 
 编辑时可通过 `client_id` 将隧道迁移到当前账号有权限的另一个客户端；省略时沿用当前客户端，兼容旧调用方。目标客户端和用户配额会在迁移前校验。
 
+停用状态在编辑后保持不变。运行中的 TCP 隧道更换客户端后，新连接使用新客户端，已建立的连接不会迁移。如果配置已保存但监听重载失败，接口会明确返回该状态；修正监听地址或端口后，需手动启动隧道。
+
 ---
 
 ### 停止隧道
@@ -528,7 +530,7 @@ POST /index/addhost/
 
 域名来源有且只能有一种：`custom` 必须提供 `host`，且不能同时提交 `platform_domain_id` / `platform_prefix`；`platform` 必须同时提供平台域名 ID 和前缀，且不能同时提交自定义 `host`。为兼容旧版客户端，未提交 `domain_mode` 时会按旧字段推断模式；新集成应始终明确传入 `domain_mode`。协议只接受 `http`、`https`、`all`（历史请求省略时按 `all` 处理）；内网目标每行一个 `host:port` 地址。
 
-创建和更新会在数据层再次做原子唯一性、路由冲突和字段校验。失败时不会留下内存或 `hosts.json` 记录；Host ID 由递增序列分配，不保证无间断。列表和单条查询响应包含 `Id`、`Scheme`、`HttpPort`、`HttpsPort` 等字段；端口为空表示标准端口 80/443，非空时是带冒号的端口后缀，例如 `:30111`。因此消费方可分别用协议和端口组装 HTTP/HTTPS 访问地址，无需依赖页面模板配置。
+创建和更新会在数据层再次做原子唯一性、路由冲突和字段校验。失败时不会留下内存或数据库记录；Host ID 由递增序列分配，不保证无间断。列表和单条查询响应包含 `Id`、`Scheme`、`HttpPort`、`HttpsPort` 等字段；端口为空表示标准端口 80/443，非空时是带冒号的端口后缀，例如 `:30111`。因此消费方可分别用协议和端口组装 HTTP/HTTPS 访问地址，无需依赖页面模板配置。
 
 Host 列表和单条查询同时返回 `UploadLimit`、`DownloadLimit`、`UploadRate`、`DownloadRate`。限速单位为 KB/s，当前速率是近似的一秒采样值，空闲时为 `0`。
 
@@ -571,6 +573,8 @@ POST /index/edithost/
 | download_limit | 资源下行限速，单位 KB/s；`0` 或留空表示不限速 |
 
 编辑时可传 `client_id` 将规则迁移到该账号有权限的客户端；省略时沿用当前客户端，兼容旧调用方。平台/自定义域名字段互斥规则与新增接口相同。
+
+更换客户端后，后续 HTTP 请求使用新客户端，包括复用同一条 HTTP/1.1 持久连接的请求。已经建立的 WebSocket、SSE 等流式连接不会迁移。
 
 ```
 POST /index/hoststop/
@@ -704,7 +708,7 @@ POST /global/certificate/platform-domains/
 仅管理员可调用。`platform_domains` 为 JSON 数组，每项包含 `ID`、
 `Wildcard`、`CertFilePath`、`KeyFilePath`，并可通过 `CertMode`、
 `CertData`、`KeyData` 提交上传或粘贴的证书材料。只更新
-`conf/global.json` 中的平台域名池，不修改全局访问名单、服务地址或使用说明。
+SQLite 中的平台域名池，不修改全局访问名单、服务地址或使用说明。
 
 ---
 

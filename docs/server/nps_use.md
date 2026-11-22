@@ -5,6 +5,7 @@
 新安装默认访问 `http://127.0.0.1:8081`。管理员用户名为 `admin`，
 `web_password`、`auth_key` 和 `auth_crypt_key` 会在首次启动时随机生成并
 打印到终端。发布模板中的 `CHANGE_ME` 和历史弱占位值也会自动轮换。
+全新安装自动初始化 `nps.conf` 和 SQLite，不迁移旧数据、不生成迁移备份或报告。
 
 远程管理应通过 HTTPS 反向代理，或把 `web_ip` 限制为受控管理网段并开启
 `web_open_ssl`。完整安全边界见[部署安全与参数速查](../server_config.md)。
@@ -98,7 +99,6 @@ conf/
 ├── nps.db-wal
 ├── nps.db-shm
 ├── nps.db.lock
-├── migration-report.json
 └── web_sessions.json
 ```
 
@@ -106,7 +106,7 @@ conf/
 `nps.conf` 或运行中的单一 `nps.db`；一致备份必须停服后复制整个目录，涵盖 WAL、SHM 和证书。`web_sessions.json` 保存 3 天免登设备的
 服务端登记，删除后所有免登 Cookie 会失效，但正常账号密码登录不受影响。
 
-SQLite 迁移、维护和回滚见 [SQLite 数据存储与升级](sqlite-storage.md)。
+从旧 JSON 自动迁移时另有 `backups/pre-sqlite-*.tar.gz` 和 `migration-report.json`，不属于全新安装的常规文件。SQLite 迁移、维护和回滚见 [SQLite 数据存储与升级](sqlite-storage.md)。
 
 ## 审计与连接日志
 
@@ -143,12 +143,11 @@ Docker 持久化、文件权限和归档见 [1.1.44 升级说明](../upgrade-1.1
 ./nps -server
 ```
 
-选择“更新”或按[构建发布](../build.md)中的正式 Release 流程操作。更新程序
-默认只替换二进制，不删除配置和业务数据。
+选“更新”会替换二进制；打开菜单或查看状态不会触发迁移。使用支持自动迁移的新版时，
+真正启动服务的进程才会备份和导入旧 JSON；先停旧服务并备份，再按 [SQLite 升级说明](../upgrade-sqlite.md)操作。自行替换二进制也适用。
 
 迁移到新服务器时停止 NPS，完整复制 `conf` 目录，再使用相同运行权限启动。
-现有 `nps.conf` 会自动补齐新版必需字段并保留已有值、注释和自定义项；升级前
-仍应先备份并检查启动日志。
+已有 SQLite 时直接使用同一数据库，旧 JSON 不会再次导入。启动后请核对配置目录和启动日志。
 
 ## 调试
 

@@ -1,10 +1,25 @@
 package conf
 
-import _ "embed"
+import (
+	_ "embed"
+	"strings"
+)
 
-// DefaultNpsConf is the server configuration template shipped with the
-// application. Keeping the template in conf/nps.conf makes the checked-in
-// example and the first-run generated file use the same source.
+// DefaultNpsConf is the compact, deployable server bootstrap template.
 //
 //go:embed nps.conf
 var DefaultNpsConf string
+
+//go:embed server-options.ini
+var serverOptions string
+
+// ServerConfigDefaults describes both the boot keys and the advanced options
+// for the Web editor. It is not written to a deployment's nps.conf.
+var ServerConfigDefaults = DefaultNpsConf + "\n" + serverOptions
+
+// IsBootstrapConfig identifies the shipped starter, even if an operator
+// copied it to disk and edited its listener settings before the first start.
+func IsBootstrapConfig(content string) bool {
+	first, _, _ := strings.Cut(strings.TrimPrefix(content, "\ufeff"), "\n")
+	return strings.TrimSpace(first) == "# NPS bootstrap v1"
+}

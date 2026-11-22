@@ -1,47 +1,27 @@
 # SQLite 升级说明
 
-本说明适用于从 JSON 数据存储升级到 v1.1.49 及后续版本。带本版本操作清单的发布说明见 [1.1.49 升级说明](upgrade-1.1.49.md)。
+## 版本选择
 
-## 兼容边界
+- **v1.1.52 及后续版本**：旧 JSON 在 NPS 正常启动时自动导入。全新安装直接初始化精简的 `nps.conf` 和 SQLite，不执行迁移、不留迁移备份或报告；已有 SQLite 不重复导入。
+- **已发布的 v1.1.49、v1.1.50、v1.1.51**：首次从 JSON 导入仍须先运行 `-json-gateway`，见 [v1.1.49 升级说明](upgrade-1.1.49.md)、[v1.1.50 升级说明](upgrade-1.1.50.md)和 [v1.1.51 升级说明](upgrade-1.1.51.md)。
 
-- NPC 的 Bridge 握手、控制消息和代理协议不变，不需要为 SQLite 升级 NPC。
-- `nps.conf` 中的监听、端口、TLS、日志等启动参数继续有效。
-- 客户端、用户、隧道、Host、全局参数和运行期业务配置迁移到 `conf/nps.db`。
-- 旧 JSON 必须先由 `1.1.49` 二进制执行 JSON 网关，并具有版本为 `1.1.49`、覆盖全部数据文件的 `conf/.json-gateway` 标记。
+SQLite 迁移仅影响服务端数据存储，不变更 Bridge 握手、NPC 配置或代理协议。现有 NPC 无需跟随升级。
 
-## 升级步骤
+## 使用支持自动迁移的新版升级
 
 1. 通知用户维护窗口，停止 NPS。
-2. 备份整个 `conf`，不要只复制 `nps.conf`。
-3. 使用 `1.1.49` 二进制完成 JSON 网关整形：
+2. 独立备份整个 `conf`，不要只复制 `nps.conf` 或活跃的 `nps.db`。
+3. 替换 NPS 二进制或镜像，使用原配置目录正常启动。程序先生成并验证 `conf/backups/pre-sqlite-*.tar.gz`，再导入业务数据和设置。
+4. 检查启动日志、归档和 `conf/migration-report.json`：`status=success`，实体及设置数量符合预期。已备份并确认的旧文件会被清理；`nps.conf` 留下启动参数，证书、密钥、历史用量和日志不受影响。
+5. 验证登录、NPC、实际使用的代理协议、用户配额及停用状态。Docker 发布必须挂载整个 `/conf`。
 
-   ```bash
-   ./nps -conf_path=/etc/nps -json-gateway
-   ```
+若在入库前失败，修复报告中的问题后用原文件重试；若数据库已提交，仅收尾失败，保留数据库和同一份归档，检查权限或空间后重启。不要删除数据库，也不要用旧 JSON 覆盖它。
 
-4. 使用同一个 `1.1.49` 二进制正常启动，完成 SQLite 首次导入。
-5. 检查 `conf/migration-report.json`；只有 `status=success` 才继续验收。
-6. 检查 `conf.backup.YYYYMMDD-HHMMSS` 已完整生成。
-7. 验证登录、NPC、TCP/UDP、域名反代、用户级共享带宽、最大连接数、到期和停用状态。
-8. 验证用户或客户端删除后，关联隧道与 Host 不再残留。
-
-## 升级后文件
-
-```text
-conf/
-├── nps.conf
-├── nps.db
-├── nps.db-wal
-├── nps.db-shm
-├── nps.db.lock
-└── migration-report.json
-```
-
-运行中不要只复制 `nps.db`。一致备份应先停止服务，再复制整个 `conf`。
+如果上次升级中断留下了空 `nps.db`，而目录中仍有旧 JSON，新版会停止启动并保留两份数据。先停服备份整个 `conf`，再在独立目录从旧 JSON 验证恢复，不要直接覆盖原目录。
 
 ## 回滚
 
-精确回滚可使用升级前自动生成的 `conf.backup.*`，但会丢失升级后的修改。
+精确回滚可使用独立停服备份，或核对自动迁移的 `conf/backups/pre-sqlite-*.tar.gz` 后在单独目录恢复。回滚到升级前不会保留升级后的修改。
 
 需要保留升级后 SQLite 数据并回到 JSON 版本时，停止 NPS 后执行：
 
@@ -49,13 +29,6 @@ conf/
 ./nps -conf_path=/etc/nps -export-json=/var/backups/nps-json
 ```
 
-导出目录包含旧版 JSON、`.json-gateway`、合并 SQLite 业务配置的 `nps.conf` 和导出报告。若 SQLite 中的用户配额无法被旧 JSON 无损表达，导出会失败并给出具体用户字段。
-
-## 验收失败
-
-- 缺少或旧于 1.1.49 的网关标记：不要直接启动 SQLite，使用 1.1.49 二进制完成整形。
-- 导入校验失败：从备份恢复原 JSON，修正冲突记录后重新网关处理。
-- 数据库已提交但归档失败：保留 `nps.db` 和迁移报告，检查 `conf` 写权限后再启动，不要删除数据库。
-- 导出失败：保留 SQLite 和原备份，报告位于导出根目录；不要用半成品覆盖生产目录。
+新版导出目录含旧单位 JSON、合并 SQLite 设置的 `nps.conf` 和导出报告；不包含作为 SQLite 单位凭证的 `.json-gateway`。若要用 v1.1.49、v1.1.50 或 v1.1.51 从该导出目录重新导入，仍须先对这份导出执行它们的网关。导出失败时保留原库，检查导出目录下的报告，不要用半成品覆盖生产目录。
 
 完整说明见 [SQLite 数据存储与升级](server/sqlite-storage.md)。
