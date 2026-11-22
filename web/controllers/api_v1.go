@@ -49,11 +49,32 @@ type ApiV1InfoController struct {
 // this namespace never accepts a browser cookie session: calls must carry an
 // administrator timestamp signature or a user API token.
 func (s *ApiV1Controller) Prepare() {
+	// HMAC signs the versioned API request contract, including its raw body.
+	// Do not let shared MVC controllers accept these headers: legacy routes do
+	// not capture or verify the raw body and must remain browser/session routes.
+	s.apiRequestOnly = true
+	s.apiHMACAllowed = true
 	if strings.TrimSpace(s.requestID) == "" {
 		s.requestID = uuid.NewString()
 	}
 	if s.Ctx != nil && s.Ctx.ResponseWriter != nil {
 		s.Ctx.ResponseWriter.Header().Set("X-Request-ID", s.requestID)
+	}
+
+	// Capture the raw body before parsing it into legacy form values. The HMAC
+	// signature covers the exact bytes sent by the client, while delegated
+	// controllers still receive the same form representation below.
+	if hasNPSHMACCredentials(s.Ctx.Request) {
+		var bodyErr error
+		s.apiRequestBodyHash, bodyErr = apiRequestBodyHash(s.Ctx.Request)
+		if bodyErr != nil {
+			s.apiRespond(http.StatusRequestEntityTooLarge, map[string]interface{}{
+				"status": 0, "code": "error", "error_code": "body_too_large", "msg": bodyErr.Error(),
+			})
+			return
+		}
+	} else {
+		s.apiRequestBodyHash = hashEmptyBody()
 	}
 
 	// Parse JSON bodies before any credential lookup so API clients can send
@@ -65,12 +86,12 @@ func (s *ApiV1Controller) Prepare() {
 		return
 	}
 
-	hasSignature := strings.TrimSpace(s.GetString("auth_key")) != ""
+	hasSignature := hasNPSHMACCredentials(s.Ctx.Request) || strings.TrimSpace(s.GetString("auth_key")) != ""
 	hasToken := extractUserAPIToken(s.Ctx.Request.Header.Get("Authorization"), s.GetString("api_token")) != ""
 	if !hasSignature && !hasToken {
 		s.apiRespond(http.StatusUnauthorized, map[string]interface{}{
 			"status": 0, "code": "error", "error_code": "unauthorized",
-			"msg": "缺少 API 凭据：请使用 auth_key+timestamp 签名或 Authorization: Bearer <token>",
+			"msg": "缺少 API 凭据：请使用 Authorization: NPS-HMAC <签名> 配合 X-NPS-Timestamp/X-NPS-Nonce/X-NPS-Key-Id，或 Authorization: Bearer <token>",
 		})
 		return
 	}
@@ -99,6 +120,9 @@ func (s *ApiV1Controller) Prepare() {
 		})
 		return
 	}
+	// The authenticated identity is request-scoped and may be propagated only
+	// to controllers invoked by this adapter, never to a browser session.
+	s.apiPrincipalSet = true
 	s.applyPaginationDefaults()
 }
 
@@ -288,7 +312,7 @@ func (s *ApiV1Controller) applyPaginationDefaults() {
 // recorder. It shares the current request context so the action sees the same
 // form, session and API principal as this /api/v1 request. A Beego StopRun
 // panic is a normal action termination, not an error.
-func runLegacyAction(ctx *beecontext.Context, target beego.ControllerInterface, controllerName, actionName string, forcePost bool) (recorder *responseRecorder, err error) {
+func runLegacyAction(ctx *beecontext.Context, target beego.ControllerInterface, principal *BaseController, controllerName, actionName string, forcePost bool) (recorder *responseRecorder, err error) {
 	if ctx == nil || ctx.Request == nil {
 		return nil, errors.New("请求上下文为空")
 	}
@@ -320,6 +344,10 @@ func runLegacyAction(ctx *beecontext.Context, target beego.ControllerInterface, 
 	// every routed request), and the delegated controller shares the same
 	// context, so there is no need to start a second session store.
 	target.Init(ctx, controllerName, actionName, target)
+	if delegated, ok := target.(interface{ apiBaseController() *BaseController }); ok {
+		delegated.apiBaseController().inheritAPIPrincipal(principal)
+		delegated.apiBaseController().apiRequestOnly = true
+	}
 
 	func() {
 		defer func() {
@@ -342,7 +370,7 @@ func (s *ApiV1Controller) invokeLegacy(controllerName, actionName string, target
 	if !ok || controller == nil {
 		return nil, errors.New("目标控制器未实现 ControllerInterface")
 	}
-	return runLegacyAction(s.Ctx, controller, controllerName, actionName, forcePost)
+	return runLegacyAction(s.Ctx, controller, &s.BaseController, controllerName, actionName, forcePost)
 }
 
 // emitLegacy converts a legacy controller response into the /api/v1 envelope.
@@ -522,12 +550,23 @@ func (s *ApiV1InfoController) Info() {
 		"msg":         "ok",
 		"version":     version.VERSION,
 		"github":      version.GitHubRepository,
-		"auth":        []string{"admin_md5_timestamp", "user_bearer_token"},
+		"auth":        apiV1AuthMethods(),
 		"description": "NPS 对外管理 API v1。旧 /client、/index、/user、/global、/auth 接口继续兼容。",
 		"resources": []string{
 			"clients", "tunnels", "hosts", "users", "global", "status", "overview", "audit", "ip-register",
 		},
 	})
+}
+
+func apiV1AuthMethods() []string {
+	methods := []string{"user_bearer_token"}
+	if beego.AppConfig.DefaultBool("api_hmac_enabled", true) {
+		methods = append([]string{"admin_hmac_sha256"}, methods...)
+	}
+	if beego.AppConfig.DefaultBool("api_legacy_md5_enabled", false) {
+		methods = append(methods, "admin_legacy_md5_timestamp")
+	}
+	return methods
 }
 
 // Time returns the server timestamp for timestamp-signature clock sync.

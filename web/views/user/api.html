@@ -276,7 +276,7 @@
             <div>
                 <span class="account-section-head__eyebrow" data-i18n-zh="AGENT ACCESS" data-i18n-en="AGENT ACCESS">AGENT ACCESS</span>
                 <h2 id="account-dev-title" data-i18n-zh="Agent 接入" data-i18n-en="Agent access">Agent 接入</h2>
-                <p data-i18n-zh="通过 CLI、Skill 或 MCP 把平台能力接入脚本与 AI Agent。用户 Token 可同时用于 CLI Bearer 与 MCP；管理员 API 密钥可用于 MCP Bearer，CLI 使用 --key 时走时间戳签名；nps.conf 的 auth_key 仅用于 CLI 签名。" data-i18n-en="Use the CLI, Skill or MCP to connect scripts and AI agents. User tokens work with CLI Bearer auth and MCP. The managed admin key works as an MCP Bearer token; npsctl --key uses timestamp signing. The nps.conf auth_key is only for CLI signatures.">通过 CLI、Skill 或 MCP 把平台能力接入脚本与 AI Agent。用户 Token 可同时用于 CLI Bearer 与 MCP；管理员 API 密钥可用于 MCP Bearer，CLI 使用 --key 时走时间戳签名；nps.conf 的 auth_key 仅用于 CLI 签名。</p>
+                <p data-i18n-zh="通过 CLI、Skill 或 MCP 把平台能力接入脚本与 AI Agent。用户 Token 可同时用于 CLI Bearer 与 MCP；管理员 API 密钥可用于 MCP Bearer 或 CLI 的 HMAC-SHA256 签名；nps.conf 的 auth_key 可用于 CLI 的 HMAC-SHA256 签名。v1.1.50 及更早的 CLI 使用旧 MD5 签名，需临时开启兼容配置或同步升级。" data-i18n-en="Use the CLI, Skill or MCP to connect scripts and AI agents. User tokens work with CLI Bearer auth and MCP. The managed admin key works as an MCP Bearer token or an HMAC-SHA256 signing key for the CLI; nps.conf auth_key also signs CLI requests. CLI releases through v1.1.50 use legacy MD5 signing and require temporary compatibility or a coordinated upgrade.">通过 CLI、Skill 或 MCP 把平台能力接入脚本与 AI Agent。用户 Token 可同时用于 CLI Bearer 与 MCP；管理员 API 密钥可用于 MCP Bearer 或 CLI 的 HMAC-SHA256 签名；nps.conf 的 auth_key 可用于 CLI 的 HMAC-SHA256 签名。v1.1.50 及更早的 CLI 使用旧 MD5 签名，需临时开启兼容配置或同步升级。</p>
             </div>
         </header>
         <div class="account-dev-grid">
@@ -310,6 +310,7 @@
 Token：<span class="dev-token">YOUR_TOKEN</span></code></pre>
                 <div class="account-dev-card__actions">
                     <button type="button" class="btn btn-outline btn-primary" id="skill-copy"><i class="fa fa-copy" aria-hidden="true"></i><span data-i18n-zh="复制给 Agent" data-i18n-en="Copy for agent">复制给 Agent</span></button>
+                    {{if eq true .isAdmin}}<button type="button" class="btn btn-outline btn-danger" id="skill-copy-admin"><i class="fa fa-globe" aria-hidden="true"></i><span data-i18n-zh="复制全局权限提示词" data-i18n-en="Copy global-access prompt">复制全局权限提示词</span></button>{{end}}
                     <button type="button" class="btn btn-outline" data-guide="skill"><i class="fa fa-question-circle" aria-hidden="true"></i><span data-i18n-zh="使用说明" data-i18n-en="How to use">使用说明</span></button>
                 </div>
             </article>
@@ -324,7 +325,15 @@ Token：<span class="dev-token">YOUR_TOKEN</span></code></pre>
                 </div>
                 <div id="mcp-token-hint" class="account-mcp-hint" hidden>
                     <i class="fa fa-info-circle" aria-hidden="true"></i>
+                    {{if eq true .isAdmin}}
+                    <span data-i18n-zh="普通账号可先生成用户 Token；管理员账号默认不填入全局密钥。管理员如确实需要全局访问，请使用下方专用按钮，复制前会再次确认权限范围。" data-i18n-en="Users can generate a scoped token first; administrator keys are never prefilled by default. Administrators who need global access can use the dedicated button below, which confirms the scope before copying.">普通账号可先生成用户 Token；管理员账号默认不填入全局密钥。管理员如确实需要全局访问，请使用下方专用按钮，复制前会再次确认权限范围。</span>
+                    {{else}}
                     <span data-i18n-zh="还没有可用的 Token，请先在上方生成用户 API Token 后再复制配置。" data-i18n-en="No token is available yet. Generate a user API token above before copying the configuration.">还没有可用的 Token，请先在上方生成用户 API Token 后再复制配置。</span>
+                    {{end}}
+                </div>
+                <div class="account-mcp-hint">
+                    <i class="fa fa-lock" aria-hidden="true"></i>
+                    <span data-i18n-zh="Agent 配置会包含可直接使用的 Bearer 凭据；部分客户端会明文保存配置文件。请保护本机文件权限，不要提交或分享配置。优先使用用户 Token；管理员全局密钥仅在确有需要时使用，泄漏后请立即撤销并重新生成。" data-i18n-en="Agent configuration contains a usable bearer credential; some clients store it in plain-text config files. Protect local file permissions and do not commit or share the config. Prefer a user token; use the global administrator key only when required, and revoke/rotate it immediately if exposed.">Agent 配置会包含可直接使用的 Bearer 凭据；部分客户端会明文保存配置文件。请保护本机文件权限，不要提交或分享配置。优先使用用户 Token；管理员全局密钥仅在确有需要时使用，泄漏后请立即撤销并重新生成。</span>
                 </div>
                 <pre class="account-dev-card__code"><code id="mcp-servers-json">{
   "mcpServers": {
@@ -339,6 +348,7 @@ Token：<span class="dev-token">YOUR_TOKEN</span></code></pre>
 }</code></pre>
                 <div class="account-dev-card__actions">
                     <button type="button" class="btn btn-outline btn-primary" id="mcp-config-copy"><i class="fa fa-copy" aria-hidden="true"></i><span data-i18n-zh="复制配置" data-i18n-en="Copy configuration">复制配置</span></button>
+                    {{if eq true .isAdmin}}<button type="button" class="btn btn-outline btn-danger" id="mcp-config-copy-admin"><i class="fa fa-globe" aria-hidden="true"></i><span data-i18n-zh="复制全局权限配置" data-i18n-en="Copy global-access config">复制全局权限配置</span></button>{{end}}
                     <button type="button" class="btn btn-outline" data-guide="mcp"><i class="fa fa-question-circle" aria-hidden="true"></i><span data-i18n-zh="使用说明" data-i18n-en="How to use">使用说明</span></button>
                 </div>
             </article>
@@ -365,7 +375,7 @@ Token：<span class="dev-token">YOUR_TOKEN</span></code></pre>
                     <pre class="account-dev-card__code"><code>npsctl --server <span class="dev-server">http://127.0.0.1:8081</span> --token <span class="dev-token">YOUR_TOKEN</span> clients
 npsctl --server <span class="dev-server">http://127.0.0.1:8081</span> --token <span class="dev-token">YOUR_TOKEN</span> client get 3
 npsctl --server <span class="dev-server">http://127.0.0.1:8081</span> --token <span class="dev-token">YOUR_TOKEN</span> mcp</code></pre>
-                    <p data-i18n-zh="普通用户用 --token 传用户 Token；管理员可用 --key 传 auth_key 或管理员 API 密钥（自动时间戳签名）。完整命令见 npsctl 帮助。" data-i18n-en="Users pass --token; administrators may pass --key with auth_key or the managed admin API key for automatic timestamp signing. Run npsctl for the full command list.">普通用户用 --token 传用户 Token；管理员可用 --key 传 auth_key 或管理员 API 密钥（自动时间戳签名）。完整命令见 npsctl 帮助。</p>
+                    <p data-i18n-zh="普通用户用 --token 传用户 Token；新版本管理员可用 --key 传 auth_key 或管理员 API 密钥（自动生成 HMAC-SHA256 签名）。v1.1.50 及更早 CLI 使用旧 MD5 查询签名；升级服务端与 CLI 后如有旧脚本，可临时设置 api_legacy_md5_enabled=true，迁移完成务必关闭。完整命令见 npsctl 帮助。" data-i18n-en="Users pass --token. Current CLI releases accept --key with auth_key or the managed admin API key and generate HMAC-SHA256 signatures. CLI releases through v1.1.50 use legacy MD5 query signatures; if needed, temporarily set api_legacy_md5_enabled=true after upgrading the server, migrate the client, then disable it. Run npsctl for the full command list.">普通用户用 --token 传用户 Token；新版本管理员可用 --key 传 auth_key 或管理员 API 密钥（自动生成 HMAC-SHA256 签名）。v1.1.50 及更早 CLI 使用旧 MD5 查询签名；升级服务端与 CLI 后如有旧脚本，可临时设置 api_legacy_md5_enabled=true，迁移完成务必关闭。完整命令见 npsctl 帮助。</p>
                 </div>
                 <div id="guide-skill" class="dev-guide" hidden>
                     <h3 data-i18n-zh="NPS Skill 安装与使用" data-i18n-en="NPS Skill">NPS Skill 安装与使用</h3>
@@ -379,7 +389,7 @@ npsctl --server <span class="dev-server">http://127.0.0.1:8081</span> --token <s
                 </div>
                 <div id="guide-mcp" class="dev-guide" hidden>
                     <h3 data-i18n-zh="MCP 接入配置" data-i18n-en="MCP access">MCP 接入配置</h3>
-                    <p data-i18n-zh="MCP 让 AI Agent 通过 /mcp 端点直接调用平台能力，无需理解 HTTP 细节。Agent 使用你的 Token 作为 Bearer 凭证，权限与账号一致。" data-i18n-en="MCP lets AI agents call platform capabilities through /mcp. The agent uses your token as a Bearer credential with the same account scope.">MCP 让 AI Agent 通过 /mcp 端点直接调用平台能力，无需理解 HTTP 细节。Agent 使用你的 Token 作为 Bearer 凭证，权限与账号一致。</p>
+                    <p data-i18n-zh="MCP 让 AI Agent 通过 /mcp 端点直接调用平台能力。用户 Token 仅能访问本人资源；管理员 API 密钥拥有全局 MCP 权限，复制时会明确确认。" data-i18n-en="MCP lets AI agents call platform capabilities through /mcp. User tokens are scoped to their owner's resources; the administrator key has global MCP access and requires confirmation before copying.">MCP 让 AI Agent 通过 /mcp 端点直接调用平台能力。用户 Token 仅能访问本人资源；管理员 API 密钥拥有全局 MCP 权限，复制时会明确确认。</p>
                     <h4 data-i18n-zh="配置" data-i18n-en="Configure">配置</h4>
                     <p data-i18n-zh="点击「复制配置」，把 mcpServers JSON 粘贴到 Codex / Claude 的 MCP 配置中即可。" data-i18n-en="Copy the mcpServers JSON into your Codex / Claude MCP configuration.">点击「复制配置」，把 mcpServers JSON 粘贴到 Codex / Claude 的 MCP 配置中即可。</p>
                     <h4 data-i18n-zh="能力" data-i18n-en="Capabilities">能力</h4>
@@ -650,7 +660,8 @@ $(function () {
     }
 
     function refreshMCPConfig() {
-        var token = ($('#admin-api-value').val() || $('#user-api-value').val() || '').trim();
+        // Never place the global administrator key in a generated example by default.
+        var token = ($('#user-api-value').val() || '').trim();
         var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
         $('#mcp-servers-json .mcp-url').text(origin + '/mcp');
         $('#mcp-servers-json .mcp-token').text(token || 'YOUR_TOKEN');
@@ -658,43 +669,88 @@ $(function () {
         $('.dev-token').text(token || 'YOUR_TOKEN');
         $('#mcp-token-hint').prop('hidden', Boolean(token));
     }
+    function mcpTokenForCopy(useAdminKey) {
+        if (useAdminKey) {
+            var adminToken = ($('#admin-api-value').val() || '').trim();
+            if (!adminToken) {
+                npsNotify('warning', localized('请先生成管理员 API 密钥', 'Generate an administrator API key first'));
+                return null;
+            }
+            var message = localized(
+                '即将复制的管理员 API 密钥拥有全局 MCP 权限，可管理所有用户的客户端、隧道和域名反代，并查看全局用户、审计及脱敏配置。仅在确实需要全局权限时继续？',
+                'The administrator API key grants global MCP access: it can manage every user’s clients, tunnels and hosts, and read global users, audit and redacted configuration. Continue only if global access is required.'
+            );
+            return window.confirm(message) ? { token: adminToken, isAdmin: true } : null;
+        }
+
+        var userToken = ($('#user-api-value').val() || '').trim();
+        if (userToken) return { token: userToken, isAdmin: false };
+
+        npsNotify('warning', $('#admin-api-value').length
+            ? localized('请先生成用户 API Token；如确实需要全局访问，请使用“复制全局权限”按钮。', 'Generate a user API token first; use the global-access copy button only if global access is required.')
+            : localized('请先生成用户 API Token', 'Generate a user API token first'));
+        return null;
+    }
     $('#npsctl-copy').on('click', function () {
         npsCopyText($('#npsctl-snippet').text().trim(), localized('安装命令已复制', 'Install command copied'));
     });
     $('#skill-copy').on('click', function () {
         var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
-        var token = ($('#admin-api-value').val() || $('#user-api-value').val() || '').trim();
-        if (!token) {
-            npsNotify('warning', localized('请先生成 Token', 'Generate a token first'));
-            return;
-        }
+        var credential = mcpTokenForCopy(false);
+        if (!credential) return;
         var release = $('.skill-release-url').text().trim();
         npsCopyText(
             '请接入 NPS Pro 管理我的资源：\n' +
             '下载地址1：' + origin + '/skill/nps.tar.gz\n' +
             '下载地址2：' + release + '\n' +
             '服务器：' + origin + '\n' +
-            'Token：' + token,
+            'Token：' + credential.token + (credential.isAdmin ? '\n权限范围：管理员全局访问' : ''),
             localized('提示词已复制，丢给 Agent 即可', 'Prompt copied, paste it to your agent')
+        );
+    });
+    $('#skill-copy-admin').on('click', function () {
+        var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+        var credential = mcpTokenForCopy(true);
+        if (!credential) return;
+        var release = $('.skill-release-url').text().trim();
+        npsCopyText(
+            '请接入 NPS Pro 管理我的全局资源（管理员密钥拥有跨用户权限）：\n' +
+            '下载地址1：' + origin + '/skill/nps.tar.gz\n' +
+            '下载地址2：' + release + '\n' +
+            '服务器：' + origin + '\n' +
+            'Token：' + credential.token + '\n权限范围：管理员全局访问',
+            localized('全局权限提示词已复制', 'Global-access prompt copied')
         );
     });
     $('#mcp-config-copy').on('click', function () {
         var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
-        var token = ($('#admin-api-value').val() || $('#user-api-value').val() || '').trim();
-        if (!token) {
-            npsNotify('warning', localized('请先生成 Token', 'Generate a token first'));
-            return;
-        }
+        var credential = mcpTokenForCopy(false);
+        if (!credential) return;
         var config = {
             mcpServers: {
                 nps: {
                     type: 'http',
                     url: origin + '/mcp',
-                    headers: { Authorization: 'Bearer ' + token }
+                    headers: { Authorization: 'Bearer ' + credential.token }
                 }
             }
         };
         npsCopyText(JSON.stringify(config, null, 2), localized('MCP 配置已复制', 'MCP configuration copied'));
+    });
+    $('#mcp-config-copy-admin').on('click', function () {
+        var origin = window.location.origin || (window.location.protocol + '//' + window.location.host);
+        var credential = mcpTokenForCopy(true);
+        if (!credential) return;
+        var config = {
+            mcpServers: {
+                nps: {
+                    type: 'http',
+                    url: origin + '/mcp',
+                    headers: { Authorization: 'Bearer ' + credential.token }
+                }
+            }
+        };
+        npsCopyText(JSON.stringify(config, null, 2), localized('全局权限 MCP 配置已复制', 'Global-access MCP configuration copied'));
     });
 
     $('.account-tab').on('click', function () {

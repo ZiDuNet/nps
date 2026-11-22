@@ -11,19 +11,30 @@ API 文档固定发布在：
 
 `/api/v1` 有四条固定约定：
 
-1. 只接受 API 凭据，不使用浏览器登录 Session。管理员使用
-   `auth_key + timestamp` 签名，普通用户使用
+1. 只接受 API 凭据，不使用浏览器登录 Session。管理员默认使用
+   `Authorization: NPS-HMAC <签名>` 和时间戳/nonce 请求头；普通用户使用
    `Authorization: Bearer npsu_...`；
 2. 管理员可使用 `nps.conf` 的 `auth_key`，也可使用「系统 → 账户管理」
-   生成的等价网页管理密钥 `npsa_...`；签名都按
-   `md5(密钥原文 + timestamp)` 计算；
+   生成的等价网页管理密钥 `npsa_...` 作为 HMAC 密钥；
 3. 成功与失败统一返回 `status`、`code`、`msg`，失败额外返回
    `error_code`，每个响应都带 `request_id`；
 4. 请求体支持 `application/json`，也兼容表单与查询参数。
 
-管理员签名时间戳为 Unix 秒，服务端允许约 20 秒误差。普通用户 Token 不携带
-时间戳。Token 可在账户管理页再次查看；查询参数传递 Token 仅用于无法设置
-请求头的兼容客户端，并应只走 HTTPS。
+管理员 HMAC 时间戳为 Unix 秒，默认允许 60 秒误差（`api_hmac_time_window`
+可配置，最大 3600 秒）；nonce 在单个 NPS 进程内拒绝重放。普通用户 Token
+不携带时间戳。不要将 `api_token` 放入 URL；若因兼容原因必须使用，它仍是
+HMAC 覆盖的查询参数，且应只走 HTTPS。旧式 MD5 查询签名默认关闭，仅在
+明确设置 `api_legacy_md5_enabled=true` 时兼容；它会泄露到 URL 日志且不防重放，
+新集成不得使用。
+
+管理员 HMAC 的 canonical 内容依次为：大写 HTTP 方法、转义后的路径、排序并
+URL 编码的完整查询串、请求体 SHA-256 十六进制摘要、时间戳、Base64URL nonce、
+密钥类型（`auth_key` 或 `managed_admin`），字段之间以换行分隔。所有查询参数
+（包括 `auth_key`、`timestamp`、`api_token`）都参与签名。格式非法或有歧义的查询串
+会被拒绝。nonce 防重放缓存是进程内存，不在多个 NPS 实例间共享；
+多副本部署时，REST HMAC 不具备跨副本的防重放保证，应使用粘滞路由或部署共享
+nonce 存储后再将其暴露到多副本环境。只有共享 nonce 存储才能保证跨副本去重；粘滞
+路由只能降低不同副本间分流的概率，不能作为防重放保证。MCP 的无状态会话不改变这一点。
 
 详细鉴权、Token 生命周期和历史接口迁移见[API 鉴权](extend/api.md)。
 
@@ -33,7 +44,7 @@ API 文档固定发布在：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/api/v1` | 版本、能力与资源发现 |
+| `GET` | `/api/v1/` | 版本、能力与资源发现 |
 | `GET` | `/api/v1/time` | 服务端 Unix 时间戳，用于签名对时 |
 | `GET` | `/api/v1/authkey` | AES-CBC 加密后的 `auth_key` |
 | `POST` | `/api/v1/ip-register` | 使用新版登记密钥绑定当前访问来源 IP，有效期内供“仅允许已登记 IP”资源校验 |
@@ -150,20 +161,27 @@ QUIC/HTTP/3 与加密内层链路共用这套证书，不支持多证书列表�
 
 示例：
 
-```bash
-ts=$(date +%s)
-sign=$(printf '%s' "your_auth_key${ts}" | md5sum | awk '{print $1}')
-curl -s "http://127.0.0.1:8081/api/v1/global/bridge-certificate?auth_key=${sign}&timestamp=${ts}"
+```python
+# 直接调用管理员接口时，先按上方 canonical 规则生成 NPS-HMAC 请求头。
+# 生产集成更推荐使用 npsctl；不要将签名或 Token 放在 URL 查询串中。
+import json
+from urllib.request import Request, urlopen
 
-curl -s -X POST "http://127.0.0.1:8081/api/v1/global/bridge-certificate?auth_key=${sign}&timestamp=${ts}" \
-  -H "Content-Type: application/json" \
-  -d '{
+url = "http://127.0.0.1:8081/api/v1/global/bridge-certificate"
+body = json.dumps({
     "mode": "path",
     "cert": "conf/bridgessl/bridge_server.pem",
     "key": "conf/bridgessl/bridge_server.key",
     "hostname": "bridge.example.com"
-  }'
+}).encode()
+secret = "your_auth_key"
+headers = admin_hmac_headers("POST", url, body, secret, "auth_key")
+headers = {"Content-Type": "application/json", **headers}
+with urlopen(Request(url, data=body, headers=headers, method="POST")) as response:
+    print(response.read().decode())
 ```
+
+`admin_hmac_headers` 的可运行参考实现见[API 鉴权与兼容说明](extend/api.md#管理员凭据)。
 
 统一成功信封：
 
@@ -195,11 +213,9 @@ curl -s -X POST "http://127.0.0.1:8081/api/v1/global/bridge-certificate?auth_key
 
 管理员签名示例：
 
-```bash
-ts=$(date +%s)
-sign=$(printf '%s' "your_auth_key${ts}" | md5sum | awk '{print $1}')
-curl -s "http://127.0.0.1:8081/api/v1/clients?auth_key=${sign}&timestamp=${ts}&limit=20"
-```
+管理员调用建议使用 `npsctl --key <管理员密钥> clients --limit 20`，CLI 会自动
+计算 HMAC 请求头；直接请求时按[管理员 HMAC 签名规则](extend/api.md#管理员凭据)
+生成签名，不要将密钥或签名放在 URL 中。
 
 普通用户 Token 示例：
 
@@ -210,11 +226,10 @@ curl -s "http://127.0.0.1:8081/api/v1/clients?limit=20" \
 
 JSON 请求示例：
 
-```bash
-curl -s -X POST "http://127.0.0.1:8081/api/v1/clients?auth_key=${sign}&timestamp=${ts}" \
-  -H "Content-Type: application/json" \
-  -d '{"remark":"office","flow_limit":1024,"compress":true}'
-```
+管理员创建资源可使用 `npsctl --key <管理员密钥> client create --data
+'{"remark":"office","flow_limit":1024,"compress":true}'`。直接 HTTP 请求时，
+将相同 JSON 字节纳入 HMAC 请求体摘要；普通用户可使用 Bearer Token，权限范围
+仍限制在其所属资源。
 
 ### 实时带宽与连接数
 
@@ -331,25 +346,9 @@ POST /api/v1/users/register
 有效期取值优先级为 `expire_time`、`expire_days`、`register_expire_days`。
 两者都省略时使用服务端默认值，当前模板默认 `0`（永久有效）。
 
-```bash
-ts=$(date +%s)
-sign=$(printf '%s' "your_auth_key${ts}" | md5sum | awk '{print $1}')
-curl -s -X POST \
-  "http://127.0.0.1:8081/api/v1/users/register?auth_key=${sign}&timestamp=${ts}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "alice",
-    "password": "replace-with-a-strong-password",
-    "email": "alice@example.com",
-    "remark": "API registered",
-    "max_client": 1,
-    "max_tunnel": 2,
-    "max_conn": 50,
-    "upload_limit": 1024,
-    "download_limit": 2048,
-    "expire_days": 7
-  }'
-```
+该管理员注册接口当前尚无 `npsctl` 子命令。直接 HTTP 请求时使用 JSON 请求体并对其
+原始字节签名；可复用[管理员 HMAC 参考 helper](extend/api.md#管理员凭据)。不要将
+`auth_key`、签名或 Token 放入 URL。
 
 成功响应的 `data` 为用户列表行，包含用户 ID、配额、并发连接数、共享上下行带宽、到期时间和资源计数。
 
@@ -419,7 +418,11 @@ POST /client/list
 | `ConnectionProtocol` | 当前承载新转发连接的协议标签，例如 `TCP`、`TCP + TLS`、`WS`、`QUIC`、`HTTP/3` |
 | `ConnectionProtocols` | 同一 VKey 当前在线且完整建立的全部协议，按运行时发现顺序返回 |
 | `ConnectionCommands` | 为当前客户端生成的全部可复制命令；只包含已启用、正在监听且允许展示的入口 |
-| `bridgeEndpoints` | 当前实际监听的全部 Bridge 入口元数据，含 `key`、`protocol`、`address`、`path`、`alpn`、`main`、`usesUdp`、`viaHttp3` |
+
+客户端列表的响应顶层（`rows` 同级）还会返回 `bridgeEndpoints`，表示服务端当前实际
+监听的全部 Bridge 入口元数据，含 `key`、`protocol`、`address`、`path`、`alpn`、
+`main`、`usesUdp`、`viaHttp3`。它是服务端全局入口列表，不属于某一客户端行，也不表示
+某个客户端专属的接入地址。新建 NPC 命令应使用面板为目标客户端生成的命令。
 
 `ConnectionCommands` 每项包含 `Key`、`Label`、`Protocol`、`Transport`、`Address`、`Path`、`ALPN`、`TLS`、`Main`、`RequiresUDP`、`ViaHTTP3`、`NormalCommand`、`QuickCommand` 和 `QuickFormat`。`QuickFormat=v1` 表示历史格式，`v2` 表示 JSON 格式；v2 新增 Bridge 入口、Path、ALPN、TLS Server Name 和证书指纹字段。HTTP/3 只有在 HTTPS 入口与 UDP 监听实际启动后才返回。
 

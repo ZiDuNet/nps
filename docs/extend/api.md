@@ -11,21 +11,134 @@
 1. `nps.conf` 中的 `auth_key`（首次启动自动生成）；
 2. 「系统 → 账户管理」生成的网页管理密钥，前缀为 `npsa_`。
 
-每个请求携带：
+新版本 `/api/v1` 默认使用 `NPS-HMAC` 请求头签名。签名覆盖 HTTP 方法、路径、完整
+查询串、请求体摘要、时间戳、随机 nonce 和密钥类型。查询串按 Go `url.Values.Encode()`
+规则排序和编码，所有参数（包括名为 `auth_key` 或 `timestamp` 的业务参数）都参与签名；
+旧式 MD5 凭据参数在 HMAC 请求中没有特殊含义。格式非法或有歧义的查询串会被拒绝。
+不要在 URL 中传 Token 或签名。
 
-| 参数 | 说明 |
-| --- | --- |
-| `auth_key` | `md5(管理员密钥原文 + timestamp)` |
-| `timestamp` | 当前 Unix 时间戳（秒） |
+直接集成时，签名可按以下参考实现生成：
 
-服务端允许约 **20 秒**时间偏差，每次请求都应重新计算。两套管理员密钥权限
-等价，均可覆盖全部功能和用户管理。网页管理密钥可在验证登录密码后再次查看。
+```python
+import base64, hashlib, hmac, os, time
+from urllib.parse import quote_from_bytes, unquote_to_bytes, urlencode, urlsplit
 
-```bash
-ts=$(date +%s)
-sign=$(printf '%s' "your_auth_key${ts}" | md5sum | awk '{print $1}')
-curl -s "http://127.0.0.1:8081/api/v1/clients?auth_key=${sign}&timestamp=${ts}"
+def go_escaped_path(path):
+    # Match Go URL.EscapedPath: preserve a valid RawPath verbatim; if it
+    # contains literal unsafe characters, escape the decoded path instead.
+    if not path:
+        return "/"
+    safe = b"/!$&'()*+,-./:;=@_~"
+    raw = path.encode("utf-8")
+    i = 0
+    raw_is_valid = True
+    while i < len(raw):
+        if raw[i] == ord("%"):
+            if i + 2 >= len(raw):
+                raw_is_valid = False
+                break
+            try:
+                int(raw[i + 1:i + 3], 16)
+            except ValueError:
+                raw_is_valid = False
+                break
+            i += 3
+            continue
+        char = raw[i]
+        if char >= 128 or not (char in safe or ord("0") <= char <= ord("9") or
+                                ord("A") <= char <= ord("Z") or
+                                ord("a") <= char <= ord("z")):
+            raw_is_valid = False
+            break
+        i += 1
+    if raw_is_valid:
+        return path
+    return quote_from_bytes(unquote_to_bytes(path), safe=safe.decode("ascii"))
+
+def admin_hmac_headers(method, url, body, secret, key_id="auth_key"):
+    parts = urlsplit(url)
+    # Match Go url.ParseQuery: reject malformed percent escapes, unescaped
+    # semicolons and invalid UTF-8 instead of signing a partial interpretation.
+    raw_pairs = []
+    if parts.query:
+        for item in parts.query.split("&"):
+            key, separator, value = item.partition("=")
+            if not separator:
+                value = ""
+            raw_pairs.append((key.replace("+", " "), value.replace("+", " ")))
+
+    def strict_unquote(value):
+        raw = bytearray()
+        index = 0
+        while index < len(value):
+            if value[index] == "%":
+                if index + 2 >= len(value):
+                    raise ValueError("malformed query escape")
+                try:
+                    raw.append(int(value[index + 1:index + 3], 16))
+                except ValueError as error:
+                    raise ValueError("malformed query escape") from error
+                index += 3
+            else:
+                raw.extend(value[index].encode("utf-8"))
+                index += 1
+        return bytes(raw)
+
+    def go_query_escape(value):
+        # Go QueryEscape works on bytes, leaves only -_.~ unescaped and uses +
+        # for spaces. Python's quote_from_bytes follows the same byte model.
+        return quote_from_bytes(value, safe="-_.~").replace("%20", "+")
+
+    values = {}
+    for raw_key, raw_value in raw_pairs:
+        if ";" in raw_key or ";" in raw_value:
+            raise ValueError("unescaped semicolon in query")
+        key, value = strict_unquote(raw_key), strict_unquote(raw_value)
+        values.setdefault(key, []).append(value)
+    pairs = [(key, value) for key in sorted(values)
+             for value in values[key]]
+    query = "&".join(go_query_escape(key) + "=" + go_query_escape(value)
+                     for key, value in pairs)
+    path = go_escaped_path(parts.path)
+    timestamp = str(int(time.time()))
+    nonce = base64.urlsafe_b64encode(os.urandom(24)).rstrip(b"=").decode()
+    body_hash = hashlib.sha256(body or b"").hexdigest()
+    canonical = "\n".join((method.upper(), path, query, body_hash,
+                           timestamp, nonce, key_id))
+    signature = hmac.new(secret.encode(), canonical.encode(), hashlib.sha256).hexdigest()
+    return {
+        "Authorization": "NPS-HMAC " + signature,
+        "X-NPS-Timestamp": timestamp,
+        "X-NPS-Nonce": nonce,
+        "X-NPS-Key-Id": key_id,
+    }
 ```
+
+默认时间窗口为 60 秒，可通过 `api_hmac_time_window` 配置（范围 1–3600 秒）。
+nonce 去重缓存只存在于单个 NPS 进程内；多副本间不会共享。若反向代理把请求分发
+到多个副本，REST HMAC 不具备跨副本防重放保证。只有部署共享 nonce 存储才能提供
+跨副本去重；粘滞路由只能降低正常请求被分发到不同副本的概率，不能作为防重放保证。
+MCP 的 stateless 会话仅表示 MCP 不依赖会话 ID，不会让 REST nonce 缓存变成共享状态。
+
+CLI 的 `--key-id auto|auth_key|managed_admin` 用于选择密钥类型。`auto` 按
+`npsa_` 前缀识别网页管理密钥；如果 `auth_key` 本身碰巧以 `npsa_` 开头，必须显式
+指定 `--key-id auth_key`。该 CLI 选项随 v1.1.51 发布；已发布的
+v1.1.50 `npsctl` 不包含该选项。
+
+旧版 `md5(管理员密钥 + timestamp)` 查询签名不再是默认方式。兼容旧调用方时，可临时在
+`nps.conf` 设置 `api_legacy_md5_enabled=true`。仅允许注册的 `/api/v1` 受保护 API 路由和
+历史 Web 管理路由；公开探针、登录/注册页面、未知路由和不支持的方法不会因此获得 API
+身份。请求中的签名会出现在 URL/access log，且协议没有 nonce、防重放能力。迁移完成后
+应关闭兼容开关。不要在新集成或示例中使用该旧协议。
+
+### 旧式签名（仅迁移兼容）
+
+旧 `/client/*`、`/index/*` 等历史管理 API 无法使用 `/api/v1` 的 HMAC 协议。旧版
+MD5 示例仅供迁移仍依赖这些路由的调用方参考，要求显式启用上述兼容开关。它会把签名
+暴露在 URL 日志中，仅应在 HTTPS 下短期迁移使用。
+
+`/api/v1` 新集成推荐使用 `npsctl --key`，它会自动生成 HMAC 请求头；也可以按上方
+Python helper 直接签名。
 
 ## 普通用户 Token
 
@@ -43,6 +156,14 @@ curl -s "http://127.0.0.1:8081/api/v1/clients?limit=20" \
 普通用户 Token 不携带时间戳，也不能访问管理员的用户管理、全局参数、Geo、
 登录保护和管理员密钥接口。服务端会按 Token 所属用户过滤客户端、隧道、
 Host、统计、审计和连接日志。
+
+### 旧式 MD5 管理员签名（仅迁移兼容）
+
+以下 `auth_key=md5(管理员密钥原文 + timestamp)` 查询参数属于已弃用的历史
+签名，并非普通用户 Token，也不是当前 `/api/v1` 管理员调用的推荐方式。它只在
+`api_legacy_md5_enabled=true` 时接受，时间戳误差窗口为 20 秒。签名在 URL 中，
+可能进入反向代理、Web 服务器和监控系统的访问日志；该协议没有 nonce，窗口内可重放。
+迁移到 `NPS-HMAC` 或用户 Bearer Token 后，应保持兼容开关关闭。
 
 管理员可在「用户管理」为用户生成、查看或撤销 Token；普通用户可在
 「系统 → 账户管理」自助管理。Token 同时保存哈希和加密密文，因此当前版本
@@ -152,6 +273,10 @@ GET /auth/getauthkey/
 ---
 
 ### 历史接口接入示例
+
+> 以下示例使用旧式 MD5 查询签名，只在 `api_legacy_md5_enabled=true` 时可用；签名会
+> 进入 URL/access log，且可重放。仅用于迁移旧历史 Web API 集成。新代码请使用
+> `/api/v1` 的 HMAC 请求头或用户 Bearer Token。
 
 ::: tabs
 

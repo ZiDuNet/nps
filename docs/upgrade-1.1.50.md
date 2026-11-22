@@ -53,7 +53,8 @@ v1.1.50 未改变 SQLite schema。可由同一 `conf` 目录直接回退到 v1.1
 
 ## 验收
 
-- 面板 `/api/v1/info` 与 `npsctl version` 显示 `1.1.50`。
+- 面板 `GET /api/v1/` 与 `npsctl version` 显示 `1.1.50`；设置 `web_base_url`
+  时，公开探针路径需添加其前缀。
 - Release 资产包含受支持服务端平台的 `*_server.tar.gz`、全部客户端的
   `*_client.tar.gz`、`npsctl_*`、`android_client.apk`、fnOS FPK、GUI ZIP
   和 `checksums.txt`。

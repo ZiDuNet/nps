@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.50</sub>
+﻿# NPS <sub>v1.1.51</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -205,6 +205,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.51** (2026-11-22) - Hardened `/api/v1` administrator authentication with HMAC-SHA256 request headers, timestamps, nonces and body signing; legacy MD5 query signing is disabled by default and has a narrow temporary migration allowlist. `npsctl` adds offset pagination, readable tables/selected TSV fields, JSON output, custom CA and timeout options. MCP/Skill access guidance now separates user-scoped credentials from global administrator credentials. See the [upgrade notes](docs/upgrade-1.1.51.md).
 - **v1.1.50** (2026-11-21) - Restored release packaging after the `v1.1.49` build failed on Linux MIPS. SQLite registration is now server-only, so MIPS NPC clients remain available while unsupported MIPS servers leave the formal matrix. CI now verifies every published target before tagging. See the [upgrade notes](docs/upgrade-1.1.50.md).
 - **v1.1.49** (2026-11-21) - Promoted SQLite to the authoritative business-data store with WAL, a single-process lock, transactional cascade deletes, runtime settings, guarded JSON migration, migration reports, and lossless `-export-json` rollback. Legacy JSON must first be normalized by the v1.1.49 gateway; invalid or unmarked data fails closed without creating a database. See the [SQLite upgrade notes](docs/upgrade-1.1.49.md).
 - **v1.1.48** (2026-11-20) - Replaced session-bound login challenges with stateless `/auth/challenge` verification, fixing `login_expired` behind Nginx caching or multi-instance deployments. Added the `/mcp` Model Context Protocol server, the `npsctl` CLI, and a bundled NPS Skill distributed as a GitHub release asset. Renamed Account Management to Access & Security and added Agent integration guidance. Release assets now include per-platform `npsctl` binaries and `nps-skill.tar.gz`. See the [upgrade notes](docs/upgrade-1.1.48.md).

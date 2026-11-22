@@ -2,15 +2,228 @@ package controllers
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"html/template"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"ehang.io/nps/lib/crypt"
 	"ehang.io/nps/lib/file"
 	"github.com/astaxie/beego"
+	beecontext "github.com/astaxie/beego/context"
 )
+
+func TestBaseControllerDoesNotAcceptVersionedAPIHMAC(t *testing.T) {
+	previousKey := beego.AppConfig.String("auth_key")
+	previousHMAC := beego.AppConfig.DefaultBool("api_hmac_enabled", true)
+	_ = beego.AppConfig.Set("auth_key", "base-controller-hmac-test-key")
+	_ = beego.AppConfig.Set("api_hmac_enabled", "true")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("auth_key", previousKey)
+		_ = beego.AppConfig.Set("api_hmac_enabled", strconv.FormatBool(previousHMAC))
+	})
+
+	body := []byte(`{"sensitive":"body"}`)
+	request := httptest.NewRequest(http.MethodPost, "http://console.test/client/add", bytes.NewReader(body))
+	bodySum := sha256.Sum256(body)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce, err := newNPSHMACNonce()
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyID := npsHMACAuthKeyID
+	signature, err := signNPSHMAC("base-controller-hmac-test-key", request, hex.EncodeToString(bodySum[:]), timestamp, nonce, keyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", npsHMACAuthorizationScheme+" "+signature)
+	request.Header.Set("X-NPS-Timestamp", timestamp)
+	request.Header.Set("X-NPS-Nonce", nonce)
+	request.Header.Set("X-NPS-Key-Id", keyID)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	ctx := beecontext.NewContext()
+	ctx.Reset(response, request)
+	session := &clientPermissionSession{values: map[interface{}]interface{}{}}
+	ctx.Input.CruSession = session
+	controller := &BaseController{}
+	controller.Init(ctx, "BaseController", "Add", controller)
+	controller.CruSession = session
+
+	runClientPermissionAction(t, controller.Prepare)
+	if controller.apiAuthorized {
+		t.Fatal("legacy MVC controller accepted an NPS-HMAC credential")
+	}
+	if response.Code != http.StatusFound {
+		t.Fatalf("legacy MVC response status = %d, want login redirect %d", response.Code, http.StatusFound)
+	}
+}
+
+func TestBaseControllerAcceptsLegacyMD5OnConsoleRoutesOnlyWhenEnabled(t *testing.T) {
+	previousKey := beego.AppConfig.String("auth_key")
+	previousLegacy := beego.AppConfig.DefaultBool("api_legacy_md5_enabled", false)
+	_ = beego.AppConfig.Set("auth_key", "base-controller-md5-test-key")
+	_ = beego.AppConfig.Set("api_legacy_md5_enabled", "true")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("auth_key", previousKey)
+		_ = beego.AppConfig.Set("api_legacy_md5_enabled", strconv.FormatBool(previousLegacy))
+	})
+
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	form := url.Values{
+		"auth_key":  {crypt.Md5("base-controller-md5-test-key" + timestamp)},
+		"timestamp": {timestamp},
+	}
+	request := httptest.NewRequest(http.MethodPost, "http://console.test/client/list/", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	ctx := beecontext.NewContext()
+	ctx.Reset(response, request)
+	session := &clientPermissionSession{values: map[interface{}]interface{}{"isAdmin": true}}
+	ctx.Input.CruSession = session
+	controller := &BaseController{}
+	controller.Init(ctx, "ClientController", "List", controller)
+	controller.CruSession = session
+
+	controller.Prepare()
+	if !controller.apiAuthorized {
+		t.Fatal("legacy MVC controller did not accept explicitly enabled MD5 compatibility")
+	}
+	if response.Code == http.StatusFound {
+		t.Fatalf("legacy MVC response redirected to login despite valid migration credential")
+	}
+}
+
+func TestBaseControllerRejectsLegacyMD5WhenDisabled(t *testing.T) {
+	previousKey := beego.AppConfig.String("auth_key")
+	previousLegacy := beego.AppConfig.DefaultBool("api_legacy_md5_enabled", false)
+	_ = beego.AppConfig.Set("auth_key", "base-controller-md5-test-key")
+	_ = beego.AppConfig.Set("api_legacy_md5_enabled", "false")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("auth_key", previousKey)
+		_ = beego.AppConfig.Set("api_legacy_md5_enabled", strconv.FormatBool(previousLegacy))
+	})
+
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	form := url.Values{
+		"auth_key":  {crypt.Md5("base-controller-md5-test-key" + timestamp)},
+		"timestamp": {timestamp},
+	}
+	request := httptest.NewRequest(http.MethodPost, "http://console.test/client/list/", strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response := httptest.NewRecorder()
+	ctx := beecontext.NewContext()
+	ctx.Reset(response, request)
+	session := &clientPermissionSession{values: map[interface{}]interface{}{}}
+	ctx.Input.CruSession = session
+	controller := &BaseController{}
+	controller.Init(ctx, "ClientController", "List", controller)
+	controller.CruSession = session
+
+	runClientPermissionAction(t, controller.Prepare)
+	if controller.apiAuthorized {
+		t.Fatal("legacy MVC controller accepted MD5 credentials while compatibility is disabled")
+	}
+	if response.Code != http.StatusFound {
+		t.Fatalf("legacy MVC response status = %d, want login redirect %d", response.Code, http.StatusFound)
+	}
+}
+
+func TestLegacyMD5RouteAllowlistRequiresExactManagementRoutes(t *testing.T) {
+	previousBase := beego.AppConfig.String("web_base_url")
+	t.Cleanup(func() { _ = beego.AppConfig.Set("web_base_url", previousBase) })
+
+	tests := []struct {
+		name   string
+		method string
+		target string
+		base   string
+		want   bool
+	}{
+		{name: "documented legacy list route", method: http.MethodPost, target: "/client/list/", want: true},
+		{name: "versioned API list route", method: http.MethodGet, target: "/api/v1/clients", want: true},
+		{name: "versioned API route under base path", method: http.MethodGet, target: "/panel/api/v1/clients/3", base: "/panel", want: true},
+		{name: "versioned item read route", method: http.MethodGet, target: "/api/v1/tunnels/12", want: true},
+		{name: "versioned item update route", method: http.MethodPatch, target: "/api/v1/hosts/12", want: true},
+		{name: "versioned user token status route", method: http.MethodGet, target: "/api/v1/users/12/token/status", want: true},
+		{name: "versioned user token revoke route", method: http.MethodPost, target: "/api/v1/users/12/token/revoke", want: true},
+		{name: "versioned client instance disconnect", method: http.MethodPost, target: "/api/v1/clients/12/instances/disconnect", want: true},
+		{name: "management route under base path", method: http.MethodPost, target: "/panel/client/list", base: "/panel", want: true},
+		{name: "public versioned discovery route", method: http.MethodGet, target: "/api/v1/", want: false},
+		{name: "public versioned time route", method: http.MethodGet, target: "/api/v1/time", want: false},
+		{name: "public versioned IP registration route", method: http.MethodPost, target: "/api/v1/ip-register", want: false},
+		{name: "unknown versioned API route", method: http.MethodGet, target: "/api/v1/future", want: false},
+		{name: "unknown item resource", method: http.MethodGet, target: "/api/v1/widgets/12", want: false},
+		{name: "unsupported resource action", method: http.MethodPost, target: "/api/v1/clients/12/start", want: false},
+		{name: "wrong item method", method: http.MethodPost, target: "/api/v1/clients/12", want: false},
+		{name: "list route rejects wrong method", method: http.MethodDelete, target: "/api/v1/clients", want: false},
+		{name: "non-decimal identifier", method: http.MethodGet, target: "/api/v1/clients/not-an-id", want: false},
+		{name: "zero identifier", method: http.MethodGet, target: "/api/v1/clients/0", want: false},
+		{name: "unregistered nested action", method: http.MethodPost, target: "/api/v1/clients/12/instances/unknown", want: false},
+		{name: "user token status rejects wrong method", method: http.MethodPost, target: "/api/v1/users/12/token/status", want: false},
+		{name: "user token revoke rejects wrong method", method: http.MethodGet, target: "/api/v1/users/12/token/revoke", want: false},
+		{name: "wrong method", method: http.MethodGet, target: "/client/list", want: false},
+		{name: "login route", method: http.MethodPost, target: "/login/index", want: false},
+		{name: "public auth route", method: http.MethodPost, target: "/auth/gettime", want: false},
+		{name: "base path prefix collision", method: http.MethodPost, target: "/panelx/client/list", base: "/panel", want: false},
+		{name: "encoded allowlisted character", method: http.MethodPost, target: "/%63lient/list", want: false},
+		{name: "encoded slash", method: http.MethodPost, target: "/client%2flist", want: false},
+		{name: "duplicate slash", method: http.MethodPost, target: "/client//list", want: false},
+		{name: "dot segment", method: http.MethodPost, target: "/client/../login/index", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = beego.AppConfig.Set("web_base_url", tt.base)
+			request := httptest.NewRequest(tt.method, "http://console.test"+tt.target, nil)
+			if got := legacyMD5APIRequestAllowed(request); got != tt.want {
+				t.Fatalf("legacyMD5APIRequestAllowed(%s %s) = %v, want %v", tt.method, tt.target, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLegacyMD5CredentialsRejectAmbiguousOrMalformedInput(t *testing.T) {
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	signature := crypt.Md5("base-controller-md5-test-key" + timestamp)
+	tests := []struct {
+		name   string
+		target string
+		body   string
+		want   bool
+	}{
+		{name: "query credentials", target: "/client/list?auth_key=" + signature + "&timestamp=" + timestamp, want: true},
+		{name: "form credentials", target: "/client/list", body: url.Values{"auth_key": {signature}, "timestamp": {timestamp}}.Encode(), want: true},
+		{name: "duplicate query and form credential", target: "/client/list?auth_key=" + signature + "&timestamp=" + timestamp, body: url.Values{"auth_key": {signature}, "timestamp": {timestamp}}.Encode(), want: false},
+		{name: "malformed query", target: "/client/list?auth_key=%ZZ&timestamp=" + timestamp, want: false},
+		{name: "duplicate query credential", target: "/client/list?auth_key=" + signature + "&auth_key=" + signature + "&timestamp=" + timestamp, want: false},
+		{name: "noncanonical timestamp", target: "/client/list?auth_key=" + signature + "&timestamp=0" + timestamp, want: false},
+		{name: "overflow timestamp", target: "/client/list?auth_key=" + signature + "&timestamp=999999999999999999999999999999999", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var body *strings.Reader
+			if tt.body != "" {
+				body = strings.NewReader(tt.body)
+			} else {
+				body = strings.NewReader("")
+			}
+			request := httptest.NewRequest(http.MethodPost, "http://console.test"+tt.target, body)
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			_, _, _, got := legacyMD5QueryCredentials(request)
+			if got != tt.want {
+				t.Fatalf("legacyMD5QueryCredentials() accepted = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestAjaxDetailKeepsLegacyAndStandardFields(t *testing.T) {
 	s := &BaseController{requestID: "test-request"}

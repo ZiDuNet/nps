@@ -65,6 +65,9 @@ var hotReloadServerConfigKeys = map[string]struct{}{
 	"force_pow":                    {},
 	"pow_bits":                     {},
 	"mcp_enabled":                  {},
+	"api_hmac_enabled":             {},
+	"api_hmac_time_window":         {},
+	"api_legacy_md5_enabled":       {},
 	"flow_limit_type":              {},
 	"system_info_display":          {},
 	"show_http_proxy_port":         {},
@@ -348,9 +351,12 @@ var serverConfigMetaByKey = map[string]serverConfigMeta{
 	"web_key_file":           {Label: "管理面板私钥路径", Category: "Web 管理面板", Description: "web_open_ssl=true 时使用；关闭 HTTPS 时可不写入。", Optional: true},
 	"web_close_on_not_found": {Label: "未知路径直接断开", Category: "Web 管理面板", Description: "访问不存在的管理路径时尽力关闭连接，不返回 404 响应。", Type: "bool", Optional: true},
 
-	"auth_key":       {Label: "Web API 密钥", Category: "Web API 认证", Description: "签名 API 请求使用的密钥。", Sensitive: true},
-	"auth_crypt_key": {Label: "API 密钥加密密钥", Category: "Web API 认证", Description: "必须恰好为 16 个字符。", Sensitive: true},
-	"mcp_enabled":    {Label: "MCP 接入端点", Category: "Web API 认证", Description: "是否开放 /mcp 模型上下文协议接入端点，供 AI Agent 通过 Bearer Token 调用。默认开启。", Type: "bool"},
+	"auth_key":               {Label: "Web API 密钥", Category: "Web API 认证", Description: "签名 API 请求使用的密钥。", Sensitive: true},
+	"auth_crypt_key":         {Label: "API 密钥加密密钥", Category: "Web API 认证", Description: "必须恰好为 16 个字符。", Sensitive: true},
+	"api_hmac_enabled":       {Label: "API HMAC 签名", Category: "Web API 认证", Description: "使用请求头中的 HMAC-SHA256 签名保护管理员 API；包含时间戳、随机 nonce、请求路径、查询参数和正文摘要。建议保持开启。", Type: "bool"},
+	"api_hmac_time_window":   {Label: "API HMAC 时间窗口", Category: "Web API 认证", Description: "HMAC 请求允许的时间偏差，单位秒；同时决定 nonce 防重放缓存有效期。", Type: "int"},
+	"api_legacy_md5_enabled": {Label: "兼容旧版 MD5 API 签名", Category: "Web API 认证", Description: "临时兼容旧版 auth_key+timestamp 查询签名。该方式会把签名写入 URL 日志且不能防重放，迁移完成后应关闭。", Type: "bool"},
+	"mcp_enabled":            {Label: "MCP 接入端点", Category: "Web API 认证", Description: "是否开放 /mcp 模型上下文协议接入端点，供 AI Agent 通过 Bearer Token 调用。默认开启。", Type: "bool"},
 
 	"allow_user_login":      {Label: "允许普通用户登录", Category: "用户与资源权限", Description: "是否启用多用户面板登录。"},
 	"allow_user_vkey_login": {Label: "允许 VKEY 登录面板", Category: "用户与资源权限", Description: "是否允许普通用户使用客户端 VKEY 登录管理面板。", Type: "bool"},
@@ -604,7 +610,7 @@ var serverConfigKeyPriority = map[string]int{
 	"totp_secret": 90, "x_nps_http_only": 120, "web_host": 130,
 	"web_close_on_not_found": 140,
 
-	"auth_key": 10, "auth_crypt_key": 20,
+	"auth_key": 10, "auth_crypt_key": 20, "api_hmac_enabled": 30, "api_hmac_time_window": 40, "api_legacy_md5_enabled": 50,
 
 	"allow_user_register": 10, "register_email_verify": 20, "register_captcha": 30,
 	"register_max_clients": 40, "register_max_tunnels": 50, "register_max_hosts": 60, "register_max_conn": 70,
@@ -1440,6 +1446,12 @@ func validateServerConfigValue(key string, meta serverConfigMeta, value string) 
 	}
 	if key == "auth_crypt_key" && len(value) != 16 {
 		return errors.New("auth_crypt_key 必须恰好为 16 个字符")
+	}
+	if key == "api_hmac_time_window" {
+		n, _ := strconv.Atoi(value)
+		if n < 1 || n > 3600 {
+			return errors.New("api_hmac_time_window 必须在 1-3600 秒之间")
+		}
 	}
 	if (key == "bridge_path" || key == "bridge_show_path") && !strings.HasPrefix(value, "/") {
 		return fmt.Errorf("%s 必须以 / 开头", key)

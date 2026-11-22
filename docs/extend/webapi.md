@@ -82,6 +82,9 @@ POST /client/list/
 | limit | 每页条数 |
 
 返回 `AjaxTable` 格式，额外含 `ip`、`bridgeType`、`bridgePort`、`bridgeEndpoints` 字段。
+其中 `bridgeEndpoints` 位于响应顶层，是服务端全局 Bridge 入口列表，不属于任何一行
+客户端数据；目标客户端的可执行命令请使用同一响应行中的 `ConnectionCommands`，或直接
+从面板客户端详情页复制。
 
 客户端行新增：
 
@@ -200,7 +203,7 @@ POST /client/del/
 
 ## User 用户管理
 
-用户列表、创建、编辑和删除等管理接口仅供管理员调用。普通用户账号归属 `users.json`，与客户端的历史 Web 登录字段不同；Token 自助接口允许普通用户只操作自己的凭据。
+用户列表、创建、编辑和删除等管理接口仅供管理员调用。普通用户账号存储于 SQLite 的 `conf/nps.db`（旧版 JSON 升级时从 `users.json` 导入），与客户端的历史 Web 登录字段不同；Token 自助接口允许普通用户只操作自己的凭据。
 
 ### 生成普通用户 API Token
 

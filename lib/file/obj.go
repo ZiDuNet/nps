@@ -965,9 +965,9 @@ type Glob struct {
 	DashboardKeyHash       string `json:"dashboard_key_hash,omitempty"`
 	DashboardKeyCiphertext string `json:"dashboard_key_ciphertext,omitempty"`
 	// AdminAPIKeyHash/AdminAPIKeyCiphertext hold the optional web-managed
-	// administrator API credential. It is equivalent to auth_key in nps.conf:
-	// both authorize the signed md5(auth_key + timestamp) protocol, and the
-	// managed key can be rotated without touching the configuration file.
+	// administrator API credential. It is accepted as the managed_admin secret
+	// for API HMAC-SHA256 requests and can be rotated without touching the
+	// configuration file. Legacy MD5 query signing is opt-in only.
 	AdminAPIKeyHash       string `json:"admin_api_key_hash,omitempty"`
 	AdminAPIKeyCiphertext string `json:"admin_api_key_ciphertext,omitempty"`
 	sync.RWMutex

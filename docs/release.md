@@ -6,8 +6,8 @@
 ## 版本号规则
 
 - 版本号唯一来源：`lib/version/version.go` 的 `VERSION`。
-- 正式 tag 必须等于 `v{VERSION}`，例如源码为 `1.1.50` 时 tag 只能是
-  `v1.1.50`。
+- 正式 tag 必须等于 `v{VERSION}`，例如源码为 `1.1.51` 时 tag 只能是
+  `v1.1.51`。
 - tag 必须指向当前 `origin/master` 的提交；`release.yml` 的
   `validate_release` 会强制校验这两点。
 - 补丁版本只递增最后一位；不要复用或移动已发布 tag，回滚请发新补丁版本。
@@ -31,6 +31,7 @@
 | `docs/README.md` | 当前版本、文档口径与升级说明导航 |
 | `docs/changelog.md` / `docs/changelog/index.md` | 顶部版本条目 |
 | `docs/upgrade-x.y.z.md` | 新增本版本升级说明 |
+| `web/skills/nps/SKILL.md` | 版本号、SPDX 许可证与来源元数据同步 |
 
 功能或行为变化时还要检查：
 
@@ -113,7 +114,8 @@ Docker 用户还要确认 `nps` / `npc` 的版本标签和 `latest` 指向新版
 - GitHub 首页 README 标题显示新版本号。
 - `docs/README.md`、`docs/changelog*` 顶部为新版本。
 - Release Notes 来自 `CHANGELOG.md` 对应段落，且包含 Full Changelog 链接。
-- 面板 `/api/v1/info` 与 `npsctl version` 一致。
+- 面板 `GET /api/v1/`（若设置了 `web_base_url`，需在前面添加该路径前缀）与
+  `npsctl version` 一致。
 
 ## 常见失败
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -41,6 +42,22 @@ func TestMCPHandlerRejectsMissingBearer(t *testing.T) {
 	}
 }
 
+func TestMCPDisabledReturnsNotFoundBeforeAuthentication(t *testing.T) {
+	previous := beego.AppConfig.DefaultBool("mcp_enabled", true)
+	if err := beego.AppConfig.Set("mcp_enabled", "false"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("mcp_enabled", strconv.FormatBool(previous))
+	})
+
+	response := httptest.NewRecorder()
+	NewMCPHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "http://console.test/mcp", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("disabled /mcp = %d, want 404: %s", response.Code, response.Body.String())
+	}
+}
+
 func installMCPTestUserToken(t *testing.T, userID int) string {
 	t.Helper()
 	db := useClientPermissionTestDb(t)
@@ -56,6 +73,10 @@ func installMCPTestUserToken(t *testing.T, userID int) string {
 }
 
 func mcpPost(t *testing.T, endpoint, token string, payload map[string]any) (*http.Response, []byte) {
+	return mcpPostWithSession(t, endpoint, token, "", payload)
+}
+
+func mcpPostWithSession(t *testing.T, endpoint, token, sessionID string, payload map[string]any) (*http.Response, []byte) {
 	t.Helper()
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -68,6 +89,9 @@ func mcpPost(t *testing.T, endpoint, token string, payload map[string]any) (*htt
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
+	if sessionID != "" {
+		req.Header.Set("Mcp-Session-Id", sessionID)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -120,12 +144,15 @@ func TestMCPStatelessInitializeListAndCall(t *testing.T) {
 		t.Fatalf("stateless MCP unexpectedly returned session id %q", sessionID)
 	}
 
-	resp, body = mcpPost(t, ts.URL, token, map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+	resp, body = mcpPostWithSession(t, ts.URL, token, "stale-or-unknown-session", map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
 	if resp.StatusCode != http.StatusOK || !bytes.Contains(body, []byte(`"nps_dashboard"`)) {
 		t.Fatalf("tools/list status = %d: %s", resp.StatusCode, body)
 	}
+	if sessionID := resp.Header.Get("Mcp-Session-Id"); sessionID != "" {
+		t.Fatalf("stateless tools/list unexpectedly returned session id %q", sessionID)
+	}
 
-	resp, body = mcpPost(t, ts.URL, token, map[string]any{
+	resp, body = mcpPostWithSession(t, ts.URL, token, "stale-or-unknown-session", map[string]any{
 		"jsonrpc": "2.0", "id": 3, "method": "tools/call",
 		"params": map[string]any{"name": "nps_dashboard", "arguments": map[string]any{}},
 	})
@@ -137,6 +164,14 @@ func TestMCPStatelessInitializeListAndCall(t *testing.T) {
 func TestMCPGetStreamingIsDisabled(t *testing.T) {
 	token := installMCPTestUserToken(t, 7)
 	handler := NewMCPHandler()
+	unauthenticated := httptest.NewRecorder()
+	unauthenticatedRequest := httptest.NewRequest(http.MethodGet, "http://console.test/mcp", nil)
+	unauthenticatedRequest.Header.Set("Accept", "text/event-stream")
+	handler.ServeHTTP(unauthenticated, unauthenticatedRequest)
+	if unauthenticated.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated GET /mcp = %d, want 401 before method handling", unauthenticated.Code)
+	}
+
 	req := httptest.NewRequest(http.MethodGet, "http://console.test/mcp", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "text/event-stream")

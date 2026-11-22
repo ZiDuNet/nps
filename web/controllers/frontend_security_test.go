@@ -269,6 +269,22 @@ func TestAccountManagementCentralizesSessionsAndAdminTOTP(t *testing.T) {
 			t.Fatalf("account management template misses security marker %q", marker)
 		}
 	}
+	for _, marker := range []string{
+		`var token = ($('#user-api-value').val() || '').trim();`,
+		`function mcpTokenForCopy(useAdminKey)`,
+		`window.confirm(message) ? { token: adminToken, isAdmin: true } : null`,
+		`id="mcp-config-copy-admin"`,
+		`id="skill-copy-admin"`,
+		`管理员 API 密钥拥有全局 MCP 权限`,
+		`global MCP access`,
+	} {
+		if !strings.Contains(template, marker) {
+			t.Fatalf("account management template misses safe MCP credential marker %q", marker)
+		}
+	}
+	if strings.Contains(template, `($('#admin-api-value').val() || $('#user-api-value').val() || '').trim()`) {
+		t.Fatal("MCP examples must not silently prefer the global administrator key")
+	}
 
 	layoutContent, err := os.ReadFile("../views/public/layout.html")
 	if err != nil {

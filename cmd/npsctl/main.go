@@ -4,7 +4,13 @@
 package main
 
 import (
-	"crypto/md5"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,8 +20,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"ehang.io/nps/lib/version"
@@ -24,11 +32,16 @@ import (
 const adminAPITokenPrefixForCLI = "npsa_"
 
 type client struct {
-	server string
-	token  string
-	key    string
-	http   *http.Client
-	out    io.Writer
+	server     string
+	token      string
+	key        string
+	keyID      string
+	http       *http.Client
+	out        io.Writer
+	jsonOutput bool
+	fields     string
+	timeout    time.Duration
+	caFile     string
 }
 
 type envelope struct {
@@ -51,41 +64,74 @@ func main() {
 }
 
 func run(args []string) error {
+	return runWithWriters(args, os.Stdout, os.Stderr)
+}
+
+func runWithWriters(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("npsctl", flag.ContinueOnError)
 	fs.Usage = func() {}
 	var (
 		server      = fs.String("server", envOr("NPS_SERVER", "http://127.0.0.1:8081"), "NPS server base URL (env NPS_SERVER)")
 		token       = fs.String("token", os.Getenv("NPS_TOKEN"), "user API bearer token npsu_... (env NPS_TOKEN)")
 		key         = fs.String("key", os.Getenv("NPS_KEY"), "administrator auth_key or managed npsa_ key (env NPS_KEY)")
+		keyID       = fs.String("key-id", "auto", "administrator key type: auto, auth_key, or managed_admin")
 		limit       = fs.Int("limit", 0, "max rows for list commands")
+		offset      = fs.Int("offset", 0, "number of rows to skip for list commands")
+		timeout     = fs.Duration("timeout", 20*time.Second, "HTTP request timeout (for example 10s or 1m)")
+		caFile      = fs.String("ca-file", "", "PEM CA bundle to trust for HTTPS connections")
+		jsonOutput  = fs.Bool("json", false, "write JSON instead of human-readable tables")
+		fields      = fs.String("fields", "", "write selected comma-separated fields as TSV (for example id,remark,status)")
 		data        = fs.String("data", "", "JSON body for create/update commands")
 		showVersion = fs.Bool("version", false, "print version and exit")
 	)
-	fs.SetOutput(os.Stderr)
+	fs.SetOutput(stderr)
 	globalArgs, restArgs := splitGlobalArgs(args)
 	if err := fs.Parse(append(globalArgs, restArgs...)); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			usage(os.Stdout, fs)
+			usage(stdout, fs)
 			return nil
 		}
 		return err
 	}
 	rest := fs.Args()
 	if *showVersion {
-		fmt.Println(version.VERSION)
+		fmt.Fprintln(stdout, version.VERSION)
 		return nil
 	}
 	if len(rest) == 0 {
-		usage(os.Stdout, fs)
+		usage(stdout, fs)
 		return nil
 	}
-
+	if *limit < 0 {
+		return errors.New("--limit 不能为负数")
+	}
+	if *offset < 0 {
+		return errors.New("--offset 不能为负数")
+	}
+	if _, err := resolveAdminKeyID(*key, *keyID); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*token) != "" && strings.TrimSpace(*keyID) != "" && !strings.EqualFold(strings.TrimSpace(*keyID), "auto") {
+		return errors.New("--key-id 仅适用于 --key，不能与 --token 一起使用")
+	}
+	if *jsonOutput && strings.TrimSpace(*fields) != "" {
+		return errors.New("--json 与 --fields 不能同时使用")
+	}
+	if *fields != "" {
+		if _, err := parseFields(*fields); err != nil {
+			return err
+		}
+	}
 	c := &client{
-		server: strings.TrimRight(strings.TrimSpace(*server), "/"),
-		token:  strings.TrimSpace(*token),
-		key:    strings.TrimSpace(*key),
-		http:   &http.Client{Timeout: 20 * time.Second},
-		out:    os.Stdout,
+		server:     strings.TrimRight(strings.TrimSpace(*server), "/"),
+		token:      strings.TrimSpace(*token),
+		key:        strings.TrimSpace(*key),
+		keyID:      strings.TrimSpace(*keyID),
+		out:        stdout,
+		jsonOutput: *jsonOutput,
+		fields:     strings.TrimSpace(*fields),
+		timeout:    *timeout,
+		caFile:     *caFile,
 	}
 
 	cmd := rest[0]
@@ -95,7 +141,7 @@ func run(args []string) error {
 		if err := noPositionalArgs("version", argv); err != nil {
 			return err
 		}
-		fmt.Println(version.VERSION)
+		fmt.Fprintln(stdout, version.VERSION)
 		return nil
 	case "dashboard":
 		if err := noPositionalArgs("dashboard", argv); err != nil {
@@ -106,33 +152,33 @@ func run(args []string) error {
 		if err := noPositionalArgs("clients", argv); err != nil {
 			return err
 		}
-		return c.list("/api/v1/clients", *limit)
+		return c.list("/api/v1/clients", *limit, *offset)
 	case "client":
 		return c.clientCmd(argv, *data)
 	case "tunnels":
 		if err := noPositionalArgs("tunnels", argv); err != nil {
 			return err
 		}
-		return c.list("/api/v1/tunnels", *limit)
+		return c.list("/api/v1/tunnels", *limit, *offset)
 	case "tunnel":
 		return c.tunnelCmd(argv, *data)
 	case "hosts":
 		if err := noPositionalArgs("hosts", argv); err != nil {
 			return err
 		}
-		return c.list("/api/v1/hosts", *limit)
+		return c.list("/api/v1/hosts", *limit, *offset)
 	case "host":
 		return c.hostCmd(argv, *data)
 	case "users":
 		if err := noPositionalArgs("users", argv); err != nil {
 			return err
 		}
-		return c.list("/api/v1/users", *limit)
+		return c.list("/api/v1/users", *limit, *offset)
 	case "audit":
 		if err := noPositionalArgs("audit", argv); err != nil {
 			return err
 		}
-		return c.get("/api/v1/audit?limit=" + strconv.Itoa(nonZero(*limit, 50)))
+		return c.list("/api/v1/audit", nonZero(*limit, 50), *offset)
 	case "npc":
 		if err := noPositionalArgs("npc", argv); err != nil {
 			return err
@@ -340,15 +386,26 @@ func (c *client) hostCmd(argv []string, data string) error {
 	}
 }
 
-func (c *client) list(path string, limit int) error {
-	if limit > 0 {
-		sep := "?"
-		if strings.Contains(path, "?") {
-			sep = "&"
-		}
-		path += sep + "limit=" + strconv.Itoa(limit)
+func (c *client) list(path string, limit, offset int) error {
+	if limit < 0 || offset < 0 {
+		return errors.New("列表分页参数不能为负数")
 	}
-	return c.get(path)
+	u, err := url.Parse(path)
+	if err != nil {
+		return err
+	}
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return fmt.Errorf("列表查询串格式无效: %w", err)
+	}
+	if limit > 0 {
+		query.Set("limit", strconv.Itoa(limit))
+	}
+	if offset > 0 {
+		query.Set("offset", strconv.Itoa(offset))
+	}
+	u.RawQuery = query.Encode()
+	return c.get(u.String())
 }
 
 func (c *client) get(path string) error {
@@ -369,6 +426,13 @@ func (c *client) send(method, path, body string) error {
 	if err := validateServerURL(c.server); err != nil {
 		return err
 	}
+	if c.http == nil {
+		httpClient, err := newHTTPClient(c.timeout, c.caFile)
+		if err != nil {
+			return err
+		}
+		c.http = httpClient
+	}
 	full := strings.TrimRight(c.server, "/") + path
 	var reader io.Reader
 	if body != "" {
@@ -385,11 +449,9 @@ func (c *client) send(method, path, body string) error {
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	} else {
-		ts := strconv.FormatInt(time.Now().Unix(), 10)
-		q := req.URL.Query()
-		q.Set("auth_key", md5Hex(c.key+ts))
-		q.Set("timestamp", ts)
-		req.URL.RawQuery = q.Encode()
+		if err := signAdminRequest(req, c.key, c.keyID, []byte(body)); err != nil {
+			return err
+		}
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -422,20 +484,231 @@ func (c *client) send(method, path, body string) error {
 		}
 		return errors.New(msg)
 	}
-	var out []byte
-	switch {
-	case len(env.Rows) > 0 || len(env.Total) > 0 || len(env.Meta) > 0:
-		out = prettyJSON(raw)
-	case len(env.Data) > 0:
-		out = prettyJSON(env.Data)
-	default:
-		out = prettyJSON(raw)
-	}
 	if c.out == nil {
 		c.out = os.Stdout
 	}
-	fmt.Fprintln(c.out, string(out))
+	if c.fields != "" {
+		return c.writeFields(raw, env)
+	}
+	if c.jsonOutput {
+		fmt.Fprintln(c.out, string(prettyJSON(raw)))
+		return nil
+	}
+	if len(env.Rows) > 0 {
+		if err := c.writeTable(env.Rows, env.Total, path); err == nil {
+			return nil
+		}
+		// Fall back to the complete JSON response if an endpoint unexpectedly
+		// returns a non-tabular rows value.
+		fmt.Fprintln(c.out, string(prettyJSON(raw)))
+		return nil
+	}
+	if len(env.Data) > 0 {
+		fmt.Fprintln(c.out, string(prettyJSON(env.Data)))
+		return nil
+	}
+	fmt.Fprintln(c.out, string(prettyJSON(raw)))
 	return nil
+}
+
+func (c *client) writeFields(raw []byte, env envelope) error {
+	requested, err := parseFields(c.fields)
+	if err != nil {
+		return err
+	}
+	rows := env.Rows
+	if len(rows) == 0 {
+		rows = env.Data
+	}
+	if len(rows) == 0 {
+		return errors.New("响应中没有 rows 或 data，无法输出 --fields")
+	}
+	return writeTSV(c.out, rows, requested)
+}
+
+func (c *client) writeTable(rowsRaw, totalRaw json.RawMessage, path string) error {
+	var rows []any
+	if err := json.Unmarshal(rowsRaw, &rows); err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		fmt.Fprintln(c.out, "（没有记录）")
+		if total, ok := jsonInteger(totalRaw); ok {
+			fmt.Fprintf(c.out, "共 %d 条\n", total)
+		}
+		return nil
+	}
+
+	fields := defaultFields(path)
+	selected := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if _, _, ok := lookupField(rows[0], field); ok {
+			selected = append(selected, field)
+		}
+	}
+	if len(selected) == 0 {
+		return errors.New("无法识别列表字段")
+	}
+	writer := tabwriter.NewWriter(c.out, 0, 4, 2, ' ', 0)
+	if err := writeTableRow(writer, selected, selected); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		values := make([]string, len(selected))
+		for i, field := range selected {
+			value, _, ok := lookupField(row, field)
+			if ok {
+				values[i] = displayValue(value)
+			}
+		}
+		if err := writeTableRow(writer, values, nil); err != nil {
+			return err
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+	if total, ok := jsonInteger(totalRaw); ok {
+		fmt.Fprintf(c.out, "显示 %d 条（总计 %d 条）\n", len(rows), total)
+	} else {
+		fmt.Fprintf(c.out, "显示 %d 条\n", len(rows))
+	}
+	return nil
+}
+
+func writeTableRow(w io.Writer, values, _ []string) error {
+	for i, value := range values {
+		value = strings.NewReplacer("\r", " ", "\n", " ", "\t", " ").Replace(value)
+		if i > 0 {
+			if _, err := io.WriteString(w, "\t"); err != nil {
+				return err
+			}
+		}
+		if _, err := io.WriteString(w, value); err != nil {
+			return err
+		}
+	}
+	_, err := io.WriteString(w, "\n")
+	return err
+}
+
+func writeTSV(out io.Writer, raw json.RawMessage, fields []string) error {
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return fmt.Errorf("解析 --fields 数据失败: %w", err)
+	}
+	rows, ok := value.([]any)
+	if !ok {
+		rows = []any{value}
+	}
+	writer := csv.NewWriter(out)
+	writer.Comma = '\t'
+	for rowIndex, row := range rows {
+		values := make([]string, len(fields))
+		for i, field := range fields {
+			value, _, found := lookupField(row, field)
+			if !found {
+				if rowIndex == 0 {
+					return fmt.Errorf("--fields 指定的字段 %q 不存在", field)
+				}
+				continue
+			}
+			values[i] = displayValue(value)
+		}
+		if rowIndex == 0 {
+			if err := writer.Write(fields); err != nil {
+				return err
+			}
+		}
+		if err := writer.Write(values); err != nil {
+			return err
+		}
+	}
+	if len(rows) == 0 {
+		if err := writer.Write(fields); err != nil {
+			return err
+		}
+	}
+	writer.Flush()
+	return writer.Error()
+}
+
+func parseFields(value string) ([]string, error) {
+	parts := strings.Split(value, ",")
+	fields := make([]string, 0, len(parts))
+	seen := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		field := strings.TrimSpace(part)
+		if field == "" {
+			return nil, errors.New("--fields 需要逗号分隔的非空字段名")
+		}
+		key := strings.ToLower(field)
+		if seen[key] {
+			return nil, fmt.Errorf("--fields 字段重复: %q", field)
+		}
+		seen[key] = true
+		fields = append(fields, field)
+	}
+	return fields, nil
+}
+
+func defaultFields(path string) []string {
+	cleanPath := strings.ToLower(strings.Trim(strings.SplitN(path, "?", 2)[0], "/"))
+	switch {
+	case strings.HasSuffix(cleanPath, "/clients"):
+		return []string{"Id", "UserName", "Remark", "Addr", "Status", "IsConnect", "NowConn"}
+	case strings.HasSuffix(cleanPath, "/tunnels"):
+		return []string{"Id", "Remark", "Mode", "Port", "Status", "RunStatus", "RunError"}
+	case strings.HasSuffix(cleanPath, "/hosts"):
+		return []string{"Id", "Host", "Remark", "Scheme", "IsClose", "AutoHttps"}
+	case strings.HasSuffix(cleanPath, "/users"):
+		return []string{"Id", "UserName", "Status", "Remark"}
+	case strings.HasSuffix(cleanPath, "/audit"):
+		return []string{"ID", "Time", "Actor", "Action", "Resource", "Result", "SourceIP", "Error"}
+	default:
+		return nil
+	}
+}
+
+func lookupField(row any, requested string) (any, string, bool) {
+	object, ok := row.(map[string]any)
+	if !ok {
+		return nil, "", false
+	}
+	if value, exists := object[requested]; exists {
+		return value, requested, true
+	}
+	keys := make([]string, 0, len(object))
+	for key := range object {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if strings.EqualFold(key, requested) {
+			return object[key], key, true
+		}
+	}
+	return nil, "", false
+}
+
+func displayValue(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return typed
+	default:
+		encoded, err := json.Marshal(typed)
+		if err != nil {
+			return fmt.Sprint(typed)
+		}
+		return string(encoded)
+	}
+}
+
+func jsonInteger(raw json.RawMessage) (int64, bool) {
+	integer, err := strconv.ParseInt(strings.TrimSpace(string(raw)), 10, 64)
+	return integer, err == nil
 }
 
 func (c *client) printMCP() error {
@@ -449,7 +722,11 @@ func (c *client) printMCP() error {
 	u, _ := url.Parse(server)
 	cred := c.token
 	if cred == "" {
-		if strings.HasPrefix(c.key, adminAPITokenPrefixForCLI) {
+		keyID, err := resolveAdminKeyID(c.key, c.keyID)
+		if err != nil {
+			return err
+		}
+		if keyID == "managed_admin" {
 			cred = c.key
 		} else {
 			cred = "YOUR_TOKEN"
@@ -469,7 +746,11 @@ func (c *client) printMCP() error {
 		c.out = os.Stdout
 	}
 	fmt.Fprintln(c.out, string(out))
-	fmt.Fprintln(c.out, "\n提示: type=http 表示 Streamable HTTP，不要改成 sse；Token 可用 ${env:NPS_TOKEN} 占位。")
+	fmt.Fprint(c.out, "\n提示: type=http 表示 Streamable HTTP，不要改成 sse。")
+	if cred == "YOUR_TOKEN" {
+		fmt.Fprint(c.out, " 当前没有可直接写入的凭据；设置 NPS_TOKEN 后重跑 npsctl mcp，或将 YOUR_TOKEN 替换为 npsu_ 用户 Token / npsa_ 管理员 API 密钥。")
+	}
+	fmt.Fprintln(c.out, " npsctl 不会展开 MCP 客户端专属的环境变量插值语法；若手动改用环境变量，请按目标 MCP 客户端文档配置。")
 	return nil
 }
 
@@ -513,34 +794,41 @@ func usage(w io.Writer, fs *flag.FlagSet) {
   npsctl [全局参数] <command> [args] [--data JSON]
   npsctl -h | --help | -version
 
+全局参数:
+  --server URL       NPS 服务端地址（默认 NPS_SERVER 或 http://127.0.0.1:8081）
+  --token TOKEN      用户 API Token（默认 NPS_TOKEN）
+  --key KEY          管理员密钥（默认 NPS_KEY）
+  --key-id TYPE      管理员密钥类型：auto、auth_key 或 managed_admin（默认 auto）
+  --limit N          列表最大条数
+  --offset N         跳过前 N 条列表记录
+  --timeout DURATION HTTP 请求超时（默认 20s，例如 5s、1m）
+  --ca-file PATH     HTTPS 使用的 PEM CA 证书包
+  --json             列表输出完整 JSON 信封
+  --fields A,B       输出所选字段的 TSV（适合脚本管道）
+  --data JSON        创建/更新请求体
+
 命令:
   dashboard                         仪表盘概览
-  clients [--limit N]               客户端列表
+  clients [--limit N] [--offset N]  客户端列表
   client get <id>                   客户端详情
   client create --data '...'        创建客户端
   client update <id> --data '...'   更新客户端
   client delete <id>                删除客户端
   client enable|disable <id>        启用/停用客户端
-  tunnels [--limit N]               隧道列表
+  tunnels [--limit N] [--offset N]  隧道列表
   tunnel get|create|update|delete|start|stop
-  hosts [--limit N]                 域名反代列表
+  hosts [--limit N] [--offset N]   域名反代列表
   host get|create|update|delete|start|stop
-  users                             用户列表（仅管理员）
-  audit [--limit N]                 操作审计（管理员看全局，用户看本人范围）
+  users [--limit N] [--offset N]    用户列表（仅管理员）
+  audit [--limit N] [--offset N]    操作审计（管理员看全局，用户看本人范围）
   npc                               打印 NPC 部署方式
   skill                             打印 Skill 安装方式
   mcp                               打印 mcpServers 配置片段
   version                           版本号
 
-列表接口返回 status/code/msg/rows/total/request_id，rows 按服务端分页；
---limit 只控制本次请求条数。环境变量：NPS_SERVER、NPS_TOKEN、NPS_KEY。
-
-全局参数:
+列表默认显示易读表格；加 --json 可获取完整分页信封，或用 --fields 指定 TSV 列。
+环境变量：NPS_SERVER、NPS_TOKEN、NPS_KEY。
 `)
-	previous := fs.Output()
-	fs.SetOutput(w)
-	fs.PrintDefaults()
-	fs.SetOutput(previous)
 }
 
 func envOr(key, fallback string) string {
@@ -550,11 +838,46 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+func newHTTPClient(timeout time.Duration, caFile string) (*http.Client, error) {
+	if timeout <= 0 {
+		return nil, errors.New("--timeout 必须大于 0")
+	}
+	client := &http.Client{Timeout: timeout}
+	if strings.TrimSpace(caFile) == "" {
+		return client, nil
+	}
+	caPEM, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("读取 --ca-file 失败: %w", err)
+	}
+	roots, err := x509.SystemCertPool()
+	if err != nil || roots == nil {
+		roots = x509.NewCertPool()
+	}
+	if !roots.AppendCertsFromPEM(caPEM) {
+		return nil, errors.New("--ca-file 不包含有效的 PEM CA 证书")
+	}
+	transport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("无法复制默认 HTTP transport")
+	}
+	transport = transport.Clone()
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
+	} else {
+		transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	}
+	transport.TLSClientConfig.RootCAs = roots
+	client.Transport = transport
+	return client, nil
+}
+
 // splitGlobalArgs moves the recognised global flags (and their values) ahead of
 // positional arguments so flags can be placed before or after the subcommand.
 func splitGlobalArgs(args []string) (global, rest []string) {
 	known := map[string]bool{
-		"--server": true, "--token": true, "--key": true, "--limit": true, "--data": true,
+		"--server": true, "--token": true, "--key": true, "--key-id": true, "--limit": true, "--offset": true,
+		"--timeout": true, "--ca-file": true, "--json": true, "--fields": true, "--data": true,
 		"-version": true, "--version": true, "-h": true, "--help": true,
 	}
 	for i := 0; i < len(args); i++ {
@@ -569,6 +892,10 @@ func splitGlobalArgs(args []string) (global, rest []string) {
 			continue
 		}
 		if name == "-version" || name == "--version" || name == "-h" || name == "--help" {
+			global = append(global, arg)
+			continue
+		}
+		if name == "--json" {
 			global = append(global, arg)
 			continue
 		}
@@ -672,7 +999,61 @@ func nonZero(v, fallback int) int {
 	return v
 }
 
-func md5Hex(s string) string {
-	sum := md5.Sum([]byte(s))
-	return hex.EncodeToString(sum[:])
+func signAdminRequest(req *http.Request, secret, requestedKeyID string, body []byte) error {
+	if req == nil {
+		return errors.New("无法为 nil 请求签名")
+	}
+	if strings.TrimSpace(secret) == "" {
+		return errors.New("管理员密钥不能为空")
+	}
+	nonceBytes := make([]byte, 24)
+	if _, err := rand.Read(nonceBytes); err != nil {
+		return fmt.Errorf("生成 API nonce 失败: %w", err)
+	}
+	nonce := base64.RawURLEncoding.EncodeToString(nonceBytes)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	bodySum := sha256.Sum256(body)
+	bodyHash := hex.EncodeToString(bodySum[:])
+	keyID, err := resolveAdminKeyID(secret, requestedKeyID)
+	if err != nil {
+		return err
+	}
+	query, err := url.ParseQuery(req.URL.RawQuery)
+	if err != nil {
+		return fmt.Errorf("管理员请求查询串格式无效: %w", err)
+	}
+	path := req.URL.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	canonical := strings.Join([]string{
+		strings.ToUpper(req.Method),
+		path,
+		query.Encode(),
+		bodyHash,
+		timestamp,
+		nonce,
+		keyID,
+	}, "\n")
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(canonical))
+	req.Header.Set("Authorization", "NPS-HMAC "+hex.EncodeToString(mac.Sum(nil)))
+	req.Header.Set("X-NPS-Timestamp", timestamp)
+	req.Header.Set("X-NPS-Nonce", nonce)
+	req.Header.Set("X-NPS-Key-Id", keyID)
+	return nil
+}
+
+func resolveAdminKeyID(secret, requested string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(requested)) {
+	case "", "auto":
+		if strings.HasPrefix(strings.TrimSpace(secret), adminAPITokenPrefixForCLI) {
+			return "managed_admin", nil
+		}
+		return "auth_key", nil
+	case "auth_key", "managed_admin":
+		return strings.ToLower(strings.TrimSpace(requested)), nil
+	default:
+		return "", errors.New("--key-id 必须为 auto、auth_key 或 managed_admin")
+	}
 }

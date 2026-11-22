@@ -17,7 +17,7 @@ func TestRotateInsecureConfig(t *testing.T) {
 			t.Fatalf("insecure config value %q remains in output %q", value, output)
 		}
 	}
-	if len(secrets["web_password"]) != 8 || len(secrets["auth_key"]) != 8 || len(secrets["auth_crypt_key"]) != 16 {
+	if len(secrets["web_password"]) != 8 || len(secrets["auth_key"]) != 32 || len(secrets["auth_crypt_key"]) != 16 {
 		t.Fatalf("generated secret lengths are incorrect: %#v", secrets)
 	}
 	if !strings.Contains(output, "public_vkey=\n") {

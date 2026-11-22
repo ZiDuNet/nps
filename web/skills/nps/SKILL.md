@@ -5,6 +5,10 @@ description: >-
   deploy an NPC client, list or manage clients, tunnels, domain reverse proxies,
   users, audit logs, or obtain the /mcp integration snippet for a running NPS
   server.
+metadata:
+  version: "1.1.51"
+  license: "GPL-3.0-or-later"
+  source: "https://github.com/ZiDuNet/nps/tree/master/web/skills/nps"
 ---
 
 # NPS Pro Skill
@@ -28,14 +32,28 @@ commit a real credential.
 | Credential | Create / view in | `npsctl` | `/mcp` | Scope |
 | --- | --- | --- | --- | --- |
 | User API Token (`npsu_...`) | 接入与安全 | `--token` or `NPS_TOKEN` | `Authorization: Bearer ...` | That user's clients, tunnels, hosts and scoped audit records |
-| Managed admin key (`npsa_...`) | 接入与安全, administrator only | `--key` or `NPS_KEY` with timestamp signing | `Authorization: Bearer ...` | Global |
-| `auth_key` from `nps.conf` | Server configuration | `--key` or `NPS_KEY` with timestamp signing | Not accepted directly | Global |
+| Managed admin key (`npsa_...`) | 接入与安全, administrator only | `--key` or `NPS_KEY` with HMAC-SHA256 signing | `Authorization: Bearer ...` | Global |
+| `auth_key` from `nps.conf` | Server configuration | `--key` or `NPS_KEY` with HMAC-SHA256 signing | Not accepted directly | Global |
 
-The managed admin key is accepted by `npsctl --key` through the same signed
-timestamp protocol as `auth_key`, and is also accepted directly as an MCP
+The managed admin key is accepted by `npsctl --key` through the same HMAC
+protocol as `auth_key`, and is also accepted directly as an MCP
 Bearer token. `auth_key` itself cannot be used as a Bearer token. MCP audit is
 scoped for ordinary users and global for administrators. `nps_users`,
 `nps_global_config` and `nps_client_set_status` remain administrator-only.
+
+The administrator CLI signing and the default `api_hmac_enabled` behavior
+require the NPS server release that supports HMAC (introduced in v1.1.51).
+The v1.1.50 and earlier `npsctl` releases use legacy MD5 query signing and are not compatible with a
+server where `api_legacy_md5_enabled` is false. Upgrade both server and CLI
+together; only temporarily enable the legacy setting when an older integration
+must be migrated, then turn it off again.
+
+Prefer a user API Token for agent access because it is limited to that user's
+resources and audit scope. The managed admin key grants global MCP access,
+including cross-user resource maintenance and global user/audit/config reads.
+Do not choose or copy the admin key by default; use it only when the user
+specifically needs global access and confirms that scope. MCP does not provide
+user-management or global-configuration write tools.
 
 ## Deploying NPC
 
@@ -43,10 +61,13 @@ Prefer the exact command copied from the panel's client detail page. Do not
 assume that `8024` or `8025` is correct: administrators can change listeners,
 disable transports, use a path or ALPN, or publish different addresses.
 
-The authoritative endpoint data is the client's `bridgeEndpoints` field in
-`npsctl clients` / `/api/v1/clients`, or the copyable commands in the panel.
-Only when the server still uses untouched defaults are the legacy TCP bridge
-`8024` and TLS bridge `8025`.
+The authoritative endpoint data is the top-level `bridgeEndpoints` field in
+the `npsctl clients` / `/api/v1/clients` response. It describes all active
+Bridge listeners on the server; it is not a field on an individual client row
+and does not identify a client-specific endpoint. The panel's copyable command
+is the authoritative ready-to-run command for a particular client. Only when
+the server still uses untouched defaults are the legacy TCP bridge `8024` and
+TLS bridge `8025`.
 
 ```bash
 # Use the exact bridge host/port/path/TLS fields returned by the server.
@@ -69,9 +90,11 @@ npsctl --server https://nps.example.com --token npsu_xxx client get 3
 npsctl --server https://nps.example.com --token npsu_xxx mcp
 ```
 
-List endpoints return `status`, `code`, `msg`, `rows`, `total`, `meta` and
-`request_id`. `rows` is the current page; `--limit` does not fetch every page.
-Create/update commands require `--data <JSON>`. `--token` and `--key` are
+List commands display a readable table by default. Add `--json` for the full
+response envelope (including `rows`, `total`, pagination metadata and
+`request_id`), or `--fields id,remark,status` for selected TSV columns. Lists
+are paginated: for example, use `--limit 20 --offset 20` to fetch the second
+page. Create/update commands require `--data <JSON>`. `--token` and `--key` are
 mutually exclusive, unknown trailing arguments are rejected, and `--server`
 must be an absolute HTTP(S) URL.
 
@@ -98,10 +121,18 @@ The server exposes a Streamable HTTP MCP endpoint at `/mcp`. Use
 ```
 
 Run `npsctl mcp` to generate the same snippet with the current server URL and
-credential. The endpoint is stateless, so clients do not need to persist or
-send `Mcp-Session-Id`. `GET /mcp` returns `405 Method Not Allowed`; use panel
-or `/api/v1/info` for health checks. If an MCP client only supports stdio,
-bridge it with `mcp-remote` rather than changing the URL to an SSE endpoint.
+credential. The endpoint is stateless: clients do not need to persist or send
+`Mcp-Session-Id`, and stale or unknown session IDs are ignored. When MCP is
+enabled, missing or invalid Bearer credentials receive `401` before method
+handling; an authenticated `GET /mcp` receives `405 Method Not Allowed` because
+streaming is disabled. If MCP is disabled, `/mcp` returns `404`.
+
+For a basic public API liveness/discovery check, request `GET /api/v1/` (or
+`<web_base_url>/api/v1/` when a Web base path is configured). It returns the
+API version and capability document. `/api/v1/time` is also public but is
+intended for clock synchronization. There is no `/api/v1/info` endpoint. If an
+MCP client only supports stdio, bridge it with `mcp-remote` rather than
+changing the URL to an SSE endpoint.
 
 Read tools: `nps_dashboard`, `nps_clients`, `nps_client_get`, `nps_tunnels`,
 `nps_hosts`, `nps_users`, `nps_audit`, `nps_global_config`.

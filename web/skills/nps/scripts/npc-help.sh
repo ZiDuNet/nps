@@ -7,7 +7,8 @@ NPC Pro 部署速查
 
 先读取真实的 Bridge 入口：
   - 管理面板：客户端详情页点击“复制命令”或“快捷启动命令”
-  - API/CLI：npsctl clients 查看对应客户端的 bridgeEndpoints
+  - API/CLI：npsctl clients 查看响应顶层的 bridgeEndpoints（它是服务端全局入口列表，
+    不属于某个客户端行）；客户端自身的命令请使用面板为该客户端生成的命令
   - 不要因为文档曾写 8024/8025 就假设服务器仍使用这两个端口。
 
 1. 普通 TCP（使用服务端返回的 host/port）：

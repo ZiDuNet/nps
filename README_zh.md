@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.50</sub>
+﻿# NPS <sub>v1.1.51</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -219,6 +219,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.51** (2026-11-22) - `/api/v1` 管理员鉴权改用 HMAC-SHA256 请求头签名，覆盖请求方法、路径、查询参数、请求体、时间戳和一次性 nonce；旧 MD5 查询签名默认关闭，仅保留严格限路由的临时迁移兼容。`npsctl` 新增 offset 分页、易读表格、JSON/字段输出、自定义 CA 和超时选项，并修复 API 请求继承浏览器会话的问题。MCP 与 Skill 凭据说明补齐权限范围。详见[升级说明](docs/upgrade-1.1.51.md)。
 - **v1.1.50** (2026-11-21) - 修复 `v1.1.49` 因 SQLite 依赖被公共存储包带入 NPC 而导致 Linux MIPS 多架构打包失败的问题。SQLite 驱动改为仅服务端注册，MIPS NPC 继续发布；无法支持 SQLite 的 MIPS server 退出正式矩阵。CI 会在提交和正式标签前验证全部发布架构。详见[升级说明](docs/upgrade-1.1.50.md)。
 - **v1.1.49** (2026-11-21) - SQLite 正式成为业务数据权威存储，启用 WAL、单进程锁、事务化级联删除、运行期业务配置、受控 JSON 迁移、迁移报告和可回滚的 `-export-json`。旧 JSON 必须先由 v1.1.49 网关整形；标记缺失或数据无效时拒绝启动且不创建数据库。详见[SQLite 升级说明](docs/upgrade-1.1.49.md)。
 - **v1.1.48** (2026-11-20) - 登录改为无状态挑战（`/auth/challenge`），修复 Nginx 反代缓存或多实例部署下反复出现 `login_expired` 的问题；新增 MCP 服务端（`/mcp`）、`npsctl` CLI 与内置 NPS Skill，并随 Release 发布各平台 `npsctl` 二进制和 `nps-skill.tar.gz`。「账户管理」更名为「接入与安全」，增加 Agent 接入说明。详见[升级说明](docs/upgrade-1.1.48.md)。

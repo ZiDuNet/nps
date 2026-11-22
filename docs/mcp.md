@@ -20,12 +20,29 @@ NPS Pro 内置一个 [Model Context Protocol](https://modelcontextprotocol.io) �
 | --- | --- | --- | --- | --- |
 | 用户 API Token | `npsu_` | `--token` / `NPS_TOKEN` | 是 | 当前账号名下的客户端、隧道、域名反代与本人范围审计 |
 | Web 生成的管理员 API 密钥 | `npsa_` | `--key` / `NPS_KEY`，自动时间戳签名 | 是 | 全局 |
-| `nps.conf` 中的 `auth_key` | 无固定前缀 | `--key` / `NPS_KEY`，自动时间戳签名 | 否 | 全局 |
+| `nps.conf` 中的 `auth_key` | 无固定前缀 | `--key` / `NPS_KEY`，HMAC 时间戳签名；前缀碰撞时指定 `--key-id auth_key` | 否 | 全局 |
 
 Token 在「接入与安全」页面生成；生成后仍可再次查看，重新生成会立即使旧值失效。
 管理员 API 密钥可直接作为 `/mcp` Bearer Token，也可作为 `npsctl --key`
 的签名密钥。`nps.conf` 中的 `auth_key` 只能用于 `npsctl --key` 时间戳签名，
 不能直接作为 `/mcp` Bearer Token。
+
+Agent 配置中的 `Authorization` 是可直接使用的 Bearer 凭据。部分 MCP 客户端会将其
+明文保存在本机配置文件中；应限制该文件的操作系统访问权限，不要提交到代码仓库、
+同步到不可信位置或截图分享。优先使用权限受限的用户 Token；只有确实需要全局管理
+能力时才配置 `npsa_` 管理员密钥。怀疑泄漏时立即在「接入与安全」撤销/重新生成密钥，
+并同步更新 Agent 配置。
+
+注意：v1.1.50 及更早的 `npsctl` 使用旧 MD5 查询签名，不包含 HMAC 和
+`--key-id`。本文 HMAC 用法要求服务端和 CLI 均升级到 v1.1.51 或更新版本。
+如必须分阶段升级，可在更换服务端前于 `nps.conf` 临时设置
+`api_legacy_md5_enabled=true`；升级 CLI 并验证 HMAC 后务必关闭该兼容项。
+兼容期旧签名会进入 URL/access log 且不防重放，不应长期启用。
+
+AI Agent 接入优先使用用户 API Token：它只管理当前账号拥有的客户端、隧道和域名反代，
+审计也仅限本人范围。管理员 API 密钥在 MCP 中拥有全局权限，能管理所有用户的这些资源，
+并读取全局用户列表、全量审计与脱敏全局配置。管理员页面生成的 MCP 示例默认不会填入
+此全局密钥；复制时只有在明确确认其全局权限后才会使用。MCP 不提供用户管理或全局配置写入工具。
 
 ## 客户端配置
 
@@ -51,12 +68,20 @@ Token 在「接入与安全」页面生成；生成后仍可再次查看，重�
 - 管理面板若配置了 `web_base_url` 前缀，`/mcp` 仍固定在根路径 `/mcp`，不受前缀影响。
 - 服务端默认关闭本机保护，允许非 localhost 客户端连接；生产环境请务必置于 HTTPS 之后。
 - 服务端按无状态模式运行，客户端仍会先执行 MCP `initialize`，但不需要保存或
-  发送 `Mcp-Session-Id`。每个请求都单独校验 Bearer Token，可配合多实例和
-  无粘滞会话的反向代理部署。
+  发送 `Mcp-Session-Id`；如果客户端发送了旧的或未知 session ID，服务端也会忽略它。
+  每个请求都单独校验 Bearer Token，可配合多实例和无粘滞会话的反向代理部署。
+- 无状态 MCP 和禁用事件流（认证后的 `GET /mcp` 返回 405）从 v1.1.49 开始；
+  v1.1.48 使用有状态 Streamable HTTP，
+  需要遵循 MCP 客户端的初始化/会话流程。REST HMAC nonce 防重放缓存则独立保存在
+  每个 NPS 进程内存中，多副本不共享，不能因为 MCP 无状态就视为 REST HMAC 已跨实例防重放。
 - 请求同时需要 `Authorization` 和 MCP 协议要求的
   `Accept: application/json, text/event-stream`。
-- `GET /mcp` 固定返回 `405 Method Not Allowed`，不会建立长连接事件流；
-  健康检查请使用面板或 `/api/v1/info`。
+- MCP 已启用时，缺少或无效的 Bearer Token 会先得到 `401 Unauthorized`；通过认证的
+  `GET /mcp` 返回 `405 Method Not Allowed`，不会建立长连接事件流。关闭 MCP 时端点返回 `404`。
+- 没有单独的 `/api/v1/info` 或 MCP 健康检查接口。做基础 HTTP/API 存活探测可请求公开的
+  `GET /api/v1/`（返回 API 版本与能力发现 JSON）；配置了 `web_base_url=/nps` 时请求
+  `/nps/api/v1/`，并确保反向代理保留该路径前缀。
+  `/api/v1/time` 也是公开接口，但主要用于时间同步。
 - 只支持 stdio 的老客户端应使用 `mcp-remote` 一类的桥接器，而不是把 `/mcp`
   改成 SSE URL。
 
@@ -85,6 +110,9 @@ MCP 配置或生产脚本。
 
 - MCP 没有 `start` / `stop` 工具；客户端启停使用 `nps_client_set_status`，
   隧道和域名反代使用对应的 `nps_*_set_status`。
+- 用户 Token 只能维护本人拥有的资源，且创建/更新客户端时不能修改管理员分配的连接数、
+  隧道数和带宽配额；管理员密钥可跨用户维护资源。管理员独有的全局读取能力不会扩展为
+  用户管理或全局配置写入能力。
 - `/api/v1/audit` 与 MCP `nps_audit` 都按当前账号隔离：普通用户只看本人
   范围，管理员看全局记录。
 - 401 认证失败由 HTTP 层返回 `application/json` 对象，并带

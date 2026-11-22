@@ -2,9 +2,9 @@ package controllers
 
 import (
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"html"
-	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -28,12 +28,16 @@ import (
 
 type BaseController struct {
 	beego.Controller
-	controllerName    string
-	actionName        string
-	apiAuthorized     bool
-	userAPIAuthorized bool
-	apiUserID         int
-	requestID         string
+	controllerName     string
+	actionName         string
+	apiAuthorized      bool
+	apiRequestBodyHash string
+	apiHMACAllowed     bool
+	apiRequestOnly     bool
+	apiPrincipalSet    bool
+	userAPIAuthorized  bool
+	apiUserID          int
+	requestID          string
 }
 
 type ownerFilterOption struct {
@@ -95,49 +99,65 @@ func (s *BaseController) Prepare() {
 		s.controllerName = strings.ToLower(controllerName)
 	}
 	s.actionName = strings.ToLower(actionName)
-	// web api verify
-	// param 1 is md5(authKey+Current timestamp)
-	// param 2 is timestamp (It's limited to 20 seconds.)
-	md5Key := s.getEscapeString("auth_key")
-	timestamp := s.GetIntNoErr("timestamp")
-	configKey := strings.TrimSpace(beego.AppConfig.String("auth_key"))
-	timeNowUnix := time.Now().Unix()
-	expectedKey := crypt.Md5(configKey + strconv.Itoa(timestamp))
-	apiAuthorized := configKey != "" && md5Key != "" &&
-		(math.Abs(float64(timeNowUnix-int64(timestamp))) <= 20) &&
-		subtle.ConstantTimeCompare([]byte(expectedKey), []byte(md5Key)) == 1
-	// The web-managed administrator key is equivalent to auth_key: the same
-	// signed timestamp protocol accepts either secret, so API clients written
-	// for the configuration file key keep working after an online rotation.
-	if !apiAuthorized && md5Key != "" && math.Abs(float64(timeNowUnix-int64(timestamp))) <= 20 {
-		if managedKey, ok := managedAdminAPIKey(); ok {
-			managedExpected := crypt.Md5(managedKey + strconv.Itoa(timestamp))
-			apiAuthorized = subtle.ConstantTimeCompare([]byte(managedExpected), []byte(md5Key)) == 1
+	// Versioned API requests use HMAC-SHA256 over the method, path, canonical
+	// query, body hash, timestamp, nonce and key id. Legacy MD5 query signing is
+	// deliberately opt-in because it leaks credentials into access logs and is
+	// replayable. The compatibility flag is useful only while older integrations
+	// are being migrated and should then be turned off again.
+	apiAuthorized := s.apiPrincipalSet && s.apiAuthorized
+	if !s.apiPrincipalSet && s.apiHMACAllowed && beego.AppConfig.DefaultBool("api_hmac_enabled", true) && hasNPSHMACCredentials(s.Ctx.Request) {
+		bodyHash := s.apiRequestBodyHash
+		if bodyHash == "" {
+			bodyHash = hashEmptyBody()
+		}
+		apiAuthorized = verifyNPSHMACRequest(s.Ctx.Request, bodyHash, time.Now())
+	}
+	if !s.apiPrincipalSet && !apiAuthorized && !hasNPSHMACCredentials(s.Ctx.Request) &&
+		beego.AppConfig.DefaultBool("api_legacy_md5_enabled", false) && legacyMD5APIRequestAllowed(s.Ctx.Request) {
+		md5Key, timestampText, timestamp, credentialsOK := legacyMD5QueryCredentials(s.Ctx.Request)
+		configKey := strings.TrimSpace(beego.AppConfig.String("auth_key"))
+		timeNowUnix := time.Now().Unix()
+		if credentialsOK && configKey != "" && timestamp >= timeNowUnix-20 && timestamp <= timeNowUnix+20 {
+			expectedKey := crypt.Md5(configKey + timestampText)
+			apiAuthorized = subtle.ConstantTimeCompare([]byte(expectedKey), []byte(md5Key)) == 1
+		}
+		// The web-managed administrator key is also accepted by the opt-in
+		// legacy protocol so an online rotation can be migrated separately.
+		if !apiAuthorized && credentialsOK && timestamp >= timeNowUnix-20 && timestamp <= timeNowUnix+20 {
+			if managedKey, ok := managedAdminAPIKey(); ok {
+				managedExpected := crypt.Md5(managedKey + timestampText)
+				apiAuthorized = subtle.ConstantTimeCompare([]byte(managedExpected), []byte(md5Key)) == 1
+			}
 		}
 	}
 	// API credentials authorize this request only. Persisting this flag in a
 	// browser session turns a short-lived signed API call into a lasting admin
 	// login, which is both surprising and unsafe.
 	s.apiAuthorized = apiAuthorized
-	if !apiAuthorized {
+	if !s.apiPrincipalSet && !apiAuthorized {
 		userToken := extractUserAPIToken(s.Ctx.Request.Header.Get("Authorization"), s.GetString("api_token"))
 		if userID, ok := lookupUserByAPIToken(userToken); ok {
 			s.userAPIAuthorized = true
 			s.apiUserID = userID
 		}
 	}
-	authorizedRequest := apiAuthorized || s.userAPIAuthorized || sessionBool(s.GetSession("auth"))
+	// Versioned API adapters must authenticate this request from an API
+	// credential only. A valid browser session or remember-me cookie must not
+	// turn a missing/invalid API token into an authenticated API request.
+	authorizedRequest := apiAuthorized || s.userAPIAuthorized || (!s.apiRequestOnly && sessionBool(s.GetSession("auth")))
 	if !authorizedRequest {
-		restored, restoreErr := restoreRememberLogin(&s.Controller, s.Ctx, time.Now())
-		if restoreErr != nil {
-			beego.Warn(describeRememberLoginError(restoreErr))
-		}
-		authorizedRequest = restored
-		if restored && sessionBool(s.GetSession("isAdmin")) {
-			server.Bridge.Register.Store(common.GetIpByAddr(s.Ctx.Input.IP()), time.Now().Add(2*time.Hour))
+		if !s.apiRequestOnly {
+			restored, restoreErr := restoreRememberLogin(&s.Controller, s.Ctx, time.Now())
+			if restoreErr != nil {
+				beego.Warn(describeRememberLoginError(restoreErr))
+			}
+			authorizedRequest = restored
+			if restored && sessionBool(s.GetSession("isAdmin")) {
+				server.Bridge.Register.Store(common.GetIpByAddr(s.Ctx.Input.IP()), time.Now().Add(2*time.Hour))
+			}
 		}
 	}
-	if !apiAuthorized && !s.userAPIAuthorized && sessionBool(s.GetSession("auth")) &&
+	if !s.apiRequestOnly && !apiAuthorized && !s.userAPIAuthorized && sessionBool(s.GetSession("auth")) &&
 		!browserSessionSecurityValid(&s.Controller, s.Ctx, time.Now()) {
 		clearAuthenticationSession(s.DelSession)
 		clearRememberLoginCookie(s.Ctx.Request, s.Ctx.ResponseWriter)
@@ -150,7 +170,10 @@ func (s *BaseController) Prepare() {
 		s.StopRun()
 		return
 	}
-	isAdminSession := s.GetSession("isAdmin")
+	var isAdminSession interface{}
+	if !s.apiRequestOnly && !s.apiPrincipalSet {
+		isAdminSession = s.GetSession("isAdmin")
+	}
 	isAdmin := s.IsAdmin()
 	if !apiAuthorized && !s.userAPIAuthorized {
 		if _, ok := isAdminSession.(bool); !ok {
@@ -212,6 +235,290 @@ func (s *BaseController) Prepare() {
 		s.Data["https_proxy_port"] = ":" + httpsPort
 	}
 }
+
+func legacyMD5APIRequestAllowed(request *http.Request) bool {
+	if request == nil || request.URL == nil {
+		return false
+	}
+	// Compatibility is deliberately limited to the exact route spelling. Check
+	// the escaped form as well as Path: URL.Path is decoded, so an encoded
+	// unreserved character (for example %63 in /%63lient/list) can otherwise
+	// collapse into an allowlisted route even when RawPath is empty.
+	escapedPath := request.URL.EscapedPath()
+	if escapedPath != request.URL.Path || strings.ContainsAny(escapedPath, "%\\") {
+		return false
+	}
+	path := escapedPath
+	basePath := strings.TrimRight(strings.TrimSpace(beego.AppConfig.String("web_base_url")), "/")
+	if basePath != "" {
+		if path != basePath && !strings.HasPrefix(path, basePath+"/") {
+			return false
+		}
+		path = strings.TrimPrefix(path, basePath)
+	}
+	// Match the router's literal paths. Encoded separators, duplicate slashes,
+	// dot segments, and case variants are intentionally not normalized into an
+	// allowlisted route because proxies and Beego may route them differently.
+	if strings.ContainsAny(path, "%\\") || strings.Contains(path, "//") || path == "" {
+		return false
+	}
+	for _, segment := range strings.Split(path, "/") {
+		if segment == "." || segment == ".." {
+			return false
+		}
+	}
+	path = strings.TrimSuffix(path, "/")
+	if strings.HasPrefix(path, "/api/v1/") {
+		return legacyMD5APIRouteAllowed(path, request.Method)
+	}
+
+	method := strings.ToUpper(request.Method)
+	allowedMethods, ok := legacyMD5RouteMethods[path]
+	if !ok {
+		return false
+	}
+	_, ok = allowedMethods[method]
+	return ok
+}
+
+// legacyMD5APIRouteAllowed limits the opt-in MD5 migration credential to the
+// protected API routes and methods that existed when this compatibility path
+// was added. Public bootstrap endpoints and unknown/future routes must never
+// become authenticated merely because they live below /api/v1.
+func legacyMD5APIRouteAllowed(path, method string) bool {
+	method = strings.ToUpper(method)
+	if methods, ok := legacyMD5APIRouteMethods[path]; ok {
+		_, allowed := methods[method]
+		return allowed
+	}
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	if len(segments) < 4 || segments[0] != "api" || segments[1] != "v1" {
+		return false
+	}
+	resource := segments[2]
+	if !positiveDecimalSegment(segments[3]) {
+		return false
+	}
+	if len(segments) == 4 {
+		return methodAllowed(method, http.MethodGet, http.MethodPatch, http.MethodPut, http.MethodDelete) &&
+			legacyMD5ItemResources[resource]
+	}
+	if len(segments) == 5 {
+		methods, ok := legacyMD5ItemActionMethods[resource][segments[4]]
+		if !ok {
+			return false
+		}
+		_, allowed := methods[method]
+		return allowed
+	}
+	if len(segments) == 6 {
+		action := segments[4] + "/" + segments[5]
+		methods, ok := legacyMD5NestedItemActionMethods[resource][action]
+		if !ok {
+			return false
+		}
+		_, allowed := methods[method]
+		return allowed
+	}
+	return false
+}
+
+func positiveDecimalSegment(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	id, err := strconv.Atoi(value)
+	return err == nil && id > 0
+}
+
+func methodAllowed(method string, allowed ...string) bool {
+	for _, candidate := range allowed {
+		if method == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+var legacyMD5ItemResources = map[string]bool{
+	"clients": true,
+	"tunnels": true,
+	"hosts":   true,
+	"users":   true,
+}
+
+var legacyMD5ItemActionMethods = map[string]map[string]map[string]struct{}{
+	"clients": {
+		"status":        {http.MethodPost: {}},
+		"upgrade":       {http.MethodPost: {}},
+		"update-check":  {http.MethodGet: {}},
+		"update-status": {http.MethodGet: {}},
+		"instances":     {http.MethodGet: {}},
+	},
+	"tunnels": {
+		"start": {http.MethodPost: {}},
+		"stop":  {http.MethodPost: {}},
+		"copy":  {http.MethodPost: {}},
+	},
+	"hosts": {
+		"start": {http.MethodPost: {}},
+		"stop":  {http.MethodPost: {}},
+	},
+	"users": {
+		"status":   {http.MethodPost: {}},
+		"password": {http.MethodPost: {}},
+		"token":    {http.MethodPost: {}},
+	},
+}
+
+var legacyMD5NestedItemActionMethods = map[string]map[string]map[string]struct{}{
+	"clients": {
+		"instances/disconnect": {http.MethodPost: {}},
+	},
+	"users": {
+		"token/revoke": {http.MethodPost: {}},
+		"token/status": {http.MethodGet: {}},
+	},
+}
+
+var legacyMD5APIRouteMethods = map[string]map[string]struct{}{
+	"/api/v1/status":                          {http.MethodGet: {}},
+	"/api/v1/status/live":                     {http.MethodGet: {}},
+	"/api/v1/status/history":                  {http.MethodGet: {}},
+	"/api/v1/overview":                        {http.MethodGet: {}},
+	"/api/v1/clients":                         {http.MethodGet: {}, http.MethodPost: {}},
+	"/api/v1/tunnels":                         {http.MethodGet: {}, http.MethodPost: {}},
+	"/api/v1/hosts":                           {http.MethodGet: {}, http.MethodPost: {}},
+	"/api/v1/hosts/check":                     {http.MethodPost: {}},
+	"/api/v1/hosts/diagnose":                  {http.MethodPost: {}},
+	"/api/v1/users":                           {http.MethodGet: {}, http.MethodPost: {}},
+	"/api/v1/users/register":                  {http.MethodPost: {}},
+	"/api/v1/global/config":                   {http.MethodGet: {}, http.MethodPost: {}},
+	"/api/v1/global/config/restart":           {http.MethodPost: {}},
+	"/api/v1/global/bridge-certificate":       {http.MethodGet: {}, http.MethodPost: {}},
+	"/api/v1/global/bridge-certificate/check": {http.MethodPost: {}},
+	"/api/v1/global/geo":                      {http.MethodGet: {}},
+	"/api/v1/global/geo/update":               {http.MethodPost: {}},
+	"/api/v1/global/banlist":                  {http.MethodGet: {}, http.MethodPost: {}},
+	"/api/v1/global/unban":                    {http.MethodPost: {}},
+	"/api/v1/global/unbanall":                 {http.MethodPost: {}},
+	"/api/v1/global/banclean":                 {http.MethodPost: {}},
+	"/api/v1/global/ip-register":              {http.MethodGet: {}, http.MethodPost: {}},
+	"/api/v1/global/ip-register/revoke":       {http.MethodPost: {}},
+	"/api/v1/global/ip-register/clean":        {http.MethodPost: {}},
+	"/api/v1/global/ip-register/clear":        {http.MethodPost: {}},
+	"/api/v1/audit":                           {http.MethodGet: {}, http.MethodPost: {}},
+	"/api/v1/audit/connections":               {http.MethodGet: {}, http.MethodPost: {}},
+}
+
+var legacyMD5RouteMethods = map[string]map[string]struct{}{
+	"/client/list":                         {http.MethodPost: {}},
+	"/client/getclient":                    {http.MethodPost: {}},
+	"/client/add":                          {http.MethodPost: {}},
+	"/client/edit":                         {http.MethodPost: {}},
+	"/client/changestatus":                 {http.MethodPost: {}},
+	"/client/del":                          {http.MethodPost: {}},
+	"/client/disconnectinstance":           {http.MethodPost: {}},
+	"/client/upgrade":                      {http.MethodPost: {}},
+	"/client/updatecheck":                  {http.MethodGet: {}},
+	"/client/updatestatus":                 {http.MethodGet: {}},
+	"/index/gettunnel":                     {http.MethodPost: {}},
+	"/index/add":                           {http.MethodPost: {}},
+	"/index/edit":                          {http.MethodPost: {}},
+	"/index/copy":                          {http.MethodPost: {}},
+	"/index/getonetunnel":                  {http.MethodPost: {}},
+	"/index/stop":                          {http.MethodPost: {}},
+	"/index/del":                           {http.MethodPost: {}},
+	"/index/start":                         {http.MethodPost: {}},
+	"/index/hostlist":                      {http.MethodPost: {}},
+	"/index/gethost":                       {http.MethodPost: {}},
+	"/index/delhost":                       {http.MethodPost: {}},
+	"/index/hoststop":                      {http.MethodPost: {}},
+	"/index/hoststart":                     {http.MethodPost: {}},
+	"/index/addhost":                       {http.MethodPost: {}},
+	"/index/edithost":                      {http.MethodPost: {}},
+	"/index/platformhostavailable":         {http.MethodPost: {}},
+	"/index/hostdiagnose":                  {http.MethodPost: {}},
+	"/user/regenerateapikey":               {http.MethodPost: {}},
+	"/user/revokeapikey":                   {http.MethodPost: {}},
+	"/user/changepassword":                 {http.MethodPost: {}},
+	"/user/apikeystatus":                   {http.MethodGet: {}},
+	"/user/list":                           {http.MethodPost: {}},
+	"/user/add":                            {http.MethodPost: {}},
+	"/user/edit":                           {http.MethodPost: {}},
+	"/user/changestatus":                   {http.MethodPost: {}},
+	"/user/del":                            {http.MethodPost: {}},
+	"/global/save":                         {http.MethodPost: {}},
+	"/global/certificate/config":           {http.MethodPost: {}},
+	"/global/certificate/platform-domains": {http.MethodPost: {}},
+	"/global/bridgecertificate":            {http.MethodGet: {}, http.MethodPost: {}},
+	"/global/bridgecertificate/check":      {http.MethodPost: {}},
+	"/global/banlist":                      {http.MethodPost: {}},
+	"/global/unban":                        {http.MethodPost: {}},
+	"/global/unbanall":                     {http.MethodPost: {}},
+	"/global/banclean":                     {http.MethodPost: {}},
+	"/global/ipregister/list":              {http.MethodPost: {}},
+	"/global/ipregister/revoke":            {http.MethodPost: {}},
+	"/global/ipregister/clean":             {http.MethodPost: {}},
+	"/global/ipregister/clear":             {http.MethodPost: {}},
+	"/global/geo":                          {http.MethodGet: {}},
+	"/global/updategeo":                    {http.MethodPost: {}},
+	"/audit/list":                          {http.MethodPost: {}},
+	"/audit/connections":                   {http.MethodPost: {}},
+	"/audit/cleanup":                       {http.MethodPost: {}},
+	"/overview/data":                       {http.MethodGet: {}},
+	"/overview/accesskey":                  {http.MethodGet: {}, http.MethodPost: {}},
+	"/overview/accesskey/revoke":           {http.MethodPost: {}},
+}
+
+func legacyMD5QueryCredentials(request *http.Request) (signature, timestampText string, timestamp int64, ok bool) {
+	if request == nil || request.URL == nil {
+		return "", "", 0, false
+	}
+	if _, err := url.ParseQuery(request.URL.RawQuery); err != nil {
+		return "", "", 0, false
+	}
+	if err := request.ParseForm(); err != nil {
+		return "", "", 0, false
+	}
+	// Form contains query and URL-encoded body parameters (or values merged
+	// from the JSON adapter). Requiring exactly one value rejects ambiguous
+	// query/body duplicates while preserving the historical POST form format.
+	signatures, timestampValues := request.Form["auth_key"], request.Form["timestamp"]
+	if len(signatures) != 1 || len(timestampValues) != 1 || len(signatures[0]) != 32 || signatures[0] == "" {
+		return "", "", 0, false
+	}
+	if _, err := hex.DecodeString(signatures[0]); err != nil {
+		return "", "", 0, false
+	}
+	timestampText = timestampValues[0]
+	timestamp, parseErr := strconv.ParseInt(timestampText, 10, 64)
+	if parseErr != nil || timestamp <= 0 || timestampText != strconv.FormatInt(timestamp, 10) {
+		return "", "", 0, false
+	}
+	return signatures[0], timestampText, timestamp, true
+}
+
+// inheritAPIPrincipal carries the already-verified /api/v1 identity to a
+// delegated legacy controller. This is not populated from request fields;
+// only the authenticated API adapter may set it.
+func (s *BaseController) inheritAPIPrincipal(principal *BaseController) {
+	if s == nil || principal == nil || !principal.apiPrincipalSet {
+		return
+	}
+	s.apiPrincipalSet = true
+	s.apiAuthorized = principal.apiAuthorized
+	s.userAPIAuthorized = principal.userAPIAuthorized
+	s.apiUserID = principal.apiUserID
+	s.requestID = principal.requestID
+}
+
+func (s *BaseController) apiBaseController() *BaseController { return s }
 
 // publicAccessPort is deliberately separate from the listener port.  NPS can
 // listen on an internal port while a reverse proxy exposes the same Host rule
@@ -286,6 +593,9 @@ func (s *BaseController) auditActor() (string, int, string) {
 // authentication is deliberately request-scoped; browser session elevation is
 // kept separate from it.
 func (s *BaseController) IsAdmin() bool {
+	if s.apiRequestOnly || s.apiPrincipalSet {
+		return s.apiAuthorized
+	}
 	return isAdminAuthorized(s.apiAuthorized, s.GetSession("isAdmin"))
 }
 

@@ -1,6 +1,9 @@
 package controllers
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -30,8 +33,13 @@ const apiV1TestAuthKey = "api-v1-test-auth-key"
 func withAPIV1TestAuthKey(t *testing.T) {
 	t.Helper()
 	previous := beego.AppConfig.String("auth_key")
+	previousLegacy := beego.AppConfig.DefaultBool("api_legacy_md5_enabled", false)
 	_ = beego.AppConfig.Set("auth_key", apiV1TestAuthKey)
-	t.Cleanup(func() { _ = beego.AppConfig.Set("auth_key", previous) })
+	_ = beego.AppConfig.Set("api_legacy_md5_enabled", "true")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("auth_key", previous)
+		_ = beego.AppConfig.Set("api_legacy_md5_enabled", strconv.FormatBool(previousLegacy))
+	})
 }
 
 // withAPIV1TestBridge installs the minimal bridge state that list actions
@@ -114,6 +122,318 @@ func TestAPIV1PrepareRejectsInvalidSignatureWithoutRedirectLeak(t *testing.T) {
 	payload := readAPIV1JSON(t, recorder)
 	if payload["status"] != float64(0) || payload["error_code"] != "unauthorized" {
 		t.Fatalf("invalid credential envelope = %#v", payload)
+	}
+}
+
+func TestAPIV1BrowserAdminSessionCannotAuthorizeOrBeMutatedByInvalidCredentials(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		token string
+	}{
+		{name: "missing credentials"},
+		{name: "invalid bearer", token: "not-a-valid-token"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			controller, recorder := newAPIV1TestController(t, http.MethodGet, "/api/v1/clients", nil, "")
+			session := controller.Ctx.Input.CruSession.(*clientPermissionSession)
+			session.values["auth"] = true
+			session.values["isAdmin"] = true
+			session.values["username"] = "browser-admin"
+			if test.token != "" {
+				controller.Ctx.Request.Header.Set("Authorization", "Bearer "+test.token)
+			}
+
+			runClientPermissionAction(t, controller.Prepare)
+			if recorder.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
+			}
+			if controller.apiAuthorized || controller.userAPIAuthorized || controller.IsAdmin() {
+				t.Fatal("browser administrator session authorized an API-only request")
+			}
+			if got := session.values["username"]; got != "browser-admin" || session.values["auth"] != true || session.values["isAdmin"] != true {
+				t.Fatalf("browser session was mutated by rejected API request: %#v", session.values)
+			}
+			if cookies := recorder.Result().Cookies(); len(cookies) != 0 {
+				t.Fatalf("rejected API request changed browser cookies: %#v", cookies)
+			}
+		})
+	}
+}
+
+func TestAPIV1UserTokenDoesNotInheritBrowserAdministratorSession(t *testing.T) {
+	db := useClientPermissionTestDb(t)
+	token, hash, err := generateUserAPIToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.JsonDb.Users.Store(7, &file.User{Id: 7, UserName: "alice", Status: true, APIKeyHash: hash})
+
+	controller, recorder := newAPIV1TestController(t, http.MethodGet, "/api/v1/clients", nil, "")
+	session := controller.Ctx.Input.CruSession.(*clientPermissionSession)
+	session.values["auth"] = true
+	session.values["isAdmin"] = true
+	session.values["username"] = "browser-admin"
+	controller.Ctx.Request.Header.Set("Authorization", "Bearer "+token)
+	controller.Prepare()
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if !controller.userAPIAuthorized || controller.apiUserID != 7 || controller.IsAdmin() {
+		t.Fatalf("API principal = (user=%v, id=%d, admin=%v), want user 7 without admin privilege", controller.userAPIAuthorized, controller.apiUserID, controller.IsAdmin())
+	}
+	if got := session.values["username"]; got != "browser-admin" || session.values["isAdmin"] != true {
+		t.Fatalf("user API request changed unrelated browser session: %#v", session.values)
+	}
+}
+
+func TestAPIV1HMACSignatureAllowsRequestAndRejectsReplay(t *testing.T) {
+	useClientPermissionTestDb(t)
+	previousKey := beego.AppConfig.String("auth_key")
+	previousHMAC := beego.AppConfig.DefaultBool("api_hmac_enabled", true)
+	previousLegacy := beego.AppConfig.DefaultBool("api_legacy_md5_enabled", false)
+	_ = beego.AppConfig.Set("auth_key", apiV1TestAuthKey)
+	_ = beego.AppConfig.Set("api_hmac_enabled", "true")
+	_ = beego.AppConfig.Set("api_legacy_md5_enabled", "false")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("auth_key", previousKey)
+		_ = beego.AppConfig.Set("api_hmac_enabled", strconv.FormatBool(previousHMAC))
+		_ = beego.AppConfig.Set("api_legacy_md5_enabled", strconv.FormatBool(previousLegacy))
+	})
+
+	body := []byte(`{"limit":10}`)
+	controller, recorder := newAPIV1TestController(t, http.MethodPost, "/api/v1/clients?tag=a%20b", bytes.NewReader(body), "application/json")
+	request := controller.Ctx.Request
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce, err := newNPSHMACNonce()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodySum := sha256.Sum256(body)
+	bodyHash := hex.EncodeToString(bodySum[:])
+	keyID := npsHMACAuthKeyID
+	signature, err := signNPSHMAC(apiV1TestAuthKey, request, bodyHash, timestamp, nonce, keyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", npsHMACAuthorizationScheme+" "+signature)
+	request.Header.Set("X-NPS-Timestamp", timestamp)
+	request.Header.Set("X-NPS-Nonce", nonce)
+	request.Header.Set("X-NPS-Key-Id", keyID)
+	controller.Prepare()
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("valid HMAC status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if !controller.IsAdmin() {
+		t.Fatal("verified API HMAC principal is not recognized as administrator")
+	}
+
+	replay, replayRecorder := newAPIV1TestController(t, http.MethodPost, "/api/v1/clients?tag=a%20b", bytes.NewReader(body), "application/json")
+	replayRequest := replay.Ctx.Request
+	replaySignature, err := signNPSHMAC(apiV1TestAuthKey, replayRequest, bodyHash, timestamp, nonce, keyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayRequest.Header.Set("Authorization", npsHMACAuthorizationScheme+" "+replaySignature)
+	replayRequest.Header.Set("X-NPS-Timestamp", timestamp)
+	replayRequest.Header.Set("X-NPS-Nonce", nonce)
+	replayRequest.Header.Set("X-NPS-Key-Id", keyID)
+	runClientPermissionAction(t, replay.Prepare)
+	if replayRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("replayed HMAC status = %d, want %d: %s", replayRecorder.Code, http.StatusUnauthorized, replayRecorder.Body.String())
+	}
+}
+
+func TestAPIV1HMACDelegatesAdminPrincipalToResourceController(t *testing.T) {
+	useClientPermissionTestDb(t)
+	withAPIV1TestBridge(t)
+	previousKey := beego.AppConfig.String("auth_key")
+	previousHMAC := beego.AppConfig.DefaultBool("api_hmac_enabled", true)
+	previousLegacy := beego.AppConfig.DefaultBool("api_legacy_md5_enabled", false)
+	_ = beego.AppConfig.Set("auth_key", apiV1TestAuthKey)
+	_ = beego.AppConfig.Set("api_hmac_enabled", "true")
+	_ = beego.AppConfig.Set("api_legacy_md5_enabled", "false")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("auth_key", previousKey)
+		_ = beego.AppConfig.Set("api_hmac_enabled", strconv.FormatBool(previousHMAC))
+		_ = beego.AppConfig.Set("api_legacy_md5_enabled", strconv.FormatBool(previousLegacy))
+	})
+
+	controller, recorder := newAPIV1TestController(t, http.MethodGet, "/api/v1/clients", nil, "")
+	request := controller.Ctx.Request
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonce, err := newNPSHMACNonce()
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyID := npsHMACAuthKeyID
+	signature, err := signNPSHMAC(apiV1TestAuthKey, request, hashEmptyBody(), timestamp, nonce, keyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", npsHMACAuthorizationScheme+" "+signature)
+	request.Header.Set("X-NPS-Timestamp", timestamp)
+	request.Header.Set("X-NPS-Nonce", nonce)
+	request.Header.Set("X-NPS-Key-Id", keyID)
+
+	controller.Prepare()
+	if !controller.apiAuthorized || !controller.apiPrincipalSet {
+		t.Fatalf("outer API principal = (%v, %v), want verified administrator", controller.apiAuthorized, controller.apiPrincipalSet)
+	}
+	runClientPermissionAction(t, controller.Clients)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("delegated HMAC resource status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	payload := readAPIV1JSON(t, recorder)
+	if payload["status"] != float64(1) || payload["code"] != "ok" {
+		t.Fatalf("delegated HMAC resource response = %#v, want success", payload)
+	}
+}
+
+func TestAPIV1HMACRejectsModifiedSignedRequest(t *testing.T) {
+	previousKey := beego.AppConfig.String("auth_key")
+	previousHMAC := beego.AppConfig.DefaultBool("api_hmac_enabled", true)
+	previousLegacy := beego.AppConfig.DefaultBool("api_legacy_md5_enabled", false)
+	_ = beego.AppConfig.Set("auth_key", apiV1TestAuthKey)
+	_ = beego.AppConfig.Set("api_hmac_enabled", "true")
+	_ = beego.AppConfig.Set("api_legacy_md5_enabled", "false")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("auth_key", previousKey)
+		_ = beego.AppConfig.Set("api_hmac_enabled", strconv.FormatBool(previousHMAC))
+		_ = beego.AppConfig.Set("api_legacy_md5_enabled", strconv.FormatBool(previousLegacy))
+	})
+
+	for _, test := range []struct {
+		name   string
+		target string
+		mutate func(*http.Request)
+	}{
+		{
+			name: "body",
+			mutate: func(request *http.Request) {
+				request.Body = io.NopCloser(strings.NewReader(`{"limit":11}`))
+			},
+		},
+		{
+			name: "query",
+			mutate: func(request *http.Request) {
+				request.URL.RawQuery = "tag=changed"
+			},
+		},
+		{
+			name:   "api_token query credential",
+			target: "/api/v1/clients?api_token=original",
+			mutate: func(request *http.Request) {
+				query := request.URL.Query()
+				query.Set("api_token", "changed")
+				request.URL.RawQuery = query.Encode()
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			body := []byte(`{"limit":10}`)
+			target := test.target
+			if target == "" {
+				target = "/api/v1/clients?tag=original"
+			}
+			controller, recorder := newAPIV1TestController(t, http.MethodPost, target, bytes.NewReader(body), "application/json")
+			request := controller.Ctx.Request
+			timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+			nonce, err := newNPSHMACNonce()
+			if err != nil {
+				t.Fatal(err)
+			}
+			bodySum := sha256.Sum256(body)
+			keyID := npsHMACAuthKeyID
+			signature, err := signNPSHMAC(apiV1TestAuthKey, request, hex.EncodeToString(bodySum[:]), timestamp, nonce, keyID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.mutate(request)
+			request.Header.Set("Authorization", npsHMACAuthorizationScheme+" "+signature)
+			request.Header.Set("X-NPS-Timestamp", timestamp)
+			request.Header.Set("X-NPS-Nonce", nonce)
+			request.Header.Set("X-NPS-Key-Id", keyID)
+
+			runClientPermissionAction(t, controller.Prepare)
+			if recorder.Code != http.StatusUnauthorized {
+				t.Fatalf("modified request status = %d, want %d: %s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestNPSHMACCanonicalRequestUsesGoEscapedPathAndCanonicalQuery(t *testing.T) {
+	tests := []struct {
+		name      string
+		target    string
+		wantPath  string
+		wantQuery string
+	}{
+		{
+			name:      "duplicate and empty query values",
+			target:    "/api/v1/items?z=&tag=one&tag=two&auth_key=business&timestamp=123",
+			wantPath:  "/api/v1/items",
+			wantQuery: "auth_key=business&tag=one&tag=two&timestamp=123&z=",
+		},
+		{
+			name:      "space plus and percent query encoding",
+			target:    "/api/v1/items?q=a+b&q=a%2Bb&literal=%25&space=a%20b",
+			wantPath:  "/api/v1/items",
+			wantQuery: "literal=%25&q=a+b&q=a%2Bb&space=a+b",
+		},
+		{
+			name:      "escaped and unicode path",
+			target:    "/api/v1/caf%C3%A9%20room/~!*'()%5B%5D?x=%E4%B8%AD%E6%96%87",
+			wantPath:  "/api/v1/caf%C3%A9%20room/~!*'()%5B%5D",
+			wantQuery: "x=%E4%B8%AD%E6%96%87",
+		},
+		{
+			name:      "semicolon remains an encoded value",
+			target:    "/api/v1/items?q=a%3Bb",
+			wantPath:  "/api/v1/items",
+			wantQuery: "q=a%3Bb",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, test.target, nil)
+			canonical, err := npsHMACCanonicalRequest(request, hashEmptyBody(), "123", "nonce", npsHMACAuthKeyID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parts := strings.Split(canonical, "\n")
+			if len(parts) != 7 {
+				t.Fatalf("canonical fields = %d, want 7: %q", len(parts), canonical)
+			}
+			if parts[1] != test.wantPath {
+				t.Errorf("escaped path = %q, want %q", parts[1], test.wantPath)
+			}
+			if parts[2] != test.wantQuery {
+				t.Errorf("canonical query = %q, want %q", parts[2], test.wantQuery)
+			}
+		})
+	}
+}
+
+func TestNPSHMACCanonicalRequestRejectsMalformedQuery(t *testing.T) {
+	for _, target := range []string{"/api/v1/items?x=%ZZ", "/api/v1/items?x=a;b"} {
+		t.Run(target, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, target, nil)
+			if _, err := npsHMACCanonicalRequest(request, hashEmptyBody(), "123", "nonce", npsHMACAuthKeyID); err == nil {
+				t.Fatalf("malformed query %q was accepted", target)
+			}
+		})
+	}
+}
+
+func TestAPIV1LegacyMD5DisabledByDefault(t *testing.T) {
+	withAPIV1TestAuthKey(t)
+	_ = beego.AppConfig.Set("api_legacy_md5_enabled", "false")
+	controller, recorder := newAPIV1TestController(t, http.MethodGet, "/api/v1/clients?"+apiV1SignedQuery().Encode(), nil, "")
+	runClientPermissionAction(t, controller.Prepare)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("legacy MD5 status = %d, want %d: %s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
 	}
 }
 
@@ -425,6 +745,43 @@ func TestAPIV1InfoDiscoveryIsPublic(t *testing.T) {
 	if !ok || len(resources) == 0 {
 		t.Fatalf("discovery resources = %#v", payload["resources"])
 	}
+	auth, ok := payload["auth"].([]interface{})
+	if !ok {
+		t.Fatalf("discovery auth methods = %#v, want array", payload["auth"])
+	}
+	if !containsString(auth, "admin_hmac_sha256") || !containsString(auth, "user_bearer_token") || containsString(auth, "admin_md5_timestamp") {
+		t.Fatalf("default discovery auth methods = %#v, want HMAC and user bearer only", auth)
+	}
+}
+
+func TestAPIV1InfoDiscoveryReportsEnabledLegacyMD5Only(t *testing.T) {
+	previousHMAC := beego.AppConfig.DefaultBool("api_hmac_enabled", true)
+	previousLegacy := beego.AppConfig.DefaultBool("api_legacy_md5_enabled", false)
+	_ = beego.AppConfig.Set("api_hmac_enabled", "false")
+	_ = beego.AppConfig.Set("api_legacy_md5_enabled", "true")
+	t.Cleanup(func() {
+		_ = beego.AppConfig.Set("api_hmac_enabled", strconv.FormatBool(previousHMAC))
+		_ = beego.AppConfig.Set("api_legacy_md5_enabled", strconv.FormatBool(previousLegacy))
+	})
+
+	controller, recorder := newAPIV1InfoTestController(t, http.MethodGet, "/api/v1")
+	runClientPermissionAction(t, controller.Info)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	auth := readAPIV1JSON(t, recorder)["auth"].([]interface{})
+	if containsString(auth, "admin_hmac_sha256") || !containsString(auth, "admin_legacy_md5_timestamp") || !containsString(auth, "user_bearer_token") {
+		t.Fatalf("configured discovery auth methods = %#v", auth)
+	}
+}
+
+func containsString(values []interface{}, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestAPIV1IPRegisterRejectsNonPostWithEnvelope(t *testing.T) {

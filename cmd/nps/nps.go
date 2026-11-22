@@ -778,7 +778,7 @@ func rotateInsecureConfig(content string) (string, map[string]string) {
 		defaults []string
 	}{
 		{key: "web_password", length: 8, defaults: []string{"123", "CHANGE_ME"}},
-		{key: "auth_key", length: 8, defaults: []string{"123", "CHANGE_ME"}},
+		{key: "auth_key", length: 32, defaults: []string{"123", "CHANGE_ME"}},
 		{key: "auth_crypt_key", length: 16, defaults: []string{"213", "CHANGE_ME_16CHAR"}},
 	} {
 		for _, value := range item.defaults {

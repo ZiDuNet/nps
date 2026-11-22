@@ -73,7 +73,8 @@ docker run -d --name nps \
 
 ## 验收清单
 
-- `GET /api/v1/info`、面板和 `npsctl version` 均显示 `1.1.49`。
+- `GET /api/v1/`、面板和 `npsctl version` 均显示 `1.1.49`；设置
+  `web_base_url` 时，公开探针路径需添加其前缀。
 - `conf/nps.db`、WAL、SHM 仅服务账号可读，磁盘空间充足。
 - `conf/migration-report.json` 为成功状态，实体计数与源数据一致。
 - 旧 NPC 可继续连接；需要新版管理能力时再按客户端发布说明升级 NPC。

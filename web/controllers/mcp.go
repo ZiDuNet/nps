@@ -33,7 +33,9 @@ type mcpPrincipalKey struct{}
 // NewMCPHandler returns the Streamable HTTP MCP endpoint at /mcp. The opt-in
 // switch is checked per request so an administrator can enable it from the
 // settings panel without restarting NPS. When disabled, callers still receive
-// an unauthenticated 404 so the endpoint's state is not exposed.
+// an unauthenticated 404 so the endpoint's state is not exposed. When enabled,
+// authentication runs before MCP method handling, so unauthenticated requests
+// receive 401 even for methods that the stateless endpoint does not support.
 func NewMCPHandler() http.Handler {
 	mcpServer := server.NewMCPServer("nps", version.VERSION, server.WithToolCapabilities(true))
 	registerMCPTools(mcpServer)
@@ -44,6 +46,8 @@ func NewMCPHandler() http.Handler {
 			}
 			return ctx
 		}),
+		// Stateless MCP does not mint a session ID and ignores one if a client
+		// sends a stale or unknown Mcp-Session-Id header.
 		server.WithStateLess(true),
 		server.WithDisableStreaming(true),
 		server.WithDisableLocalhostProtection(true),
