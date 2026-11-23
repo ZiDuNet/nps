@@ -2,6 +2,21 @@
 
 所有重要变更记录在此。
 
+## [Unreleased]
+
+### Changed
+
+- 「系统 → 全局参数 → 全局参数」按“基础与容量”“访问控制”“使用说明”“Geo 数据”分为四个 Tab，并支持 `#global-basic`、`#global-access`、`#global-guide`、`#global-geo` 深链；旧使用说明链接 `#usage-guide-settings` 继续可用。
+- 「服务端配置」按“入口与转发”“Bridge 与客户端”“日志与监控”“账号与接入”“运行与安全”和“`nps.conf` 启动项”分为六个 Tab。前五项只展示 SQLite 业务配置，最后一项集中展示启动参数、兼容/自定义字段和完整源码。
+- 配置卡片新增“SQLite 业务配置”/“nps.conf 启动配置”来源徽标和“立即生效”/“需重启”行为徽标，避免把业务设置误写回启动文件。
+- 热更新范围补充 `disconnect_timeout`、`ip_limit`、`acl_max_rules`、DNS、NTP 服务器与周期、时区和 GeoIP/Geosite 路径；仍不能安全在线切换的监听、TLS 和日志适配器继续提示重启。
+- 配置页补充响应式卡片布局、键盘可访问的 Tab 切换和深链定位；`public_vkey` 继续作为 1.1.49 至 1.1.52 的 SQLite 兼容键保留，通常仍需重启后完全生效。
+
+### Compatibility
+
+- Bridge 握手、NPC 控制消息、快捷命令、代理协议、既有 `/api/v1` 字段和 SQLite schema 均不变，旧 NPC 无需随本次界面与配置整理升级。
+- 本次仅整理配置界面和文档，未提升版本号或创建新发布。
+
 ## [1.1.52] - 2026-11-22
 
 ### Fixed

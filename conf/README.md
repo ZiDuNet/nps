@@ -8,9 +8,9 @@
 
 全新安装只初始化 `nps.conf`、SQLite 及正常服务所需文件，不执行旧数据迁移，也不生成迁移包或报告。`npc.conf` 和 `multi_account.conf` 是客户端示例，不会被服务端释放或改写；Docker 部署请挂载整个 `/conf`。
 
-管理员可以在 Web 面板「系统 → 全局参数」的「服务端配置」Tab 中维护当前运行目录下的 `nps.conf`。可视化页面按功能分类展示非证书、非注册配置；证书、私钥和 ACME 字段统一放在「证书设置」Tab，注册入口、新用户默认权益、限频和 SMTP 放在「用户注册」Tab，完整 `nps.conf` 仍可在源码视图中查看和维护。可选监听、证书、密钥、日志归档和调试项关闭后会从有效配置中移除。密码、API 密钥和私钥不会回显，保存后必须重启 NPS 才会应用。历史版本或自定义键会只读展示并在保存时保留。
+管理员可以在 Web 面板「系统 → 全局参数 → 服务端配置」中维护当前运行目录下的配置。页面按“入口与转发”“Bridge 与客户端”“日志与监控”“账号与接入”“运行与安全”和“`nps.conf` 启动项”六个 Tab 分类；前五个展示 SQLite 业务配置，最后一个集中维护启动参数、兼容/自定义字段和完整源码。证书、私钥和 ACME 字段统一放在「证书设置」，注册入口、新用户默认权益、限频和 SMTP 放在「用户注册」。字段卡片会标明配置来源及保存后“立即生效”或“需重启”。可选监听、证书、密钥、日志归档和调试项关闭后会从有效配置中移除。密码、API 密钥和私钥不会回显；历史版本或自定义键会只读展示并在保存时保留。
 
-Bridge 全协议共用一套 TLS 证书。管理员可在「系统 → 全局参数」的「证书设置」Tab 中通过路径、上传或粘贴方式维护 `bridge_cert_file`、`bridge_key_file`；上传/粘贴文件写入 `conf/bridgessl`，最终配置仍只保存在 `nps.conf`，保存后需重启 NPS 才会生效。平台泛域名和 HTTPS 默认证书、管理面板 HTTPS、IP 登记 HTTPS 也在同一 Tab 中维护。平台泛域名使用上传/粘贴时写入 `conf/certs/platform_<ID>.pem` 和 `conf/certs/platform_<ID>.key`；使用路径模式时不会复制文件。
+Bridge 全协议共用一套 TLS 证书。管理员可在「系统 → 全局参数」的「证书设置」Tab 中通过路径、上传或粘贴方式维护 `bridge_cert_file`、`bridge_key_file`；上传/粘贴文件写入 `conf/bridgessl`，最终路径仍只保存在 `nps.conf`；有效证书保存后会在后续 TLS 握手热加载，已有连接不会被主动断开。平台泛域名和 HTTPS 默认证书、管理面板 HTTPS、IP 登记 HTTPS 也在同一 Tab 中维护。平台泛域名使用上传/粘贴时写入 `conf/certs/platform_<ID>.pem` 和 `conf/certs/platform_<ID>.key`；使用路径模式时不会复制文件。
 
 客户端详情中的各协议连接命令由 `bridge_*_show` 控制是否展示，由 `bridge_*_show_ip`、`bridge_*_show_port` 和 `bridge_show_path` 覆盖公网地址、端口与 WS 路径。这些字段只影响命令文本，不改变服务端监听；`bridge_*_show=false` 会作为显式配置保留，升级时不会被自动恢复为 `true`。
 

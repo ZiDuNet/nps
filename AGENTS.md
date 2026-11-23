@@ -71,7 +71,7 @@ C/S 架构，服务端（NPS）和客户端（NPC）通过 Bridge 层通信。�
 
 1. **控制面**：客户端 `WORK_MAIN` 连接 → Bridge 验证 vkey → 保持长连接（ping 心跳每 5 秒，3 次失败踢出）
 2. **数据面**：客户端 `WORK_CHAN` 连接 → nps_mux 多路复用 → 服务端 `SendLinkInfo` 下发连接请求 → 客户端连本地目标 → 双向转发
-3. **存储**：所有数据（clients/tasks/hosts）存在 JSON 文件中，`sync.Map` 内存缓存，定时持久化。`lib/file/` 中 `JsonDb` 负责读写
+3. **存储**：客户端、用户、隧道、Host、全局参数和运行期业务配置保存在 `conf/nps.db`；SQLite 使用 WAL、单进程锁和事务写入，`sync.Map` 只作为运行时缓存。旧 JSON 仅用于迁移、归档和 `-export-json` 回滚
 
 ### 代理模式
 
@@ -97,13 +97,14 @@ Service 接口（`server/proxy/base.go`）：`Start() error` + `Close() error`�
 
 Beego + Bootstrap 5 管理面板，路由在 `web/routers/router.go`。AutoRouter 映射：`ClientController.Add` → `/client/add`。
 
-控制器（`web/controllers/`）：BaseController（会话、管理员/用户/API 鉴权与权限过滤）、IndexController（仪表盘、普通隧道与 Host）、ClientController（客户端）、UserController（用户与 API Token）、AuthController（历史对时和 auth_key 发现）、GlobalController（全局参数、nps.conf、证书、IP 登记、Geo 与封禁）、AuditController（审计），并提供 `/api/v1` 控制器。
+控制器（`web/controllers/`）：BaseController（会话、管理员/用户/API 鉴权与权限过滤）、IndexController（仪表盘、普通隧道与 Host）、ClientController（客户端）、UserController（用户与 API Token）、AuthController（历史对时和 auth_key 发现）、GlobalController（全局参数、服务端配置、证书、IP 登记、Geo 与封禁）、AuditController（审计），并提供 `/api/v1` 控制器。全局参数与服务端配置按 Tab 分组，字段按实际来源写入 SQLite 业务设置或 `nps.conf` 启动项。
 
 静态文件通过 `go:embed` 嵌入可执行文件（`web/embed.go`），启动时按需释放到临时目录。
 
 ### 配置
 
-- 服务端：`conf/nps.conf`（INI 格式，beego 加载），首次启动自动生成随机密码
+- 服务端启动配置：`conf/nps.conf`（INI 格式，beego 加载），首次启动自动生成随机密码
+- 服务端业务数据与运行期业务设置：`conf/nps.db`（SQLite），旧 JSON 只在迁移和回滚导出时使用
 - 客户端：无需配置文件，通过命令行参数或交互式输入启动
 - 关键端口：Bridge TCP 8024、Bridge TLS 8025、Web 面板 8081、HTTP 代理 80、HTTPS 代理 443；KCP、WS、WSS、QUIC 和 HTTP/3 使用按需启用的独立监听
 
@@ -122,7 +123,7 @@ cmd/npc/npc-gui/     → Wails GUI 客户端（Go + Vue.js）
 cmd/npc/sdk.go       → 客户端 SDK（构建为 .dll/.so）
 server/proxy/        → 代理模式实现（tcp/udp/socks5/http/https/p2p/websocket）
 server/server.go     → 服务端生命周期（启停隧道、AddTask、NewMode）
-lib/file/            → 数据模型 + JSON 持久化（JsonDb, DbUtils）
+lib/file/            → 数据模型 + SQLite/JSON 迁移与持久化
 lib/conn/            → 连接协议封装（Conn, Link, SnappyConn, 线协议）
 lib/nps_mux/         → 自定义多路复用库
 lib/rate/            → 令牌桶限速器
@@ -130,7 +131,7 @@ lib/crypt/           → TLS 证书管理
 lib/config/          → 客户端配置文件解析
 lib/common/          → 常量、连接池、字节操作
 web/                 → Web 管理面板（Beego MVC）
-conf/                → 默认配置 + JSON 数据 + SSL 证书
+conf/                → 启动配置 + SQLite 数据 + SSL 证书
 build.sh             → 跨平台发布构建脚本（15+ 平台）
 Makefile             → build/test/lint/ci
 Dockerfile.nps/.npc  → 多阶段 Docker 构建

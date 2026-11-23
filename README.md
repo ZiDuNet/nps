@@ -23,7 +23,7 @@ Administrators can create users and assign multiple clients to one user; ordinar
 
 - 🚀 **Comprehensive Protocols** — TCP, UDP, HTTP(S), SOCKS5, P2P, Secret, File access
 - 🖥️ **Cross-platform** — Linux / Windows / macOS / ARM / Synology, with one-click system service installation
-- 🎨 **Web UI** — Operations-focused console with a persistent top bar, light/dark theme, responsive layout, Chinese/English localization, keyboard-friendly controls, and real-time traffic monitoring
+- 🎨 **Web UI** — Operations-focused console with a persistent top bar, light/dark theme, responsive layout, Chinese/English localization, keyboard-friendly controls, and real-time traffic monitoring. Global settings use focused tabs, while server configuration separates SQLite business settings from the dedicated `nps.conf` startup tab and marks each field with its source and apply mode.
 - 👥 **User Management** — One user can manage multiple clients, with user-level tunnel quotas and expiration
 - **Account sign-in** — Username or linked-email login, optional client-scoped VKey login, and email password recovery while registration is open; recovery revokes previous browser sessions
 - **Audit and connection journals** — The console reads the latest 2,000 records from each file with user isolation; administrators can prune older records by retention days without changing the existing history-query APIs

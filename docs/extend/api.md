@@ -126,10 +126,11 @@ CLI 的 `--key-id auto|auth_key|managed_admin` 用于选择密钥类型。`auto`
 v1.1.50 `npsctl` 不包含该选项。
 
 旧版 `md5(管理员密钥 + timestamp)` 查询签名不再是默认方式。兼容旧调用方时，可临时在
-`nps.conf` 设置 `api_legacy_md5_enabled=true`。仅允许注册的 `/api/v1` 受保护 API 路由和
-历史 Web 管理路由；公开探针、登录/注册页面、未知路由和不支持的方法不会因此获得 API
-身份。请求中的签名会出现在 URL/access log，且协议没有 nonce、防重放能力。迁移完成后
-应关闭兼容开关。不要在新集成或示例中使用该旧协议。
+「系统 → 全局参数 → 服务端配置 → 账号与接入」的“Web API 认证”中开启
+“兼容旧版 MD5 API 签名”（`api_legacy_md5_enabled`）。仅允许注册的 `/api/v1` 受保护
+API 路由和历史 Web 管理路由；公开探针、登录/注册页面、未知路由和不支持的方法不会因此
+获得 API 身份。请求中的签名会出现在 URL/access log，且协议没有 nonce、防重放能力。
+迁移完成后应关闭兼容开关。不要在新集成或示例中使用该旧协议。
 
 ### 旧式签名（仅迁移兼容）
 

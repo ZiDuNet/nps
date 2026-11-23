@@ -119,7 +119,14 @@ NPC 不认识这两个字段时会忽略它们，原有连接协议和目标配�
 - `allow_user_local`、`allow_secret_link`、`allow_secret_local`、`allow_remote_update`；
 - `ntp_server`、`ntp_interval`、`geoip_path`、`geosite_path`、`geo_reload_interval`、`acl_max_rules`、`dns_server`。
 
-注册相关字段可以在「系统 → 全局参数」的「用户注册」Tab 中维护；其他字段在「服务端配置」Tab 中按分组查看，证书、私钥和 ACME 字段在「证书设置」Tab 中统一维护。运行期业务字段写入 SQLite，不必手工放回 `nps.conf`。保存结果会提示是否需要重启；配置页不会覆盖未知自定义字段，敏感值只显示掩码。升级不要求重写端口和证书路径，原来显式设置的 `register_expire_days` 会导入数据库。
+注册相关字段可在「系统 → 全局参数 → 用户注册」中维护；其他业务字段按用途
+分布在「服务端配置」的“入口与转发”“Bridge 与客户端”“日志与监控”
+“账号与接入”“运行与安全”五个 SQLite 业务 Tab 中。真正写回 `nps.conf` 的
+启动项、兼容/自定义字段和完整源码集中在第六个“`nps.conf` 启动项”Tab；
+证书、私钥和 ACME 字段仍在「证书设置」中统一维护。字段卡片会标明配置来源
+和“立即生效”或“需重启”。运行期业务字段写入 SQLite，不必手工放回
+`nps.conf`；未知自定义字段不会因可视化保存被覆盖，敏感值只显示掩码。
+升级不要求重写端口和证书路径，原来显式设置的 `register_expire_days` 会导入数据库。
 
 ### 二进制部署
 

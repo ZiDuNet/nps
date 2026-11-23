@@ -677,7 +677,10 @@ POST /global/save/
 GET /global/certificate/
 ```
 
-仅管理员可访问。页面集中展示 Bridge TLS 证书、平台泛域名与证书、HTTPS 默认证书与 ACME、管理面板 HTTPS、IP 登记 HTTPS，以及 Bridge TLS 入口配置。完整 `nps.conf` 仍可通过服务端配置的源码视图查看和维护。
+仅管理员可访问。页面集中展示 Bridge TLS 证书、平台泛域名与证书、HTTPS
+默认证书与 ACME、管理面板 HTTPS、IP 登记 HTTPS，以及 Bridge TLS 入口配置。
+完整 `nps.conf` 可通过「系统 → 全局参数 → 服务端配置 → `nps.conf` 启动项」
+中的完整源码编辑器查看和维护。
 
 ---
 

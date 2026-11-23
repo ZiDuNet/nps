@@ -4,12 +4,10 @@
 
 ## 获取访问者真实 IP
 
-HTTP(S) 域名代理可在转发到后端时附加真实来源地址。服务端配置：
-
-```ini
-# conf/nps.conf
-http_add_origin_header=true
-```
+HTTP(S) 域名代理可在转发到后端时附加真实来源地址。管理员在
+「系统 → 全局参数 → 服务端配置 → 入口与转发」开启“添加来源请求头”
+（`http_add_origin_header`）；该业务设置保存在 SQLite，不需要手工写回
+`nps.conf`。
 
 启用后，后端应用可从请求头读取：
 
@@ -41,7 +39,8 @@ http_add_origin_header=true
 - `bridge_ip`、`bridge_port`、`bridge_type`、`tls_bridge_port`
 - `http_proxy_ip`、`http_proxy_port`、`https_proxy_port`
 - `web_ip`、`web_port`、`web_open_ssl` 及 Web 证书路径
-- 需要重新读取的全局行为开关，例如 `allow_local_proxy`
+- 其他需要重新监听或重新装载适配器的启动项；具体以字段卡片中的“需重启”提示为准。
+  SQLite 业务设置中的 `allow_local_proxy` 等开关已纳入即时生效。
 
 Linux/macOS 可先执行：
 
@@ -128,7 +127,7 @@ sudo nps reload
 保留期内的采样继续显示，不必删除历史重建。分钟精度默认保留 48 小时，五分钟
 精度默认保留 90 天；启用采集时，启动和每次采样都会自动清理过期点，并在下次
 写盘时更新历史文件。已删除资源的历史在两种精度全部过期后自动回收；客户端
-仅离线不会导致历史被提前删除。可在「全局参数 → 服务端配置 → 日志与审计」
+仅离线不会导致历史被提前删除。可在「全局参数 → 服务端配置 → 日志与监控」
 调整保留时长，重启后生效。
 
 ## 版本兼容

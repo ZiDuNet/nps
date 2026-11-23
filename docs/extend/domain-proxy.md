@@ -83,7 +83,7 @@ DNS 不会替代端口开放，也不会隐藏非 80/443 端口。即使 `*.exam
 
 - **请求 Host**：将发给后端的 `Host` 改为后端虚拟主机需要的值。
 - **自定义请求 Header**：每行使用 `名称: 值`，例如 `X-Environment: production`。
-- **真实来源 Header**：启用 `http_add_origin_header=true` 后，NPS 会维护 `X-Forwarded-For`、`X-Real-IP`、`X-Forwarded-Host`、`X-Forwarded-Proto`、`X-Forwarded-Port` 和 `X-Real-Proto`。默认覆盖访问者传入的转发头；也可选择保留链路或只信任指定代理。后端只能信任来自 NPS 或受控反向代理的这些 Header。
+- **真实来源 Header**：在「服务端配置 → 入口与转发」开启“添加来源请求头”（`http_add_origin_header`）后，NPS 会维护 `X-Forwarded-For`、`X-Real-IP`、`X-Forwarded-Host`、`X-Forwarded-Proto`、`X-Forwarded-Port` 和 `X-Real-Proto`。默认覆盖访问者传入的转发头；也可选择保留链路或只信任指定代理。后端只能信任来自 NPS 或受控反向代理的这些 Header。
 - **Basic 认证**：域名规则可单独配置 `auth`/独立账号；留空时使用所属客户端的公共 Basic。HTTP 正向代理和 SOCKS5 的规则级认证是另一组代理端口配置。
 
 域名规则的“兼容与响应”选项还包括：
@@ -106,13 +106,12 @@ DNS 不会替代端口开放，也不会隐藏非 80/443 端口。即使 `*.exam
 
 ## 转发到 NPS 服务器本机
 
-若后端服务实际运行在 NPS 服务器上，而不是 NPC 所在内网，需要在 `nps.conf` 中开启：
-
-```ini
-allow_local_proxy=true
-```
-
-重启 NPS 后，在对应 Host 规则勾选「转发到本地」。两项缺一不可。NPS 使用 Docker `network_mode: host` 时，规则目标 `127.0.0.1:8081` 指向宿主机回环；默认 bridge 网络中则只指向 NPS 容器本身。
+若后端服务实际运行在 NPS 服务器上，而不是 NPC 所在内网，需要在
+「系统 → 全局参数 → 服务端配置 → 账号与接入」的“用户与资源权限”中开启
+“允许本地代理”（`allow_local_proxy=true`），保存后即时生效。随后在对应 Host
+规则勾选「转发到本地」。两项缺一不可。NPS 使用 Docker `network_mode: host`
+时，规则目标 `127.0.0.1:8081` 指向宿主机回环；默认 bridge 网络中则只指向
+NPS 容器本身。
 
 本地转发让规则创建者访问 NPS 主机可达的服务，只应开放给可信管理员。
 

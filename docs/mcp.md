@@ -9,8 +9,9 @@ NPS Pro 内置一个 [Model Context Protocol](https://modelcontextprotocol.io) �
 
 ## 启用与关闭
 
-`mcp_enabled` 默认开启，可在 `conf/nps.conf` 或「全局参数 → 可视化配置 → Web API 认证」
-中修改。关闭后 `/mcp` 返回 404。
+`mcp_enabled` 默认开启，可在「系统 → 全局参数 → 服务端配置 → 账号与接入」的
+“Web API 认证”中修改。该值保存在 SQLite，保存后按字段提示生效；关闭后
+`/mcp` 返回 404。
 
 ## 认证
 
@@ -35,8 +36,9 @@ Agent 配置中的 `Authorization` 是可直接使用的 Bearer 凭据。部分 
 
 注意：v1.1.50 及更早的 `npsctl` 使用旧 MD5 查询签名，不包含 HMAC 和
 `--key-id`。本文 HMAC 用法要求服务端和 CLI 均升级到 v1.1.51 或更新版本。
-如必须分阶段升级，可在更换服务端前于 `nps.conf` 临时设置
-`api_legacy_md5_enabled=true`；升级 CLI 并验证 HMAC 后务必关闭该兼容项。
+如必须分阶段升级，可在「服务端配置 → 账号与接入」的“Web API 认证”中临时开启
+“兼容旧版 MD5 API 签名”（`api_legacy_md5_enabled`）；升级 CLI 并验证 HMAC 后
+务必关闭该兼容项。
 兼容期旧签名会进入 URL/access log 且不防重放，不应长期启用。
 
 AI Agent 接入优先使用用户 API Token：它只管理当前账号拥有的客户端、隧道和域名反代，
