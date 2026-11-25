@@ -97,6 +97,7 @@ type rawHTTPResponses struct {
 	pending  bool
 	overflow bool
 	drained  chan struct{}
+	idle     chan struct{}
 	terminal atomic.Bool
 }
 
@@ -121,6 +122,10 @@ func (r *rawHTTPResponses) Read(b []byte) (int, error) {
 		r.mu.Lock()
 		if !r.overflow && len(r.requests.ch) == 0 {
 			r.pending = false
+			if r.idle != nil {
+				close(r.idle)
+				r.idle = nil
+			}
 			if r.drained != nil {
 				close(r.drained)
 				r.drained = nil
@@ -129,6 +134,30 @@ func (r *rawHTTPResponses) Read(b []byte) (int, error) {
 		r.mu.Unlock()
 	}
 	return r.responseInspector.Read(b)
+}
+
+// pendingResponse reports whether a forwarded response has not been fully
+// written to the visitor yet.
+func (r *rawHTTPResponses) pendingResponse() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.pending
+}
+
+// idleChan returns a channel that is closed once no forwarded response is
+// pending. Callers must re-check pendingResponse after it fires.
+func (r *rawHTTPResponses) idleChan() <-chan struct{} {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.pending {
+		closed := make(chan struct{})
+		close(closed)
+		return closed
+	}
+	if r.idle == nil {
+		r.idle = make(chan struct{})
+	}
+	return r.idle
 }
 
 func (r *rawHTTPResponses) waitForDrain(done <-chan struct{}) bool {
@@ -757,7 +786,19 @@ reset:
 	readReq:
 		// Read requests separately so an upstream EOF can wake this loop while
 		// still allowing an already-arriving request to complete route selection.
-		if err := c.SetReadDeadline(time.Now().Add(hostRequestReadTimeout)); err != nil {
+		//
+		// The visitor read deadline only bounds keep-alive idle time. While a
+		// forwarded response is still being written there is no next request to
+		// wait for, so arming the deadline would truncate any long-lived body
+		// (chunked video, SSE, large downloads) even though data is flowing.
+		streaming := responseStreaming
+		upstreamDone := responseDone
+		idle := responses.idleChan()
+		if responses.pendingResponse() {
+			if err := c.SetReadDeadline(time.Time{}); err != nil {
+				return
+			}
+		} else if err := c.SetReadDeadline(time.Now().Add(hostRequestReadTimeout)); err != nil {
 			return
 		}
 		type requestReadResult struct {
@@ -769,13 +810,19 @@ reset:
 			request, readErr := http.ReadRequest(br)
 			requestRead <- requestReadResult{request: request, err: readErr}
 		}()
-		streaming := responseStreaming
-		upstreamDone := responseDone
 		for {
 			select {
 			case result := <-requestRead:
 				r, err = result.request, result.err
 				goto requestReadComplete
+			case <-idle:
+				// The last forwarded response is fully written, so the
+				// connection is idle again and the bounded keep-alive window
+				// applies from here.
+				idle = nil
+				if err := c.SetReadDeadline(time.Now().Add(hostRequestReadTimeout)); err != nil {
+					return
+				}
 			case <-streaming:
 				streaming = nil
 				if err := c.SetReadDeadline(time.Time{}); err != nil {

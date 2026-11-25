@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复域名反代（Host）长响应被 keep-alive 读超时截断的问题：分块传输的视频流、除 SSE 之外的长连接和大文件下载，此前会在请求空闲窗口（10 秒，带 `Connection: close` 时再加 5 秒等待）后被强制断开；现在只有在上游响应完整写回访客后才开始计空闲超时。
+
 ### Changed
 
 - 「系统 → 全局参数 → 全局参数」按“基础与容量”“访问控制”“使用说明”“Geo 数据”分为四个 Tab，并支持 `#global-basic`、`#global-access`、`#global-guide`、`#global-geo` 深链；旧使用说明链接 `#usage-guide-settings` 继续可用。

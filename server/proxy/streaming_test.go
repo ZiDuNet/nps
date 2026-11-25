@@ -178,6 +178,105 @@ func TestHostSSEStaysOpenPastRequestIdleWindow(t *testing.T) {
 	}
 }
 
+// A chunked, non-SSE response (live video, large download) must survive the
+// keep-alive idle window: no further request arrives while the body streams,
+// so the visitor read deadline must not be armed until the response finishes.
+func TestHostChunkedResponseSurvivesRequestIdleWindow(t *testing.T) {
+	installStreamingHost(t)
+	upstream, upstreamPeer := net.Pipe()
+	defer upstreamPeer.Close()
+	bridge := &streamingTestBridge{target: upstream}
+	server := &httpServer{BaseServer: BaseServer{bridge: bridge}}
+
+	oldTimeout := hostRequestReadTimeout
+	hostRequestReadTimeout = 40 * time.Millisecond
+	t.Cleanup(func() { hostRequestReadTimeout = oldTimeout })
+
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+	req := httptest.NewRequest(http.MethodGet, "http://stream.example.test/live.mp4", nil)
+	req.RequestURI = "/live.mp4"
+	req.URL.Scheme = "http"
+	req.RemoteAddr = "198.51.100.23:12345"
+	done := make(chan struct{})
+	go func() {
+		server.handleHttp(conn.NewConn(serverConn), req, bufio.NewReader(serverConn))
+		close(done)
+	}()
+
+	if deadlineErr := upstreamPeer.SetReadDeadline(time.Now().Add(time.Second)); deadlineErr != nil {
+		t.Fatal(deadlineErr)
+	}
+	upstreamReader := bufio.NewReader(upstreamPeer)
+	for {
+		line, readErr := upstreamReader.ReadString('\n')
+		if readErr != nil {
+			t.Fatalf("read forwarded request: %v", readErr)
+		}
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+	if deadlineErr := upstreamPeer.SetReadDeadline(time.Time{}); deadlineErr != nil {
+		t.Fatal(deadlineErr)
+	}
+	responseHead := []byte("HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n")
+	writeDone := make(chan error, 1)
+	go func() {
+		_, writeErr := upstreamPeer.Write(responseHead)
+		writeDone <- writeErr
+	}()
+	select {
+	case err := <-writeDone:
+		if err != nil {
+			t.Fatalf("write chunked response head: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("upstream did not receive the first response read")
+	}
+
+	response := readStreamingResponse(t, clientConn, req)
+	firstChunk := make([]byte, len("hello"))
+	if _, err := io.ReadFull(response.Body, firstChunk); err != nil {
+		t.Fatalf("read first chunk: %v", err)
+	}
+	if string(firstChunk) != "hello" {
+		t.Fatalf("first chunk = %q", firstChunk)
+	}
+
+	// The handler used to return once the 40ms request deadline elapsed, which
+	// closed the visitor connection mid-stream. A chunked body must stay
+	// writable well past that window.
+	time.Sleep(200 * time.Millisecond)
+	secondChunk := []byte("6\r\n world\r\n")
+	writeDone = make(chan error, 1)
+	go func() {
+		_, writeErr := upstreamPeer.Write(secondChunk)
+		writeDone <- writeErr
+	}()
+	select {
+	case err := <-writeDone:
+		if err != nil {
+			t.Fatalf("chunked response was closed at the request idle deadline: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("chunked response stalled at the request idle deadline")
+	}
+	secondRead := make([]byte, len(" world"))
+	if _, err := io.ReadFull(response.Body, secondRead); err != nil {
+		t.Fatalf("read second chunk: %v", err)
+	}
+	if string(secondRead) != " world" {
+		t.Fatalf("second chunk = %q", secondRead)
+	}
+	select {
+	case <-done:
+		t.Fatal("handler exited while the chunked response was still streaming")
+	default:
+	}
+}
+
 func TestHostFiniteResponseKeepsBoundedIdleCleanup(t *testing.T) {
 	installStreamingHost(t)
 	upstream, upstreamPeer := net.Pipe()
