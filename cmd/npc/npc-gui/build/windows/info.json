@@ -1,10 +1,10 @@
 {
 	"fixed": {
-		"file_version": "1.1.52"
+		"file_version": "1.1.53"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "1.1.52",
+			"ProductVersion": "1.1.53",
 			"CompanyName": "NPS",
 			"FileDescription": "NPS 客户端",
 			"LegalCopyright": "Copyright © 2026 NPS",

@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.52</sub>
+﻿# NPS <sub>v1.1.53</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -219,6 +219,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.53** (2026-11-25) - 修复域名反代（Host）长响应被 keep-alive 读超时截断：分块视频流、非 SSE 长连接和大文件下载不再在请求空闲窗口（10 秒，带 `Connection: close` 时 15 秒）后被强制断开，空闲超时改为在上游响应完整写回后才开始计。Bridge、NPC 协议、API 字段和 SQLite schema 不变，只需替换服务端二进制。详见[升级说明](docs/upgrade-1.1.53.md)。
 - **v1.1.52** (2026-11-22) - 1.1.47、1.1.48 的旧 JSON 可在正常启动时自动完整备份、校验并迁移到 SQLite；全新安装和已有 SQLite 不再误触发迁移。菜单与生命周期命令不再先打开数据库，修复运行中服务存在时的“数据库被占用”；菜单升级改为替换系统服务注册的真实程序。详见[升级说明](docs/upgrade-1.1.52.md)。
 - **v1.1.51** (2026-11-22) - `/api/v1` 管理员鉴权改用 HMAC-SHA256 请求头签名，覆盖请求方法、路径、查询参数、请求体、时间戳和一次性 nonce；旧 MD5 查询签名默认关闭，仅保留严格限路由的临时迁移兼容。`npsctl` 新增 offset 分页、易读表格、JSON/字段输出、自定义 CA 和超时选项，并修复 API 请求继承浏览器会话的问题。MCP 与 Skill 凭据说明补齐权限范围。详见[升级说明](docs/upgrade-1.1.51.md)。
 - **v1.1.50** (2026-11-21) - 修复 `v1.1.49` 因 SQLite 依赖被公共存储包带入 NPC 而导致 Linux MIPS 多架构打包失败的问题。SQLite 驱动改为仅服务端注册，MIPS NPC 继续发布；无法支持 SQLite 的 MIPS server 退出正式矩阵。CI 会在提交和正式标签前验证全部发布架构。详见[升级说明](docs/upgrade-1.1.50.md)。

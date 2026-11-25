@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.52</sub>
+﻿# NPS <sub>v1.1.53</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -205,6 +205,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.53** (2026-11-25) - Fixed Host reverse-proxy responses being cut off by the keep-alive idle deadline: chunked video streams, non-SSE long connections and large downloads no longer die after the 10s request idle window (15s with `Connection: close`). The idle window now starts only after the upstream response has been fully written back, and the global/server settings tabs keep their documented behaviour. Bridge, NPC protocol, API fields and SQLite schema are unchanged. See the [upgrade notes](docs/upgrade-1.1.53.md).
 - **v1.1.52** (2026-11-22) - Legacy 1.1.47/1.1.48 JSON now migrates to SQLite automatically with a verified `conf/backups/` archive, while fresh installs and existing SQLite deployments avoid needless migration. Management/lifecycle commands no longer take the database lock before the service command runs. Menu updates replace the executable registered by the service. See the [upgrade notes](docs/upgrade-1.1.52.md).
 - **v1.1.51** (2026-11-22) - Hardened `/api/v1` administrator authentication with HMAC-SHA256 request headers, timestamps, nonces and body signing; legacy MD5 query signing is disabled by default and has a narrow temporary migration allowlist. `npsctl` adds offset pagination, readable tables/selected TSV fields, JSON output, custom CA and timeout options. MCP/Skill access guidance now separates user-scoped credentials from global administrator credentials. See the [upgrade notes](docs/upgrade-1.1.51.md).
 - **v1.1.50** (2026-11-21) - Restored release packaging after the `v1.1.49` build failed on Linux MIPS. SQLite registration is now server-only, so MIPS NPC clients remain available while unsupported MIPS servers leave the formal matrix. CI now verifies every published target before tagging. See the [upgrade notes](docs/upgrade-1.1.50.md).
