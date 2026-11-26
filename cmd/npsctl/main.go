@@ -57,6 +57,11 @@ type envelope struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == selfUpdateCommand {
+		_, _ = runSelfUpdate()
+		return
+	}
+	maybeScheduleSelfUpdate()
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "npsctl:", err)
 		os.Exit(1)
@@ -82,6 +87,8 @@ func runWithWriters(args []string, stdout, stderr io.Writer) error {
 		jsonOutput  = fs.Bool("json", false, "write JSON instead of human-readable tables")
 		fields      = fs.String("fields", "", "write selected comma-separated fields as TSV (for example id,remark,status)")
 		data        = fs.String("data", "", "JSON body for create/update commands")
+		prefix      = fs.String("prefix", "", "platform subdomain prefix for host create (random when empty)")
+		platformDom = fs.String("platform-domain", "", "platform wildcard ID or *.example.com for host create")
 		showVersion = fs.Bool("version", false, "print version and exit")
 	)
 	fs.SetOutput(stderr)
@@ -143,6 +150,11 @@ func runWithWriters(args []string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintln(stdout, version.VERSION)
 		return nil
+	case "self-update":
+		if err := noPositionalArgs("self-update", argv); err != nil {
+			return err
+		}
+		return selfUpdateCommandRun(stdout)
 	case "dashboard":
 		if err := noPositionalArgs("dashboard", argv); err != nil {
 			return err
@@ -167,8 +179,13 @@ func runWithWriters(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		return c.list("/api/v1/hosts", *limit, *offset)
+	case "platform-domains":
+		if err := noPositionalArgs("platform-domains", argv); err != nil {
+			return err
+		}
+		return c.printPlatformDomains()
 	case "host":
-		return c.hostCmd(argv, *data)
+		return c.hostCmd(argv, *data, *prefix, *platformDom)
 	case "users":
 		if err := noPositionalArgs("users", argv); err != nil {
 			return err
@@ -323,7 +340,7 @@ func (c *client) tunnelCmd(argv []string, data string) error {
 	}
 }
 
-func (c *client) hostCmd(argv []string, data string) error {
+func (c *client) hostCmd(argv []string, data, prefix, platformDomain string) error {
 	if len(argv) == 0 {
 		return errors.New("用法: npsctl host <get|create|update|delete|start|stop> [id] [--data JSON]")
 	}
@@ -342,10 +359,7 @@ func (c *client) hostCmd(argv []string, data string) error {
 		if err := exactArgs("host create", argv, 1); err != nil {
 			return err
 		}
-		if err := requireData("host create", data); err != nil {
-			return err
-		}
-		return c.post("/api/v1/hosts", data)
+		return c.createPlatformHost(data, prefix, platformDomain)
 	case "update":
 		if err := exactArgs("host update", argv, 2); err != nil {
 			return err
@@ -386,6 +400,199 @@ func (c *client) hostCmd(argv []string, data string) error {
 	}
 }
 
+// platformDomain mirrors the read-only platform wildcard list exposed by the
+// server. Certificate paths stay server-side and are never returned.
+type platformDomain struct {
+	ID                    string `json:"id"`
+	Wildcard              string `json:"wildcard"`
+	CertificateConfigured bool   `json:"certificate_configured"`
+}
+
+func (c *client) fetchData(path string, out any) error {
+	env, _, err := c.call("GET", path, "")
+	if err != nil {
+		return err
+	}
+	if len(env.Data) == 0 {
+		return errors.New("服务端未返回 data")
+	}
+	if err := json.Unmarshal(env.Data, out); err != nil {
+		return fmt.Errorf("解析响应失败: %w", err)
+	}
+	return nil
+}
+
+func (c *client) platformDomains() ([]platformDomain, error) {
+	var domains []platformDomain
+	if err := c.fetchData("/api/v1/platform-domains", &domains); err != nil {
+		return nil, err
+	}
+	return domains, nil
+}
+
+func (c *client) printPlatformDomains() error {
+	domains, err := c.platformDomains()
+	if err != nil {
+		return err
+	}
+	if c.out == nil {
+		c.out = os.Stdout
+	}
+	if c.jsonOutput {
+		encoded, err := json.MarshalIndent(domains, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(c.out, string(encoded))
+		return nil
+	}
+	if len(domains) == 0 {
+		fmt.Fprintln(c.out, "（没有可用的平台域名）")
+		return nil
+	}
+	writer := tabwriter.NewWriter(c.out, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(writer, "ID\t泛域名\t证书")
+	for _, domain := range domains {
+		certificate := "未配置（仅 HTTP）"
+		if domain.CertificateConfigured {
+			certificate = "已配置"
+		}
+		fmt.Fprintf(writer, "%s\t%s\t%s\n", domain.ID, domain.Wildcard, certificate)
+	}
+	return writer.Flush()
+}
+
+func pickPlatformDomain(domains []platformDomain, reference, scheme string) (platformDomain, error) {
+	if len(domains) == 0 {
+		return platformDomain{}, errors.New("服务端未配置可用的平台域名，请联系管理员在「全局参数 → 证书设置」中添加")
+	}
+	reference = strings.TrimSpace(reference)
+	if reference != "" {
+		for _, domain := range domains {
+			if strings.EqualFold(domain.ID, reference) || strings.EqualFold(domain.Wildcard, reference) {
+				return domain, nil
+			}
+		}
+		return platformDomain{}, fmt.Errorf("未找到可用的平台域名 %q", reference)
+	}
+	needsCertificate := !strings.EqualFold(strings.TrimSpace(scheme), "http")
+	for _, domain := range domains {
+		if !needsCertificate || domain.CertificateConfigured {
+			return domain, nil
+		}
+	}
+	return platformDomain{}, fmt.Errorf("平台域名 %s 未配置证书，只能创建 HTTP 规则", domains[0].Wildcard)
+}
+
+func randomPlatformPrefix() string {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return "npshost1"
+	}
+	for i, value := range buf {
+		buf[i] = alphabet[int(value)%len(alphabet)]
+	}
+	return string(buf)
+}
+
+// createPlatformHost creates a domain reverse-proxy rule on a managed platform
+// wildcard. Custom domains are intentionally rejected: they require DNS and
+// certificate ownership that the panel workflow handles explicitly.
+func (c *client) createPlatformHost(data, prefix, platformDomain string) error {
+	payload := map[string]any{}
+	if strings.TrimSpace(data) != "" {
+		if err := json.Unmarshal([]byte(data), &payload); err != nil || payload == nil {
+			return errors.New("--data 必须是 JSON 对象")
+		}
+	}
+	if _, exists := payload["host"]; exists {
+		return errors.New("CLI 仅支持平台域名：请删除 host，改用 --prefix 指定子域名前缀；自定义域名请在 Web 面板创建")
+	}
+	if mode, _ := payload["domain_mode"].(string); strings.TrimSpace(mode) != "" && !strings.EqualFold(strings.TrimSpace(mode), "platform") {
+		return errors.New("CLI 仅支持平台域名：domain_mode 只能是 platform；自定义域名请在 Web 面板创建")
+	}
+	scheme := "all"
+	if value, ok := payload["scheme"].(string); ok && strings.TrimSpace(value) != "" {
+		scheme = strings.ToLower(strings.TrimSpace(value))
+	}
+	payload["scheme"] = scheme
+	location := "/"
+	if value, ok := payload["location"].(string); ok && strings.TrimSpace(value) != "" {
+		location = strings.TrimSpace(value)
+	}
+	payload["location"] = location
+
+	domainRef := strings.TrimSpace(platformDomain)
+	if value, ok := payload["platform_domain_id"].(string); ok && strings.TrimSpace(value) != "" {
+		domainRef = strings.TrimSpace(value)
+	}
+	chosenPrefix := strings.ToLower(strings.TrimSpace(prefix))
+	if value, ok := payload["platform_prefix"].(string); ok && strings.TrimSpace(value) != "" {
+		chosenPrefix = strings.ToLower(strings.TrimSpace(value))
+	}
+	domains, err := c.platformDomains()
+	if err != nil {
+		return err
+	}
+	domain, err := pickPlatformDomain(domains, domainRef, scheme)
+	if err != nil {
+		return err
+	}
+
+	autoPrefix := chosenPrefix == ""
+	attempts := 1
+	if autoPrefix {
+		attempts = 3
+	}
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		candidate := chosenPrefix
+		if autoPrefix {
+			candidate = randomPlatformPrefix()
+		}
+		payload["domain_mode"] = "platform"
+		payload["platform_domain_id"] = domain.ID
+		payload["platform_prefix"] = candidate
+		body, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		env, raw, err := c.call("POST", "/api/v1/hosts", string(body))
+		if err != nil {
+			lastErr = err
+			if autoPrefix && strings.Contains(err.Error(), "已被使用") {
+				continue
+			}
+			return err
+		}
+		if c.out == nil {
+			c.out = os.Stdout
+		}
+		if c.jsonOutput {
+			fmt.Fprintln(c.out, string(prettyJSON(raw)))
+			return nil
+		}
+		hostName := candidate + "." + strings.TrimPrefix(strings.TrimPrefix(domain.Wildcard, "*"), ".")
+		id := 0
+		if len(env.Data) > 0 {
+			var created struct {
+				ID int `json:"id"`
+			}
+			if json.Unmarshal(env.Data, &created) == nil {
+				id = created.ID
+			}
+		}
+		if id > 0 {
+			fmt.Fprintf(c.out, "已创建域名反代 #%d: %s → %s\n", id, hostName, location)
+		} else {
+			fmt.Fprintf(c.out, "已创建域名反代: %s → %s\n", hostName, location)
+		}
+		return nil
+	}
+	return lastErr
+}
+
 func (c *client) list(path string, limit, offset int) error {
 	if limit < 0 || offset < 0 {
 		return errors.New("列表分页参数不能为负数")
@@ -417,78 +624,15 @@ func (c *client) post(path, body string) error {
 }
 
 func (c *client) send(method, path, body string) error {
-	if c.token == "" && c.key == "" {
-		return errors.New("缺少凭据：请设置 --token 或 --key（或环境变量 NPS_TOKEN / NPS_KEY）")
-	}
-	if c.token != "" && c.key != "" {
-		return errors.New("凭据冲突：--token 与 --key 只能选择一个")
-	}
-	if err := validateServerURL(c.server); err != nil {
-		return err
-	}
-	if c.http == nil {
-		httpClient, err := newHTTPClient(c.timeout, c.caFile)
-		if err != nil {
-			return err
-		}
-		c.http = httpClient
-	}
-	full := strings.TrimRight(c.server, "/") + path
-	var reader io.Reader
-	if body != "" {
-		reader = strings.NewReader(body)
-	}
-	req, err := http.NewRequest(method, full, reader)
+	env, raw, err := c.call(method, path, body)
 	if err != nil {
 		return err
-	}
-	req.Header.Set("Accept", "application/json")
-	if body != "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	} else {
-		if err := signAdminRequest(req, c.key, c.keyID, []byte(body)); err != nil {
-			return err
-		}
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	var env envelope
-	parsed := json.Unmarshal(raw, &env) == nil
-	if resp.StatusCode >= http.StatusBadRequest {
-		msg := strings.TrimSpace(env.Msg)
-		if parsed && env.ErrorCode != "" {
-			msg = strings.TrimSpace(env.ErrorCode + ": " + msg)
-		}
-		if msg == "" {
-			msg = bodySnippet(raw)
-		}
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, msg)
-	}
-	if parsed && env.Status != 1 {
-		msg := env.Msg
-		if env.ErrorCode != "" {
-			msg = env.ErrorCode + ": " + msg
-		}
-		if msg == "" {
-			msg = "服务端返回失败状态"
-		}
-		return errors.New(msg)
 	}
 	if c.out == nil {
 		c.out = os.Stdout
 	}
 	if c.fields != "" {
-		return c.writeFields(raw, env)
+		return c.writeFields(raw, *env)
 	}
 	if c.jsonOutput {
 		fmt.Fprintln(c.out, string(prettyJSON(raw)))
@@ -509,6 +653,80 @@ func (c *client) send(method, path, body string) error {
 	}
 	fmt.Fprintln(c.out, string(prettyJSON(raw)))
 	return nil
+}
+
+// call performs one authenticated request and returns the parsed envelope plus
+// the raw body. Callers that need the payload without printing use it directly;
+// send() renders the result the same way for every command.
+func (c *client) call(method, path, body string) (*envelope, []byte, error) {
+	if c.token == "" && c.key == "" {
+		return nil, nil, errors.New("缺少凭据：请设置 --token 或 --key（或环境变量 NPS_TOKEN / NPS_KEY）")
+	}
+	if c.token != "" && c.key != "" {
+		return nil, nil, errors.New("凭据冲突：--token 与 --key 只能选择一个")
+	}
+	if err := validateServerURL(c.server); err != nil {
+		return nil, nil, err
+	}
+	if c.http == nil {
+		httpClient, err := newHTTPClient(c.timeout, c.caFile)
+		if err != nil {
+			return nil, nil, err
+		}
+		c.http = httpClient
+	}
+	full := strings.TrimRight(c.server, "/") + path
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, full, reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	} else {
+		if err := signAdminRequest(req, c.key, c.keyID, []byte(body)); err != nil {
+			return nil, nil, err
+		}
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	var env envelope
+	parsed := json.Unmarshal(raw, &env) == nil
+	if resp.StatusCode >= http.StatusBadRequest {
+		msg := strings.TrimSpace(env.Msg)
+		if parsed && env.ErrorCode != "" {
+			msg = strings.TrimSpace(env.ErrorCode + ": " + msg)
+		}
+		if msg == "" {
+			msg = bodySnippet(raw)
+		}
+		return nil, nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, msg)
+	}
+	if parsed && env.Status != 1 {
+		msg := env.Msg
+		if env.ErrorCode != "" {
+			msg = env.ErrorCode + ": " + msg
+		}
+		if msg == "" {
+			msg = "服务端返回失败状态"
+		}
+		return nil, nil, errors.New(msg)
+	}
+	return &env, raw, nil
 }
 
 func (c *client) writeFields(raw []byte, env envelope) error {
@@ -806,6 +1024,8 @@ func usage(w io.Writer, fs *flag.FlagSet) {
   --json             列表输出完整 JSON 信封
   --fields A,B       输出所选字段的 TSV（适合脚本管道）
   --data JSON        创建/更新请求体
+  --prefix PREFIX    host create 的平台子域名前缀（留空随机生成）
+  --platform-domain  host create 的平台泛域名 ID 或 *.example.com（留空自动选择）
 
 命令:
   dashboard                         仪表盘概览
@@ -818,16 +1038,20 @@ func usage(w io.Writer, fs *flag.FlagSet) {
   tunnels [--limit N] [--offset N]  隧道列表
   tunnel get|create|update|delete|start|stop
   hosts [--limit N] [--offset N]   域名反代列表
+  platform-domains                  列出可用的平台域名
   host get|create|update|delete|start|stop
+                                    create 仅支持平台域名：--prefix 指定前缀，
+                                    留空随机生成；自定义域名请在 Web 面板创建
   users [--limit N] [--offset N]    用户列表（仅管理员）
   audit [--limit N] [--offset N]    操作审计（管理员看全局，用户看本人范围）
   npc                               打印 NPC 部署方式
   skill                             打印 Skill 安装方式
   mcp                               打印 mcpServers 配置片段
+  self-update                       立即检查并更新 npsctl（失败不影响退出码）
   version                           版本号
 
 列表默认显示易读表格；加 --json 可获取完整分页信封，或用 --fields 指定 TSV 列。
-环境变量：NPS_SERVER、NPS_TOKEN、NPS_KEY。
+环境变量：NPS_SERVER、NPS_TOKEN、NPS_KEY；NPSCTL_NO_UPDATE_CHECK=1 关闭自动更新检查。
 `)
 }
 
@@ -878,6 +1102,7 @@ func splitGlobalArgs(args []string) (global, rest []string) {
 	known := map[string]bool{
 		"--server": true, "--token": true, "--key": true, "--key-id": true, "--limit": true, "--offset": true,
 		"--timeout": true, "--ca-file": true, "--json": true, "--fields": true, "--data": true,
+		"--prefix": true, "--platform-domain": true,
 		"-version": true, "--version": true, "-h": true, "--help": true,
 	}
 	for i := 0; i < len(args); i++ {

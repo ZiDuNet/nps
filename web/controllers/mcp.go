@@ -988,10 +988,15 @@ func mcpTunnelSetStatus(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 }
 
 func registerMCPHostTools(s *server.MCPServer) {
+	s.AddTool(newMCPTool("nps_platform_domains", "列出平台域名", true, false, true,
+		mcp.WithDescription("列出可用于创建域名反代的平台泛域名：ID、泛域名以及是否已配置证书。证书路径不会返回。"),
+	), mcpPlatformDomains)
+
 	s.AddTool(newMCPTool("nps_host_create", "创建域名反代", false, false, false,
-		mcp.WithDescription("创建域名反代规则。"),
-		mcp.WithString("host", mcp.Required(), mcp.Description("域名")),
+		mcp.WithDescription("创建域名反代规则。固定使用服务端托管的平台域名：域名由平台泛域名和单层前缀组成，不支持自定义域名。"),
 		mcp.WithNumber("client_id", mcp.Required(), mcp.Description("客户端 ID")),
+		mcp.WithString("prefix", mcp.Description("平台子域名前缀（单层，例如 demo）；留空则随机生成")),
+		mcp.WithString("platform_domain_id", mcp.Description("平台泛域名 ID 或 *.example.com；留空自动选择可用泛域名")),
 		mcp.WithString("scheme", mcp.Description("http、https 或 all，默认 all")),
 		mcp.WithString("location", mcp.Description("路径前缀，默认 /")),
 		mcp.WithString("target", mcp.Description("目标地址，如 127.0.0.1:8080")),
@@ -1010,12 +1015,31 @@ func registerMCPHostTools(s *server.MCPServer) {
 	), mcpHostSetStatus)
 }
 
+func mcpPlatformDomains(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if _, failure := mcpRequestPrincipal(ctx); failure != nil {
+		return failure, nil
+	}
+	domains := file.GetDb().GetUsablePlatformDomains()
+	rows := make([]map[string]any, 0, len(domains))
+	for _, domain := range domains {
+		rows = append(rows, map[string]any{
+			"id":                     domain.ID,
+			"wildcard":               domain.Wildcard,
+			"certificate_configured": domain.CertFilePath != "" && domain.KeyFilePath != "",
+		})
+	}
+	return mcpJSON(map[string]any{"domains": rows})
+}
+
 func mcpHostCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	principal, failure := mcpRequestPrincipal(ctx)
 	if failure != nil {
 		return failure, nil
 	}
 	args := request.GetArguments()
+	if strings.TrimSpace(mcpArgString(args, "host")) != "" || strings.EqualFold(strings.TrimSpace(mcpArgString(args, "domain_mode")), "custom") {
+		return mcpError("不支持自定义域名：请用 prefix 指定平台子域名前缀；自定义域名请在 Web 面板创建"), nil
+	}
 	clientID := mcpArgInt(args, "client_id")
 	if !principal.canTouchClient(clientID) {
 		return mcpError("无权操作该客户端"), nil
@@ -1036,13 +1060,24 @@ func mcpHostCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 	if err := validateBridgeTargetPermission(principal.IsAdmin, target); err != nil {
 		return mcpError(err.Error()), nil
 	}
+	hostName, platformDomainID, err := file.GetDb().AllocatePlatformHost(
+		mcpArgString(args, "platform_domain_id"),
+		mcpArgString(args, "prefix"),
+		location,
+		scheme,
+		0,
+	)
+	if err != nil {
+		return mcpError("创建域名反代失败: " + err.Error()), nil
+	}
 	host := &file.Host{
-		Host:     strings.ToLower(mcpArgString(args, "host")),
-		Scheme:   scheme,
-		Location: location,
-		Client:   client,
-		Target:   &file.Target{TargetStr: target},
-		Remark:   mcpArgString(args, "remark"),
+		Host:             hostName,
+		PlatformDomainID: platformDomainID,
+		Scheme:           scheme,
+		Location:         location,
+		Client:           client,
+		Target:           &file.Target{TargetStr: target},
+		Remark:           mcpArgString(args, "remark"),
 	}
 	create := file.GetDb().NewHost
 	if principal.IsAdmin {
@@ -1051,7 +1086,7 @@ func mcpHostCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallT
 	if err := create(host); err != nil {
 		return mcpError("创建域名反代失败: " + err.Error()), nil
 	}
-	return mcpJSON(map[string]any{"id": host.Id})
+	return mcpJSON(map[string]any{"id": host.Id, "host": hostName, "platform_domain_id": platformDomainID})
 }
 
 func mcpHostDelete(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

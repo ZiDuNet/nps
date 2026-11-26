@@ -100,6 +100,7 @@ MCP 配置或生产脚本。
 | `nps_client_get` | 单个客户端详情 | 账号范围 |
 | `nps_tunnels` | 列出隧道，支持按客户端/模式过滤 | 账号范围 |
 | `nps_hosts` | 列出域名反代规则 | 账号范围 |
+| `nps_platform_domains` | 列出可用的平台泛域名（ID、泛域名、是否配置证书） | 账号范围 |
 | `nps_client_create` / `update` / `delete` | 客户端维护 | 账号范围 |
 | `nps_client_set_status` | 客户端启停 | 仅管理员 |
 | `nps_tunnel_create` / `delete` / `set_status` | 隧道维护 | 账号范围 |
@@ -130,10 +131,37 @@ MCP 配置或生产脚本。
 资源；更新和状态工具为幂等；删除工具标记为 destructive；工具均不访问
 NPS 之外的开放世界资源。
 
+## 域名反代：只创建平台域名
+
+`nps_host_create` 只支持平台域名，不接受自定义主机名，参数如下：
+
+| 参数 | 说明 |
+| --- | --- |
+| `client_id` | 必填，所属客户端 ID |
+| `prefix` | 平台子域名前缀，单层标签，例如 `demo`；留空时服务端随机生成 8 位字母数字并在冲突时重试 |
+| `platform_domain_id` | 平台泛域名 ID 或 `*.example.com`；留空时自动选择第一个可用泛域名 |
+| `scheme` | `http`、`https` 或 `all`；未配置证书的平台域名只能创建 `http` |
+| `location`、`target`、`remark` | 与面板字段一致 |
+
+调用前先用 `nps_platform_domains` 确认存在可用泛域名。传入 `host` 或
+`domain_mode=custom` 会被拒绝并提示“自定义域名请在 Web 面板创建”，MCP 不会
+自动降级为自定义域名。成功响应包含 `id`、最终 `host` 和实际使用的
+`platform_domain_id`，例如：
+
+```json
+{"id": 12, "host": "demo.example.com", "platform_domain_id": "pd_7f3c1a2b"}
+```
+
+前缀已被同路径规则占用时工具返回错误，换一个前缀重试即可；服务端不会静默改写
+已有规则。
+
 ## 与 npsctl / Skill 的关系
 
 - **CLI**：`npsctl` 使用同一套 `/api/v1` 接口，适合脚本与终端；通过
   `curl -fsSL https://raw.githubusercontent.com/ZiDuNet/nps/master/scripts/install-npsctl.sh | bash` 安装。
+  它每天在后台检查一次 GitHub 上的新版本，成功时静默替换自身；也可运行
+  `npsctl self-update` 立即检查。自动更新失败只打印警告，不影响命令结果，
+  设置 `NPSCTL_NO_UPDATE_CHECK=1` 可完全关闭。
 - **Skill**：面向 AI Agent 的本地技能，从面板 `/skill/nps.tar.gz` 或 GitHub
   Release 的 `nps-skill.tar.gz` 下载，解压到 `~/.codex/skills`（Claude 为
   `~/.claude/skills`），可引导部署 NPC 并输出 `/mcp` 片段。

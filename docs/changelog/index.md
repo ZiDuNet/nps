@@ -1,5 +1,13 @@
 # 更新日志
 
+## v1.1.54（2026-11-26）
+
+- 新增 `GET /api/v1/platform-domains`，普通用户 Token 可读取可用平台泛域名（ID、泛域名、是否配置证书），不返回证书路径。
+- `npsctl` 新增 `platform-domains`、`self-update` 子命令与 `--prefix`、`--platform-domain` 全局参数；默认每 24 小时在后台检查并静默更新自身，失败不影响命令结果，`NPSCTL_NO_UPDATE_CHECK=1` 可关闭。
+- MCP 新增只读工具 `nps_platform_domains`。
+- `npsctl host create`、MCP `nps_host_create` 和 Skill 只创建平台域名规则：前缀留空随机生成并在冲突时重试，平台域名留空自动选择第一个可用泛域名；自定义域名请在 Web 面板创建，工具侧不会降级创建。面板行为不变。
+- Bridge、NPC 协议、既有 API 字段和 SQLite schema 不变，只需替换服务端二进制。详见 [1.1.54 升级说明](../upgrade-1.1.54.md)。
+
 ## v1.1.53（2026-11-25）
 
 - 修复域名反代（Host）长响应被 keep-alive 读超时截断的问题：分块视频流、非 SSE 长连接和大文件下载不再在请求空闲窗口（10 秒，带 `Connection: close` 时再加 5 秒）后被强制断开；空闲超时只在上游响应完整写回后生效。

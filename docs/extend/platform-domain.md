@@ -62,6 +62,30 @@
 
 域名列表会按规则的协议显示可直接打开的 HTTP、HTTPS 或两个访问链接。使用非标准入口时，链接会包含已配置的端口；仍应确认云安全组、宿主机防火墙、Docker 端口映射和前置反向代理都允许访问。
 
+## CLI、MCP 与 Skill：只使用平台域名
+
+Web 面板同时支持自定义域名和平台域名，但 `npsctl`、MCP 工具和 Skill 只创建平台域名规则。原因是非交互场景无法可靠收集 DNS 解析状态和自定义证书，静默创建一条不可用的自定义域名规则比直接拒绝更糟。需要自定义域名时请在 Web 面板新增，工具侧不会代为创建。
+
+标准流程：
+
+1. 读取可用平台域名。普通用户 Token 也可以调用，响应只有 ID、泛域名和是否配置证书：
+
+   ```bash
+   npsctl --token "$NPS_TOKEN" platform-domains
+   ```
+
+2. 用前缀创建规则；不传 `--platform-domain` 时自动选择第一个可用泛域名，不传 `--prefix` 时随机生成 8 位前缀：
+
+   ```bash
+   npsctl --token "$NPS_TOKEN" host create \
+     --data '{"client_id": 3, "target": "127.0.0.1:8080", "location": "/", "scheme": "https"}' \
+     --prefix demo
+   ```
+
+3. 返回 `已创建域名反代 #12: demo.example.com → /` 即表示成功。前缀已被同路径规则占用时会报错，换一个前缀重试；服务端不会自动改写已有规则。
+
+MCP 对应 `nps_platform_domains` 与 `nps_host_create`（参数 `client_id`、`prefix`、`platform_domain_id`、`scheme`、`location`、`target`、`remark`）。传 `host` 或 `domain_mode=custom` 会被拒绝。一个可用平台域名都没有时，三者都直接报错，不会降级为自定义域名。
+
 ## DNS 泛解析示例
 
 假设 NPS 公网地址为 `203.0.113.10`，平台泛域名为 `*.demo.example.com`：

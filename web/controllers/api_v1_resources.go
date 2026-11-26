@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"ehang.io/nps/lib/file"
 	"ehang.io/nps/server"
 )
 
@@ -166,6 +167,22 @@ func (s *ApiV1Controller) Hosts() {
 // HostsCreate creates a domain reverse-proxy rule.
 func (s *ApiV1Controller) HostsCreate() {
 	s.emitLegacy(s.invokeSafe("index", "AddHost", &IndexController{}, true))
+}
+
+// PlatformDomains lists the managed wildcards a caller may use for a new
+// domain reverse-proxy rule. Certificate paths stay administrator-only, so
+// ordinary users can discover the ID they must submit without seeing secrets.
+func (s *ApiV1Controller) PlatformDomains() {
+	domains := file.GetDb().GetUsablePlatformDomains()
+	rows := make([]map[string]interface{}, 0, len(domains))
+	for _, domain := range domains {
+		rows = append(rows, map[string]interface{}{
+			"id":                     domain.ID,
+			"wildcard":               domain.Wildcard,
+			"certificate_configured": domain.CertFilePath != "" && domain.KeyFilePath != "",
+		})
+	}
+	s.apiData(rows)
 }
 
 // HostGet returns one host DTO.

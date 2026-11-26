@@ -6,7 +6,7 @@ description: >-
   users, audit logs, or obtain the /mcp integration snippet for a running NPS
   server.
 metadata:
-  version: "1.1.53"
+  version: "1.1.54"
   license: "GPL-3.0-or-later"
   source: "https://github.com/ZiDuNet/nps/tree/master/web/skills/nps"
 ---
@@ -23,6 +23,20 @@ the `/mcp` endpoint.
   add a second machine with another VKey.
 - The user asks to list / create / update / delete clients, tunnels or hosts.
 - The user asks for dashboard status, audit events, or an MCP configuration.
+
+## Before you start
+
+Keep the CLI current. Run the self-update once per session and ignore any
+failure; it must never block the actual task:
+
+```bash
+npsctl self-update || true
+```
+
+`npsctl` also schedules a detached update check at most once per day
+(`NPSCTL_NO_UPDATE_CHECK=1` disables it). Updates are verified against
+`checksums.txt`, never change the exit code of the command the user ran, and
+take effect on the next invocation.
 
 ## Credentials
 
@@ -81,6 +95,38 @@ shows each live instance separately.
 
 See `scripts/npc-help.sh` for a quick reference.
 
+## Domain reverse proxy: platform domains only
+
+`npsctl` and MCP create domain reverse-proxy rules **only on the
+administrator-managed platform wildcards**. They never create custom domains:
+a custom domain needs the user's own DNS record and certificate, which is a
+panel-only workflow.
+
+1. List the wildcards the account may use:
+   `npsctl platform-domains` (MCP: `nps_platform_domains`). Use the wildcard the
+   user names; otherwise take the first one with a configured certificate,
+   which is required for `https` and `all`.
+2. Prefix: use the single-label prefix the user asked for. If the user has no
+   preference, omit it — an 8-character prefix is generated and the resulting
+   hostname is printed back.
+3. Create the rule:
+
+   ```bash
+   npsctl --server https://nps.example.com --token npsu_xxx host create \
+     --prefix demo --data '{"client_id":3,"target":"127.0.0.1:8080","scheme":"all","location":"/"}'
+   ```
+
+   The printed line `已创建域名反代 #12: demo.example.com → /` is the value to
+   report. DNS for the platform wildcard is already handled by the platform.
+4. If creation fails with `已被使用`, retry with another prefix. Do not fall
+   back to a custom domain.
+5. For a custom domain request, tell the user to create it in the panel
+   (域名反代 → 新增 → 自定义域名) with their own certificate. Do not attempt it
+   through the CLI or MCP.
+
+MCP `nps_host_create` accepts `client_id`, `prefix`, `platform_domain_id`,
+`scheme`, `location`, `target` and `remark`; a `host` argument is rejected.
+
 ## Driving the server with npsctl
 
 ```bash
@@ -135,7 +181,8 @@ MCP client only supports stdio, bridge it with `mcp-remote` rather than
 changing the URL to an SSE endpoint.
 
 Read tools: `nps_dashboard`, `nps_clients`, `nps_client_get`, `nps_tunnels`,
-`nps_hosts`, `nps_users`, `nps_audit`, `nps_global_config`.
+`nps_hosts`, `nps_platform_domains`, `nps_users`, `nps_audit`,
+`nps_global_config`.
 
 Maintenance tools: `nps_client_create`, `nps_client_update`,
 `nps_client_delete`, `nps_client_set_status`, `nps_tunnel_create`,
@@ -161,5 +208,7 @@ into MCP configuration.
   invalidates the old token immediately.
 - Do not delete a client, tunnel, host, audit file or log file without explicit
   confirmation.
+- Create domain reverse-proxy rules only on platform domains. Never invent a
+  custom hostname or certificate through the tools; send the user to the panel.
 - Prefer the panel-generated NPC command over handbuilding one from defaults.
 - Treat server URLs, tokens, VKeys, private keys and full audit logs as secrets.

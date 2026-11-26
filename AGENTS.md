@@ -100,6 +100,7 @@ Beego + Bootstrap 5 管理面板，路由在 `web/routers/router.go`。AutoRoute
 控制器（`web/controllers/`）：BaseController（会话、管理员/用户/API 鉴权与权限过滤）、IndexController（仪表盘、普通隧道与 Host）、ClientController（客户端）、UserController（用户与 API Token）、AuthController（历史对时和 auth_key 发现）、GlobalController（全局参数、服务端配置、证书、IP 登记、Geo 与封禁）、AuditController（审计），并提供 `/api/v1` 控制器。全局参数与服务端配置按 Tab 分组，字段按实际来源写入 SQLite 业务设置或 `nps.conf` 启动项。
 
 静态文件通过 `go:embed` 嵌入可执行文件（`web/embed.go`），启动时按需释放到临时目录。
+面板的域名反代同时支持自定义域名和平台域名；`npsctl`、MCP 与 Skill 只创建平台域名（`domain_mode=platform`，前缀可随机），自定义域名只能在面板创建。
 
 ### 配置
 

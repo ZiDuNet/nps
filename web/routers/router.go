@@ -182,6 +182,7 @@ func apiV1Routers() []beego.LinkNamespace {
 
 		// Domain reverse proxy rules.
 		beego.NSRouter("/hosts", &controllers.ApiV1Controller{}, "GET:Hosts;POST:HostsCreate"),
+		beego.NSRouter("/platform-domains", &controllers.ApiV1Controller{}, "GET:PlatformDomains"),
 		beego.NSRouter("/hosts/:id", &controllers.ApiV1Controller{}, "GET:HostGet;PATCH:HostUpdate;PUT:HostUpdate;DELETE:HostDelete"),
 		beego.NSRouter("/hosts/:id/start", &controllers.ApiV1Controller{}, "POST:HostStart"),
 		beego.NSRouter("/hosts/:id/stop", &controllers.ApiV1Controller{}, "POST:HostStop"),

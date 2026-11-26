@@ -65,6 +65,7 @@ nonce 存储后再将其暴露到多副本环境。只有共享 nonce 存储才�
 | 域名反代 | `/api/v1/hosts/{id}` | `GET`、`PATCH`、`PUT`、`DELETE` |
 | 域名反代 | `/api/v1/hosts/{id}/start`、`/stop` | `POST` |
 | 域名反代 | `/api/v1/hosts/check`、`/diagnose` | `POST` |
+| 平台域名 | `/api/v1/platform-domains` | `GET` |
 | 用户注册 | `/api/v1/users/register` | `POST`（管理员） |
 | 用户 | `/api/v1/users` | `GET`、`POST`（管理员） |
 | 用户 | `/api/v1/users/{id}` | `GET`、`PATCH`、`PUT`、`DELETE`（管理员） |
@@ -626,6 +627,42 @@ POST /index/stop
 `proxy_auth` 明文。修改时省略或留空 `proxy_auth` 会保留原值；提交新的账号
 集合会整体替换；提交 `clear_proxy_auth=true` 会清除独立认证并回退到客户端
 Basic。
+
+### 平台域名接口
+
+```http
+GET /api/v1/platform-domains
+```
+
+返回管理员在「系统 → 全局参数 → 证书设置」维护、且当前可用的平台泛域名池。
+普通用户 Token 也可以调用：这是创建平台域名反代前唯一需要读取的域名元数据，
+否则用户无法得知应提交的 `platform_domain_id`。响应只包含 ID、泛域名和是否已配置
+证书，不返回证书或私钥的服务器路径。
+
+```json
+{
+  "status": 1,
+  "code": "ok",
+  "msg": "ok",
+  "data": [
+    {
+      "id": "pd_7f3c1a2b",
+      "wildcard": "*.example.com",
+      "certificate_configured": true
+    }
+  ],
+  "request_id": "..."
+}
+```
+
+`data` 为空数组表示管理员尚未配置可用的平台域名，此时无法创建平台域名反代；
+不要回退到自定义域名。`certificate_configured=false` 的条目只能创建 HTTP 规则，
+选择 HTTPS 或 HTTP + HTTPS 时服务端会拒绝。
+
+创建平台域名反代使用 `POST /api/v1/hosts`，提交 `domain_mode=platform`、
+`platform_domain_id`（或泛域名本身）和 `platform_prefix`；`platform_prefix`
+留空时服务端随机生成 8 位前缀并在冲突时重试。CLI、MCP 和 Skill 只走这条路径，
+自定义域名请在 Web 面板创建，详见[平台泛域名与规则诊断](extend/platform-domain.md)。
 
 ## 历史 Host 域名接口
 

@@ -2,6 +2,27 @@
 
 所有重要变更记录在此。
 
+## [1.1.54] - 2026-11-26
+
+### Added
+
+- 新增 `GET /api/v1/platform-domains`，返回管理员维护且当前可用的平台泛域名（ID、泛域名、是否配置证书），不返回证书路径。普通用户 Token 可调用，用于在创建平台域名反代前获知 `platform_domain_id`。
+- `npsctl` 新增 `platform-domains` 与 `self-update` 子命令，以及全局参数 `--prefix`、`--platform-domain`。
+- `npsctl` 默认每 24 小时在后台检查一次 GitHub 新版本并静默替换自身；检查与替换失败只打印警告，不影响命令结果，`NPSCTL_NO_UPDATE_CHECK=1` 可关闭。
+- MCP 新增只读工具 `nps_platform_domains`。
+
+### Changed
+
+- `npsctl host create`、MCP `nps_host_create` 与 Skill 只创建平台域名规则：用 `--prefix` / `prefix` 指定单层前缀，留空则随机生成 8 位并在冲突时重试；`--platform-domain` / `platform_domain_id` 留空时自动选择第一个可用泛域名。传入 `host` 或 `domain_mode=custom` 会被拒绝并提示在 Web 面板创建自定义域名。
+- 平台域名反代的证书仍由服务端按泛域名锁定；未配置证书的泛域名只能创建 HTTP 规则，无可用平台域名时直接报错而不降级为自定义域名。
+- Web 面板行为不变，仍同时支持自定义域名与平台域名。
+
+### Compatibility
+
+- Bridge 握手、NPC 控制消息、代理协议、既有 `/api/v1` 字段和 SQLite schema 均不变，旧 NPC 无需升级；本次只需替换服务端二进制。
+- 新增接口 `GET /api/v1/platform-domains` 为只读追加，`nps_host_create` 的参数收紧只影响 MCP/CLI/Skill 调用方；面板与直接调用 `/api/v1/hosts` 的既有集成不受影响。
+- 详细步骤见 [1.1.54 升级说明](docs/upgrade-1.1.54.md)。
+
 ## [1.1.53] - 2026-11-25
 
 ### Fixed
