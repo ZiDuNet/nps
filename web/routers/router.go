@@ -38,6 +38,8 @@ func Init() {
 			beego.NSRouter("/global/config/source", &controllers.GlobalController{}, "GET:ConfigSource;POST:SaveConfigSource"),
 			beego.NSRouter("/global/config/restart", &controllers.GlobalController{}, "POST:Restart"),
 			beego.NSRouter("/global/version-check", &controllers.GlobalController{}, "GET:VersionCheckProxy"),
+			beego.NSRouter("/global/server-update", &controllers.GlobalController{}, "GET:ServerUpdate"),
+			beego.NSRouter("/global/server-update/apply", &controllers.GlobalController{}, "POST:ServerUpdateApply"),
 			beego.NSRouter("/global/registration", &controllers.GlobalController{}, "GET:Registration"),
 			beego.NSRouter("/global/registration/save", &controllers.GlobalController{}, "POST:SaveRegistration"),
 			beego.NSRouter("/global/certificate", &controllers.GlobalController{}, "GET:Certificate"),
@@ -94,6 +96,8 @@ func Init() {
 		beego.Router("/global/config/source", &controllers.GlobalController{}, "GET:ConfigSource;POST:SaveConfigSource")
 		beego.Router("/global/config/restart", &controllers.GlobalController{}, "POST:Restart")
 		beego.Router("/global/version-check", &controllers.GlobalController{}, "GET:VersionCheckProxy")
+		beego.Router("/global/server-update", &controllers.GlobalController{}, "GET:ServerUpdate")
+		beego.Router("/global/server-update/apply", &controllers.GlobalController{}, "POST:ServerUpdateApply")
 		beego.Router("/global/registration", &controllers.GlobalController{}, "GET:Registration")
 		beego.Router("/global/registration/save", &controllers.GlobalController{}, "POST:SaveRegistration")
 		beego.Router("/global/certificate", &controllers.GlobalController{}, "GET:Certificate")

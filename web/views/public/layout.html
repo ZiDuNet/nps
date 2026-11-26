@@ -195,7 +195,7 @@
                         <a href="https://github.com/ZiDuNet/nps" langtag="application">NPS</a></span>
                     </li>
                     <li class="nps-topbar-version-item">
-                        <a id="nps-version-indicator" class="nps-topbar-version" href="https://github.com/{{.github_repository}}/releases/latest" target="_blank" rel="noopener noreferrer" aria-live="polite" title="查看版本发布" data-title-zh="查看版本发布" data-title-en="View release notes">
+                        <a id="nps-version-indicator" class="nps-topbar-version" href="https://github.com/{{.github_repository}}/releases/latest" data-bs-toggle="modal" data-bs-target="#server-update-modal" role="button" aria-haspopup="dialog" aria-live="polite" title="版本与升级" data-title-zh="版本与升级" data-title-en="Version and update">
                             <i class="fa fa-tag" aria-hidden="true"></i>
                             <span class="nps-topbar-version__label" data-i18n-zh="版本" data-i18n-en="Version">版本</span>
                             <strong id="nps-current-version">v{{.version}}</strong>
@@ -273,6 +273,33 @@
     </div>
 </div>
 {{end}}
+
+<div id="server-update-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="server-update-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content nps-password-modal">
+            <div class="modal-header">
+                <div>
+                    <div class="nps-modal-kicker" data-i18n-zh="版本与升级" data-i18n-en="Version and update">版本与升级</div>
+                    <h2 id="server-update-title" class="modal-title" data-i18n-zh="服务端升级" data-i18n-en="Server update">服务端升级</h2>
+                </div>
+                <button type="button" class="nps-modal-close" data-bs-dismiss="modal" aria-label="关闭" data-aria-label-zh="关闭" data-aria-label-en="Close"><i class="fa fa-times" aria-hidden="true"></i><span class="sr-only" data-i18n-zh="关闭" data-i18n-en="Close">关闭</span></button>
+            </div>
+            <div class="modal-body">
+                <p class="nps-password-modal__account"><span data-i18n-zh="当前版本" data-i18n-en="Current version">当前版本</span><strong>v{{.version}}</strong></p>
+                <p class="nps-password-modal__account"><span data-i18n-zh="最新版本" data-i18n-en="Latest version">最新版本</span><strong id="server-update-latest">—</strong></p>
+                <p id="server-update-status" class="help-block" data-i18n-zh="正在读取版本信息…" data-i18n-en="Reading release information…">正在读取版本信息…</p>
+                <p id="server-update-progress" class="help-block" hidden></p>
+                <p class="help-block" data-i18n-zh="升级会下载官方 Release、校验 SHA-256 后替换程序并原地重启，连接会短暂中断。Docker 部署只替换当前容器内的程序，重建容器后仍会回到镜像版本；建议同时在宿主机更新镜像。" data-i18n-en="The upgrade downloads the official release, verifies its SHA-256, replaces the binary and re-execs in place; connections briefly drop. In Docker it only replaces the binary inside the current container, so recreating the container returns to the image version; update the image on the host as well.">升级会下载官方 Release、校验 SHA-256 后替换程序并原地重启，连接会短暂中断。Docker 部署只替换当前容器内的程序，重建容器后仍会回到镜像版本；建议同时在宿主机更新镜像。</p>
+            </div>
+            <div class="modal-footer">
+                <a id="server-update-notes" class="btn btn-outline" href="https://github.com/{{.github_repository}}/releases/latest" target="_blank" rel="noopener noreferrer" data-i18n-zh="发布说明" data-i18n-en="Release notes">发布说明</a>
+                {{if eq true .isAdmin}}
+                <button type="button" id="server-update-apply" class="btn btn-primary" hidden data-i18n-zh="立即升级" data-i18n-en="Upgrade now">立即升级</button>
+                {{end}}
+            </div>
+        </div>
+    </div>
+</div>
 
 <div id="dashboard-access-modal" class="modal fade" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="dashboard-access-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
@@ -504,6 +531,149 @@
         }).then(function (response) {
             return response.ok ? response.json() : null;
         }).then(applyLatestRelease).catch(function () {});
+    })();
+
+    // Panel-driven server upgrade. The topbar version chip opens the modal; the
+    // server exposes whether this deployment can replace and re-exec itself.
+    (function initServerUpdateModal() {
+        var modal = document.getElementById('server-update-modal');
+        var latestEl = document.getElementById('server-update-latest');
+        var statusEl = document.getElementById('server-update-status');
+        var progressEl = document.getElementById('server-update-progress');
+        var applyBtn = document.getElementById('server-update-apply');
+        if (!modal || !latestEl || !statusEl || !progressEl || !window.fetch) return;
+
+        var config = window.nps || {};
+        var basePath = String(config.web_base_url || '').replace(/\/+$/, '');
+        var startedVersion = null;
+        var pollTimer = null;
+
+        function english() {
+            return typeof npsIsEnglish === 'function' && npsIsEnglish();
+        }
+        function text(zh, en) {
+            return english() ? en : zh;
+        }
+        function setStatus(message, isError) {
+            statusEl.textContent = message || '';
+            statusEl.classList.toggle('text-danger', !!isError);
+        }
+        function setProgress(message) {
+            if (!message) {
+                progressEl.hidden = true;
+                progressEl.textContent = '';
+                return;
+            }
+            progressEl.hidden = false;
+            progressEl.textContent = message;
+        }
+        function stopPolling() {
+            if (pollTimer) {
+                window.clearTimeout(pollTimer);
+                pollTimer = null;
+            }
+        }
+        function render(data) {
+            if (!data || data.status !== 1) {
+                latestEl.textContent = '—';
+                setStatus(text('无法读取版本信息', 'Unable to read release information'), true);
+                return;
+            }
+            latestEl.textContent = data.latest ? 'v' + String(data.latest).replace(/^v/, '') : '—';
+            var job = data.job || {};
+            if (job.running) {
+                setStatus(text('升级进行中，请勿关闭页面', 'Upgrade in progress; keep this page open'));
+                setProgress(job.message || job.stage || '');
+            } else if (job.stage === 'failed') {
+                setStatus((job.message || text('升级失败', 'Upgrade failed')) + (job.error ? '：' + job.error : ''), true);
+                setProgress('');
+            } else if (job.stage === 'completed') {
+                setStatus(job.message || text('已是最新版本', 'Already up to date'));
+                setProgress('');
+            } else if (data.update_available === true) {
+                setStatus(text('发现新版本，可在此直接升级', 'A newer release is available'));
+                setProgress('');
+            } else if (data.check_error) {
+                setStatus(text('版本检查失败：', 'Release check failed: ') + data.check_error, true);
+                setProgress('');
+            } else {
+                setStatus(text('当前已是最新版本', 'Already up to date'));
+                setProgress('');
+            }
+            if (applyBtn) {
+                var canApply = data.supported === true && data.update_available === true && !job.running;
+                applyBtn.hidden = !canApply;
+                applyBtn.disabled = !canApply;
+                if (!data.supported && data.reason) {
+                    setStatus(data.reason, true);
+                }
+            }
+        }
+        function load() {
+            return window.fetch(basePath + '/global/server-update', {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                credentials: 'same-origin'
+            }).then(function (response) {
+                return response.ok ? response.json() : null;
+            }).then(function (data) {
+                render(data);
+                return data;
+            }).catch(function () {
+                return null;
+            });
+        }
+        function poll() {
+            stopPolling();
+            pollTimer = window.setTimeout(function () {
+                load().then(function (data) {
+                    if (!data) {
+                        // The process is re-execing; keep retrying quietly.
+                        pollTimer = window.setTimeout(poll, 2000);
+                        return;
+                    }
+                    if (startedVersion && data.current && data.current !== startedVersion) {
+                        setStatus(text('升级完成，正在刷新页面…', 'Upgrade finished; reloading…'));
+                        window.setTimeout(function () { window.location.reload(); }, 800);
+                        return;
+                    }
+                    if (data.job && data.job.running) {
+                        pollTimer = window.setTimeout(poll, 2000);
+                    }
+                });
+            }, 2000);
+        }
+
+        modal.addEventListener('show.bs.modal', function () { load(); });
+        modal.addEventListener('hidden.bs.modal', function () { stopPolling(); });
+
+        if (applyBtn) {
+            applyBtn.addEventListener('click', function () {
+                if (!window.confirm(text('确定立即升级服务端？连接会短暂中断。', 'Upgrade the server now? Connections will briefly drop.'))) {
+                    return;
+                }
+                applyBtn.disabled = true;
+                startedVersion = (config.version || '').replace(/^v/, '');
+                setStatus(text('正在开始升级…', 'Starting the upgrade…'));
+                window.fetch(basePath + '/global/server-update/apply', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin'
+                }).then(function (response) {
+                    return response.json();
+                }).then(function (data) {
+                    if (!data || data.status !== 1) {
+                        setStatus((data && data.msg) || text('升级请求失败', 'Upgrade request failed'), true);
+                        applyBtn.disabled = false;
+                        return;
+                    }
+                    poll();
+                }).catch(function () {
+                    // A failed request can also mean the restart already began.
+                    poll();
+                });
+            });
+        }
     })();
 
     function getThemePreference() {

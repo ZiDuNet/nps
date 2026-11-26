@@ -787,6 +787,9 @@ func (p *nps) run() (runErr error) {
 
 func run() error {
 	routers.Init()
+	// A successful panel upgrade re-execs the new binary; only now is it safe to
+	// drop the rollback copy that the previous process kept on disk.
+	install.AcknowledgeServerUpdateStartup()
 	controllers.StartVersionCheckWorker()
 	task := &file.Tunnel{
 		Mode: "webServer",

@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.55</sub>
+﻿# NPS <sub>v1.1.56</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -219,6 +219,7 @@ docker-compose up -d
 
 ### 近期更新
 
+- **v1.1.56** (2026-11-26) - 面板新增一键升级服务端：点击顶栏版本徽标打开「版本与升级」弹窗，显示当前/最新版本，管理员可直接升级。服务端下载官方 Release、校验 SHA-256、替换程序后原地重启，PID 不变，systemd 与 Docker 都不需要额外重启策略。Windows、临时构建、目录不可写会明确拒绝并说明原因；Docker 会提示镜像本身不变。Bridge、NPC 协议、`/api/v1` 字段和 SQLite schema 不变。详见[升级说明](docs/upgrade-1.1.56.md)。
 - **v1.1.55** (2026-11-26) - 修复服务端菜单升级误判失败并回滚：升级后的健康检查此前用仍在运行的旧菜单二进制版本去比对刚启动的新服务，导致 1.1.52 升级到 1.1.54 时总是报“新服务版本为 1.1.54，期望 1.1.52”并恢复旧程序。现在改为比对本次要安装的 Release 版本。Bridge、NPC 协议、`/api/v1` 字段和 SQLite schema 不变。详见[升级说明](docs/upgrade-1.1.55.md)。
 - **v1.1.54** (2026-11-26) - `npsctl`、MCP 与内置 Skill 创建域名反代时只使用管理员托管的平台泛域名，自定义域名仍只在面板创建。新增只读接口 `GET /api/v1/platform-domains`（普通用户 Token 可读，不含证书路径）、MCP 工具 `nps_platform_domains` 和 `npsctl platform-domains`。`npsctl` 每天检查一次 GitHub 并在校验 checksums 后静默自更新，失败不影响命令退出码。Bridge、NPC 协议、既有 API 字段和 SQLite schema 不变，面板仍同时支持自定义域名与平台域名。详见[升级说明](docs/upgrade-1.1.54.md)。
 - **v1.1.53** (2026-11-25) - 修复域名反代（Host）长响应被 keep-alive 读超时截断：分块视频流、非 SSE 长连接和大文件下载不再在请求空闲窗口（10 秒，带 `Connection: close` 时 15 秒）后被强制断开，空闲超时改为在上游响应完整写回后才开始计。Bridge、NPC 协议、API 字段和 SQLite schema 不变，只需替换服务端二进制。详见[升级说明](docs/upgrade-1.1.53.md)。

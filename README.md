@@ -1,4 +1,4 @@
-﻿# NPS <sub>v1.1.55</sub>
+﻿# NPS <sub>v1.1.56</sub>
 
 [![](https://img.shields.io/github/v/release/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/releases)
 [![](https://img.shields.io/github/stars/ZiDuNet/nps.svg)](https://github.com/ZiDuNet/nps/stargazers)
@@ -205,6 +205,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full history.
 
 ### Recent
 
+- **v1.1.56** (2026-11-26) - Added an in-panel server upgrade: the topbar version chip opens a "Version and update" dialog showing the current and latest release, and administrators can upgrade directly. The server downloads the official asset, verifies its SHA-256, replaces the binary and re-execs in place, so the PID is preserved and neither systemd nor Docker needs extra restart handling. Windows, temporary builds and read-only directories are refused with an explicit reason; Docker is warned that the image itself is unchanged. Bridge, NPC protocol, `/api/v1` fields and SQLite schema are unchanged. See the [upgrade notes](docs/upgrade-1.1.56.md).
 - **v1.1.55** (2026-11-26) - Fixed server menu updates reporting a false failure and rolling back: the post-update health check compared the freshly started service against the version of the old menu binary still running, so 1.1.52 installing 1.1.54 always failed with "new service version 1.1.54, expected 1.1.52" and restored the previous binary. The check now targets the release being installed. Bridge, NPC protocol, `/api/v1` fields and SQLite schema are unchanged. See the [upgrade notes](docs/upgrade-1.1.55.md).
 - **v1.1.54** (2026-11-26) - `npsctl`, MCP and the bundled Skill now create domain reverse-proxy rules only on administrator-managed platform wildcards; custom domains stay a panel-only workflow. Added the read-only `GET /api/v1/platform-domains` endpoint so ordinary user tokens can discover the platform domain ID, plus a `nps_platform_domains` MCP tool and `npsctl platform-domains`. `npsctl` now checks GitHub once a day and silently self-updates after checksum verification, with failures never changing the exit code. Bridge, NPC protocol, existing API fields and SQLite schema are unchanged; the panel still supports both custom and platform domains. See the [upgrade notes](docs/upgrade-1.1.54.md).
 - **v1.1.53** (2026-11-25) - Fixed Host reverse-proxy responses being cut off by the keep-alive idle deadline: chunked video streams, non-SSE long connections and large downloads no longer die after the 10s request idle window (15s with `Connection: close`). The idle window now starts only after the upstream response has been fully written back, and the global/server settings tabs keep their documented behaviour. Bridge, NPC protocol, API fields and SQLite schema are unchanged. See the [upgrade notes](docs/upgrade-1.1.53.md).
