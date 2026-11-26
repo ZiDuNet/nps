@@ -203,7 +203,7 @@ func TestNpsPanelHealthUsesLoopbackBasePathAndVersion(t *testing.T) {
 		body := `{"version":"` + version.VERSION + `"}`
 		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
 	}
-	if err := verifyNpsPanelHealth(runPath, nil); err != nil {
+	if err := verifyNpsPanelHealth(runPath, nil, ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -234,8 +234,35 @@ func TestNpsPanelHealthUsesServiceWebIPOverride(t *testing.T) {
 	if err := verifyNpsPanelHealth(runPath, []string{
 		"NPS_WEB_IP=[::]",
 		"NPS_WEB_BASE_URL=/ignored-environment-value",
-	}); err != nil {
+	}, ""); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The menu that performs an update still runs the previous release, so the
+// health check must accept the version it just installed instead of insisting
+// on its own build version. Regression for "新服务版本为 1.1.54，期望 1.1.52".
+func TestNpsPanelHealthAcceptsInstalledTargetVersion(t *testing.T) {
+	runPath := t.TempDir()
+	confDir := filepath.Join(runPath, "conf")
+	if err := os.MkdirAll(confDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := "web_ip=127.0.0.1\nweb_port=18083\nweb_open_ssl=false\n"
+	if err := os.WriteFile(filepath.Join(confDir, "nps.conf"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous := npsPanelHealthRequest
+	t.Cleanup(func() { npsPanelHealthRequest = previous })
+	npsPanelHealthRequest = func(scheme, address, basePath string) (*http.Response, error) {
+		body := `{"version":"1.1.99"}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
+	}
+	if err := verifyNpsPanelHealth(runPath, nil, "1.1.99"); err != nil {
+		t.Fatalf("target version should pass: %v", err)
+	}
+	if err := verifyNpsPanelHealth(runPath, nil, "1.2.0"); err == nil {
+		t.Fatal("a service that did not reach the target version must fail")
 	}
 }
 

@@ -1,5 +1,5 @@
 appname = NPC-Pro
-version = 1.1.54
+version = 1.1.55
 display_name = NPC-Pro
 desc = NPC 内网穿透客户端，可在同一台飞牛上管理多条连接与多个 VKey，支持 TCP、TLS、KCP、WS、WSS 和 QUIC 连接方式。
 platform = x86

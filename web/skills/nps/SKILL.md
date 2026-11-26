@@ -6,7 +6,7 @@ description: >-
   users, audit logs, or obtain the /mcp integration snippet for a running NPS
   server.
 metadata:
-  version: "1.1.54"
+  version: "1.1.55"
   license: "GPL-3.0-or-later"
   source: "https://github.com/ZiDuNet/nps/tree/master/web/skills/nps"
 ---

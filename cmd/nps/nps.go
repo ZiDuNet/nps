@@ -393,7 +393,7 @@ func updateInstalledNps(s service.Service, runPath string) (bool, error) {
 		return false, nil
 	}
 	health := func(runPath string, timeout time.Duration) error {
-		return verifyUpdatedNpsHealth(runPath, command.Environment, timeout)
+		return verifyUpdatedNpsHealth(runPath, command.Environment, staged.Version, timeout)
 	}
 	return true, installNpsUpdateAndVerifyWith(s, runPath, staged, health)
 }
@@ -408,7 +408,7 @@ type updateHealthChecker func(runPath string, timeout time.Duration) error
 
 func installNpsUpdateAndVerify(s npsServiceController, runPath string, staged *install.StagedNpsUpdate) error {
 	return installNpsUpdateAndVerifyWith(s, runPath, staged, func(runPath string, timeout time.Duration) error {
-		return verifyUpdatedNpsHealth(runPath, nil, timeout)
+		return verifyUpdatedNpsHealth(runPath, nil, staged.Version, timeout)
 	})
 }
 
@@ -460,13 +460,13 @@ func wrapIfErr(operation string, err error) error {
 // verifyUpdatedNpsHealth proves that the newly started service owns its
 // configured SQLite lock and answers the public version endpoint. ProbeLock
 // is non-mutating and detects a process that exited before acquiring the lock.
-func verifyUpdatedNpsHealth(runPath string, serviceEnvironment []string, timeout time.Duration) error {
+func verifyUpdatedNpsHealth(runPath string, serviceEnvironment []string, expectedVersion string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 	for time.Now().Before(deadline) {
 		locked, err := store.ProbeLock(filepath.Join(runPath, "conf", "nps.db"))
 		if err == nil && locked {
-			if err := verifyNpsPanelHealth(runPath, serviceEnvironment); err == nil {
+			if err := verifyNpsPanelHealth(runPath, serviceEnvironment, expectedVersion); err == nil {
 				return nil
 			} else {
 				lastErr = err
@@ -495,7 +495,11 @@ var npsPanelHealthRequest = func(scheme, address, basePath string) (*http.Respon
 	return client.Get(scheme + "://" + address + basePath + "/api/v1/")
 }
 
-func verifyNpsPanelHealth(runPath string, serviceEnvironment []string) error {
+func verifyNpsPanelHealth(runPath string, serviceEnvironment []string, expectedVersion string) error {
+	expectedVersion = strings.TrimSpace(expectedVersion)
+	if expectedVersion == "" {
+		expectedVersion = version.VERSION
+	}
 	ini, err := settings.ReadStartupConfig(filepath.Join(runPath, "conf", "nps.conf"), defaultNpsConf)
 	if err != nil {
 		return fmt.Errorf("读取新服务启动配置: %w", err)
@@ -549,8 +553,8 @@ func verifyNpsPanelHealth(runPath string, serviceEnvironment []string) error {
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return fmt.Errorf("解析新服务健康响应: %w", err)
 	}
-	if payload.Version != version.VERSION {
-		return fmt.Errorf("新服务版本为 %q，期望 %q", payload.Version, version.VERSION)
+	if payload.Version != expectedVersion {
+		return fmt.Errorf("新服务版本为 %q，期望 %q", payload.Version, expectedVersion)
 	}
 	return nil
 }

@@ -652,6 +652,11 @@ type StagedNpsUpdate struct {
 	PreviousBinary string
 	PreviousMode   os.FileMode
 	Downloaded     bool
+	// Version is the release being installed, without the leading "v". Health
+	// checks must compare against this value: the menu that starts the update
+	// still runs the previous version, so comparing with the local build would
+	// report a successful replacement as a failure and roll it back.
+	Version string
 	// syncDir is injectable so update tests can prove the directory-durability
 	// failure path restores the old binary before the service is restarted.
 	syncDir func(string) error
@@ -694,6 +699,7 @@ func StageNpsUpdate(targetPath string) (*StagedNpsUpdate, error) {
 		PreviousBinary: targetPath + ".pre-update",
 		PreviousMode:   info.Mode().Perm(),
 		Downloaded:     true,
+		Version:        strings.TrimPrefix(strings.TrimSpace(release.TagName), "v"),
 	}, nil
 }
 
