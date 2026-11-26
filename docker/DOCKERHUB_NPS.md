@@ -54,4 +54,6 @@ http://127.0.0.1:8081
 
 请持久化整个 `/conf`。`nps.conf` 保存启动参数，`nps.db` 保存客户端、用户、隧道、域名规则和业务设置。不要只复制运行中的 `nps.db`。全新安装不需要迁移。升级旧 JSON 时请先停掉容器并备份挂载目录，按实际镜像版本选择步骤，见[部署和升级文档](https://github.com/ZiDuNet/nps/blob/master/docs/docker.md)。
 
+镜像内的 `/nps` 不在挂载卷中。v1.1.56 起面板支持一键升级，但容器内替换只对当前容器生效：`docker restart` 保留，重建容器后回到镜像版本。正式升级请执行 `docker compose pull && docker compose up -d`。
+
 项目地址：https://github.com/ZiDuNet/nps

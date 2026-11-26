@@ -112,6 +112,16 @@ docker compose logs --tail=100 nps
 
 不要给容器附加 `-conf_path=/conf`：镜像内的运行根目录是 `/`，默认已读取 `/conf`。升级失败时保留现有文件和归档，先检查[迁移说明](server/sqlite-storage.md#启动迁移)，不要删除数据库再强行导入。
 
+### 面板一键升级在容器里的边界
+
+v1.1.56 起，管理员可以在面板顶栏点「立即升级」。容器内执行时，它会替换容器可写层的 `/nps` 并原地重启：
+
+- `docker restart nps` 后仍保留新版本；
+- `docker rm`、`docker compose up -d` 重建容器后会**回到镜像内的版本**；
+- 镜像本身不会改变，`docker images` 里仍是旧标签。
+
+二进制属于镜像，Docker 场景应以镜像为准：正式升级仍使用上面的 `docker compose pull` 流程，面板升级只作为临时应急手段（例如临时没有宿主机权限）。容器以只读根文件系统运行时，面板会检测到目录不可写并直接禁用按钮。
+
 ## 镜像平台
 
 Docker Hub：
